@@ -912,7 +912,17 @@ func (r *Router) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, 
 			return data, err
 		}
 		r.o.Log.Info("transport: MQTT did not publish the backup, using HTTP", "device", int64(d.ID))
-		return r.httpDownload(ctx, t)
+		// The facts may have changed since the decision (the fresh read found no usable password): the same rule as
+		// a backup that chose HTTP, so /dl is never sent to a device only MQTT could carry (#997). Without a fresh
+		// decision (p stays zero) the /dl goes as before and its error unexplained.
+		_, f, p, derr := r.decide(ctx, id)
+		if derr == nil {
+			if err := r.backupNeedsPassword(ctx, t, f); err != nil {
+				return nil, err
+			}
+		}
+		raw, err := r.httpDownload(ctx, t)
+		return raw, r.explainBackup(err, f, p)
 	}
 	if err := r.backupNeedsPassword(ctx, t, f); err != nil {
 		return nil, err

@@ -385,3 +385,85 @@ func TestAnHTTPFailureAfterMQTTWasBlockedKeepsTheMQTTReason(t *testing.T) {
 		})
 	}
 }
+
+// Why (#997 (3)): the reason says what HTTP did in the words the HTTP facts use everywhere: a refused connection is
+// "cannot reach", an answer that could not be read is a failed backup over HTTP (a refusal that proves nothing was sent,
+// a 401 or an address outside the device networks, is decided again and ends with no path). A timeout has its own words (TestAnHTTPFailureAfterMQTTWasBlockedKeepsTheMQTTReason). Each keeps the MQTT reason
+// and its HTTP error for errors.Is.
+func TestTheReasonAfterAnHTTPFailureNamesWhatHTTPDid(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		says string
+	}{
+		{tasmota.ErrUnreachable, "TasmoFleet cannot reach the device over HTTP, and a backup over MQTT is not possible: "},
+		{fmt.Errorf("%w: HTTP 500", tasmota.ErrBadResponse), "the backup over HTTP failed, and a backup over MQTT is not possible: "},
+	} {
+		t.Run(tc.err.Error(), func(t *testing.T) {
+			g := newDLRig(t)
+			g.mem.Clear(7)
+			g.f.httpOK = true
+			g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone
+			g.http.err = tc.err
+			_, err := g.r.DownloadConfig(t.Context(), g.target())
+			var blocked *BackupBlockedError
+			if !errors.As(err, &blocked) || !errors.Is(err, tc.err) || !strings.HasPrefix(blocked.Reason, tc.says) {
+				t.Fatalf("%v: want a reason starting %q", err, tc.says)
+			}
+		})
+	}
+}
+
+// Why: a backup whose caller gave up while the HTTP probe ran (a shutdown, a closed page) has learnt nothing about the
+// device. It ends with the caller's error, never with "needs an MQTT password": the scheduled run reads a context
+// error as a shutdown and records no failure for the device, and nothing more is sent.
+func TestABackupWhoseCallerGaveUpDuringTheProbeSaysNothingAboutTheDevice(t *testing.T) {
+	g := newDLRig(t)
+	g.mem.Clear(7)
+	g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	g.http.err = context.Canceled
+	_, err := g.r.DownloadConfig(ctx, g.target())
+	var blocked *BackupBlockedError
+	if !errors.Is(err, context.Canceled) || errors.As(err, &blocked) || g.http.dl != 0 || g.http.n() != 1 {
+		t.Fatalf("%v, /dl %d, HTTP commands %v: want the caller's error after the one probe", err, g.http.dl, g.http.calls)
+	}
+}
+
+// laterReads is the device store whose reads after the first one (decide) see the device changed by later: the MQTT
+// password cleared or refused between the decision and the FileDownload's fresh read.
+type laterReads struct {
+	*fakeDevices
+	reads int
+	later func(*model.Device)
+}
+
+func (l *laterReads) GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error) {
+	l.mu.Lock()
+	l.reads++
+	if l.reads == 2 {
+		l.later(&l.d)
+	}
+	l.mu.Unlock()
+	return l.fakeDevices.GetDevice(ctx, id)
+}
+
+// Why (#997, review of PR #1019): the rule "only MQTT could carry it and its password is not usable: nothing is sent"
+// holds on every way into /dl. A backup that chose MQTT, but whose FileDownload found no usable password on its fresh
+// read (cleared, or refused by a concurrent transfer), published nothing and falls back to HTTP. While HTTP is not
+// known to work, that /dl could only wait out the download timeout and say "took too long", the #997 symptom. So the
+// fallback decides again and asks the same rule: one Status 11, then the needs-password reason, no /dl.
+func TestTheFallbackAfterAnMQTTBackupThatPublishedNothingAsksTheSameRule(t *testing.T) {
+	g := newDLRig(t)
+	g.mem.Clear(7)
+	g.r.o.Devices = &laterReads{fakeDevices: g.devs, later: func(d *model.Device) { d.MQTTPasswordMode = model.MQTTPasswordNone }}
+	g.http.err = tasmota.ErrTimeout
+	_, err := g.r.DownloadConfig(t.Context(), g.target())
+	var blocked *BackupBlockedError
+	if !errors.As(err, &blocked) || !strings.HasPrefix(blocked.UserReason(), "Needs an MQTT password: ") {
+		t.Fatalf("%v: want the needs-password reason, not the HTTP timeout", err)
+	}
+	if g.http.dl != 0 || len(g.dl.pws) != 0 || g.http.n() != 1 || g.http.calls[0] != "Status 11" {
+		t.Fatalf("/dl %d, FileDownload %v, HTTP commands %v: want one Status 11 and nothing else sent", g.http.dl, g.dl.pws, g.http.calls)
+	}
+}
