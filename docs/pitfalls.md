@@ -370,6 +370,9 @@ means nothing stops you: you have to know it. The full working rules are in
   another column has room to spare, titled or not) and r (no element of one row over the text of another, as
   loaded and with the pointer on a row and its titled elements) in `e2e/support/layout.ts` (#821); a very long
   explanation (about 100 characters or more) in a dense row is not guarded.
+  A table guard must survive a live region swap (#1015): `hoverRowProblems` names its table by its place in the
+  page (the path from the nearest ancestor with an id, such as a live region's card), never by an attribute set
+  at runtime, because the swapped-in table has no such attribute; every call it makes is bounded.
 
 ### A visible browser opened on the maintainer's desktop (2026-11-01)
 

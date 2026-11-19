@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -18,8 +19,8 @@ const (
 
 // netFactsReader reads the network facts (Prober.ReadNet) in the background, never as part of
 // first contact or a refresh: devices that are online and were never read (import, add), and
-// devices whose identity was just refreshed (later). One device at a time, so a device sees at
-// most one Status command at a time from here.
+// devices whose identity was just refreshed (later), one queued read per device however many refreshes
+// asked. One device at a time, so a device sees at most one Status command at a time from here.
 type netFactsReader struct {
 	list   func(context.Context) ([]model.Device, error)
 	online func(model.DeviceID) bool
@@ -30,18 +31,35 @@ type netFactsReader struct {
 
 	kick   chan model.DeviceID
 	failed map[model.DeviceID]time.Time // next attempt after a failed read
+
+	// queued marks the devices with a kick in the channel. later runs on request goroutines and must decide
+	// before the kick enters the bounded channel, so a full queue holds no duplicates; hence a mutex, not a
+	// set filled on the reader goroutine (brokerHostReader).
+	mu     sync.Mutex
+	queued map[model.DeviceID]bool
 }
 
 func newNetFactsReader(list func(context.Context) ([]model.Device, error), online func(model.DeviceID) bool,
 	read func(context.Context, model.DeviceID) error, log *slog.Logger) *netFactsReader {
 	return &netFactsReader{list: list, online: online, read: read, now: time.Now, every: netFactsEvery, log: log,
-		kick: make(chan model.DeviceID, netFactsQueue), failed: map[model.DeviceID]time.Time{}}
+		kick: make(chan model.DeviceID, netFactsQueue), failed: map[model.DeviceID]time.Time{},
+		queued: map[model.DeviceID]bool{}}
 }
 
-// later queues a read of id and returns at once.
+// later queues a read of id and returns at once. A device that already waits for its read is not queued
+// again: each read holds the device's topic for the identity window (ReadNet's hear-all Status 5), and a
+// person's refresh shares that topic one command at a time, so a pile of reads queued by earlier refreshes
+// made the next refresh wait (#1015). The mark ends when run takes the kick, so a refresh during a read
+// queues one more.
 func (r *netFactsReader) later(id model.DeviceID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.queued[id] {
+		return
+	}
 	select {
 	case r.kick <- id:
+		r.queued[id] = true
 	default: // queue full: the device keeps its facts until it is refreshed again
 	}
 }
@@ -55,6 +73,9 @@ func (r *netFactsReader) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case id := <-r.kick:
+			r.mu.Lock()
+			delete(r.queued, id)
+			r.mu.Unlock()
 			r.readOne(ctx, id)
 		case <-t.C:
 			r.pass(ctx)

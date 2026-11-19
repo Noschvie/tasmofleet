@@ -1137,18 +1137,37 @@ export async function hoverRowProblems(page: Page, rows = 2, perRow = 8): Promis
   const n = await tables.count();
   for (let t = 0; t < n; t++) {
     const table = tables.nth(t);
-    const tag = `guard-r-${t}`;
-    // a table the guard can name: the hover helper selects the rows of a table by selector
-    const usable = await table.evaluate((e, tag) => {
+    // The table is named by where it sits in the page, never by an attribute set on the element: a live region
+    // swaps its whole card (#950), and the table that comes in has no attribute, so a later lookup waited for
+    // the test's timeout (#1015). The path starts at the nearest ancestor with an id (a live region's card) or
+    // at body; the guard's own evaluate calls are bounded, so a swap fails in seconds, not minutes.
+    const tableSel = await table.evaluate((e) => {
       const body = e.tBodies[0];
-      if (!body || body.rows.length < 2 || getComputedStyle(body.rows[0].cells[0] ?? e).display !== "table-cell") return false;
-      e.setAttribute("data-guard-r", tag);
-      return true;
-    }, tag);
-    if (!usable) continue;
+      if (!body || body.rows.length < 2 || getComputedStyle(body.rows[0].cells[0] ?? e).display !== "table-cell") return null;
+      const path: string[] = [];
+      let el: Element | null = e;
+      for (; el && el !== document.body; el = el.parentElement) {
+        const id = el.getAttribute("id"); // not el.id: a form with a control named "id" answers with that control
+        if (id) {
+          path.unshift(`#${CSS.escape(id)}`);
+          break;
+        }
+        const same = [...(el.parentElement?.children ?? [])].filter((c) => c.tagName === el!.tagName);
+        path.unshift(`${el.tagName.toLowerCase()}:nth-of-type(${same.indexOf(el) + 1})`);
+      }
+      if (el === document.body) path.unshift("body");
+      const sel = path.join(" > ");
+      // a name that does not find exactly this table would measure another one: that is a finding, not a skip
+      return { sel: document.querySelectorAll(sel).length === 1 && document.querySelector(sel) === e ? sel : "" };
+    }, undefined, { timeout: 10_000 });
+    if (!tableSel) continue;
+    if (!tableSel.sel) {
+      problems.push(`table ${t}: the guard could not name this table by its place in the page, so the bubble was never measured`);
+      continue;
+    }
     let hovered = 0;
     try {
-      const rowsSel = `table[data-guard-r="${tag}"] tbody tr`;
+      const rowsSel = `${tableSel.sel} > tbody > tr`;
       const trs = page.locator(rowsSel);
       for (let i = 0; i < Math.min(rows, await trs.count()); i++) {
         const targets: Locator[] = [trs.nth(i)];
@@ -1157,7 +1176,14 @@ export async function hoverRowProblems(page: Page, rows = 2, perRow = 8): Promis
         for (let k = 0; k < m && targets.length <= perRow; k++) targets.push(titled.nth(k));
         for (const target of targets) {
           if (!(await target.isVisible())) continue;
-          const what = await target.evaluate((e) => `${e.tagName.toLowerCase()}${typeof e.className === "string" && e.className.trim() ? "." + e.className.trim().split(/\s+/)[0] : ""} in ${(e.closest("td") as HTMLElement | null)?.dataset.label ?? "row"}`);
+          // a target the page swapped away and did not bring back is skipped, bounded like hoverTip, and not counted as hovered
+          const what = await target
+            .evaluate((e) => `${e.tagName.toLowerCase()}${typeof e.className === "string" && e.className.trim() ? "." + e.className.trim().split(/\s+/)[0] : ""} in ${(e.closest("td") as HTMLElement | null)?.dataset.label ?? "row"}`, undefined, { timeout: 10_000 })
+            .catch((e) => (/Timeout/.test(String(e)) ? null : Promise.reject(e)));
+          if (what === null) {
+            test.info().annotations.push({ type: "hover skipped", description: `table ${t} row ${i}: the element was replaced by a live swap and did not come back within 10 s` });
+            continue;
+          }
           // an element something else covers cannot be pointed at, and shows no bubble: it is skipped, not waited for
           const r = await hoverTip(page, target, rowsSel, target === targets[0] ? { x: 20, y: 18 } : undefined, 10_000).catch((e) => (/Timeout/.test(String(e)) ? null : Promise.reject(e)));
           if (!r) {
@@ -1172,7 +1198,6 @@ export async function hoverRowProblems(page: Page, rows = 2, perRow = 8): Promis
       if (hovered === 0) problems.push(`table ${t}: no row or titled element could be pointed at, so the bubble was never measured`);
     } finally {
       await page.mouse.move(0, 0);
-      await table.evaluate((e) => e.removeAttribute("data-guard-r"));
     }
   }
   return problems;

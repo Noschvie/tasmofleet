@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { cutCellProblems, layoutGuards, rowCoverProblems } from "../support/layout";
+import { cutCellProblems, hoverRowProblems, layoutGuards, rowCoverProblems } from "../support/layout";
 
 // Guards s and r (table cells and rows, #821) and the line-wise guard o, on built pages: each guard must
 // report the defect it exists for and stay quiet where the page is right. Without these a guard that
@@ -69,4 +69,45 @@ test("o: a note that wraps in the middle of a date does not overlap the link on 
 test("o: two texts drawn on top of each other are still reported", async ({ page }) => {
   await page_(page, `<div style="position:relative;height:40px"><p style="position:absolute;top:0;left:0;margin:0">first line of text</p><p style="position:absolute;top:4px;left:10px;margin:0">second line of text</p></div>`);
   expect((await layoutGuards(page, ["o"])).flatMap((r) => r.offenders).join("\n")).toMatch(/overlaps/);
+});
+
+// Why: pages with a live region (the Backups page, #950) swap their whole card, table included, when an event
+// arrives. The hover pass named its table by an attribute set at runtime; the table that came in had none, so
+// the pass lost the rest of the table, and when the swap fell between two of its calls it waited for the
+// 10-minute test timeout (nightly 44571540336, #1015). The pass must go on with the table that replaced the
+// first and point at its rows too. The swap here comes during the pause after the first hover; the rows
+// the pointer reached are counted by the page, which a swap does not reset.
+test("r: a table that a live region swaps during the pass is measured on, row by row", async ({ page }) => {
+  test.setTimeout(60_000);
+  const rows = `<tr><td title="first row">first row</td><td>a</td></tr><tr><td title="second row">second row</td><td>b</td></tr>`;
+  const card = `<table style="width:400px"><thead><tr><th>Col 0</th><th>Col 1</th></tr></thead><tbody>${rows}</tbody></table>`;
+  await page_(page, `<section id="live-card">${card}</section>`);
+  await page.evaluate((card) => {
+    const w = window as unknown as { __swaps: number; __rows: string[] };
+    w.__swaps = 0;
+    w.__rows = [];
+    document.addEventListener("pointerover", (e) => {
+      const tr = (e.target as Element).closest("tbody tr") as HTMLTableRowElement | null;
+      if (!tr) return;
+      const name = tr.cells[0].textContent ?? "";
+      if (!w.__rows.includes(name)) w.__rows.push(name);
+      if (w.__swaps) return;
+      w.__swaps = 1; // the first pointer on a row swaps the whole card once, as the live region does on an event
+      setTimeout(() => (document.getElementById("live-card")!.innerHTML = card), 0);
+    });
+  }, card);
+  expect(await hoverRowProblems(page, 2, 2)).toEqual([]);
+  const seen = await page.evaluate(() => ({ swaps: (window as unknown as { __swaps: number }).__swaps, rows: (window as unknown as { __rows: string[] }).__rows }));
+  expect(seen.swaps, "the page swapped the table during the pass").toBe(1);
+  expect(seen.rows, "the pointer reached the second row of the table that replaced the first").toContain("second row");
+});
+
+// Why: a form with a control named "id" answers form.id with that control, not with its id attribute; the
+// add-devices pages have such forms, and the guard named their tables "#[object RadioNodeList] > ..." and
+// measured nothing (found by the first run of tablet-guards on the new naming, #1015).
+test("r: a table in a form that has a control named id is still named and measured", async ({ page }) => {
+  test.setTimeout(60_000);
+  const rows = `<tr><td title="first row">first row</td><td>a</td></tr><tr><td title="second row">second row</td><td>b</td></tr>`;
+  await page_(page, `<form id="scan"><input name="id" type="hidden" value="1"><div><table style="width:400px"><thead><tr><th>Col 0</th><th>Col 1</th></tr></thead><tbody>${rows}</tbody></table></div></form>`);
+  expect(await hoverRowProblems(page, 2, 2)).toEqual([]);
 });
