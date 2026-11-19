@@ -18,7 +18,8 @@ func (m *Manager) UpsertExisting(ctx context.Context, actor string, id model.Dev
 // UpdateIf is Update as a compare-and-set: the write happens only if the
 // stored record still equals expected (same comparison as Upsert's re-check:
 // all inventory-owned fields, ignoring timestamps and identity); otherwise
-// nothing is written and ErrConflict is returned.
+// nothing is written and ErrConflict is returned. When next equals the stored
+// record nothing is written, audited or published either (#988).
 func (m *Manager) UpdateIf(ctx context.Context, actor string, expected, next model.Device) error {
 	// Same rule as Update: a credentialed device moves only on the admin's
 	// explicit, target-bound confirmation (probe and check before the lock).
@@ -34,6 +35,10 @@ func (m *Manager) UpdateIf(ctx context.Context, actor string, expected, next mod
 	}
 	if err == nil {
 		err = m.validate(&next)
+	}
+	if err == nil && sameRecord(old, next) {
+		m.mu.Unlock()
+		return nil // nothing to change: no write, no audit row (#988)
 	}
 	if err == nil {
 		err = m.st.UpdateDevice(ctx, next)

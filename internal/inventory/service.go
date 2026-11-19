@@ -361,7 +361,8 @@ func (m *Manager) create(ctx context.Context, d model.Device) (model.DeviceID, e
 // Update replaces the editable fields of a device. The write is a full
 // replacement: callers that do not hold a new password must pass the stored
 // one (Get returns it in memory), because an empty HTTPPassword clears it.
-// Identity and health are not touched.
+// Identity and health are not touched. A device that would not change is not
+// written and not audited (#988).
 func (m *Manager) Update(ctx context.Context, actor string, d model.Device) error {
 	// An address or port change keeps the stored password and sends it to the
 	// new target. That is the admin's call (audit row 15, 2026-10-21): the form
@@ -379,6 +380,10 @@ func (m *Manager) Update(ctx context.Context, actor string, d model.Device) erro
 	old, err := m.st.GetDevice(ctx, d.ID)
 	if err == nil {
 		err = m.validate(&d)
+	}
+	if err == nil && sameRecord(old, d) {
+		m.mu.Unlock()
+		return nil // nothing to change: no write, no audit row (#988)
 	}
 	if err == nil {
 		err = m.st.UpdateDevice(ctx, d)
@@ -620,8 +625,17 @@ func hasCredentials(d model.Device) bool { return d.HasCredentials() }
 // its mode, source, dates and marks are written by other paths (SetMQTTPassword, the learner that takes
 // it from a backup, #609; UpdateDevice never writes them) and are ignored: such a write between the read
 // and the write of an update must not turn it into a conflict.
+//
+// Update, UpdateIf and Upsert skip the write when this says "equal", so every column UpdateDevice writes
+// must be compared here: a field blanked below that UpdateDevice also writes would be dropped silently.
+// No tags are nil for the store but an empty list after validate; both are the same record. The same holds
+// for the MAC set: validate puts the primary MAC first, the store loads the set sorted.
 func sameRecord(a, b model.Device) bool {
 	for _, d := range []*model.Device{&a, &b} {
+		if len(d.Tags) == 0 {
+			d.Tags = nil
+		}
+		d.MACs = slices.Sorted(slices.Values(d.MACs)) // a copy: the caller's slice stays as it is
 		d.CreatedAt, d.UpdatedAt, d.Identity, d.FWReach = time.Time{}, time.Time{}, model.Identity{}, model.FWReach{}
 		d.MQTTPassword, d.MQTTPasswordMode, d.MQTTPasswordSource = "", model.MQTTPasswordNone, model.MQTTPasswordTyped
 		d.MQTTPasswordBadAt, d.MQTTPasswordSetAt, d.MQTTPasswordOKAt = time.Time{}, time.Time{}, time.Time{}
