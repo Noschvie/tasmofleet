@@ -215,6 +215,8 @@ func (a *runtime) run(ctx context.Context) error {
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
 	mid.known = a.mqttKnown.Known
 	mid.fw = a.fw
+	// A new version in a live INFO1 reads the identity at once (#1003).
+	mid.onVersion = a.brokerHost.identityChanged
 	mid.spawn = func(f func()) { a.goBG("mqtt-identity-ask", func() error { f(); return nil }) } // waited for at shutdown
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 

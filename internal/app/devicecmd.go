@@ -22,7 +22,7 @@ func (a *runtime) setupDeviceCmd() {
 	}
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
 	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks, onBroker: a.brokerHost.later, onWrite: a.settingsWritten,
-		onGroupTopic: a.forgetGroupTopics}
+		onGroupTopic: a.forgetGroupTopics, onIdentity: a.brokerHost.identityWritten}
 	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds, a.tracker.Minimal); return nil })
 }
 

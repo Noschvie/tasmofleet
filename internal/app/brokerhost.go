@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/events"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/settings"
@@ -48,8 +49,19 @@ import (
 // restart is one refresh however many messages announce it. A restart reads the identity and the data only
 // if no restart read them in the last hour (restartRefreshEvery): a device in a boot loop gets the broker
 // read after every boot, as before #600, and the rest once when the hour is over (a failed read is not
-// retried before), so about once an hour. The policy values are left out of the data read while the policy
-// live check is paused or its interval is 0, as for the policy poller.
+// retried before), so about once an hour. A restart read that read nothing for the device does not count (#1003): its
+// check found minimal firmware (no MAC to show, the first step of an update on an ESP8266), another device, or a
+// topic it could not vouch for; the boot into the new firmware a minute later is then read in full. The policy values
+// are left out of the data read while the policy live check is paused or its interval is 0, as for the policy poller.
+//
+// Three more things ask for the identity alone, at once and inside the hour (#1003): a live INFO1 or a backup that names
+// another firmware version than the stored identity (identityChanged), and a console or bulk write the device accepted
+// for a value the identity holds (identityWritten: OtaUrl, a group topic, the topic, the names, the hostname). They
+// only ask: nothing of the INFO1, the backup or the answer is stored, the identity read stores what it reads with its
+// own checks (T20). A version asks once (versionAsked) until an identity read of the device succeeds, so a boot loop on
+// that version stays braked; the requests of a device share its one pending entry, and the reader reads one device at a
+// time, so there is never more than one identity read of a device in flight. A read one of them asked for that fails is
+// retried after brokerHostRetry like a scheduled one (#817), and a restart in between leaves that retry alone.
 //
 // A device whose HTTP API is off (or HTTP blocked) is never "readable" (the HTTP health poll does not reach it), yet MQTT
 // serves it: when its identity or its data is due, after a restart too, and the router reads it over MQTT, it is
@@ -146,9 +158,11 @@ type brokerHostReader struct {
 
 	kick        chan model.DeviceID
 	kickRestart chan model.DeviceID
-	claims      chan topicClaim
-	pending     map[model.DeviceID]brokerWant
-	next        map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
+	// kickIdentity: the identity reads a new version or a write asked for (#1003).
+	kickIdentity chan identityKick
+	claims       chan topicClaim
+	pending      map[model.DeviceID]brokerWant
+	next         map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
 	// dataNext and identityNext: the same for the data and the identity; absent: due.
 	dataNext, identityNext map[model.DeviceID]time.Time
 	// probeNext: when a device may be asked for an HTTP probe again; absent: now.
@@ -172,6 +186,10 @@ type brokerHostReader struct {
 	retryAt       map[retryKey]time.Time
 	retrying      map[retryKey]bool
 	inRestartRead bool
+	// versionAsked: the firmware version that last asked for an identity read of a device (#1003). The same version
+	// asks no more until an identity read of the device succeeds (readLocked) or the device is gone (pass): a boot loop
+	// announces its version at every boot.
+	versionAsked map[model.DeviceID]string
 	// outcomes: why the last background data refresh of a device failed (#818), read by the device page.
 	outcomes *refreshOutcomes
 }
@@ -190,11 +208,19 @@ type retryKey struct {
 	identity bool
 }
 
-// brokerWant is a read somebody asked for. restart: the device restarted, so its identity and data are
-// read as well.
+// brokerWant is a read somebody asked for. broker: the broker is read (a restart, a broker command). restart: the
+// device restarted, so its identity and data are read as well. identity: the identity is read even inside the hour a
+// restart read brakes (a new version or an identity value was written, #1003).
 type brokerWant struct {
-	due, until time.Time
-	restart    bool
+	due, until                time.Time
+	broker, restart, identity bool
+}
+
+// identityKick asks for an identity read of id. version: the firmware version an INFO1 or a backup named; "" for a
+// write, which asks every time.
+type identityKick struct {
+	id      model.DeviceID
+	version string
 }
 
 func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // httpUp says whether the HTTP health poll reached the device lately: the periodic read is HTTP
@@ -202,8 +228,9 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	httpUp func(model.DeviceID) bool,
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
-		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
-		claims: make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
+		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue), kickIdentity: make(chan identityKick, brokerHostQueue),
+		versionAsked: map[model.DeviceID]string{},
+		claims:       make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
 		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}, outcomes: newRefreshOutcomes()}
 }
@@ -227,6 +254,29 @@ func (r *brokerHostReader) restarted(id model.DeviceID) {
 	select {
 	case r.kickRestart <- id:
 	default: // queue full: the periodic reads catch up
+	}
+}
+
+// identityChanged asks for an identity read of id, whose live INFO1 or newest backup names version, another firmware
+// version than the stored identity (#1003), and returns at once. It is called from the MQTT identity reader and the
+// backup watcher, which must not wait for the reader.
+func (r *brokerHostReader) identityChanged(id model.DeviceID, version string) {
+	r.kickIdentityRead(identityKick{id: id, version: version})
+}
+
+// identityWritten asks for an identity read of id after a write the device accepted changed a value the identity holds
+// (holdingCmd, #1003), and returns at once.
+func (r *brokerHostReader) identityWritten(id model.DeviceID) {
+	r.kickIdentityRead(identityKick{id: id})
+}
+
+func (r *brokerHostReader) kickIdentityRead(k identityKick) {
+	if r == nil {
+		return
+	}
+	select {
+	case r.kickIdentity <- k:
+	default: // queue full: the periodic identity read catches up
 	}
 }
 
@@ -257,6 +307,8 @@ func (r *brokerHostReader) run(ctx context.Context) {
 			r.want(id)
 		case id := <-r.kickRestart:
 			r.wantRestart(id)
+		case k := <-r.kickIdentity:
+			r.wantIdentity(k)
 		case c := <-r.claims:
 			r.noteClaim(c)
 		case <-t.C:
@@ -290,7 +342,23 @@ func (r *brokerHostReader) noteClaim(c topicClaim) {
 
 func (r *brokerHostReader) request(id model.DeviceID, restart bool) {
 	now := r.now()
-	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), restart: restart || r.pending[id].restart}
+	old := r.pending[id]
+	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), broker: true, restart: restart || old.restart, identity: old.identity}
+}
+
+// wantIdentity records that id's identity is to be read once it has settled, inside the hour a restart read brakes
+// (#1003). A version that already asked is not asked about again until an identity read of the device succeeds.
+func (r *brokerHostReader) wantIdentity(k identityKick) {
+	if k.version != "" {
+		if r.versionAsked[k.id] == k.version {
+			return
+		}
+		r.versionAsked[k.id] = k.version
+	}
+	now := r.now()
+	w := r.pending[k.id]
+	w.due, w.until, w.identity = now.Add(brokerHostSettle), now.Add(brokerHostPendingFor), true
+	r.pending[k.id] = w
 }
 
 // pass asks the topics of the marked devices that are due again (recheckTopics), then reads the devices somebody
@@ -309,6 +377,11 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		listed[d.ID] = d
 	}
 	r.outcomes.keep(listed)
+	for id := range r.versionAsked {
+		if _, ok := listed[id]; !ok {
+			delete(r.versionAsked, id) // deleted: nothing more to ask
+		}
+	}
 	r.recheckTopics(ctx, devs, now)
 	probed := false // one probe request per pass: not the whole fleet at once
 	ask := func(d model.Device) {
@@ -331,10 +404,11 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		case !ok || now.After(w.until): // deleted, or waited long enough: the periodic read catches up
 			delete(r.pending, id)
 		case now.Before(w.due): // not yet
-		case !r.readable(d) && (!w.restart || !r.overMQTT(ctx, d, visitWhat{identity: true, data: true}).any()):
+		case !r.readable(d) && (!w.restart && !w.identity || !r.overMQTT(ctx, d, visitWhat{identity: true, data: true}).any()):
 			ask(d) // nothing the read could reach now: HTTP is checked, once the read is due
 		default:
 			what := r.requested(id, w, now)
+			full := what.data // requested reads the data only as the restart's own read
 			if !r.readable(d) {
 				// A restart of a device HTTP does not reach: its identity and data go over MQTT (#682, #676), the broker
 				// read waits for HTTP. A restart within the hour leaves them to the end of the hour (requested): nothing
@@ -344,16 +418,19 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 					break
 				}
 			}
-			r.inRestartRead = true
+			// A read a new version or a write asked for is no restart's read: its failure is retried soon (#1003).
+			r.inRestartRead = !w.identity
 			err := r.visit(ctx, d, what)
 			r.inRestartRead = false
 			switch {
 			case err == nil:
 				delete(r.pending, id)
-				if what.identity || what.data {
+				if full {
 					r.restartRead[id] = now
 					delete(r.restartLeft, id)
 				}
+			case errors.Is(err, errBrokerRefused): // read nothing for the device: no restart's read, the hour is not used up (#1003)
+				delete(r.pending, id)
 			case errors.Is(err, errBrokerRetry): // not answering: not asked again at every tick
 				w.due = now.Add(brokerHostAskAgain)
 				r.pending[id] = w
@@ -501,13 +578,15 @@ func (r *brokerHostReader) pruneClaims(devs []model.Device, now time.Time) {
 }
 
 // requested says what a visit somebody asked for reads: the broker, and after a restart the identity and the
-// data too, unless a restart read them less than restartRefreshEvery ago. Then they are read once when that
+// data too, unless a restart read them less than restartRefreshEvery ago. full: this is the restart's read, which
+// starts that hour once it read the device (it is the only visit somebody asked for that includes the data). The identity a new version or
+// a write asked for is read in any case (#1003): a boot loop keeps its version, so that does not undo the brake. Then they are read once when that
 // hour is over, and not before (a failed restart read is not retried every ten minutes either): a device that keeps
 // restarting is read in full about once an hour, not after every boot. The exception is the retry of a failed
 // scheduled refresh (#817): it was not caused by a restart, often by this very one (the device restarted while it
 // was read), and moving it to the end of the hour would leave the values stale for most of that hour.
 func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.Time) visitWhat {
-	what := visitWhat{broker: true}
+	what := visitWhat{broker: w.broker, identity: w.identity}
 	if !w.restart {
 		return what
 	}
@@ -562,6 +641,9 @@ const topicTakenLog = "another device answers on the device's MQTT topic; until 
 var (
 	errBrokerBusy  = errors.New("device busy")
 	errBrokerRetry = errors.New("read failed, try again")
+	// errBrokerRefused: the device could not be told to be the stored one (another device answers on the topic or at
+	// the address, or minimal firmware shows no MAC), so nothing was read for it (#1003). An answer, not a failure.
+	errBrokerRefused = errors.New("not the stored device")
 )
 
 // visitWhat says what a visit to one device reads.
@@ -578,8 +660,8 @@ func (r *brokerHostReader) isDue(m map[model.DeviceID]time.Time, id model.Device
 // visit reads what the schedule or a restart asks for from one device: the broker and the identity under
 // the device lock, then the data (see the top of the file). errBrokerBusy: a job holds the device, nothing
 // was sent. errBrokerRetry: the broker read failed (nothing else is tried then: the device does not
-// answer). nil: done, another device answers on the topic or at the address (nothing more was read), or the identity or data
-// read failed, which then waits for its own retry.
+// answer). errBrokerRefused: whoever answered could not be told to be the stored device, so nothing more was read.
+// nil: done, or the identity or data read failed, which then waits for its own retry.
 func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visitWhat) error {
 	id := d.ID
 	if what.broker || what.identity {
@@ -588,7 +670,7 @@ func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visit
 			return err
 		}
 		if refused {
-			return nil // another device answers on the topic or at the address: nothing is read for this device from it
+			return errBrokerRefused // nothing is read for this device from whoever answered
 		}
 	}
 	if what.data && r.readData != nil && !r.readDataOf(ctx, d) && !what.broker && !what.identity {
@@ -651,7 +733,14 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 			refused = true
 			err = nil                                   // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
 			r.dataNext[id] = r.now().Add(identityEvery) // and nothing is read for this device from that address until the identity matches again
-			r.outcomes.fail(id, r.now(), r.dataNext[id], settings.FailOtherDevice)
+			why := settings.FailOtherDevice
+			if ref.Reason == refusedUnverified {
+				why = settings.FailNoMAC // minimal firmware, the first step of an update (#1003): not another device
+			}
+			r.outcomes.fail(id, r.now(), r.dataNext[id], why)
+		}
+		if err == nil && !refused {
+			delete(r.versionAsked, id) // the stored identity is the device's now: a new version may ask again
 		}
 		r.finished(ctx, r.identityNext, retryKey{id, true}, identityEvery, err, "identity")
 	}
@@ -771,6 +860,14 @@ func (a *runtime) startBrokerHost(ctx context.Context) {
 	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
 	a.brokerHost.enter = a.brokerReadGuard()
 	a.wireDeviceRefresh(a.brokerHost)
+	if a.svc.Hub != nil { // a backup that names another firmware version reads the identity at once (#1003)
+		ch, unsub := a.svc.Hub.Subscribe(events.TopicBackup)
+		a.goBG("backup-versions", func() error {
+			defer unsub()
+			watchBackupVersions(ctx, ch, a.svc.Store.GetDevice, a.brokerHost.identityChanged, a.log)
+			return nil
+		})
+	}
 	a.goBG("broker-host", func() error { a.brokerHost.run(ctx); return nil })
 }
 

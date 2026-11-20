@@ -48,7 +48,8 @@ type liveView struct {
 	// Off dims the region: the device does not answer, what shows is its last reported state.
 	Off bool
 	// ReadsOff is the reason Refresh identity is disabled (the device's HTTP API is off and nothing else reads
-	// it), "" otherwise. The live refresh never swaps the Identity card, so live.js follows this (#659).
+	// it), "" otherwise. The live refresh swaps the Identity card only when what it shows changed (#1003), not for
+	// this, so live.js follows this (#659).
 	ReadsOff string
 	Tiles    []tile
 	Box      *relayBox // nil: the device has no relays
@@ -183,6 +184,32 @@ type identCard struct {
 	FWRRead bool
 	// CRWarn is the warning that the settings text area is nearly full; "" shows nothing.
 	CRWarn string
+	// Sig names what the card shows from the stored device (identSig); Changed: the live refresh carries the card out
+	// of band (hx-swap-oob), because the page shows another Sig (#1003).
+	Sig     string
+	Changed bool
+}
+
+// identSig is a short fingerprint of what the Identity card shows from the stored device. It leaves out the answer of
+// a Refresh identity (Notice, Error), which only that answer carries, and the dimming and the reason the button is
+// disabled (Off, Why), which live.js follows from the live region: neither is a reason to swap the card.
+func identSig(c identCard) string {
+	var b strings.Builder
+	for _, r := range c.Rows {
+		b.WriteString("r|" + r.Key + "|" + r.Value + "\n")
+	}
+	for _, r := range c.FWR {
+		b.WriteString("f|" + r.Name + "|" + r.Value + "\n")
+	}
+	for _, r := range c.Reading {
+		b.WriteString("g|" + r.Key + "|" + r.Value + "\n")
+	}
+	for _, f := range []bool{c.CanProbe, c.CanAnswer, c.KeepOK, c.FWRRead} {
+		b.WriteString(strconv.FormatBool(f) + "|")
+	}
+	b.WriteString(c.CRWarn + "|" + c.NameOffer)
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:8])
 }
 
 // policyCard is the device's policy compliance: the number of rules that apply to this device
@@ -328,6 +355,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	c.FWR, c.Reading = statusFWRRows(d.Identity), tasmoFleetReading(d.Identity, build)
 	c.FWRRead = d.Identity.FWR.Read()
 	c.CRWarn = crWarning(d.Identity.FWR, h.crWarnPercent())
+	c.Sig = identSig(c)
 	return c
 }
 

@@ -662,7 +662,9 @@ func (h *handler) powerLive(w http.ResponseWriter, r *http.Request, d model.Devi
 
 // deviceLive is GET /devices/{id}/live: the tiles, the relay box and the Activity box, with the
 // header and the offline banner out of band. The page asks for it when the device changes
-// (#126); it never carries the Identity card.
+// (#126). It carries the Identity card only when what the card shows changed (#1003: the
+// background identity read stored a new version or OTA URL), so an unchanged card keeps its
+// Refresh identity notice and the focus.
 func (h *handler) deviceLive(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
@@ -675,6 +677,7 @@ func (h *handler) deviceLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Activity.Unchanged = p.Activity.Sig == r.URL.Query().Get("act")
+	p.Ident.Changed = p.Ident.Sig != r.URL.Query().Get("ident")
 	h.component(w, r, http.StatusOK, deviceLiveParts(p))
 }
 

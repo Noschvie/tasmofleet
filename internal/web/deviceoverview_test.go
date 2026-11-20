@@ -298,12 +298,18 @@ func TestOverviewLiveRegionListensToThisDeviceOnly(t *testing.T) {
 }
 
 // Why (#126): the live answer carries the region, the Activity box, the header and the banner slot,
-// and never the Identity card (it holds answers and notices a swap would erase).
+// and not the Identity card while what it shows is unchanged (it holds answers and notices a swap
+// would erase; #1003 swaps it when it changed).
 func TestLiveAnswerCarriesTheRegionsButNotTheIdentity(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
 		d.Health.(fakeHealth)[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: now0, Power: map[string]string{"POWER": "ON"}}
 	})
-	resp, body := e.do(t, "GET", "/devices/1/live", "operator", nil)
+	_, page := e.do(t, "GET", "/devices/1", "operator", nil)
+	sig := regexp.MustCompile(`id="identsig" name="ident" value="([0-9a-f]+)"`).FindStringSubmatch(page)
+	if sig == nil {
+		t.Fatal("the page names no Identity signature")
+	}
+	resp, body := e.do(t, "GET", "/devices/1/live?ident="+sig[1], "operator", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}

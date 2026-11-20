@@ -68,6 +68,9 @@ type mqttIdentity struct {
 	log      *slog.Logger
 	grace    time.Duration
 	fw       *firmwareState // optional: the firmware an INFO1 names (#558)
+	// onVersion is told of a probed device whose live INFO1 names another regular firmware version than the stored
+	// identity (#1003): it asks for the identity read (brokerHostReader.identityChanged). nil: nobody.
+	onVersion func(id model.DeviceID, version string)
 
 	// known, if set, limits the topic table to inventory devices (mqttKnown.Known): a flood of
 	// topics on the broker must not fill it.
@@ -179,9 +182,12 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 	d, ok := m.deviceOf(ctx, msg.Topic)
 	if ok && msg.Suffix == "INFO1" && !msg.Retained {
 		m.applyGroupTopic(ctx, d, msg.Payload) // #239: whatever the identity rules below say
-		if m.fw != nil {
-			if variant, known := info1Build(msg.Payload); known { // #558: a device that boots into safeboot, or leaves it
+		if variant, known := info1Build(msg.Payload); known {
+			if m.fw != nil { // #558: a device that boots into safeboot, or leaves it
 				m.fw.set(d.ID, variant, m.now())
+			}
+			if variant == "" {
+				m.newVersion(d, msg.Payload)
 			}
 		}
 	}
@@ -201,6 +207,21 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 		return
 	}
 	m.applyInfo1(ctx, d, msg.Payload)
+}
+
+// newVersion asks for the identity read of a probed device whose live INFO1 on regular firmware names another version
+// than the stored identity (#1003): a firmware update outside TasmoFleet. The INFO1 has no MAC check, so its version is
+// never stored here; the identity read stores what it reads with its own checks (T20). The version is read with the
+// grammar the stored one was read with (fwselect: the part before the build tag), so the two compare as they are.
+func (m *mqttIdentity) newVersion(d model.Device, payload []byte) {
+	if m.onVersion == nil || d.Identity.DetectedAt.IsZero() {
+		return // never probed: applyInfo1 below and the first probe deal with it
+	}
+	parsed, err := fwselect.DetectInfo1(payload, model.Identity{}) // the version only: no hardware to check it against
+	if err != nil || parsed.Version == "" || parsed.Version == d.Identity.Version {
+		return
+	}
+	m.onVersion(d.ID, parsed.Version)
 }
 
 // info1GroupTopic is the GroupTopic of an INFO1 message as the plain topic. INFO1 writes it in

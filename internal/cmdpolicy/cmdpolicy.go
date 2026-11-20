@@ -475,6 +475,30 @@ func SetsGroupTopic(cmd string) bool {
 	return bad == "" && setsGroupTopicIn(p)
 }
 
+// SetsIdentityValue reports whether cmd writes a value TasmoFleet keeps with the device's identity (#1003): OtaUrl,
+// GroupTopic with any index, Topic, DeviceName, FriendlyName with any index and Hostname, each with an argument, alone
+// or inside a Backlog (every part counts). A bare command only reads. TasmoFleet reads the identity again after such a
+// write instead of taking the value from the answer, which no MAC check vouches for. MqttHost and MqttPort are left to
+// the broker read (#598). It reads the command exactly like Classify, so callers never parse commands themselves.
+func SetsIdentityValue(cmd string) bool {
+	p, bad := parse(cmd)
+	return bad == "" && setsIdentityIn(p)
+}
+
+func setsIdentityIn(p parsed) bool {
+	switch p.base {
+	case "otaurl", "grouptopic", "topic", "devicename", "friendlyname", "hostname":
+		return p.args != ""
+	case "backlog":
+		for _, part := range strings.Split(p.args, ";") {
+			if sub, bad := parse(stripBacklogPrefix(part)); bad == "" && setsIdentityIn(sub) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func setsGroupTopicIn(p parsed) bool {
 	switch p.base {
 	case "grouptopic":

@@ -42,6 +42,10 @@ type holdingCmd struct {
 	// onGroupTopic is told of every GroupTopic<n> with a value that may have reached a device (#1005): it may have
 	// changed GroupTopic2 to GroupTopic4, which nothing else refreshes before the next read. nil: nobody.
 	onGroupTopic func(model.DeviceID)
+	// onIdentity is told of every write the device accepted of a value TasmoFleet keeps with the identity
+	// (cmdpolicy.SetsIdentityValue, #1003): the stored value is stale, and the identity read refreshes it with its own
+	// checks (T20); the answer itself is never stored. nil: nobody.
+	onIdentity func(model.DeviceID)
 }
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
@@ -60,6 +64,9 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	}
 	if c.onBroker != nil && err == nil && setsBrokerTarget(cmd) {
 		c.onBroker(id)
+	}
+	if c.onIdentity != nil && err == nil && cmdpolicy.SetsIdentityValue(cmd) {
+		c.onIdentity(id)
 	}
 	if !neverSent(err) && cmdpolicy.StartsFirmwareUpgrade(cmd) {
 		startHold(c.holds, c.uptime, id)

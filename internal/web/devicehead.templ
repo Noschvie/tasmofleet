@@ -206,7 +206,8 @@ templ deviceOverviewPage(p deviceOverview) {
 }
 
 // deviceLiveParts is the answer of the live refresh: the region the page replaces, and the
-// Activity box, the header and the offline banner out of band.
+// Activity box, the header, the offline banner and, when what it shows changed, the Identity card
+// out of band (#1003).
 templ deviceLiveParts(p deviceOverview) {
 	@liveRegion(p.Live)
 	if p.Stab != nil {
@@ -214,6 +215,9 @@ templ deviceLiveParts(p deviceOverview) {
 	}
 	if !p.Activity.Unchanged {
 		@devActBox(p.Activity, templ.Attributes{"hx-swap-oob": "true"})
+	}
+	if p.Ident.Changed {
+		@identityCard(p.Ident)
 	}
 	if p.Paths != nil {
 		@pathsLive(*p.Paths)
@@ -246,6 +250,7 @@ templ liveRegion(l liveView) {
 			data-reads-off={ l.ReadsOff }
 		}
 		hx-get={ l.Base + devPath(l.ID, "/live") + "?act=" + l.ActSig }
+		hx-include="#identsig"
 		hx-trigger={ "sse:devstate-" + devID(l.ID) + " throttle:2s, sse:devjob-" + devID(l.ID) + " throttle:2s, sse:power-" + devID(l.ID) + " throttle:10s, sse:uptime-" + devID(l.ID) + " throttle:10s, sse:resync" }
 		hx-swap="outerHTML"
 	>
@@ -440,9 +445,21 @@ templ deviceHistoryPage(p historyView) {
 	</section>
 }
 
-// identityCard is the Identity card; "Refresh identity" asks the device again and swaps the card.
+// identityCard is the Identity card; "Refresh identity" asks the device again and swaps the card. The hidden field
+// names what the card shows (Sig): the live region sends it back, and the live refresh carries the card out of band
+// only when that changed (Changed, #1003), so a card Refresh identity just swapped in, with its notice, is left alone.
 templ identityCard(c identCard) {
-	<section id="identity" class={ "devcard", dimClass(c.Off), ui.StackRank(2) } data-dim aria-disabled={ ariaBool(c.Off) } aria-labelledby="dc-ident">
+	<section
+		id="identity"
+		class={ "devcard", dimClass(c.Off), ui.StackRank(2) }
+		data-dim
+		aria-disabled={ ariaBool(c.Off) }
+		aria-labelledby="dc-ident"
+		if c.Changed {
+			hx-swap-oob="true"
+		}
+	>
+		<input type="hidden" id="identsig" name="ident" value={ c.Sig }/>
 		<div class="devcard-head">
 			<h2 id="dc-ident">Identity</h2>
 			if c.CanProbe {

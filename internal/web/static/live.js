@@ -158,8 +158,9 @@
   });
 
   // Device overview (#145, #126): the page refreshes #devlive, the header and the Activity list
-  // when the device changes, but never the Identity and Connection cards (they hold answers and
-  // notices). Those follow the offline state from here: dimmed, and Refresh identity disabled.
+  // when the device changes, but never the Connection card and the Identity card only when what it
+  // shows changed (#1003; both hold answers and notices). Those follow the offline state from here:
+  // dimmed, and Refresh identity disabled.
   function syncDeviceDim() {
     var live = document.getElementById("devlive");
     if (!live) {
@@ -171,7 +172,7 @@
       el.setAttribute("aria-disabled", off ? "true" : "false");
     });
     // The live region says why Refresh identity cannot work (the device's HTTP API is off and nothing else
-    // reads it, #659): the Identity card is not swapped, so the button follows that reason both ways.
+    // reads it, #659): the Identity card is not swapped for it, so the button follows that reason both ways.
     var refused = live.getAttribute("data-reads-off") || "";
     document
       .querySelectorAll("#identity [data-needs-device]")
