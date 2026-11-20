@@ -234,43 +234,91 @@ func (s *TransportFacts) commandPrefix() string {
 // FullTopic without %topic%, or with %hostname%, %id%, ...) makes the answer false: unknown is not
 // exclusive. A device with neither Topic nor FullTopic is HTTP only and listens on nothing.
 // Not seen: devices outside the inventory, and group topics never read (othersGroupUnread and the device's own
-// GroupTopicsReadAt hold writes back for those).
+// GroupTopicsReadAt hold writes back for those). The rule itself is topicConflicts, which the Topic check card and the
+// Identity card's hint show (#1047): one rule, so the view cannot drift from the gate.
 func topicExclusive(d model.Device, all []model.Device, prefix string) bool {
+	conflicts, ok := topicConflicts(d, all, prefix)
+	return ok && len(conflicts) == 0
+}
+
+// topicConflicts is the write gate's topic rule with its reasons (#1047): every conflict that makes d's topic not
+// exclusive, from the same loop and the same fail-closed cases topicExclusive used to stop at, in inventory order.
+// ok is false when d has no Topic or its own FullTopic cannot be expanded: then nothing about d's topic is known and
+// no conflict is listed. A pair is listed once per reason: an equal topic is not reported again as overlapping
+// command topics, and a group topic's SetOption75 stem only when its FullTopic stem does not already overlap.
+func topicConflicts(d model.Device, all []model.Device, prefix string) (conflicts []transport.TopicConflict, ok bool) {
 	mine, ok := transport.CommandTopic(d.FullTopic, d.Topic, prefix)
 	if d.Topic == "" || !ok {
-		return false
+		return nil, false
 	}
 	for _, o := range all {
 		groups := o.GroupTopics()
 		if o.Topic == "" && o.FullTopic == "" && len(groups) == 0 {
 			continue
 		}
-		if o.ID != d.ID {
-			if o.Topic == d.Topic {
-				return false
-			}
-			x, ok := transport.CommandTopic(o.FullTopic, o.Topic, prefix)
-			if !ok || transport.StemsOverlap(x, mine) {
-				return false
+		add := func(kind transport.TopicConflictKind, topic, stem, slot string) {
+			conflicts = append(conflicts, transport.TopicConflict{Kind: kind, Topic: topic, Stem: stem, OtherID: o.ID, OtherName: o.Name, Slot: slot})
+		}
+		unknown := false // o's stem cannot be known: listed once, whatever else of o is checked
+		addUnknown := func() {
+			if !unknown {
+				unknown = true
+				add(transport.ConflictOtherStemUnknown, o.Topic, "", transport.SlotTopic)
 			}
 		}
-		for _, g := range groups {
+		if o.ID != d.ID {
+			same := o.Topic == d.Topic
+			if same {
+				add(transport.ConflictSameTopic, o.Topic, "", transport.SlotTopic)
+			}
+			x, ok := transport.CommandTopic(o.FullTopic, o.Topic, prefix)
+			switch {
+			case !ok:
+				addUnknown()
+			case !same && transport.StemsOverlap(x, mine):
+				add(transport.ConflictStemOverlap, o.Topic, shorterStem(x, mine), transport.SlotTopic)
+			}
+		}
+		for i, g := range groups {
+			slot := transport.SlotGroupTopic2to4
+			if i == 0 && o.GroupTopic != "" {
+				slot = transport.SlotGroupTopic1
+			}
 			if g == d.Topic {
-				return false
+				kind := transport.ConflictGroupIsTopic
+				if o.ID == d.ID {
+					kind = transport.ConflictOwnGroupIsTopic
+				}
+				add(kind, g, "", slot)
+				continue
 			}
 			x, ok := transport.CommandTopic(o.FullTopic, g, prefix)
-			if !ok || transport.StemsOverlap(x, mine) {
-				return false
+			if !ok {
+				addUnknown()
+			} else if transport.StemsOverlap(x, mine) {
+				add(transport.ConflictGroupStemOverlap, g, shorterStem(x, mine), slot)
+				continue
 			}
 			// With SetOption75 1 Tasmota subscribes a group topic as <prefix>/<group>/#, whatever the FullTopic says
 			// (GetGroupTopic_P). SetOption75 is not read, so that stem counts too, with our prefix and Tasmota's
 			// default "cmnd" (it only adds refusals).
-			if transport.StemsOverlap(prefix+"/"+g, mine) || transport.StemsOverlap("cmnd/"+g, mine) {
-				return false
+			for _, s := range []string{prefix + "/" + g, "cmnd/" + g} {
+				if transport.StemsOverlap(s, mine) {
+					add(transport.ConflictSetOption75, g, shorterStem(s, mine), slot)
+					break
+				}
 			}
 		}
 	}
-	return true
+	return conflicts, true
+}
+
+// shorterStem is the stem of two overlapping ones that the other lies under (or equals).
+func shorterStem(a, b string) string {
+	if len(a) < len(b) {
+		return a
+	}
+	return b
 }
 
 // lastProbe is the time of the device's last Status 1 read or identity detection.
@@ -306,7 +354,7 @@ func groupTopicStale(d model.Device) bool {
 func othersGroupUnread(d model.Device, all []model.Device, health func(model.DeviceID) model.Health, ev brokerEvidence) []string {
 	var names []string
 	for _, o := range all {
-		if o.ID == d.ID || o.Topic == "" || !groupTopicStale(o) || health(o.ID).LWT == "Offline" || offOurBroker(o, all, health, ev) {
+		if o.ID == d.ID || o.Topic == "" || !groupTopicStale(o) || !holdsWritesBack(o, all, health, ev) {
 			continue
 		}
 		name := o.Name
@@ -316,6 +364,13 @@ func othersGroupUnread(d model.Device, all []model.Device, health func(model.Dev
 		names = append(names, name)
 	}
 	return names
+}
+
+// holdsWritesBack says a message on our broker could reach o, so its unknown group topics hold back MQTT writes to the
+// other devices: false when its last will is Offline or it is provably not on our broker (offOurBroker). The one rule
+// for othersGroupUnread and the Topic check card (#1047).
+func holdsWritesBack(o model.Device, all []model.Device, health func(model.DeviceID) model.Health, ev brokerEvidence) bool {
+	return health(o.ID).LWT != "Offline" && !offOurBroker(o, all, health, ev)
 }
 
 // willReplayGrace is how long the bus's subscriptions must have been in place before "nothing heard from a topic"

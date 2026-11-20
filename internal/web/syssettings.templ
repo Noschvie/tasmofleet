@@ -193,6 +193,12 @@ templ sysCardView(p sysPage, c sysCard) {
 					</details>
 				}
 			}
+		case "topiccheck":
+			if p.Topics != nil {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: ui.StackRank(c.Phone), Plain: true}) {
+					@sysTopicCheck(*p.Topics)
+				}
+			}
 		case "download":
 			if p.DB != nil {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Acts at once, outside the schedule form. Every download is written to the audit log.", Class: ui.StackRank(c.Phone), Plain: true}) {
@@ -1015,6 +1021,61 @@ templ sysPasswordsCard(p sysPage) {
 		</div>
 	}
 	<p class="cnote">Updated after every backup. A password you enter is kept until a newer backup holds a different one.</p>
+}
+
+// sysTopicCheck is the Topic check card (#1047): the status line, the collisions with every device involved and how
+// it uses the topic, then the devices TasmoFleet does not fully know. Long lists start folded.
+templ sysTopicCheck(t topicsCard) {
+	<div class="sys-status" id="topiccheck-status">
+		<span class={ "sys-status-dot", "t-" + t.Tone } aria-hidden="true"></span>
+		<div class="sys-status-text">
+			<b>{ t.Title }</b>
+			<span>{ t.Text }</span>
+		</div>
+	</div>
+	if !t.Failed {
+		if len(t.Collisions) > 0 {
+			<details class="fold" open?={ len(t.Collisions) <= foldOpen }>
+				<summary>Collisions <span class="meta">{ strconv.Itoa(len(t.Collisions)) }</span></summary>
+				<div class="sys-orphans" id="topiccheck-collisions">
+					for _, col := range t.Collisions {
+						<div class="sys-orphan">
+							<div class="sys-orphan-main">
+								<div class="sys-orphan-title"><span class="sys-store-name mono topic-name">{ col.Topic }</span></div>
+								if col.Note != "" {
+									<div class="sys-orphan-detail">{ col.Note }</div>
+								}
+								<ul class="topic-members">
+									for _, m := range col.Members {
+										<li><a href={ templ.SafeURL(m.Href) } class="sys-store-name">{ m.Name }</a> <span class="meta">{ m.Use }</span></li>
+									}
+								</ul>
+							</div>
+						</div>
+					}
+				</div>
+			</details>
+		}
+		if len(t.Unknown) > 0 {
+			<details class="fold" open?={ len(t.Unknown) <= foldOpen }>
+				<summary>Not fully known <span class="meta">{ strconv.Itoa(len(t.Unknown)) }</span></summary>
+				<div class="sys-orphans" id="topiccheck-unknown">
+					for _, u := range t.Unknown {
+						<div class="sys-orphan">
+							<div class="sys-orphan-main">
+								<div class="sys-orphan-title"><a href={ templ.SafeURL(u.Href) } class="sys-store-name">{ u.Name }</a></div>
+								<div class="sys-orphan-detail">{ u.Reason }</div>
+								if u.Muted != "" {
+									<div class="topic-muted">{ u.Muted }</div>
+								}
+							</div>
+						</div>
+					}
+				</div>
+			</details>
+		}
+		<p class="cnote">TasmoFleet only knows what it has read from the devices: right after a start or a GroupTopic change, devices show as not fully read yet for a short while (the reader asks one device every 2 seconds).</p>
+	}
 }
 
 // pwBrokerFields are the insides of "Use the broker password": the devices, all ticked, and the box for the tests.

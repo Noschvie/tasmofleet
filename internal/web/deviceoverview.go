@@ -598,7 +598,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 		c := stabCardOf(in.Now, res, boots, hl, facts.SSID)
 		p.Stab = &c
 	}
-	p.Ident = h.identity(v, d, p.Updating != nil, off, facts)
+	p.Ident = h.identityWithHint(ctx, v, d, p.Updating != nil, off, facts)
 	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
 	if tpOK {

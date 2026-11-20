@@ -148,7 +148,7 @@ everything.
 | `ota`                              | update state machine + engine                                                                                 | `Step(job, event, now, cfg)` (pure), `Engine{Run, Submit, Preview, Cancel}`, `DeviceAPI`, `Firmware`, `Backups`, `Notifier`                                                                                                                                                                   | model, fwselect, store, clock          |
 | `mqttbus`                          | optional MQTT                                                                                                 | `Bus{Subscribe, Command, Connected}`, `Connect`, `Message`, `Kind`                                                                                                                                                                                                                            | paho                                   |
 | `mqttcmd`                          | commands over MQTT (SAFETY)                                                                                   | `Channel{Do, DoLoose, Info, Connected}`, `Doer`, `ErrRefused`                                                                                                                                                                                                                                 | cmdpolicy, mqttbus, tasmota, model     |
-| `transport`                        | path choice and routing (SAFETY)                                                                              | `Choose(Facts) Paths` (pure), `Router` (a `tasmota.Client`), `WithPath`, `WithTrace`, `Memory`                                                                                                                                                                                                | cmdpolicy, mqttcmd, tasmota, model     |
+| `transport`                        | path choice and routing (SAFETY)                                                                              | `Choose(Facts) Paths` (pure), `Router` (a `tasmota.Client`), `WithPath`, `WithTrace`, `Memory`, `TopicCheck` (#1047, UI only)                                                                                                                                                                 | cmdpolicy, mqttcmd, tasmota, model     |
 | `health`                           | reachability                                                                                                  | `Tracker{Get, All, Run}`, `Options`                                                                                                                                                                                                                                                           | model, mqttbus, tasmota, store, events |
 | `events`                           | in-process pub/sub                                                                                            | `Hub{Publish, Subscribe}`, `Event`, `Topic`                                                                                                                                                                                                                                                   | stdlib                                 |
 | `inventory`                        | device service                                                                                                | `Service{List, Get, Create, Update, Delete, Upsert}`                                                                                                                                                                                                                                          | model, store, audit, events            |
@@ -515,6 +515,19 @@ has no knowable stem: for this device it means not exclusive, and so does such a
 
 Limits: devices outside the inventory on the same broker are invisible and can still make a message reach more
 than one device. GroupTopic2 to GroupTopic4 are read with GroupTopic1 since #1005.
+
+The rule is shown, not only applied (#1047). `topicExclusive` is `topicConflicts` with no conflict: one loop that
+returns every reason (`transport.TopicConflict`: the same Topic, overlapping command stems, a group topic that is the
+Topic, a group topic's stem or SetOption75 stem that overlaps, the device's own group topic, another device's stem that
+cannot be known; the slot is GroupTopic1 or "one of GroupTopic2 to 4", since the model keeps 2 to 4 as a list).
+`webFacts.TopicCheck` runs it for every device with a Topic from one inventory list and returns `transport.TopicCheck`:
+the collisions merged per topic (overlaps per stem, a pair once), the devices not fully known (group topics not read
+since the last probe, or a FullTopic that cannot be expanded), each marked whether it holds back the other devices'
+writes (`othersGroupUnread`'s exemptions), each device's own conflicts, and a Topic equal to `DefaultGroupTopic`, which
+Choose refuses on its own. The UI reads it through `web.TopicCheckSource`: the Topic check card on System > Settings >
+MQTT (status line "All device topics are unique" only with no collision and no unknown device) and a hint on the
+device's Identity card (collisions only). The report is advisory: nothing in Choose or the router reads it, and it sends
+nothing to any device.
 
 The group topics are trusted as "known" only when GroupTopic1 is set and both stamps, GroupTopic1's and GroupTopic2 to
 4's (`Device.GroupTopicsReadAt`), are set and not older than the last Status 1 read (they can be stale: INFO1 is sent

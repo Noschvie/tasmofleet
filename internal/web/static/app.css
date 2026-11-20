@@ -13130,6 +13130,34 @@ a.sys-sum:hover {
   font-size: 12.5px;
   color: var(--color-text-2);
 }
+/* Topic check (#1047): the devices of a collision, each with how it uses the topic; a topic or stem wraps anywhere */
+.topic-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.topic-members {
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.topic-members li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-8);
+  min-width: 0;
+  padding: 2px 0;
+}
+.topic-members .meta {
+  font-size: 12.5px;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
+.topic-muted {
+  font-size: 12.5px;
+  color: var(--color-text-3);
+}
 /* Advanced: "Reset all settings" in a danger-bordered box */
 .sys-danger-title {
   font-weight: 600;

@@ -62,6 +62,7 @@ var sysLayout = []sysTabDef{
 	{"mqtt", "MQTT", []int{2, 1}, []sysCardDef{
 		{ID: "broker", Title: "Broker", Note: "Changes apply at once. An empty host turns MQTT off.", Stack: 0, Keys: []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD", "MQTT_ACL_WARNING_HIDDEN"}},
 		{ID: "topics", Title: "Topics", Stack: 1, Keys: []string{"MQTT_FULLTOPIC"}},
+		{ID: "topiccheck", Title: "Topic check", Note: "Whether a command to one device's topic can reach another device. Only reads what TasmoFleet stored; sends nothing.", Stack: 1},
 		{ID: "devicepasswords", Title: "Device MQTT passwords", Note: "Tasmota starts a backup or restore over MQTT only when the command carries the device's own MqttPassword.", Stack: 0, Keys: []string{"MQTT_PASSWORD_FROM_BACKUPS"}},
 	}},
 	{"discovery", "Discovery", []int{1, 2}, []sysCardDef{

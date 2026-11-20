@@ -184,6 +184,10 @@ type identCard struct {
 	FWRRead bool
 	// CRWarn is the warning that the settings text area is nearly full; "" shows nothing.
 	CRWarn string
+	// Topic is the hint that MQTT writes to the device are held back by a topic collision (#1047); nil shows
+	// nothing. It sits under the Group topics row (or the MQTT topic row): Rows[:TopicAt] above it, the rest below.
+	Topic   *topicHint
+	TopicAt int
 	// Sig names what the card shows from the stored device (identSig); Changed: the live refresh carries the card out
 	// of band (hx-swap-oob), because the page shows another Sig (#1003).
 	Sig     string
@@ -207,7 +211,7 @@ func identSig(c identCard) string {
 	for _, f := range []bool{c.CanProbe, c.CanAnswer, c.KeepOK, c.FWRRead} {
 		b.WriteString(strconv.FormatBool(f) + "|")
 	}
-	b.WriteString(c.CRWarn + "|" + c.NameOffer)
+	b.WriteString(c.CRWarn + "|" + c.NameOffer + "|" + c.Topic.sig())
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:8])
 }
@@ -359,6 +363,41 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	return c
 }
 
+// identityWithHint is the Identity card with the topic collision hint (#1047), which needs the fleet's topic check.
+func (h *handler) identityWithHint(ctx context.Context, v view, d model.Device, updating, off bool, f snapFacts) identCard {
+	c := h.identity(v, d, updating, off, f)
+	if c.Topic, c.TopicAt = h.topicHint(ctx, v, d, c.Rows); c.Topic != nil {
+		c.Sig = identSig(c)
+	}
+	return c
+}
+
+// topicHint is the Identity card's hint for d (#1047) and the row it sits under: the Group topics row, else the MQTT
+// topic row. The check is one inventory read for the fleet; when it cannot be read the card shows no hint (the Paths
+// card still says how writes go).
+func (h *handler) topicHint(ctx context.Context, v view, d model.Device, rows []ui.KVRow) (*topicHint, int) {
+	src, ok := h.d.Transport.(TopicCheckSource)
+	if !ok || d.Topic == "" {
+		return nil, 0
+	}
+	c, err := src.TopicCheck(ctx)
+	if err != nil {
+		h.log.WarnContext(ctx, "identity: topic check", "device", d.ID, "err", err)
+		return nil, 0
+	}
+	hint := topicHintOf(d, c.Of(d.ID), v.Base, v.IsAdmin)
+	if hint == nil {
+		return nil, 0
+	}
+	at := 0
+	for i, r := range rows {
+		if r.Key == "MQTT topic" || r.Key == "Group topics" {
+			at = i + 1
+		}
+	}
+	return hint, at
+}
+
 // defaultCRWarnPercent is the threshold when no system setting is wired (tests).
 const defaultCRWarnPercent = 90
 
@@ -508,7 +547,7 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	hl, running := h.deviceState(r, d)
 	tabs := h.headOf(r.Context(), v, d, hl, running, "overview")
-	c := h.identity(v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
+	c := h.identityWithHint(r.Context(), v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
 	c.Why = tabs.readsAPIOff()
 	c.Notice, c.Error = notice, failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

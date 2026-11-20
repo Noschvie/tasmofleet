@@ -480,7 +480,13 @@ templ identityCard(c identCard) {
 			}
 		</div>
 		@identityID(c.ID)
-		@ui.KV(c.Rows)
+		if c.Topic != nil {
+			@ui.KV(c.Rows[:c.TopicAt])
+			@identityTopicHint(*c.Topic)
+			@ui.KV(c.Rows[c.TopicAt:])
+		} else {
+			@ui.KV(c.Rows)
+		}
 		@identityFWR(c)
 		if c.CRWarn != "" {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: c.CRWarn})
@@ -500,6 +506,29 @@ templ identityCard(c identCard) {
 			</div>
 		}
 	</section>
+}
+
+// identityTopicHint says that MQTT writes to the device are held back by a topic collision (#1047), with the other
+// device as a link and, for admins, "+N more" as a link to the Topic check card. The markup is ui.Banner's.
+templ identityTopicHint(t topicHint) {
+	<div class="banner tone-warn" role="status" id="topic-hint">
+		<span class="banner-dot"></span>
+		<div class="banner-text">
+			{ t.Lead + t.Before }
+			if t.Other != "" {
+				<a href={ templ.SafeURL(t.OtherAt) }>{ t.Other }</a>{ t.After + "." }
+			} else {
+				{ t.After + "." }
+			}
+			if t.More > 0 {
+				if t.MoreHref != "" {
+					{ " " }<a href={ templ.SafeURL(t.MoreHref) }>{ "+" + strconv.Itoa(t.More) + " more" }</a>
+				} else {
+					{ " +" + strconv.Itoa(t.More) + " more" }
+				}
+			}
+		</div>
+	</div>
 }
 
 // identityID is the first row of the Identity card (#1004): the number every log line names the
