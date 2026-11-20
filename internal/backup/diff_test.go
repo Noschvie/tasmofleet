@@ -198,12 +198,25 @@ func TestFilterVolatile(t *testing.T) {
 	}
 }
 
+// snapshotDrift is the drift view's default list: the changed settings of a snapshot comparison,
+// without the unchanged ones SnapshotCompare marks Same.
+func snapshotDrift(stored, live []byte) ([]Change, error) {
+	all, err := SnapshotCompare(stored, live)
+	var out []Change
+	for _, c := range all {
+		if !c.Same {
+			out = append(out, c)
+		}
+	}
+	return out, err
+}
+
 // Why: drift compares the stored snapshot with a live one; clocks, uptime and
 // memory change every second and would drown real drift.
 func TestSnapshotDrift(t *testing.T) {
 	a := []byte(`{"Status1":{"StatusPRM":{"Uptime":"1T01:00:00","BootCount":3}},"Status2":{"StatusFWR":{"Version":"15.0.0"}},"Status11":{"StatusSTS":{"UptimeSec":5}},"Status6":{"StatusMQT":{"MqttHost":"a","MqttPassword":"x"}}}`)
 	b := []byte(`{"Status1":{"StatusPRM":{"Uptime":"2T01:00:00","BootCount":4}},"Status2":{"StatusFWR":{"Version":"16.0.0"}},"Status11":{"StatusSTS":{"UptimeSec":9}},"Status6":{"StatusMQT":{"MqttHost":"b","MqttPassword":"y"}}}`)
-	changes, err := SnapshotDrift(a, b)
+	changes, err := snapshotDrift(a, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,13 +255,6 @@ func TestSnapshotCompareListsUnchangedSettings(t *testing.T) {
 	}
 	if c := got["Status6.StatusMQT.MqttPassword"]; !c.Secret || c.Old != "" || c.New != "" {
 		t.Errorf("an unchanged secret is still never shown: %+v", c)
-	}
-	drift, err := SnapshotDrift(a, b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(drift) != 1 || drift[0].Path != "Status6.StatusMQT.MqttHost" {
-		t.Errorf("SnapshotDrift keeps listing the changes only: %+v", drift)
 	}
 }
 
@@ -484,7 +490,7 @@ func TestSnapshotDriftIgnoresSensorReadings(t *testing.T) {
 		`"Status10":{"StatusSNS":{"Time":"2026-11-05T10:00:00","ENERGY":{"Power":12,"Today":0.4,"Voltage":230},"DS18B20":{"Temperature":21.5},"TempUnit":"C"}}}`)
 	b := []byte(`{"Status1":{"StatusPRM":{"GroupTopic":"tasmotas"}},"Status6":{"StatusMQT":{"MqttHost":"a"}},` +
 		`"Status10":{"StatusSNS":{"Time":"2026-11-05T10:05:00","ENERGY":{"Power":99,"Today":0.9,"Voltage":231},"DS18B20":{"Temperature":22.1},"TempUnit":"F"}}}`)
-	for name, fn := range map[string]func(a, b []byte) ([]Change, error){"drift": SnapshotDrift, "compare": SnapshotCompare} {
+	for name, fn := range map[string]func(a, b []byte) ([]Change, error){"drift": snapshotDrift, "compare": SnapshotCompare} {
 		changes, err := fn(a, b)
 		if err != nil {
 			t.Fatal(err)
@@ -498,7 +504,7 @@ func TestSnapshotDriftIgnoresSensorReadings(t *testing.T) {
 	// a configuration change next to it is still found, in a group that merely starts with "Status1"
 	c := bytes.Replace(b, []byte(`"GroupTopic":"tasmotas"`), []byte(`"GroupTopic":"other"`), 1)
 	c = bytes.Replace(c, []byte(`"MqttHost":"a"`), []byte(`"MqttHost":"b"`), 1)
-	changes, err := SnapshotDrift(a, c)
+	changes, err := snapshotDrift(a, c)
 	if err != nil {
 		t.Fatal(err)
 	}

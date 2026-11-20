@@ -52,7 +52,7 @@ type Release struct {
 
 	// Notes is the release body (changelog) as plain Markdown text, cut to
 	// MaxNotesBytes; empty when no source provides one. Render it only with
-	// ParseNotes. URL is the release page (a SafeLink or empty).
+	// ParseNotesWith. URL is the release page (a SafeLink or empty).
 	Notes          string
 	NotesTruncated bool
 	URL            string
@@ -113,9 +113,3 @@ type Options struct {
 	// Logger defaults to slog.Default().
 	Logger *slog.Logger
 }
-
-// Server returns the device-facing handler (mounted on the firmware
-// listener only) with default ServerOptions. It needs a cache that can look
-// up indexed files (the one returned by New can); for any other Cache it
-// answers 404 to everything.
-func Server(c Cache) http.Handler { return NewServer(c, ServerOptions{}) }

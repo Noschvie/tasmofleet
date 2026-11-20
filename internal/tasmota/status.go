@@ -11,18 +11,6 @@ type StatusFWR struct {
 	CR            string `json:"CR"`
 }
 
-// StatusMEM is the StatusMEM object of "Status 4".
-type StatusMEM struct {
-	ProgramSize      int    `json:"ProgramSize"`
-	Free             int    `json:"Free"`
-	Heap             int    `json:"Heap"`
-	ProgramFlashSize int    `json:"ProgramFlashSize"`
-	FlashSize        int    `json:"FlashSize"`
-	FlashChipID      string `json:"FlashChipId"`
-	FlashFrequency   int    `json:"FlashFrequency"`
-	FlashMode        string `json:"FlashMode"`
-}
-
 // StatusSTS is the StatusSTS object of "Status 11" (same shape as tele STATE).
 type StatusSTS struct {
 	Time      string            `json:"Time"`

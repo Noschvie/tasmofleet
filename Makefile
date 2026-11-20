@@ -53,12 +53,12 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity smoke-shots styleguide-docs vuln build dist image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint deadcode test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity smoke-shots styleguide-docs vuln build dist image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
 # and go vet is the only check left for the *_templ.go files.
-check: templ-check fmt-check vet lint test scripts-test agent-refs shards-check-changed migration-append-only changelog-fragments-check integration vuln build
+check: templ-check fmt-check vet lint deadcode test scripts-test agent-refs shards-check-changed migration-append-only changelog-fragments-check integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
 # expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
@@ -134,6 +134,11 @@ staticcheck:
 
 lint:
 	$(NICE) $(TOOL) golangci-lint run ./...
+
+# Unreachable functions (#1057): golangci-lint's unused skips exported names, so a function only its own
+# test calls passes every other check. tools/deadcode-allow.txt lists the test kits and seams on purpose.
+deadcode:
+	TOOL="$(TOOL)" NICE="$(NICE)" tools/deadcode-check.sh
 
 # Unit tests: no network except loopback listeners started by the test itself.
 test:

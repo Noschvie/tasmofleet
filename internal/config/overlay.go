@@ -213,10 +213,6 @@ func isUI(key string) bool {
 	return false
 }
 
-// IsUI reports whether key is an operational setting owned by the system
-// settings page.
-func IsUI(key string) bool { return isUI(key) }
-
 // IsLocked reports whether the operator set key in the environment.
 func (c Config) IsLocked(key string) bool { return c.Locked[key] }
 

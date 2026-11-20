@@ -10,11 +10,11 @@ data generated from the Tasmota source, not as a hand-written table (#268, part 
 - `catalogue-<version>.json`: one entry per command-table entry of a pinned Tasmota version, embedded. One
   catalogue is pinned per Tasmota version the policy editor should judge (`TASMOTA_PINS` in the Makefile; #269);
   `tasmotacmd.Pinned()` holds them all, `Default()` is the newest.
-- `tasmotacmd.ReplyKeys(cmd) ([]string, ok)`: the keys that answer `cmd`. `cmd` is the command as sent
+- `(*Catalogue).ReplyKeys(cmd) ([]string, ok)` (get the catalogue with `tasmotacmd.Default()`): the keys that answer `cmd`. `cmd` is the command as sent
   (`OtaUrl`, `SetOption19`, `Power1 on`); arguments are ignored, matching is case-insensitive, trailing
   digits are the index. `<n>` in a stored key becomes the typed index (1 when none is typed, as in
   Tasmota). `ok` is false when the command is unknown or loose.
-- `tasmotacmd.Lookup(cmd)` returns the same plus the `Loose` reason, so a caller can show why.
+- `(*Catalogue).Lookup(cmd)` returns the same plus the `Loose` reason, so a caller can show why.
 - `internal/tasmotacmd/extract` and `cmd/tasmofleet-catalogue`: the generator.
 
 A command is **loose** when its reply keys cannot be derived statically. `ReplyKeys` then refuses

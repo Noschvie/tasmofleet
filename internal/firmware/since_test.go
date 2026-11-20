@@ -52,7 +52,7 @@ func TestReleasesBetween(t *testing.T) {
 // block of the section under a "Breaking" heading is flagged, and the next
 // heading ends the section.
 func TestBreakingBlocks(t *testing.T) {
-	blocks := ParseNotes("## v14.3.0\n### Added\n- a\n### Breaking Changed\n- old API removed\n\nmore text\n### Fixed\n- b\n")
+	blocks := ParseNotesWith("## v14.3.0\n### Added\n- a\n### Breaking Changed\n- old API removed\n\nmore text\n### Fixed\n- b\n", nil)
 	marks, found := BreakingBlocks(blocks)
 	if !found {
 		t.Fatal("breaking section not found")
@@ -72,7 +72,7 @@ func TestBreakingBlocks(t *testing.T) {
 	if got := strings.Join(flagged, "|"); got != "h:Breaking Changed|li:old API removed|p:more text" {
 		t.Errorf("flagged = %q", got)
 	}
-	if _, found := BreakingBlocks(ParseNotes("### Added\n- breaking news in a bullet is no heading\n")); found {
+	if _, found := BreakingBlocks(ParseNotesWith("### Added\n- breaking news in a bullet is no heading\n", nil)); found {
 		t.Error("only a heading opens a breaking section")
 	}
 }

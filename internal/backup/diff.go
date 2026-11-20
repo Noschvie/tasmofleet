@@ -264,15 +264,10 @@ func volatileSnapshot(path string) bool {
 	return volatileSnapshotKeys[last]
 }
 
-// SnapshotDrift compares a stored snapshot (Status 1..11 JSON) with a live
-// one and returns the differences in settings, ignoring clocks, uptime,
-// memory and sensor readings. Secrets are redacted like in Diff.
-func SnapshotDrift(stored, live []byte) ([]Change, error) {
-	return diffFiltered(stored, live, volatileSnapshot, false)
-}
-
-// SnapshotCompare is SnapshotDrift with the unchanged settings listed too (Same set): the
-// drift view's "Show all". Secrets stay redacted on both kinds of rows.
+// SnapshotCompare compares a stored snapshot (Status 1..11 JSON) with a live one and returns the
+// settings of both, ignoring clocks, uptime, memory and sensor readings. The unchanged settings
+// carry Same: the drift view lists the changes and, under "Show all", the rest. Secrets are
+// redacted like in Diff, on both kinds of rows.
 func SnapshotCompare(stored, live []byte) ([]Change, error) {
 	return diffFiltered(stored, live, volatileSnapshot, true)
 }

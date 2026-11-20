@@ -1,7 +1,6 @@
 package web
 
 import (
-	"cmp"
 	"slices"
 )
 
@@ -51,43 +50,4 @@ func markSortable(m map[string]tableDef) {
 			}
 		}
 	}
-}
-
-// rowKey compares two rows by one column; has says whether a row has a value
-// for it. Rows without a value go last in both directions.
-type rowKey[T any] func(a, b T) (c int, hasA, hasB bool)
-
-func strKey[T any](f func(T) string, c func(a, b string) int) rowKey[T] {
-	return func(a, b T) (int, bool, bool) {
-		x, y := f(a), f(b)
-		return c(x, y), x != "", y != ""
-	}
-}
-
-func intKey[T any](f func(T) int64) rowKey[T] {
-	return func(a, b T) (int, bool, bool) { return cmp.Compare(f(a), f(b)), true, true }
-}
-
-// sortBy orders rows by the column s names; an unknown or empty key keeps the
-// incoming order, ties keep it too.
-func sortBy[T any](rows []T, s tableSort, keys map[string]rowKey[T]) {
-	key, ok := keys[s.Key]
-	if !ok {
-		return
-	}
-	slices.SortStableFunc(rows, func(a, b T) int {
-		c, hasA, hasB := key(a, b)
-		switch {
-		case hasA != hasB:
-			if hasA {
-				return -1
-			}
-			return 1
-		case !hasA:
-			return 0
-		case s.Dir == "desc":
-			return -c
-		}
-		return c
-	})
 }

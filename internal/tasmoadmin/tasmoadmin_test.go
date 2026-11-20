@@ -7,10 +7,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 const fixtures = "../../testdata/fixtures/tasmoadmin"
@@ -62,7 +65,7 @@ func newKey(t *testing.T) []byte {
 func TestUserWithoutPasswordIsDroppedOnImport(t *testing.T) {
 	csv := "1,\"A\",192.168.1.50,admin,,bulb_1,1,1,0,0,1,80,\"A\",0,a,0\n" +
 		"2,\"B\",192.168.1.51,admin,plainpw,bulb_1,1,1,0,0,1,80,\"B\",0,b,0\n"
-	devs, _, err := ParseDevices(strings.NewReader(csv), nil)
+	devs, _, err := parseDevices(strings.NewReader(csv), nil)
 	if err != nil || len(devs) != 2 {
 		t.Fatalf("%v %d", err, len(devs))
 	}
@@ -77,7 +80,7 @@ func TestUserWithoutPasswordIsDroppedOnImport(t *testing.T) {
 // The documented results of the sample file: nothing may be dropped silently,
 // and every row that needs the operator's attention produces an error.
 func TestParseDevicesFixtureWithoutKey(t *testing.T) {
-	devs, errs, err := ParseDevices(openFixture(t, "devices.csv"), nil)
+	devs, errs, err := parseDevices(openFixture(t, "devices.csv"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +139,7 @@ func TestParseDevicesDecryptsWithGeneratedKey(t *testing.T) {
 		"base64 no \\n": []byte(base64.StdEncoding.EncodeToString(key)),
 	} {
 		t.Run(name, func(t *testing.T) {
-			devs, errs, err := ParseDevices(strings.NewReader(csv), k)
+			devs, errs, err := parseDevices(strings.NewReader(csv), k)
 			if err != nil || len(errs) != 0 {
 				t.Fatalf("err=%v errs=%v", err, errs)
 			}
@@ -150,7 +153,7 @@ func TestParseDevicesDecryptsWithGeneratedKey(t *testing.T) {
 // A wrong key must never yield garbage that is later sent to a device.
 func TestParseDevicesWrongKeyReportsAndClearsPassword(t *testing.T) {
 	csv := `7,"Plug",10.0.0.7,admin,` + encrypt(t, newKey(t), "secret") + "\n"
-	devs, errs, err := ParseDevices(strings.NewReader(csv), newKey(t))
+	devs, errs, err := parseDevices(strings.NewReader(csv), newKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +171,7 @@ func TestParseDevicesWrongKeyReportsAndClearsPassword(t *testing.T) {
 }
 
 func TestParseDevicesInvalidKeyIsFatal(t *testing.T) {
-	_, _, err := ParseDevices(strings.NewReader("1,a,1.2.3.4\n"), []byte("short"))
+	_, _, err := parseDevices(strings.NewReader("1,a,1.2.3.4\n"), []byte("short"))
 	if err == nil {
 		t.Fatal("a key that is neither 32 raw bytes nor base64 of 32 bytes must fail the import")
 	}
@@ -185,7 +188,7 @@ func TestParseDevicesRowProblems(t *testing.T) {
 		`7,"Friendly",10.0.0.7,,,bulb_1,7,1,0,0,1,80,"Pretty Name|Second",0,t7`,
 		`8,"Desk Left|Desk Right",10.0.0.8,,,bulb_1,8`,
 	}, "\n") + "\n"
-	devs, errs, err := ParseDevices(strings.NewReader(csv), nil)
+	devs, errs, err := parseDevices(strings.NewReader(csv), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +237,7 @@ func TestParseDevicesRowProblems(t *testing.T) {
 }
 
 func TestParseDevicesUnterminatedQuote(t *testing.T) {
-	devs, errs, err := ParseDevices(strings.NewReader("1,\"broken,10.0.0.1\n"), nil)
+	devs, errs, err := parseDevices(strings.NewReader("1,\"broken,10.0.0.1\n"), nil)
 	if err != nil {
 		t.Fatalf("a damaged row is a row error, not a fatal one: %v", err)
 	}
@@ -277,7 +280,7 @@ func FuzzParseDevices(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, in string) {
-		devs, _, err := ParseDevices(strings.NewReader(in), nil)
+		devs, _, err := parseDevices(strings.NewReader(in), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -292,12 +295,12 @@ func FuzzParseDevices(f *testing.F) {
 // Why (review F1): the parser is fed uploads; record count, field count and
 // field size are bounded so a small file cannot amplify into memory.
 func TestParseDevicesBoundsRecordsAndFields(t *testing.T) {
-	_, errs, err := ParseDevices(strings.NewReader(strings.Repeat("x\n", 5000)), nil)
+	_, errs, err := parseDevices(strings.NewReader(strings.Repeat("x\n", 5000)), nil)
 	if err != nil || len(errs) > maxRecords+1 || !errors.Is(errors.Join(errs...), ErrTooManyRecords) {
 		t.Fatalf("records: err=%v errs=%d", err, len(errs))
 	}
 	long := "1,\"" + strings.Repeat("a", maxFieldBytes+10) + "\",10.0.0.1\n" + strings.Repeat("1,", maxFields+2) + "\n"
-	_, errs, err = ParseDevices(strings.NewReader(long), nil)
+	_, errs, err = parseDevices(strings.NewReader(long), nil)
 	if err != nil || len(errs) != 2 || !errors.Is(errs[0], ErrRecordTooBig) || !errors.Is(errs[1], ErrRecordTooBig) {
 		t.Fatalf("fields: err=%v errs=%v", err, errs)
 	}
@@ -311,12 +314,26 @@ func TestParseDevicesBlankLineAfterTheCap(t *testing.T) {
 	for i := 0; i < maxRecords; i++ {
 		b.WriteString(row(i))
 	}
-	devs, errs, err := ParseDevices(strings.NewReader(b.String()+"\n\r\n"), nil)
+	devs, errs, err := parseDevices(strings.NewReader(b.String()+"\n\r\n"), nil)
 	if err != nil || len(errs) != 0 || len(devs) != maxRecords {
 		t.Fatalf("1000 rows and blank lines: %d devices, errors %v, %v", len(devs), errs, err)
 	}
-	_, errs, _ = ParseDevices(strings.NewReader(b.String()+"\n"+row(maxRecords)), nil)
+	_, errs, _ = parseDevices(strings.NewReader(b.String()+"\n"+row(maxRecords)), nil)
 	if !errors.Is(errors.Join(errs...), ErrTooManyRecords) {
 		t.Fatalf("a 1001st record must still be refused: %v", errs)
 	}
+}
+
+// parseDevices is ParseRows without the line numbers: the tests above check the devices and the
+// row problems of the one parser the importer uses.
+func parseDevices(r io.Reader, key []byte) ([]model.Device, []error, error) {
+	rows, errs, err := ParseRows(r, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	devs := make([]model.Device, len(rows))
+	for i, row := range rows {
+		devs[i] = row.Device
+	}
+	return devs, errs, nil
 }

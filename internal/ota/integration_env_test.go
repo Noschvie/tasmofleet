@@ -321,7 +321,7 @@ func newItEnvMQTT(t *testing.T, mqttURL string) *itEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.fwHandler.Store(http.HandlerFunc(firmware.Server(e.cache).ServeHTTP)) // one concrete type, so tests can swap in wrappers
+	e.fwHandler.Store(http.HandlerFunc(firmware.NewServer(e.cache, firmware.ServerOptions{}).ServeHTTP)) // one concrete type, so tests can swap in wrappers
 
 	e.fleet, err = simulator.NewFleetWith(simulator.FleetOptions{FixturesDir: itFixtures, MQTTURL: mqttURL, TelePeriod: time.Hour}, simulator.Extra{TimeScale: timeScale})
 	if err != nil {

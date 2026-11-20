@@ -6,10 +6,10 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 )
 
-// TestFamilyFromHardware has one row per §6.1 entry. The chip family is the
+// TestHardwareInfo has one row per §6.1 entry. The chip family is the
 // primary key of the safety guard: a wrong family here sends a binary for the
 // wrong CPU to a device, which bricks it. Unknown strings must stay unknown.
-func TestFamilyFromHardware(t *testing.T) {
+func TestHardwareInfo(t *testing.T) {
 	tests := []struct {
 		hw     string
 		family model.ChipFamily
@@ -77,9 +77,6 @@ func TestFamilyFromHardware(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.hw, func(t *testing.T) {
-			if got := FamilyFromHardware(tt.hw); got != tt.family {
-				t.Errorf("FamilyFromHardware(%q) = %q, want %q", tt.hw, got, tt.family)
-			}
 			fam, single := hardwareInfo(tt.hw)
 			if fam != tt.family || single != tt.single {
 				t.Errorf("hardwareInfo(%q) = %q,%v, want %q,%v", tt.hw, fam, single, tt.family, tt.single)

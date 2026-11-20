@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -294,12 +293,8 @@ type backupData struct {
 	Blocked     string // why "Back up now" cannot be used now (updating, never answered); empty = usable
 }
 
-// IsNewest reports whether a backup taken at t is the newest run of the
-// device: deleting it gets the extra warning.
-func (b backupData) IsNewest(t time.Time) bool { return t.Equal(backup.NewestRun(b.Backups)) }
-
 // DeleteText is the text of the confirmation dialog of the delete button. The
-// newest backup of the device gets an extra callout in the dialog (IsNewest).
+// newest backup of the device gets an extra warning on the confirm page (confirmpages.go).
 func (b backupData) DeleteText(x model.Backup) string {
 	return "Delete the backup of " + ui.StampText(x.TakenAt, ui.StampDateTimeSec) + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
 }
@@ -451,42 +446,6 @@ func (h *handler) device(w http.ResponseWriter, r *http.Request) (model.Device, 
 		return d, false
 	}
 	return d, true
-}
-
-// mqttText describes in one line what the device does with MQTT and whether
-// tasmofleet watches it. brokerConfigured says whether tasmofleet has a broker
-// at all; same compares the device's broker with ours. Only host and port are
-// shown, never the device's MQTT user or password.
-func mqttText(d model.Device, brokerConfigured bool, same func(host string, port int) bool) string {
-	if d.MQTT == model.MQTTNone {
-		return "MQTT disabled"
-	}
-	if d.MQTT == model.MQTTUnknown {
-		return "not probed yet"
-	}
-	topic := ""
-	if d.Topic != "" {
-		topic = ", topic " + d.Topic
-	}
-	if d.MQTTHost == "" { // probed before the broker address was recorded
-		if d.MQTT == model.MQTTOurs {
-			return "reports to our broker" + topic
-		}
-		return "MQTT configured (broker address known after the next probe)" + topic
-	}
-	port := d.MQTTPort
-	if port == 0 {
-		port = 1883
-	}
-	target := net.JoinHostPort(d.MQTTHost, strconv.Itoa(port))
-	switch {
-	case !brokerConfigured:
-		return "reports to " + target + topic + " (not monitored: TasmoFleet has no MQTT broker configured)"
-	case d.MQTT == model.MQTTOurs || (same != nil && same(d.MQTTHost, d.MQTTPort)):
-		return "reports to our broker (" + target + ")" + topic
-	default:
-		return "other broker " + target + topic
-	}
 }
 
 // refreshProblem is the sentence under a failed "Refresh identity".

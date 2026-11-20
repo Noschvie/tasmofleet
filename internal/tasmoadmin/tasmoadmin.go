@@ -90,33 +90,6 @@ type Config struct {
 	OtaServerPort   string
 }
 
-// ParseDevices reads devices.csv (fputcsv with backslash escape, 7 to 16
-// columns). Rows without an IP are reported, not silently dropped. key is
-// the content of .device-password.key (base64 of 32 bytes) used to decrypt
-// "enc:v1:" passwords (AES-256-GCM, iv||tag||ciphertext); nil leaves
-// encrypted passwords empty and reports them. Column 10 (isUpdatable=0)
-// maps to Device.OTAExcluded, column 14 to Topic.
-//
-// key may be the file content (base64, whitespace allowed) or the 32 raw
-// bytes. A key that is neither is a fatal error (third return value); row
-// problems are returned in the []error slice as *RowError. Devices with a
-// non-fatal problem (undecryptable password, bad port) are still returned.
-//
-// The device name is the friendly name (column 12), else the relay names
-// (column 1); several relay names are joined with "-" like TasmoAdmin does.
-// Notes records the TasmoAdmin id.
-func ParseDevices(r io.Reader, key []byte) ([]model.Device, []error, error) {
-	rows, errs, err := ParseRows(r, key)
-	if err != nil {
-		return nil, nil, err
-	}
-	devs := make([]model.Device, len(rows))
-	for i, row := range rows {
-		devs[i] = row.Device
-	}
-	return devs, errs, nil
-}
-
 // Row is a device read from devices.csv with the line its record starts on, so that a caller can
 // tie the problems of a line (RowError.Line) to the device they belong to.
 type Row struct {
@@ -131,7 +104,22 @@ func NonFatal(err error) bool {
 	return errors.Is(err, ErrBadPort) || errors.Is(err, ErrEncryptedNoKey) || errors.Is(err, ErrDecrypt)
 }
 
-// ParseRows is ParseDevices with the line of every device.
+// ParseRows reads devices.csv (fputcsv with backslash escape, 7 to 16
+// columns). Rows without an IP are reported, not silently dropped. key is
+// the content of .device-password.key (base64 of 32 bytes) used to decrypt
+// "enc:v1:" passwords (AES-256-GCM, iv||tag||ciphertext); nil leaves
+// encrypted passwords empty and reports them. Column 10 (isUpdatable=0)
+// maps to Device.OTAExcluded, column 14 to Topic.
+//
+// key may be the file content (base64, whitespace allowed) or the 32 raw
+// bytes. A key that is neither is a fatal error (third return value); row
+// problems are returned in the []error slice as *RowError. Devices with a
+// non-fatal problem (undecryptable password, bad port) are still returned.
+//
+// The device name is the friendly name (column 12), else the relay names
+// (column 1); several relay names are joined with "-" like TasmoAdmin does.
+// Notes records the TasmoAdmin id.
+// Every device comes with the line its record starts on.
 func ParseRows(r io.Reader, key []byte) ([]Row, []error, error) {
 	gcm, err := newGCM(key)
 	if err != nil {

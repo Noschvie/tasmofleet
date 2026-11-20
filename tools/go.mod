@@ -6,6 +6,7 @@ tool (
 	github.com/a-h/templ/cmd/templ
 	github.com/go-gremlins/gremlins/cmd/gremlins
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck
 )

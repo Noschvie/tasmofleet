@@ -134,25 +134,6 @@ func TestPolicySetText(t *testing.T) {
 	}
 }
 
-// Why: a command that classifies with Redact keeps its arguments out of every log; it must also
-// never be accepted as a rule, even if some future class change dropped its confirmation.
-func TestPolicyCommandCombinesReadAndSetChecks(t *testing.T) {
-	if err := PolicyCommand("Sleep", "50"); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct{ name, want, why string }{
-		{"Status0", "1", reasonStatus},
-		{"MqttPassword", "x", reasonSecret},
-		{"Reset", "1", reasonActs},
-		{"Template", "1", reasonConfirm},
-		{"WebServer", "1", reasonConfirm},
-	} {
-		if err := PolicyCommand(c.name, c.want); err == nil || err.Error() != c.why {
-			t.Errorf("PolicyCommand(%q, %q) = %v, want %q", c.name, c.want, err, c.why)
-		}
-	}
-}
-
 // Why: whatever the name, "readable" must imply that the bare form is not Status and not a
 // secret, is one plain token, and classifies without a confirmation. A fuzzer finds the
 // spelling a table did not think of.

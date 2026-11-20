@@ -59,21 +59,6 @@ func TestParseStatus2_AllFixtures(t *testing.T) {
 	}
 }
 
-func TestParseStatus4_AllFixtures(t *testing.T) {
-	for _, dir := range fixtureDevices(t) {
-		t.Run(filepath.Base(dir), func(t *testing.T) {
-			got, err := ParseStatus4(readFixture(t, dir, "status-4.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			// Flash size picks the 1 MB (minimal-first) versus 4 MB flow.
-			if got.FlashSize == 0 || got.ProgramFlashSize == 0 || got.FlashChipID == "" {
-				t.Errorf("incomplete StatusMEM: %+v", got)
-			}
-		})
-	}
-}
-
 func TestParseStatus11_AllFixtures(t *testing.T) {
 	for _, dir := range fixtureDevices(t) {
 		t.Run(filepath.Base(dir), func(t *testing.T) {
@@ -112,7 +97,6 @@ func TestParsers_UnknownMeansErrUnknownCommand(t *testing.T) {
 		raw := readFixture(t, dir, "unknown-foobar.json")
 		for name, fn := range map[string]func(json.RawMessage) error{
 			"Status2":      func(r json.RawMessage) error { _, e := ParseStatus2(r); return e },
-			"Status4":      func(r json.RawMessage) error { _, e := ParseStatus4(r); return e },
 			"Status11":     func(r json.RawMessage) error { _, e := ParseStatus11(r); return e },
 			"UpgradeProbe": func(r json.RawMessage) error { _, e := ParseUpgradeProbe(r); return e },
 			"OtaURL":       func(r json.RawMessage) error { _, e := ParseOtaURL(r); return e },

@@ -9,11 +9,20 @@ import (
 
 func always(model.DeviceID, string) bool { return true }
 
+// commandLines are the command texts of a plan in sending order.
+func commandLines(p FixPlan) []string {
+	out := make([]string, len(p.Commands))
+	for i, c := range p.Commands {
+		out[i] = c.Text
+	}
+	return out
+}
+
 func lines(t *testing.T, ps []FixPlan, id model.DeviceID) []string {
 	t.Helper()
 	for _, p := range ps {
 		if p.DeviceID == id {
-			return p.Lines()
+			return commandLines(p)
 		}
 	}
 	t.Fatalf("no plan for device %d in %+v", id, ps)

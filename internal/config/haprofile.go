@@ -46,16 +46,6 @@ var haDefaults = map[string]string{
 	"LOG_FORMAT":      "text",
 }
 
-// haOptionKeys lists the option names in declaration order.
-func haOptionKeys() []string {
-	var keys []string
-	rt := reflect.TypeFor[haOptions]()
-	for i := range rt.NumField() {
-		keys = append(keys, rt.Field(i).Tag.Get("json"))
-	}
-	return keys
-}
-
 // inHomeAssistant reports whether the process runs as a Home Assistant app. An empty token counts
 // as not set, like every other empty variable.
 func inHomeAssistant(environ []string) bool {

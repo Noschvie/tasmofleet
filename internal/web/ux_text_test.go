@@ -51,13 +51,6 @@ func TestSnapshotGaps(t *testing.T) {
 	}
 }
 
-// Why: the transaction page says how an update is flashed in words, not as the stored enum.
-func TestPlanText(t *testing.T) {
-	if planText(model.PlanDirect) != "direct flash" || planText(model.PlanStaged) != "staged: minimal firmware first" {
-		t.Error("plan texts changed")
-	}
-}
-
 // A health detail that only repeats the Source column adds noise; one that
 // names a cause (rejected credentials, an error kind) must stay.
 func TestHealthDetailOnlyWhenItAddsInformation(t *testing.T) {

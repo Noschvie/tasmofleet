@@ -143,13 +143,6 @@ func Detect(in Inputs) (model.Identity, error) {
 	return id, nil
 }
 
-// FamilyFromHardware maps StatusFWR.Hardware to a chip family. Unknown
-// strings return ChipUnknown (never a guess).
-func FamilyFromHardware(hw string) model.ChipFamily {
-	fam, _ := hardwareInfo(hw)
-	return fam
-}
-
 // Choice is the user's selection for an update.
 type Choice struct {
 	Release  string // e.g. "16.0.0"

@@ -242,3 +242,14 @@ func TestCertChangesAreAnnouncedWithTheirFingerprint(t *testing.T) {
 		t.Errorf("renewal: announced %v, served %s", got, renewed)
 	}
 }
+
+// CertFingerprint returns the SHA-256 of the certificate cfg serves now, as
+// upper-case hex pairs separated by colons (what browsers show), so an
+// operator can compare it with the log before accepting a self-signed one.
+func CertFingerprint(cfg *tls.Config) (string, error) {
+	c, err := cfg.GetCertificate(nil)
+	if err != nil || c == nil || len(c.Certificate) == 0 {
+		return "", errors.New("httpx: no certificate to fingerprint")
+	}
+	return fingerprintDER(c.Certificate[0]), nil
+}

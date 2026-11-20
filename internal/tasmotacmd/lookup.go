@@ -78,24 +78,6 @@ func Default() (*Catalogue, error) {
 	return s.Newest(), nil
 }
 
-// ReplyKeys returns the RESULT keys that answer cmd in the embedded catalogue; see Catalogue.ReplyKeys.
-func ReplyKeys(cmd string) ([]string, bool) {
-	c, err := Default()
-	if err != nil {
-		return nil, false
-	}
-	return c.ReplyKeys(cmd)
-}
-
-// Lookup is Catalogue.Lookup on the embedded catalogue.
-func Lookup(cmd string) (Reply, bool) {
-	c, err := Default()
-	if err != nil {
-		return Reply{}, false
-	}
-	return c.Lookup(cmd)
-}
-
 // ReplyKeys returns the top-level keys of the RESULT message that answers cmd. ok is false when
 // the command is not in the catalogue or its keys are loose (see Lookup for the reason).
 func (c *Catalogue) ReplyKeys(cmd string) ([]string, bool) {

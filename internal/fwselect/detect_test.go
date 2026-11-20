@@ -492,7 +492,7 @@ func FuzzDetect(f *testing.F) {
 		// A known family must always be backed by the hardware string or,
 		// without hardware, by a minimal image (which exists only for ESP8266).
 		if id.Family != model.ChipUnknown {
-			if id.Hardware != "" && FamilyFromHardware(id.Hardware) != id.Family {
+			if fam, _ := hardwareInfo(id.Hardware); id.Hardware != "" && fam != id.Family {
 				t.Fatalf("family %q not backed by hardware %q", id.Family, id.Hardware)
 			}
 			if id.Hardware == "" && (id.Family != model.ChipESP8266 || id.Variant != "minimal") {

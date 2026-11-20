@@ -115,12 +115,12 @@ func TestOtaUrlRuleDetectsATasmoAdminUrlAndMakeCompliantSetsIt(t *testing.T) {
 	fs := Check(otaRules[:1], devs, vals)
 	plans := PlanFix(fs, func(model.DeviceID, string) bool { return true })
 	want := "OtaUrl http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
-	if len(plans) != 1 || !reflect.DeepEqual(plans[0].Lines(), []string{want}) {
+	if len(plans) != 1 || !reflect.DeepEqual(commandLines(plans[0]), []string{want}) {
 		t.Fatalf("plans %+v", plans)
 	}
 	c := &fakeCmd{}
 	r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
-	if err := newFixer(c, r).Apply(context.Background(), devs[0], plans[0].Lines()); err != nil {
+	if err := newFixer(c, r).Apply(context.Background(), devs[0], commandLines(plans[0])); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(c.sent, []string{"Backlog " + want, "Backlog SaveData 0"}) {
@@ -135,7 +135,7 @@ func TestPlanFixGenericRuleNeedsALiveValue(t *testing.T) {
 	devs := []model.Device{dev(1, "a", model.ChipESP8266), dev(2, "b", model.ChipESP8266)}
 	fs := Check([]Rule{rule}, devs, map[model.DeviceID]map[string]string{1: {"LedState": "1"}})
 	plans := PlanFix(fs, func(id model.DeviceID, _ string) bool { return id == 1 })
-	if len(plans) != 2 || !reflect.DeepEqual(plans[0].Lines(), []string{"LedState 3"}) || len(plans[1].Commands) != 0 || plans[1].Skipped[0].Reason != SkipUnknown {
+	if len(plans) != 2 || !reflect.DeepEqual(commandLines(plans[0]), []string{"LedState 3"}) || len(plans[1].Commands) != 0 || plans[1].Skipped[0].Reason != SkipUnknown {
 		t.Fatalf("plans %+v", plans)
 	}
 	if _, ok := ValuesFromDecoded([]byte(`{"led_state":1}`))["LedState"]; ok {

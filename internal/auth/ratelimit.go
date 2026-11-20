@@ -231,14 +231,3 @@ func (l *Limiter) prune(now time.Time) {
 		tr.overflow = trim(tr.overflow, now, tr.window)
 	}
 }
-
-// size returns the number of keys per tier (tests).
-func (l *Limiter) size() [5]int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	var s [5]int
-	for i := range l.tiers {
-		s[i] = len(l.tiers[i].m)
-	}
-	return s
-}

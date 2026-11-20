@@ -11,7 +11,7 @@ import (
 
 // Release notes come from the body of a GitHub release: text written by
 // third parties and fetched from the internet, so it is never rendered as
-// HTML. ParseNotes turns the small, common subset of Markdown (headings,
+// HTML. ParseNotesWith turns the small, common subset of Markdown (headings,
 // lists, code, bold, links) into a plain data structure and drops everything
 // else; the template then prints every string through html/template's
 // escaping. There is no template.HTML anywhere on this path, so no input can
@@ -177,12 +177,8 @@ var (
 	htmlBlockLine = regexp.MustCompile(`^ {0,3}<(?:[A-Za-z][A-Za-z0-9-]*[ \t/>]|[A-Za-z][A-Za-z0-9-]*$|/[A-Za-z]|!)`)
 )
 
-// ParseNotes parses a release body. It never fails: unknown constructs
-// become plain text.
-func ParseNotes(src string) []NoteBlock { return ParseNotesWith(src, nil) }
-
-// ParseNotesWith is ParseNotes with an explicit link host allow-list (nil =
-// DefaultNoteLinkHosts).
+// ParseNotesWith parses a release body with an explicit link host allow-list (nil =
+// DefaultNoteLinkHosts). It never fails: unknown constructs become plain text.
 func ParseNotesWith(src string, hosts []string) []NoteBlock {
 	src, _ = TruncateNotes(src)
 	src = strings.ReplaceAll(strings.ReplaceAll(src, "\r\n", "\n"), "\r", "\n")

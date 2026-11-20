@@ -171,13 +171,3 @@ func PolicySetText(name, want string) (string, error) {
 	}
 	return send, nil
 }
-
-// PolicyCommand is PolicyReadable followed by PolicySetText: the one check for a
-// generic rule, as a single error.
-func PolicyCommand(name, want string) error {
-	if ok, why := PolicyReadable(name); !ok {
-		return errors.New(why)
-	}
-	_, err := PolicySetText(name, want)
-	return err
-}

@@ -121,8 +121,12 @@ func TestGoldenCommandsTasmoFleetSends(t *testing.T) {
 		// FriendlyName tests !usridx && !data_len, a form the extractor does not split: the typed reply is the superset
 		"FriendlyName2": {"FriendlyName1", "FriendlyName2", "FriendlyName3", "FriendlyName4", "FriendlyName5", "FriendlyName6", "FriendlyName7", "FriendlyName8"},
 	}
+	c, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for cmd, want := range keys {
-		got, ok := ReplyKeys(cmd)
+		got, ok := c.ReplyKeys(cmd)
 		if !ok || !reflect.DeepEqual(got, want) {
 			t.Errorf("ReplyKeys(%q) = %v, %v; want %v", cmd, got, ok, want)
 		}
@@ -134,11 +138,11 @@ func TestGoldenCommandsTasmoFleetSends(t *testing.T) {
 		"Gpio":    "GPIO<#>",       // GPIO0, GPIO1, ... depend on the template
 	}
 	for cmd, word := range loose {
-		r, known := Lookup(cmd)
+		r, known := c.Lookup(cmd)
 		if !known || r.Loose == "" || !strings.Contains(r.Loose, word) {
 			t.Errorf("Lookup(%q) = %+v, known %v; want loose mentioning %q", cmd, r, known, word)
 		}
-		if keys, ok := ReplyKeys(cmd); ok || keys != nil {
+		if keys, ok := c.ReplyKeys(cmd); ok || keys != nil {
 			t.Errorf("ReplyKeys(%q) must refuse a loose command, got %v", cmd, keys)
 		}
 	}

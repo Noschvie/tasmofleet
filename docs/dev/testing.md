@@ -16,6 +16,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 | go vet                                                                    | `make vet`                                                                    |
 | staticcheck (also inside `make lint`)                                     | `make staticcheck`                                                            |
 | golangci-lint (incl. depguard boundaries)                                 | `make lint`                                                                   |
+| unreachable functions (deadcode, allow-list in `tools/`)                  | `make deadcode`                                                               |
 | unit tests                                                                | `make test`                                                                   |
 | integration tests                                                         | `make integration`                                                            |
 | race detector                                                             | `make race`                                                                   |
@@ -26,6 +27,12 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 | the broker ACL guide against a real Mosquitto (must be installed)         | `make mqtt-acl-check`                                                         |
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
+`make deadcode` (also in `make check` and the CI lint job) runs `deadcode -generated ./...` (golang.org/x/tools; generated code such as the templ components is included) and fails for every exported or
+unexported function that no main package reaches, which golangci-lint's `unused` does not see for exported names. A helper that only a test
+needs lives in a `_test.go` file; a test kit or seam is listed in `tools/deadcode-allow.txt` as `<regexp> # <reason>` (the regexp is matched
+against `<import path> <function>`, anchored with `^` and `$`). An entry that matches nothing fails too, so the list cannot go stale. The call
+graph starts at the four mains of `./...` (server, catalogue generator, dev environment, revert helper): code only the dev environment or the
+revert helper reaches counts as live.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
 `make quick` runs fmt-check, vet, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
 changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them; a changed file outside every package

@@ -794,17 +794,6 @@ func snapshotGaps(note string) string {
 	return ""
 }
 
-// planText says how an update is flashed, in words.
-func planText(p model.Plan) string {
-	switch p {
-	case model.PlanDirect:
-		return "direct flash"
-	case model.PlanStaged:
-		return "staged: minimal firmware first"
-	}
-	return string(p)
-}
-
 // healthDetail returns the detail of a state change only when it says more
 // than the Source column next to it ("http" + "http poll ok" repeats itself).
 func healthDetail(source model.HealthSource, detail string) string {

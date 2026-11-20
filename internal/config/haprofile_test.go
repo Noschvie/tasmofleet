@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -183,4 +184,14 @@ func TestHAOptionsAreDocumented(t *testing.T) {
 			t.Errorf("app option %s is not documented", key)
 		}
 	}
+}
+
+// haOptionKeys lists the option names in declaration order.
+func haOptionKeys() []string {
+	var keys []string
+	rt := reflect.TypeFor[haOptions]()
+	for i := range rt.NumField() {
+		keys = append(keys, rt.Field(i).Tag.Get("json"))
+	}
+	return keys
 }

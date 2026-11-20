@@ -105,15 +105,6 @@ func ParseStatus2(raw json.RawMessage) (StatusFWR, error) {
 	return s, nil
 }
 
-// ParseStatus4 extracts StatusMEM.
-func ParseStatus4(raw json.RawMessage) (StatusMEM, error) {
-	var s StatusMEM
-	if _, err := section(raw, "StatusMEM", &s); err != nil {
-		return StatusMEM{}, err
-	}
-	return s, nil
-}
-
 var powerKey = regexp.MustCompile(`^POWER[0-9]*$`)
 
 // ParseStatus11 extracts StatusSTS including POWERn fields.

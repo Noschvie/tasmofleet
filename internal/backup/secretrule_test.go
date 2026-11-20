@@ -70,7 +70,7 @@ func TestDiffAndCommandPolicyAgreeOnEverySecret(t *testing.T) {
 			continue
 		}
 		a, b := nested(r.snapshot, `"old-value"`), nested(r.snapshot, `"new-value"`)
-		ch, err := SnapshotDrift(a, b)
+		ch, err := snapshotDrift(a, b)
 		if err != nil || len(ch) != 1 {
 			t.Fatalf("SnapshotDrift %s: %+v %v", r.snapshot, ch, err)
 		}

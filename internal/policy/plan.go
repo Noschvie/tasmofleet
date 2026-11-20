@@ -47,15 +47,6 @@ type FixPlan struct {
 	Skipped  []FixSkip
 }
 
-// Lines are the command texts in sending order.
-func (p FixPlan) Lines() []string {
-	out := make([]string, len(p.Commands))
-	for i, c := range p.Commands {
-		out[i] = c.Text
-	}
-	return out
-}
-
 // A SetOption's index and value are plain decimals. Tasmota reads the index with atoi (SetOption003 is SetOption3,
 // which deviceName names) and the value with strtol base 0, so a leading 0 in the value is octal there ("08" is 0)
 // while Atoi reads 8 (#606).

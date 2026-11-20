@@ -41,8 +41,8 @@ type TLSOptions struct {
 	// addresses are not (a container's bridge IPs say nothing a client needs).
 	Hosts []string
 	Now   func() time.Time // default time.Now
-	// OnCert, if set, is called with the SHA-256 fingerprint (see
-	// CertFingerprint) and expiry of every certificate that becomes the one
+	// OnCert, if set, is called with the SHA-256 fingerprint (upper-case hex pairs separated by colons,
+	// as browsers show it) and expiry of every certificate that becomes the one
 	// served: at start, after an in-process renewal, after a reload. It runs
 	// under the holder's lock; keep it to logging.
 	OnCert func(fingerprint string, notAfter time.Time)
@@ -98,17 +98,6 @@ func TLSConfig(o TLSOptions) (*tls.Config, func() error, error) {
 		return h.config(), func() error { return nil }, nil
 	}
 	return nil, nil, errors.New("httpx: no TLS certificate source configured")
-}
-
-// CertFingerprint returns the SHA-256 of the certificate cfg serves now, as
-// upper-case hex pairs separated by colons (what browsers show), so an
-// operator can compare it with the log before accepting a self-signed one.
-func CertFingerprint(cfg *tls.Config) (string, error) {
-	c, err := cfg.GetCertificate(nil)
-	if err != nil || c == nil || len(c.Certificate) == 0 {
-		return "", errors.New("httpx: no certificate to fingerprint")
-	}
-	return fingerprintDER(c.Certificate[0]), nil
 }
 
 func fingerprintDER(der []byte) string {

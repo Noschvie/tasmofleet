@@ -335,3 +335,10 @@ func TestImportUploadIsAuditedWithoutSecrets(t *testing.T) {
 		t.Fatalf("upload not audited: %+v", e.aud.events)
 	}
 }
+
+// size returns the number of held plans (tests).
+func (p *importPlans) size() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.m)
+}

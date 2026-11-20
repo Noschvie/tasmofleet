@@ -386,7 +386,7 @@ func TestARestartIsJudgedByTheValueTheDeviceGets(t *testing.T) {
 		if len(ps) != 1 {
 			t.Fatalf("want %q: plans %+v", want, ps)
 		}
-		lines := ps[0].Lines()
+		lines := commandLines(ps[0])
 		if !slices.Equal(lines, []string{"SetOption128 0", "SetOption103 1"}) {
 			t.Errorf("want %q: lines %q, want the plain line first", want, lines)
 			continue

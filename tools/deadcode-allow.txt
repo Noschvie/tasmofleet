@@ -1,0 +1,18 @@
+# Functions deadcode (make deadcode) reports as unreachable on purpose. One entry per line:
+#   <regexp> # <reason>
+# The regexp is matched against "<import path> <function>" (a method is "Type.method"), starts with ^ and
+# ends with $. An entry that matches nothing fails the check: delete it when its function is gone or live.
+# deadcode runs over ./... without tests, so the test kits below look dead although tests call them.
+
+# A test seam: another package's tests cannot read backup's private context key.
+^github\.com/hellwand/tasmofleet/internal/backup RunFrom$ # the ota test fakes (engine_test.go, backupjob_test.go) read the Run the engine attached to a context
+
+# The simulator's test API: used by tests only; the server and the dev environment use the rest.
+^github\.com/hellwand/tasmofleet/internal/simulator Broker\.Publish$ # test API: a test injects a message into the simulated broker
+^github\.com/hellwand/tasmofleet/internal/simulator Broker\.Subscribe$ # test API: a test listens on the simulated broker
+^github\.com/hellwand/tasmofleet/internal/simulator NewFleet$ # test API: a test starts an empty fleet (the server and the dev environment use NewFleetWith)
+
+# Test kits (internal/testutil): imported by _test.go files only, so no main reaches any of them.
+^github\.com/hellwand/tasmofleet/internal/testutil/oidcmock .+$ # test kit: the mock OIDC provider; its tests-only helpers are not reached from a main
+^github\.com/hellwand/tasmofleet/internal/testutil/quarantine .+$ # test kit: skips a quarantined test except in the nightly quarantine job
+^github\.com/hellwand/tasmofleet/internal/testutil/redactguard .+$ # test kit: fails a test whose read sends the bare form of a command whose reply the router masks

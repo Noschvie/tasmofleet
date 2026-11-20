@@ -5,6 +5,7 @@ import (
 	"html"
 	"html/template"
 	"log/slog"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -13,6 +14,11 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
 )
+
+// longToken matches an unbreakable run of 32 or more identifier characters: a SHA-1/SHA-256
+// digest, an OIDC subject. Such a token cannot wrap, so inside a table cell it makes the whole page
+// wider than a phone; the display helpers below and in pages.go and policyhistory.go shorten it.
+var longToken = regexp.MustCompile(`[A-Za-z0-9_-]{32,}`)
 
 // systemActors are the fixed actor names background code and the CLI audit
 // under. They are not people and get a badge of their own.

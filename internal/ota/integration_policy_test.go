@@ -137,10 +137,10 @@ func TestITMakeCompliantSavesOnceAndKeepsTheDeviceRunning(t *testing.T) {
 	before := len(p.ctrl[dev].Commands())
 
 	plan := p.plan(itRules, dev)
-	if got := strings.Join(plan.Lines(), "|"); got != "PowerOnState 0|SetOption4 0|TelePeriod 300" {
+	if got := strings.Join(planLines(plan), "|"); got != "PowerOnState 0|SetOption4 0|TelePeriod 300" {
 		t.Fatalf("plan %q", got)
 	}
-	id, skipped, err := p.eng.SubmitPolicy(context.Background(), "it", []PolicyRequest{{DeviceID: dev, Commands: plan.Lines()}})
+	id, skipped, err := p.eng.SubmitPolicy(context.Background(), "it", []PolicyRequest{{DeviceID: dev, Commands: planLines(plan)}})
 	if err != nil || len(skipped) != 0 {
 		t.Fatalf("%v %v", err, skipped)
 	}
@@ -176,7 +176,7 @@ func TestITMakeCompliantFailureThenRetry(t *testing.T) {
 	for _, d := range []model.DeviceID{good, bad} {
 		p.send(d, "SetOption4 1")
 	}
-	gl := p.plan(itRules, good).Lines()
+	gl := planLines(p.plan(itRules, good))
 
 	reqs := []PolicyRequest{
 		{DeviceID: good, Commands: gl},
@@ -211,4 +211,13 @@ func TestITMakeCompliantFailureThenRetry(t *testing.T) {
 	if rb, _ := p.st.GetBatch(context.Background(), res.Batch); rb.RetryOf != first {
 		t.Fatalf("retry batch %+v", rb)
 	}
+}
+
+// planLines are the command texts of a plan in sending order.
+func planLines(p policy.FixPlan) []string {
+	out := make([]string, len(p.Commands))
+	for i, c := range p.Commands {
+		out[i] = c.Text
+	}
+	return out
 }

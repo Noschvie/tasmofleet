@@ -47,38 +47,6 @@ func TestSortableColumnsExist(t *testing.T) {
 	// tests below register two tables of their own (sortFixture).
 }
 
-// Why: the keys are typed. Versions compare as versions (16.10 after 16.9),
-// addresses as addresses, times as times; text sorted as text would put them in
-// the wrong order and the user would not trust the arrow.
-func TestTypedSortKeys(t *testing.T) {
-	type addrRow struct{ name, addr string }
-	rows := []addrRow{{"b", "10.0.0.10"}, {"a", "10.0.0.9"}, {"c", ""}}
-	byAddr := map[string]rowKey[addrRow]{"address": strKey(func(r addrRow) string { return r.addr }, compareAddresses)}
-	sortBy(rows, tableSort{"address", "asc"}, byAddr)
-	if rows[0].name != "a" || rows[1].name != "b" {
-		t.Errorf("addresses numerically: %v", rows)
-	}
-	sortBy(rows, tableSort{"address", "desc"}, byAddr)
-	if rows[2].name != "c" {
-		t.Errorf("a row without a value goes last in both directions: %v", rows)
-	}
-
-	type verRow struct{ id int64 }
-	byVer := map[string]rowKey[verRow]{"version": intKey(func(v verRow) int64 { return v.id })}
-	vers := []verRow{{2}, {10}, {9}}
-	sortBy(vers, tableSort{"version", "desc"}, byVer)
-	if vers[0].id != 10 || vers[2].id != 2 {
-		t.Errorf("versions numerically: %+v", vers)
-	}
-
-	// An unknown key keeps the incoming order: nothing is reordered by mistake.
-	before := slices.Clone(vers)
-	sortBy(vers, tableSort{"nope", "asc"}, byVer)
-	if !slices.Equal(before, vers) {
-		t.Error("an unknown sort key must not reorder")
-	}
-}
-
 // sortFixture registers two sortable tables that share one page ("t_rules", "t_versions"):
 // since design v2 no html/template table of the app sorts on the server any more (N3 turned
 // the policy tables into cards), and the generic machinery is tested on these until it goes

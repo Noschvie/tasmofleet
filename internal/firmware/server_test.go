@@ -240,20 +240,20 @@ func TestServerOverHTTP(t *testing.T) {
 	}
 }
 
-// Server(Cache) from the frozen skeleton must work with the real cache and
+// NewServer with default options must work with the real cache and
 // stay closed (404) for caches that cannot look up indexed files.
 func TestServerFromCacheOnly(t *testing.T) {
 	f := newServerFixture(t, nil)
-	h := Server(f.cache)
+	h := NewServer(f.cache, ServerOptions{})
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/fw/16.0.0/tasmota-minimal.bin.gz", nil))
 	if w.Code != 200 {
-		t.Fatalf("Server(cache) = %d", w.Code)
+		t.Fatalf("NewServer(cache) = %d", w.Code)
 	}
 	w = httptest.NewRecorder()
-	Server(noLookupCache{}).ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/fw/16.0.0/tasmota-minimal.bin.gz", nil))
+	NewServer(noLookupCache{}, ServerOptions{}).ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/fw/16.0.0/tasmota-minimal.bin.gz", nil))
 	if w.Code != 404 {
-		t.Fatalf("Server(noLookup) = %d, want 404", w.Code)
+		t.Fatalf("NewServer(noLookup) = %d, want 404", w.Code)
 	}
 }
 

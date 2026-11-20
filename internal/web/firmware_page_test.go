@@ -393,12 +393,12 @@ func TestFirmwareHelpers(t *testing.T) {
 	if got := safeErr(`GET "https://u:p@h.example/x": 503; ftp://a@b/c`); strings.Contains(got, "u:p") || strings.Contains(got, "a@") || !strings.Contains(got, "https://h.example/x") {
 		t.Errorf("safeErr = %q", got)
 	}
-	blocks := firmware.ParseNotes("## Changelog\n\nIntro text.\n\n- one\n- two\n- three\n- four\n- five\n- six\n- seven")
+	blocks := firmware.ParseNotesWith("## Changelog\n\nIntro text.\n\n- one\n- two\n- three\n- four\n- five\n- six\n- seven", nil)
 	ex := excerpt(blocks)
 	if len(ex) != excerptItems || ex[0][0].Text != "one" {
 		t.Errorf("excerpt = %+v, want the first %d points of the list", ex, excerptItems)
 	}
-	if ex := excerpt(firmware.ParseNotes("Just a paragraph.")); len(ex) != 1 || ex[0][0].Text != "Just a paragraph." {
+	if ex := excerpt(firmware.ParseNotesWith("Just a paragraph.", nil)); len(ex) != 1 || ex[0][0].Text != "Just a paragraph." {
 		t.Errorf("excerpt without a list = %+v", ex)
 	}
 }

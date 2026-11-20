@@ -301,7 +301,7 @@ func TestCustomImageCoexistsWithUpstreamOfTheSameVersion(t *testing.T) {
 	// What a device downloads at each URL.
 	body := func(url string) []byte {
 		rec := httptest.NewRecorder()
-		Server(c).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
+		NewServer(c, ServerOptions{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("GET %s: %d", url, rec.Code)
 		}
@@ -317,7 +317,7 @@ func TestCustomImageCoexistsWithUpstreamOfTheSameVersion(t *testing.T) {
 	// A wrong key, or a custom key on the plain path, serves nothing.
 	for _, url := range []string{"/c/0000000000/fw/16.0.0/tasmota.bin.gz", "/c/" + cust.Custom + "/fw/16.0.0/tasmota-sensors.bin.gz", "/c/" + cust.Custom + "/fw/16.0.1/tasmota.bin.gz", "/c/../fw/16.0.0/tasmota.bin.gz"} {
 		rec := httptest.NewRecorder()
-		Server(c).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
+		NewServer(c, ServerOptions{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, url, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s: %d, want 404", url, rec.Code)
 		}
@@ -349,7 +349,7 @@ func TestCustomImageIsServedToDevices(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
-	Server(c).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/c/"+got.Artifact.Custom+"/fw/16.0.0.9/tasmota.bin.gz", nil))
+	NewServer(c, ServerOptions{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/c/"+got.Artifact.Custom+"/fw/16.0.0.9/tasmota.bin.gz", nil))
 	if rec.Code != http.StatusOK || int64(rec.Body.Len()) != got.Artifact.Size {
 		t.Fatalf("status %d, %d bytes, want %d", rec.Code, rec.Body.Len(), got.Artifact.Size)
 	}

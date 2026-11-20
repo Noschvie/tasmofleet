@@ -52,7 +52,7 @@ func customImage(t *testing.T, name string, pad int) []byte {
 func (e *itEnv) recordFirmwareRequests() (paths func() []string, reset func()) {
 	var mu sync.Mutex
 	var got []string
-	inner := firmware.Server(e.cache)
+	inner := firmware.NewServer(e.cache, firmware.ServerOptions{})
 	e.fwHandler.Store(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := httptest.NewRecorder()
 		inner.ServeHTTP(rec, r)

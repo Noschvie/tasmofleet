@@ -555,3 +555,14 @@ func TestNetworkTierSlowRate(t *testing.T) {
 		t.Fatal("no attempt after one minute")
 	}
 }
+
+// size returns the number of keys per tier (tests).
+func (l *Limiter) size() [5]int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var s [5]int
+	for i := range l.tiers {
+		s[i] = len(l.tiers[i].m)
+	}
+	return s
+}

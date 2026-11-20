@@ -117,12 +117,6 @@ func (p *importPlans) put(now time.Time, binding string, plan importer.Plan) (st
 	return id, true
 }
 
-func (p *importPlans) size() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.m)
-}
-
 // take removes and returns the plan if it belongs to binding and is fresh.
 func (p *importPlans) take(now time.Time, id, binding string) (importer.Plan, bool) {
 	p.mu.Lock()

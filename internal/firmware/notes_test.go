@@ -56,7 +56,7 @@ func flat(blocks []NoteBlock) (hrefs []string, text string) {
 func TestParseNotesDropsUnsafeLinks(t *testing.T) {
 	src := "[click](javascript:alert(1)) [lan](http://192.168.1.50/cm?cmnd=Reset%201) [other](https://example.org/x) and ![x](data:text/html;base64,AAAA) and [ok](https://github.com/a/b) " +
 		"and <a href=\"javascript:alert(1)\">raw</a> and https://github.com/path."
-	blocks := ParseNotes(src)
+	blocks := ParseNotesWith(src, nil)
 	hrefs, text := flat(blocks)
 	want := []string{"https://github.com/a/b", "https://github.com/path"}
 	if len(hrefs) != len(want) || hrefs[0] != want[0] || hrefs[1] != want[1] {
@@ -73,7 +73,7 @@ func TestParseNotesDropsUnsafeLinks(t *testing.T) {
 // template escapes it; no inline may carry markup semantics. A whole-line raw
 // HTML block is dropped (see TestParseNotesDropsHTMLBlocks).
 func TestParseNotesKeepsHTMLAsText(t *testing.T) {
-	blocks := ParseNotes("# <img src=x onerror=alert(1)>\n\n- <b>x</b>\n\n```\n<script>y</script>\n```")
+	blocks := ParseNotesWith("# <img src=x onerror=alert(1)>\n\n- <b>x</b>\n\n```\n<script>y</script>\n```", nil)
 	_, text := flat(blocks)
 	for _, s := range []string{"<img src=x onerror=alert(1)>", "<b>x</b>", "<script>y</script>"} {
 		if !strings.Contains(text, s) {
@@ -87,7 +87,7 @@ func TestParseNotesKeepsHTMLAsText(t *testing.T) {
 
 func TestParseNotesStructure(t *testing.T) {
 	src := "## Added\r\n- one **bold** `code`\n- two\n  continued\n\n1. first\n2. second\n\nplain\nwrapped\n\n> quoted\n\n---\n"
-	b := ParseNotes(src)
+	b := ParseNotesWith(src, nil)
 	kinds := []string{}
 	for _, x := range b {
 		kinds = append(kinds, x.Kind)
@@ -110,7 +110,7 @@ func TestParseNotesStructure(t *testing.T) {
 // nesting; parsing must stay linear and bounded.
 func TestParseNotesBoundsInput(t *testing.T) {
 	big := strings.Repeat("[a](https://x.example/", 20000) + strings.Repeat("*", 100000) + strings.Repeat("`", 5000)
-	if blocks := ParseNotes(big); len(blocks) > maxNoteLines {
+	if blocks := ParseNotesWith(big, nil); len(blocks) > maxNoteLines {
 		t.Fatalf("too many blocks: %d", len(blocks))
 	}
 	s, cut := TruncateNotes(strings.Repeat("ä", MaxNotesBytes))
@@ -127,7 +127,7 @@ func FuzzParseNotes(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		hrefs, _ := flat(ParseNotes(s))
+		hrefs, _ := flat(ParseNotesWith(s, nil))
 		for _, h := range hrefs {
 			if got, ok := SafeLink(h); !ok || got != h {
 				t.Fatalf("emitted link %q is not safe", h)
@@ -156,11 +156,11 @@ func TestNoteLinkHostAllowList(t *testing.T) {
 	if _, ok := NoteLink("https://example.org/x", []string{"*.example.org"}); ok {
 		t.Error("wildcard matched the bare domain")
 	}
-	_, text := flat(ParseNotes("see [x](javascript:alert(1)) and (http://192.168.0.1/ ) ok"))
+	_, text := flat(ParseNotesWith("see [x](javascript:alert(1)) and (http://192.168.0.1/ ) ok", nil))
 	if text != "see x and (http://192.168.0.1/ ) ok|" {
 		t.Errorf("text = %q", text)
 	}
-	_, text = flat(ParseNotes("[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) end"))
+	_, text = flat(ParseNotesWith("[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) end", nil))
 	if text != "wiki end|" {
 		t.Errorf("balanced parentheses: %q", text)
 	}
@@ -172,7 +172,7 @@ func TestNoteLinkHostAllowList(t *testing.T) {
 func TestParseNotesDropsHTMLBlocks(t *testing.T) {
 	src := "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" srcset=\"https://example.org/a.png\">\n  <img alt=\"Tasmota\" src=\"https://example.org/b.png\">\n</picture>\n\n" +
 		"<!-- hidden\nstill hidden -->\n\n<script>alert(1)</script>\n\n## Added\n- one <b>inline</b>\n\nA sentence with 3 < 4 and a > b."
-	blocks := ParseNotes(src)
+	blocks := ParseNotesWith(src, nil)
 	_, text := flat(blocks)
 	for _, gone := range []string{"picture", "<source", "<img", "hidden", "alert(1)", "srcset"} {
 		if strings.Contains(text, gone) {
