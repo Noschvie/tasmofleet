@@ -154,6 +154,22 @@ func TestButtonIsALinkOnlyWithAnAddress(t *testing.T) {
 	}
 }
 
+// Why (#1069): the one a row of buttons is on (the pager's page size) is told to assistive
+// technology (aria-current="page") and styled as the selected one (btn-current), on a link and on a
+// button alike; a button that is not current carries neither, so the mark means something.
+func TestButtonCurrentIsMarkedForAssistiveTechnology(t *testing.T) {
+	got := comp(t, Button(Btn{Label: "50", Href: "/x?per=50", Small: true, Current: true, Rel: "next"}))
+	if want := `<a class="btn btn-sm btn-current" href="/x?per=50" rel="next" aria-current="page">50</a>`; got != want {
+		t.Errorf("current link: %s, want %s", got, want)
+	}
+	if got := comp(t, Button(Btn{Label: "50", Current: true})); !strings.Contains(got, `aria-current="page"`) || !strings.Contains(got, "btn-current") {
+		t.Errorf("current button: %s", got)
+	}
+	if got := comp(t, Button(Btn{Label: "25", Href: "/x", Small: true})); strings.Contains(got, "aria-current") || strings.Contains(got, "btn-current") || strings.Contains(got, "rel=") {
+		t.Errorf("a button that is not current must carry no mark: %s", got)
+	}
+}
+
 // Why: a destructive confirmation repeats the verb in the danger tone; anything else is primary.
 // A dialog posts with the CSRF token and its Cancel never submits.
 func TestDialogVerbToneAndForm(t *testing.T) {

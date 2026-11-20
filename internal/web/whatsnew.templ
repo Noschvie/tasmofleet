@@ -85,9 +85,9 @@ templ whatsNewPage(p whatsNewView) {
 				}
 				<div class="btn-row">
 					if p.IsAdmin {
-						<a class="button" href={ templ.SafeURL(p.Base + "/about") }>About</a>
+						@ui.Button(ui.Btn{Label: "About", Href: p.Base + "/about"})
 					}
-					<a class="button" href={ templ.SafeURL(sourceURL + "/blob/main/CHANGELOG.md") } target="_blank" rel="noopener noreferrer">Full changelog</a>
+					@ui.Button(ui.Btn{Label: "Full changelog", Href: sourceURL + "/blob/main/CHANGELOG.md", Target: "_blank", Rel: "noopener noreferrer"})
 				</div>
 			</section>
 			<section class="ucard wn-jump r2" aria-labelledby="wn-jump-h">

@@ -66,7 +66,12 @@ func newPager(path string, q url.Values, page, size, def, total int, noun string
 		p.Next = href(page+1, size)
 	}
 	for _, s := range pagerSizes {
-		p.Sizes = append(p.Sizes, pagerSize{N: s, Href: href(1, s), Current: s == size})
+		// a size restarts at page 1; the size you are on stays where you are (it is marked as the current page)
+		n := 1
+		if s == size {
+			n = page
+		}
+		p.Sizes = append(p.Sizes, pagerSize{N: s, Href: href(n, s), Current: s == size})
 	}
 	return p
 }

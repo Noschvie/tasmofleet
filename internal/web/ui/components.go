@@ -119,7 +119,10 @@ type Btn struct {
 	Label, Kind, Href, Type string
 	Name, Value             string
 	Dialog                  string // id of the dialog dialog.js opens instead of following Href
+	Rel, Target             string // rel and target of a link (a pager's "prev" and "next"; an external link's "noopener noreferrer" and "_blank")
+	Mask                    bool   // text the pixel comparison cannot reproduce (a version): data-visual-mask
 	Small, Disabled         bool
+	Current                 bool   // the one a row of them is on (a pager's page size): aria-current="page", the accent tint
 	Aria                    string // accessible name when the label is a glyph (icon button "⋯")
 	Icon                    bool   // square icon button
 }
@@ -134,6 +137,9 @@ func (b Btn) classes() string {
 	}
 	if b.Icon {
 		c += " btn-icon"
+	}
+	if b.Current {
+		c += " btn-current"
 	}
 	return c
 }

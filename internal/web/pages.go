@@ -544,14 +544,7 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	for _, e := range d.Audit {
 		a := activityView{When: ui.StampDayText(now, e.At), At: e.At.UTC().Format(time.RFC3339), Action: e.Action, Summary: auditShort(e)}
-		switch auditStatus(e) {
-		case auditOK:
-			a.Status, a.Tone = "OK", ui.ToneOK
-		case auditRefused:
-			a.Status, a.Tone = "Refused", ui.ToneWarn
-		default:
-			a.Status, a.Tone = "Failed", ui.ToneDanger
-		}
+		a.Tone, a.Status = auditBadge(auditStatus(e))
 		v.Activity = append(v.Activity, a)
 	}
 	v.AuditHref = d.BasePath + "/audit?since=all&actor=" + url.QueryEscape(u.Subject)

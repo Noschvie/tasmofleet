@@ -308,7 +308,7 @@ test("audit: the shared pager is the same on desktop and phone", async ({ page }
     await page.setViewportSize(viewport);
     await page.goto(app.url + "/audit?since=all&result=ok");
     await expect(pager.getByText(/Page 1 of \d+, \d+ events/)).toBeVisible();
-    await expect(pager.getByText("Previous", { exact: true })).toHaveAttribute("aria-disabled", "true");
+    await expect(pager.getByRole("button", { name: "Previous", exact: true })).toBeDisabled();
     await expect(pager.getByText("Per page")).toBeVisible();
   }
   await page.setViewportSize({ width: 1280, height: 900 });

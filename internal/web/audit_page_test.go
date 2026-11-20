@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -232,5 +233,95 @@ func TestSortIconAscendingPointsUp(t *testing.T) {
 	}
 	if d := norm(rule(".sortlink.is-desc .sortmark")); !strings.Contains(d, "to top right, transparent 50%, var(--color-accent) 50%) bottom left") {
 		t.Errorf("descending icon does not point down: %s", d)
+	}
+}
+
+// resultBadges returns, per Result cell of the audit table, the badge's class and word.
+func resultBadges(t *testing.T, body string) [][2]string {
+	t.Helper()
+	var out [][2]string
+	for _, m := range regexp.MustCompile(`<td data-label="Result"[^>]*>(.*?)</td>`).FindAllStringSubmatch(body, -1) {
+		b := regexp.MustCompile(`<span class="([^"]*)">([^<]*)</span>`).FindStringSubmatch(m[1])
+		if b == nil {
+			t.Fatalf("a Result cell without a badge: %s", m[1])
+		}
+		out = append(out, [2]string{b[1], b[2]})
+	}
+	return out
+}
+
+// Why (#1069): the Result column is the design system's badge (ui.Badge, class bdg) in the design's
+// tone words, not the old glyph badge, and its colour comes from the same classification as the
+// result filter and the word (auditStatus). Two classifiers had drifted apart: an empty result and
+// "role changed" read as success but were drawn red, a refusal that only the detail names was red
+// instead of amber. A badge that disagrees with its word sends the reader to the wrong conclusion.
+func TestAuditResultIsTheDesignSystemBadge(t *testing.T) {
+	e := setup(t)
+	at := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
+	for i, r := range []struct{ result, detail string }{
+		{"ok", `{}`},
+		{"failed: timeout", `{}`},
+		{"refused: not allowed", `{}`},
+		{"role changed", `{}`},
+		{"", `{}`},
+		{"error", `{"refused":"policy"}`},
+		{"forbidden", `{}`},
+	} {
+		e.aud.events = append(e.aud.events, model.AuditEvent{ID: int64(i), At: at.Add(-time.Duration(i) * time.Minute), Actor: "adam",
+			Action: "device.update", Target: "device:1", Result: r.result, Detail: r.detail})
+	}
+	_, body := e.do(t, "GET", "/audit?since=all", "admin", nil)
+	if strings.Contains(body, `class="badge`) || strings.Contains(body, "tone-bad") {
+		t.Errorf("the audit page still renders the pre-v2 badge")
+	}
+	// newest first: the events were added newest first, and "when" sorts descending by default
+	want := [][2]string{
+		{"bdg t-ok", "Succeeded"}, {"bdg t-danger", "Failed"}, {"bdg t-warn", "Refused"}, {"bdg t-ok", "Succeeded"},
+		{"bdg t-ok", "Succeeded"}, {"bdg t-warn", "Refused"}, {"bdg t-warn", "Refused"},
+	}
+	got := resultBadges(t, body)
+	if !slices.Equal(got, want) {
+		t.Errorf("result badges (class, word):\n got %q\nwant %q", got, want)
+	}
+}
+
+// Why (#1069): the pager is made of the design system's buttons. A page that cannot be reached is a
+// disabled button, not a grey span that still looks like one you can press; the page size you are on
+// is marked for assistive technology (aria-current="page") and styled as the selected one, and it is
+// a link to the page you are on, not to page 1.
+func TestAuditPagerUsesTheDesignSystemButtons(t *testing.T) {
+	e := setup(t)
+	for i := 0; i < 60; i++ {
+		e.aud.events = append(e.aud.events, model.AuditEvent{ID: int64(i), At: time.Date(2026, 10, 19, 10, 0, i%60, 0, time.UTC),
+			Actor: "adam", Action: "device.update", Target: "device:1", Result: "ok", Detail: `{}`})
+	}
+	nav := func(q string) string {
+		t.Helper()
+		_, body := e.do(t, "GET", "/audit?since=all"+q, "admin", nil)
+		i := strings.Index(body, `<nav class="pager"`)
+		if i < 0 {
+			t.Fatalf("no pager on %q", q)
+		}
+		return body[i : i+strings.Index(body[i:], "</nav>")]
+	}
+	for _, old := range []string{`class="button`, "is-off", "is-current", `aria-current="true"`} {
+		if strings.Contains(nav(""), old) {
+			t.Errorf("the pager still has %s", old)
+		}
+	}
+	first := nav("")
+	if !strings.Contains(first, `<button type="button" class="btn btn-sm" disabled>Previous</button>`) {
+		t.Errorf("page 1: Previous is not a disabled button: %s", first)
+	}
+	if !strings.Contains(first, `rel="next"`) || strings.Contains(first, `disabled>Next`) {
+		t.Errorf("page 1: Next is not a link: %s", first)
+	}
+	last := nav("&page=3")
+	if !strings.Contains(last, `<button type="button" class="btn btn-sm" disabled>Next</button>`) || !strings.Contains(last, `rel="prev"`) {
+		t.Errorf("last page: Next is not a disabled button or Previous not a link: %s", last)
+	}
+	cur := regexp.MustCompile(`<a [^>]*aria-current="page"[^>]*>([^<]*)</a>`).FindAllStringSubmatch(nav("&page=2"), -1)
+	if len(cur) != 1 || cur[0][1] != "25" || !strings.Contains(cur[0][0], "btn-current") || !strings.Contains(cur[0][0], "page=2") {
+		t.Errorf("page 2: exactly the current size is marked, as a link to this page with btn-current: %q", cur)
 	}
 }

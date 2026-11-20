@@ -16,6 +16,10 @@ func TestPagerLinksKeepTheFilters(t *testing.T) {
 	if p.Sizes[1].Href != "/tf/audit?actor=adam&per=50" || !p.Sizes[0].Current {
 		t.Fatalf("sizes: %+v", p.Sizes)
 	}
+	// the size you are on is marked aria-current="page": its link goes to the page you are on, not to page 1
+	if p.Sizes[0].Href != "/tf/audit?actor=adam&page=6" {
+		t.Fatalf("the current size must link to the current page: %q", p.Sizes[0].Href)
+	}
 }
 
 func TestPagerEdges(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The audit table shows an action as a readable label, the target as a name,
@@ -74,6 +75,19 @@ func auditStatus(e model.AuditEvent) string {
 		return auditRefused
 	}
 	return auditFailed
+}
+
+// auditBadge is the Result badge of a status of auditStatus: the design system's tone and the word of its
+// result table. The Result column of the audit log and the activity of a user page both read it, so a
+// word and its colour cannot disagree.
+func auditBadge(status string) (ui.Tone, string) {
+	switch status {
+	case auditOK:
+		return ui.ToneOK, "Succeeded"
+	case auditRefused:
+		return ui.ToneWarn, "Refused"
+	}
+	return ui.ToneDanger, "Failed"
 }
 
 func detailOf(raw string) map[string]any {

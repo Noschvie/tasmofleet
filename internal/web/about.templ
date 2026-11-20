@@ -44,7 +44,7 @@ templ aboutPage(p aboutView) {
 				<div class="about-build" data-visual-mask>{ p.Platform }</div>
 				<div class="about-meta" data-visual-mask>Up { p.Uptime } · { strconv.Itoa(p.Devices) } devices</div>
 				<div class="about-actions">
-					<a class="button" href={ templ.SafeURL(p.Base + "/whats-new") } data-visual-mask>What’s new in { p.Version }</a>
+					@ui.Button(ui.Btn{Label: "What’s new in " + p.Version, Href: p.Base + "/whats-new", Mask: true})
 				</div>
 			</section>
 			<section class="about-card about-proj r3" aria-labelledby="about-proj">

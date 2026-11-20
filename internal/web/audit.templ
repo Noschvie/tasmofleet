@@ -61,8 +61,8 @@ templ auditView(base string, p auditPage) {
 								}
 							</td>
 							<td data-label="Summary" class="nowrap s grow m-hide" title={ tip(ev.SummaryAll) }>{ ev.Summary }</td>
-							<td data-label="Result" class="res p2"><span class={ "badge", "tone-" + resultTone(ev.Result) }>{ ev.Status }</span></td>
-							<td data-label="Details" class="detail s"><details><summary class="button sm">Details</summary></details></td>
+							<td data-label="Result" class="res p2">@ui.Badge(auditBadge(ev.Status))</td>
+							<td data-label="Details" class="detail s"><details><summary class="btn btn-sm">Details</summary></details></td>
 						</tr>
 						<tr class="detail-row">
 							<td colspan="7">
@@ -120,9 +120,9 @@ templ auditWho(w whoParts) {
 templ pagerNav(p pager) {
 	<nav class="pager" aria-label="Pages">
 		if p.Prev != "" {
-			<a class="button sm" href={ templ.SafeURL(p.Prev) } rel="prev">Previous</a>
+			@ui.Button(ui.Btn{Label: "Previous", Href: p.Prev, Rel: "prev", Small: true})
 		} else {
-			<span class="button sm is-off" aria-disabled="true">Previous</span>
+			@ui.Button(ui.Btn{Label: "Previous", Small: true, Disabled: true})
 		}
 		<span class="pager-of">
 			if p.Total > 0 {
@@ -132,18 +132,14 @@ templ pagerNav(p pager) {
 			}
 		</span>
 		if p.Next != "" {
-			<a class="button sm" href={ templ.SafeURL(p.Next) } rel="next">Next</a>
+			@ui.Button(ui.Btn{Label: "Next", Href: p.Next, Rel: "next", Small: true})
 		} else {
-			<span class="button sm is-off" aria-disabled="true">Next</span>
+			@ui.Button(ui.Btn{Label: "Next", Small: true, Disabled: true})
 		}
 		<span class="pager-size">
 			Per page
 			for _, s := range p.Sizes {
-				if s.Current {
-					<span class="button sm is-current" aria-current="true">{ strconv.Itoa(s.N) }</span>
-				} else {
-					<a class="button sm" href={ templ.SafeURL(s.Href) }>{ strconv.Itoa(s.N) }</a>
-				}
+				@ui.Button(ui.Btn{Label: strconv.Itoa(s.N), Href: s.Href, Small: true, Current: s.Current})
 			}
 		</span>
 	</nav>

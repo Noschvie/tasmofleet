@@ -214,7 +214,7 @@ templ bulkBar(v view) {
 		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" id="bulk-note" data-bar-note hidden></span></span>
 		<div class="bulk-acts">
 			if v.Features.Updates {
-				<button type="submit" data-needs-device class="primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>
+				<button type="submit" data-needs-device class="btn btn-primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>
 			}
 			if v.Features.BulkCommand && v.IsAdmin {
 				<button type="submit" data-needs-device formaction={ templ.SafeURL(v.Base + "/devices/bulk/command") }><span class="bulk-lg">Send command</span><span class="bulk-sm">Command</span></button>

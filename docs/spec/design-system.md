@@ -4,11 +4,12 @@ Status: binding since the design v2 port. The look is the
 **Claude Design v2 prototype** ("v2"): rounded 7/10/12 px surfaces, hairline borders, Geist and Geist
 Mono, one blue accent (`oklch` hue 250), light and dark as equal themes. The prototype
 (`design/v2/`) is the binding source and is compared pixel by pixel (`make visual`, see
-`design/v2/README.md`); the v1 Modernist system is being removed: its remaining rules are in `app.css`
-between "Base" and "Shell (design v2, WP F3)" and in the "nav-patterns (PORT.md)" block (#1069). A page
-must not use them in new markup (`.button`, `.badge`, `.notice`, `.card`, `.tone-*` outside banners and
-toasts); `css_unused_test.go` lists the selectors that are still used and fails when an unused one comes
-back. Wording follows the prototype
+`design/v2/README.md`); the v1 Modernist component layer (`.button`, `.badge`, `.card`, `.empty-state`,
+`.stats`, `.tabs`, `.theme-switch`, `.navpanel`, `.tone-info`, `.tone-bad`) was removed from `app.css` (#1069):
+`TestNoPreV2ComponentSelectors` in `internal/web/legacycss_test.go` fails when one of them comes back in the
+stylesheet or in a template, and `TestBulkBarIsOneBlock` keeps the bulk bar in one block. `.notice` and the
+`.tone-ok`, `.tone-warn` and `.tone-neutral` banner classes are still used (#1091 and #1102 replace them).
+Wording follows the prototype
 (plan D14) except for the rows of the wording table below.
 
 This document is the style guide in the repository: tokens, type, spacing, every component with its
@@ -104,7 +105,7 @@ literals they stand for.
 
 | Group | Tokens |
 | --- | --- |
-| Bars | `--bulkbar-h` 58px, `--sb-line` 32px (status bar row; 44px on phones), `--sb-h` (row + safe area), `--header-h` (sticky header with sub-navigation) |
+| Bars | `--sb-line` 32px (status bar row; 44px on phones), `--sb-h` (row + safe area), `--header-h` (sticky header with sub-navigation) |
 | Overlay | `--backdrop` for every `::backdrop`; planned: `--color-scrim: rgb(10 14 18)` mixed 50 % into `--color-bg` for the scrollbar gutter behind a modal |
 | On colours | planned: `--color-on-danger: #fff` (danger-solid text), `--color-knob: #fff` (switch knobs), both themes |
 | Focus | planned: `--focus-ring: 2px solid var(--color-accent)`, `--focus-offset: 2px`; inside a clipping container the offset is `-2px` |
@@ -202,7 +203,7 @@ Also: [desktop, dark](../design/styleguide/live-desktop-dark.png) · [phone, lig
 
 Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, padding 14), danger (outlined text in danger-fg), danger-solid (the confirming button of a destructive dialog), ghost, link (text only, 32 px target) and the icon button (⋯). Height `--ctl` (34 px, 40 px on phones), small 32 px. A Btn with `Href` is a link (it only navigates or opens the dialog named by `Dialog`); without it a `type=button` that never submits by accident. One action, one component; the confirming button repeats the trigger's verb and tone.
 
-Component: `ui.Button(Btn{Label, Kind, Href, Type, Name, Value, Small, Icon, Aria, Disabled, Dialog})`. `Name` and `Value` make a submit button that sends a value (the console's quick commands); `Aria` is the accessible name of an icon button.
+Component: `ui.Button(Btn{Label, Kind, Href, Rel, Target, Type, Name, Value, Small, Icon, Aria, Disabled, Dialog, Current, Mask})`. `Name` and `Value` make a submit button that sends a value (the console's quick commands); `Aria` is the accessible name of an icon button. `Rel` and `Target` belong to a link (a pager's `prev` and `next`; an external link's `noopener noreferrer` and `_blank`). `Current` marks the one a row of buttons is on (the pager's page size): `aria-current="page"` and the class `btn-current`, drawn in the selected look below. `Mask` is `data-visual-mask` for text the pixel comparison cannot reproduce (a version). A disabled button is a `<button disabled>`, a disabled link keeps `aria-disabled`.
 
 Sizes: default (`--ctl`), small (`--ctl-sm`) and tall (`--ctl-lg`: the sign-in button and the update
 preview's start button). A danger link is text in danger-fg for a row's Delete when the row has no other
@@ -410,7 +411,9 @@ into the row menu (⋯). Pinned columns, column widths and the Columns chooser c
 per row with label before value. A table without rows shows `ui.Empty` instead of a header.
 
 Under the table: the pager: Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small
-buttons; the current page size uses the selected state.
+buttons (`ui.Button`, `Small`). A page that cannot be reached (Previous on the first page, Next on the last)
+is a disabled button. The current page size is a link to the page you are on with `Current`: it uses the
+selected state (`.btn-current`).
 
 Component: `ui.Table`, `ui.Pager`, `ui.DeviceCards` (#1094).
 

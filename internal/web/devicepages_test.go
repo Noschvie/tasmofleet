@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/restore"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // subPageEnv has every device page: Settings, Console, Backups, Replace.
@@ -127,20 +129,24 @@ func TestSettingsUnreachableOffersAWayOut(t *testing.T) {
 }
 
 // Why: the current tab of an unavailable page was drawn in the disabled grey, so
-// the tab you are on looked inactive. The rule that undoes it must come after the
-// disabled rules.
+// the tab you are on looked inactive. The tab row (ui.Tabs) draws a tab as disabled only when it
+// is not the one you are on, whatever reason the page gives (the old CSS rule that undid it for the
+// pre-v2 .tabs went with that layer, #1069).
 func TestCurrentTabIsNeverDrawnDisabled(t *testing.T) {
-	css, err := os.ReadFile("static/app.css")
+	var b strings.Builder
+	err := ui.Tabs("Device", []ui.Tab{
+		{Label: "Overview", Href: "/d", Current: true, Reason: "The device is offline"},
+		{Label: "Console", Href: "/d/console", Reason: "The device is offline"},
+	}).Render(context.Background(), &b)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const rule = `.tabs a[aria-disabled="true"][aria-current="page"]`
-	i := strings.LastIndex(string(css), rule)
-	if i < 0 {
-		t.Fatal("no rule keeps the current tab out of the disabled style")
+	cur := regexp.MustCompile(`<a [^>]*aria-current="page"[^>]*>Overview`).FindString(b.String())
+	if cur == "" || strings.Contains(cur, "aria-disabled") {
+		t.Errorf("the current tab is not a plain link: %s", b.String())
 	}
-	if j := strings.LastIndex(string(css), `.tabs a[aria-disabled="true"] {`); j > i {
-		t.Fatal("a disabled-tab rule comes after the current-tab rule and wins")
+	if !strings.Contains(b.String(), `<span class="utab" aria-disabled="true" title="The device is offline">Console</span>`) {
+		t.Errorf("a tab that is not current and unavailable is not drawn disabled: %s", b.String())
 	}
 }
 

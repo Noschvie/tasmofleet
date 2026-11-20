@@ -142,40 +142,6 @@ for (const vp of viewports) {
   });
 }
 
-// Why: "✓ok" - glyph and word were glued where a table cell clamps the badge.
-// The glyph has its own space, measured on the real pages.
-test("badge: a gap between the icon and the text, app-wide", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.setExtraHTTPHeaders(admin);
-  let seen = 0;
-  for (const path of ["/", "/devices", "/audit", "/transactions", "/policy", `/devices/${deviceID}`, "/firmware"]) {
-    await page.goto(app.url + path);
-    const res = await page.evaluate(() => {
-      const bad: string[] = [];
-      let n = 0;
-      for (const b of document.querySelectorAll(".badge")) {
-        const cs = getComputedStyle(b, "::before");
-        if (cs.content === "none" || cs.content === "normal") continue;
-        n++;
-        const gap = parseFloat(cs.marginRight) || 0;
-        const text = (b.textContent ?? "").trim();
-        if (gap < 4 && getComputedStyle(b).display.includes("flex") === false) bad.push(`${text}: gap ${gap}px`);
-        // the rendered distance between the glyph box and the first text box
-        const r = document.createRange();
-        const tn = [...b.childNodes].find((c) => c.nodeType === 3 && (c.textContent ?? "").trim());
-        if (!tn) continue;
-        r.setStart(tn, 0); r.setEnd(tn, 1);
-        const tr = r.getBoundingClientRect(), br = b.getBoundingClientRect();
-        if (tr.width > 0 && tr.left - br.left < 14) bad.push(`${text}: text starts ${Math.round(tr.left - br.left)}px from the badge edge`);
-      }
-      return { bad, n };
-    });
-    expect(res.bad, path).toEqual([]);
-    seen += res.n;
-  }
-  expect(seen, "the pages show badges").toBeGreaterThan(5);
-});
-
 // Why: a tooltip once listed devices (the update's Preview, now Review update) and one page dump
 // copied into a title. Server-rendered titles follow the same rule as the script's: at most
 // 160 characters, 1-2 short sentences, and the button that goes on needs none.

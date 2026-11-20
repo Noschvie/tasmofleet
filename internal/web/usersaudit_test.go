@@ -250,7 +250,7 @@ func TestAuditReadsConsistently(t *testing.T) {
 		t.Errorf("the empty state and the filter row both offer a clear action (%d)", n)
 	}
 	css, err := os.ReadFile("static/app.css")
-	if err != nil || !strings.Contains(string(css), ".filters a.button") {
+	if err != nil || !strings.Contains(string(css), ".audit-filters .btn") {
 		t.Error("the clear link is not a full-width button on a phone")
 	}
 	if !strings.Contains(string(css), "table td.rowacts:empty") {

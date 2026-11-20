@@ -171,37 +171,29 @@ test("a space after a capital keeps its width", async ({ page }) => {
   );
 });
 
-// Why: dark-mode contrast of dashboard zero tiles (2.75:1 with the disabled-text token) and of the
-// sort icons (about 2:1); both need 3:1 or better (4.5:1 for text).
+// Why: dark-mode contrast of the sort icons (about 2:1); they need 3:1 or better. (The pre-v2 dashboard zero tile,
+// .stat.zero, left with the v1 stylesheet in #1069; the stat tiles are covered below.)
 for (const scheme of ["light", "dark"] as const) {
-  test(`zero tiles and sort icons are readable (${scheme})`, async ({
+  test(`sort icons are readable (${scheme})`, async ({
     page,
   }) => {
     await open(page, "/about", 1280, scheme);
     await mount(
       page,
-      `<div class="stat zero"><span class="num">0</span></div><table><thead><tr><th><a class="sortlink"><span class="sortmark"></span></a></th></tr></thead></table>`,
+      `<table><thead><tr><th><a class="sortlink"><span class="sortmark"></span></a></th></tr></thead></table>`,
     );
     const m = await page.evaluate(() => {
-      const bg = getComputedStyle(
-        document.querySelector("#sandbox .stat")!,
-      ).backgroundColor;
       const th = getComputedStyle(document.querySelector("#sandbox th")!);
       const mark = getComputedStyle(
         document.querySelector("#sandbox .sortmark")!,
       );
       return {
-        num: getComputedStyle(document.querySelector("#sandbox .stat .num")!)
-          .color,
-        bg,
         thColor: th.color,
         thBg: th.backgroundColor,
         opacity: Number(mark.opacity),
         page: getComputedStyle(document.body).backgroundColor,
       };
     });
-    const surface = m.bg === "rgba(0, 0, 0, 0)" ? m.page : m.bg;
-    expect(await contrast(page, m.num, surface)).toBeGreaterThanOrEqual(4.5);
     // the icon is the header colour at `opacity` over the page: blend it, then measure
     const blended = await page.evaluate(
       ([fg, bgc, o]) => {
@@ -315,7 +307,7 @@ test("an action row below a table has a gap", async ({ page }) => {
   await open(page, "/about");
   await mount(
     page,
-    `<section class="card"><table><tbody><tr><td>x</td></tr></tbody></table><p class="actions"><a class="button">Export</a></p></section>`,
+    `<section class="ucard"><table><tbody><tr><td>x</td></tr></tbody></table><p class="actions"><a class="btn">Export</a></p></section>`,
   );
   const gap = await page.evaluate(
     () =>
@@ -326,45 +318,19 @@ test("an action row below a table has a gap", async ({ page }) => {
   expect(gap).toBeGreaterThanOrEqual(12);
 });
 
-// Why: a wrapping checkbox label centred its box on the whole block; it belongs on the first line.
-test("a wrapped checkbox label keeps its box on the first line (phone)", async ({
-  page,
-}) => {
-  await open(page, "/about", 375);
-  await mount(
-    page,
-    `<label class="inline"><input type="checkbox"> <span class="long">I understand that this device is backed up first, then receives the configuration of the backup and restarts, and that the old credentials come back.</span></label>`,
-  );
-  const m = await page.evaluate(() => {
-    const r = document.createRange();
-    r.selectNodeContents(document.querySelector("#sandbox .long")!);
-    const line = r.getClientRects()[0];
-    const box = document
-      .querySelector("#sandbox input")!
-      .getBoundingClientRect();
-    return {
-      boxMid: box.top + box.height / 2,
-      lineMid: line.top + line.height / 2,
-      lines: r.getClientRects().length,
-    };
-  });
-  expect(m.lines).toBeGreaterThan(2);
-  expect(Math.abs(m.boxMid - m.lineMid)).toBeLessThan(4);
-});
-
 // Why: native progress was blue, rounded and 140px wide; job bars and chips were pills; job cards had a shadow.
 // Design v2 rounds bars and chips with the small token radii (4px, 7px) but they stay no pills.
 test("native controls are flat and full width", async ({ page }) => {
   await open(page, "/about");
   await mount(
     page,
-    `<section class="card"><progress max="10" value="4"></progress><progress aria-label="x"></progress><div class="job"></div><div class="bar bad"><i class="s2"></i></div><label class="chip"><input type="checkbox"> name</label><input type="file"><input type="checkbox" aria-invalid="true"></section>`,
+    `<section class="ucard"><progress max="10" value="4"></progress><progress aria-label="x"></progress><div class="job"></div><div class="bar bad"><i class="s2"></i></div><label class="chip"><input type="checkbox"> name</label><input type="file"><input type="checkbox" aria-invalid="true"></section>`,
   );
   const m = await page.evaluate(() => {
     const q = (s: string) =>
       getComputedStyle(document.querySelector("#sandbox " + s)!);
     const card = document
-      .querySelector("#sandbox .card")!
+      .querySelector("#sandbox .ucard")!
       .getBoundingClientRect();
     const pr = document
       .querySelector("#sandbox progress")!

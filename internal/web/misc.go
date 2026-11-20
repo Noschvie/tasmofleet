@@ -407,18 +407,6 @@ func auditNameTargets(names map[model.DeviceID]string, q string) []string {
 	return out
 }
 
-// resultTone colours the result of an audited action.
-func resultTone(res string) string {
-	l := strings.ToLower(res)
-	switch {
-	case l == "ok":
-		return "ok"
-	case strings.Contains(l, "refus") || strings.Contains(l, "denied") || strings.Contains(l, "forbidden"):
-		return "warn"
-	}
-	return "bad"
-}
-
 func (h *handler) about(w http.ResponseWriter, r *http.Request) {
 	v := h.view(r, "About", "about", nil)
 	v.Live = true // About reports health: the top bar says whether the page still hears the server
