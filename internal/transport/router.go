@@ -297,24 +297,51 @@ func (r *Router) TypedRoute(ctx context.Context, id model.DeviceID, cmnd string)
 	if id == 0 || r.mqttDoer() == nil || r.o.Facts == nil || cls.job || !cls.write {
 		return HTTP
 	}
-	refused := mqttcmd.Refuses(cmnd)
-	if st := r.o.Facts.HTTPState(id).State; st != HTTPFailing {
-		_, _, mqtt := r.writeOverMQTT(ctx, id)
-		switch {
-		case mqtt && !refused:
-			return MQTT
-		case mqtt && st != HTTPOK && cmdpolicy.RunsStatus0(cmnd):
-			return None // HTTP is not known to work, and MQTT never carries it
-		}
-		return HTTP // write goes on over HTTP after the channel refused
+	st := r.o.Facts.HTTPState(id).State
+	if _, mqtt := r.writesMQTT(ctx, id, st); !mqtt {
+		return HTTP
 	}
-	if _, _, p, err := r.decide(ctx, id); err == nil && p.Writes == MQTT {
-		if refused {
-			return None
-		}
+	switch {
+	case !mqttcmd.Refuses(cmnd):
 		return MQTT
+	case st == HTTPFailing:
+		return None // Command tries MQTT, which refuses it
+	case st != HTTPOK && cmdpolicy.RunsStatus0(cmnd):
+		return None // HTTP is not known to work, and MQTT never carries it
 	}
-	return HTTP
+	return HTTP // write goes on over HTTP after the channel refused
+}
+
+// WritesOverMQTT reports whether Command sends a plain write to device d MQTT first now: a command that changes the
+// device, starts no job and the channel publishes (Power1 ON). It is the router's own decision (writesMQTT), the one
+// TypedRoute names and Command takes, so a caller that publishes through the command channel itself (the power toggle,
+// devicecmd) publishes only where any other write would go (#605, #1053) and never asks a copy of the rule. False
+// without a device id, the command channel or the facts: Command then sends over HTTP. What is judged is the caller's
+// d, the snapshot it publishes with: the router decides on its own snapshot, and when that one's MQTT settings differ
+// from d's (topic, group topics, FullTopic, MQTT capability), or differ by the time the decision is made (a second
+// read, as publish does), the answer is false, so the caller never publishes to a topic the rule did not judge (T6).
+func (r *Router) WritesOverMQTT(ctx context.Context, d model.Device) bool {
+	if d.ID == 0 || r.mqttDoer() == nil || r.o.Facts == nil {
+		return false
+	}
+	judged, mqtt := r.writesMQTT(ctx, d.ID, r.o.Facts.HTTPState(d.ID).State)
+	if !mqtt || mqttSettingsChanged(judged, d) {
+		return false
+	}
+	now, err := r.o.Devices.GetDevice(ctx, d.ID)
+	return err == nil && !mqttSettingsChanged(now, d)
+}
+
+// writesMQTT is command's decision for a plain write to device id while the cheap HTTP state is st, and the device
+// snapshot it judged: with HTTP not known to fail, write's (writeOverMQTT); with HTTP known to fail, the facts' writes
+// path (decide), and HTTP when they cannot be read. The caller reads st once, so its answer and its send see one state.
+func (r *Router) writesMQTT(ctx context.Context, id model.DeviceID, st HTTPStateKind) (model.Device, bool) {
+	if st != HTTPFailing {
+		d, _, mqtt := r.writeOverMQTT(ctx, id)
+		return d, mqtt
+	}
+	d, _, p, err := r.decide(ctx, id)
+	return d, err == nil && p.Writes == MQTT
 }
 
 // offRoute refuses a send over p when ctx announced the other transport (WithRoute, #826). Nothing was sent.
@@ -566,7 +593,7 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 	if err != nil {
 		return r.httpFirst(ctx, t, cmnd, cls)
 	}
-	if d.MQTT != model.MQTTOurs || d.Topic == "" {
+	if !d.OnOurBroker() {
 		return r.httpFirst(ctx, t, cmnd, cls) // not on our broker: no need to gather the inventory's facts
 	}
 	f, err := r.o.Facts.FactsFor(ctx, d)
@@ -658,10 +685,10 @@ func (r *Router) NoteUnansweredWrite(ctx context.Context, id model.DeviceID, err
 // writeOverMQTT is write's decision for a device whose HTTP is not known to fail: the device snapshot, whether it is
 // on our broker, and whether the write goes MQTT first. Not on our broker needs no facts. Without facts no judgement
 // is possible and the established path (HTTP first) is taken; the facts may also know of an HTTP failure the cheap
-// check did not see, and httpFirst then decides as it always did. TypedRoute asks the same (#826).
+// check did not see, and httpFirst then decides as it always did. TypedRoute and WritesOverMQTT ask the same (writesMQTT, #826, #1053).
 func (r *Router) writeOverMQTT(ctx context.Context, id model.DeviceID) (d model.Device, onBroker, mqtt bool) {
 	d, err := r.o.Devices.GetDevice(ctx, id)
-	onBroker = err == nil && d.MQTT == model.MQTTOurs && d.Topic != ""
+	onBroker = err == nil && d.OnOurBroker()
 	if !onBroker {
 		return d, false, false
 	}

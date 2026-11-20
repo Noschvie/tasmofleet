@@ -207,7 +207,7 @@ func refusedNow(hl model.Health) bool { return hl.APIOff() }
 // "Reachable" (#416). What HTTP showed beats the device's overall state: a device whose last will says
 // offline but whose web page answers is not "no response" (#447).
 func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time) reach {
-	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not checked yet"}
+	r := reach{MQTTOn: mqttInPlay(d, hl), HTTPWord: "Not checked yet"}
 	r.MQTTOK = hl.LWT == "Online" || hl.LWT == "" && !hl.SeenMQTT.IsZero() && hl.State == model.HealthOnline
 	r.LWTOff = hl.LWT == "Offline"
 	// What HTTP showed beats an Offline state only when it came after the device went offline: an answer

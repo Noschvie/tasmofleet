@@ -304,7 +304,9 @@ func TestPowerOverMQTTUnconfirmedDoesNotRetryOverHTTP(t *testing.T) {
 }
 
 // Why: MQTT is an accelerator. When the broker is down, or the device does
-// not talk to our broker, HTTP does the job.
+// not talk to our broker, HTTP does the job. The write rule is the router's
+// own, as the app wires it (#1053), on facts that would allow MQTT otherwise:
+// the router itself must say no for such a device.
 func TestPowerFallsBackToHTTP(t *testing.T) {
 	for name, tc := range map[string]struct {
 		bus *fakeBus
@@ -317,6 +319,14 @@ func TestPowerFallsBackToHTTP(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := setup(t, plug, tc.cap, tc.bus)
+			if tc.bus != nil {
+				ch := mqttcmd.New(tc.bus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond})
+				mem := transport.NewMemory(time.Minute, time.Now)
+				r := transport.NewRouter(transport.Options{HTTP: e.client, Devices: routerDevices{e.devs}, Facts: stubFacts{mem: mem}, Memory: mem})
+				r.SetMQTT(ch)
+				e.svc = New(Options{Devices: e.devs, Client: e.client, Audit: e.rec, MQTT: ch,
+					WritesOverMQTT: r.WritesOverMQTT})
+			}
 			if _, err := e.svc.Power(context.Background(), "x", 7, 1, "ON"); err != nil {
 				t.Fatal(err)
 			}
@@ -939,5 +949,53 @@ func TestRunSendsWhatTheAuditHidesOverMQTTFirstAndStillHidesIt(t *testing.T) {
 		if ev := rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"mqtt"`) || strings.Contains(ev[0].Detail, "hunter2") {
 			t.Errorf("%q: audit = %+v, want via=mqtt and no secret", cmd, ev)
 		}
+	}
+}
+
+// Why (T6, #605, #1053 review): the toggle reads the device itself and publishes with that snapshot, while the
+// router's write rule (as the app wires it) decides on a snapshot of its own. When the two differ (an edit or an
+// identity refresh landed between the reads), the toggle must not publish Power to its topic: no exclusivity check,
+// no topic-taken mark and no broker check ever judged it, and it may be another device's now. The switch goes
+// through the router instead, which decides and publishes from one snapshot, so it still reaches the device.
+func TestPowerNeverPublishesToASnapshotTheRouterDidNotJudge(t *testing.T) {
+	stored := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
+	for name, toggles := range map[string]func(d model.Device) model.Device{
+		"an older topic":      func(d model.Device) model.Device { d.Topic = "plug-old"; return d },
+		"another broker":      func(d model.Device) model.Device { d.MQTT = model.MQTTOtherBroker; return d },
+		"another group topic": func(d model.Device) model.Device { d.MoreGroupTopics = []string{"kitchen"}; return d },
+		"the judged snapshot": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			toggleBus, routerBus := &fakeBus{connected: true}, &fakeBus{connected: true}
+			answerPower(toggleBus)
+			answerPower(routerBus)
+			mem := transport.NewMemory(time.Minute, time.Now)
+			var httpCalls atomic.Int32
+			r := transport.NewRouter(transport.Options{HTTP: powerHTTPCount{n: &httpCalls}, Devices: routerDevices{devices{7: stored}}, Facts: stubFacts{mem: mem}, Memory: mem})
+			r.SetMQTT(mqttcmd.New(routerBus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond}))
+			seen := stored
+			if toggles != nil {
+				seen = toggles(stored)
+			}
+			svc := New(Options{Devices: devices{7: seen}, Client: r, Audit: &recorder{},
+				MQTT:           mqttcmd.New(toggleBus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond}),
+				WritesOverMQTT: r.WritesOverMQTT})
+			if state, err := svc.Power(t.Context(), "x", 7, 1, "ON"); err != nil || state != "ON" {
+				t.Fatalf("state %q err %v", state, err)
+			}
+			toggled, routed := toggleBus.pubs(), routerBus.pubs()
+			if toggles == nil {
+				if len(toggled) != 1 || len(routed) != 0 || httpCalls.Load() != 0 {
+					t.Fatalf("fixture: the judged snapshot must be published by the toggle: toggle %v router %v http %d", toggled, routed, httpCalls.Load())
+				}
+				return
+			}
+			if len(toggled) != 0 {
+				t.Fatalf("the toggle published %v with a snapshot the rule did not judge", toggled)
+			}
+			if len(routed)+int(httpCalls.Load()) != 1 || (len(routed) == 1 && !strings.HasPrefix(routed[0], "plug ")) {
+				t.Fatalf("want one switch through the router on the judged topic: router %v http %d", routed, httpCalls.Load())
+			}
+		})
 	}
 }

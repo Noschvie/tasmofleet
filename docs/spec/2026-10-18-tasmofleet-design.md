@@ -1065,7 +1065,8 @@ HTTP. Rules:
   such, never sent again; while the caller still waits and HTTP is not failing it marks the device like an
   unanswered read, so its next commands go over HTTP for 10 minutes. docs/security/mqtt-transport.md lists what still uses HTTP and why.
 - The power toggle (`devicecmd.Power`) calls the command channel itself, so it confirms the relay's state; it
-  publishes only where `Choose` gives MQTT for writes (`devicecmd.Options.WritesOverMQTT`, injected by the app), else
+  publishes only where the router sends any other write MQTT first (`devicecmd.Options.WritesOverMQTT`, wired by the
+  app to `transport.Router.WritesOverMQTT`, the decision `Command` and `TypedRoute` take, #1053), else
   it switches through the router. A switch the channel did not publish goes over HTTP once, pinned
   (`WithPath(HTTP)`), so the router cannot publish it after all. A switch through the router is traced: its audit
   `via` names the transport the router used. A device with an unread GroupTopic is switched over HTTP (before

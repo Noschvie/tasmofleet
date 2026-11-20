@@ -23,3 +23,24 @@ func TestFWRFactsCRUsage(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1053): "on our broker" is the first question of every MQTT read and write and of the power toggle. A device
+// is reached there only when it reports to TasmoFleet's broker and has a topic to send to; a device on another
+// broker, one whose broker is not known yet, or one without a topic is reached over HTTP and needs no MQTT facts.
+func TestOnOurBroker(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		d    Device
+		want bool
+	}{
+		{"our broker, topic set", Device{MQTT: MQTTOurs, Topic: "plug"}, true},
+		{"our broker, no topic", Device{MQTT: MQTTOurs}, false},
+		{"another broker, topic set", Device{MQTT: MQTTOtherBroker, Topic: "plug"}, false},
+		{"broker not known yet, topic set", Device{MQTT: MQTTUnknown, Topic: "plug"}, false},
+		{"no MQTT, topic set", Device{MQTT: MQTTNone, Topic: "plug"}, false},
+	} {
+		if got := tc.d.OnOurBroker(); got != tc.want {
+			t.Errorf("%s: OnOurBroker = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

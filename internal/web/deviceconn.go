@@ -491,6 +491,12 @@ func heardOnOurBroker(d model.Device, hl model.Health, httpOK bool, now time.Tim
 	if httpOK {
 		return false
 	}
+	return mqttInPlay(d, hl)
+}
+
+// mqttInPlay reports whether MQTT is in play for the device at all: it is on our broker by its capability, or a last
+// will or a message of it was heard there. The "Other broker" hint and the Reachability tile read it.
+func mqttInPlay(d model.Device, hl model.Health) bool {
 	return d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero()
 }
 

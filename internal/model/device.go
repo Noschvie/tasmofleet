@@ -167,6 +167,11 @@ func (d Device) GroupTopicsReadAt() time.Time {
 // always "admin"), so only a non-empty password counts.
 func (d Device) HasCredentials() bool { return d.HTTPPassword != "" }
 
+// OnOurBroker reports whether the device reports to TasmoFleet's MQTT broker and has a topic to send to: the first
+// question of every MQTT read and write (transport.Router) and of the identity reads over MQTT. Whether MQTT is usable
+// for it is transport.Choose's question, on the facts.
+func (d Device) OnOurBroker() bool { return d.MQTT == MQTTOurs && d.Topic != "" }
+
 // MQTTPasswordMode says where the MqttPassword for FileDownload/FileUpload comes from.
 type MQTTPasswordMode string
 

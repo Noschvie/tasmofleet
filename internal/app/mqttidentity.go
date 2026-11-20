@@ -368,7 +368,7 @@ func (m *mqttIdentity) applyStashed(ctx context.Context) {
 // and can be asked: minimal and safeboot firmware do not know Status 2.
 func wantsStatus2(d model.Device) bool {
 	i := d.Identity
-	return d.Topic != "" && d.MQTT == model.MQTTOurs && i.DetectedAt.IsZero() && i.Hardware == "" &&
+	return d.OnOurBroker() && i.DetectedAt.IsZero() && i.Hardware == "" &&
 		i.Variant != "minimal" && i.Variant != "safeboot"
 }
 

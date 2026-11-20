@@ -43,14 +43,25 @@ func TestPowerAsksTheRoutersWriteRule(t *testing.T) {
 		{"own GroupTopic unread", []model.Device{unread}, false},
 		{"another device's GroupTopic unread", []model.Device{ok, other}, false},
 	} {
-		a := &runtime{facts: newFacts(tc.devs, live, fakeMemory{})}
-		if got := a.writesOverMQTT(t.Context(), tc.devs[0]); got != tc.want {
+		facts := newFacts(tc.devs, live, fakeMemory{})
+		if got := toggleWriteRule(facts.Devices, facts)(t.Context(), tc.devs[0]); got != tc.want {
 			t.Errorf("%s: writesOverMQTT = %v, want %v", tc.name, got, tc.want)
 		}
 	}
-	if (&runtime{}).writesOverMQTT(t.Context(), ok) {
+	if toggleWriteRule(fakeFactsDevices{[]model.Device{ok}}, nil)(t.Context(), ok) {
 		t.Error("without facts a switch must not be published")
 	}
+}
+
+// toggleWriteRule is the power toggle's write rule as setupDeviceCmd wires it (Router.WritesOverMQTT, #1053), asked of a
+// router on these facts (none: nil) with a command channel that is connected.
+func toggleWriteRule(devs transport.DeviceGetter, facts *TransportFacts) func(context.Context, model.Device) bool {
+	r := transport.NewRouter(transport.Options{HTTP: &writesHTTP{}, Devices: devs})
+	if facts != nil {
+		r.SetFacts(facts)
+	}
+	r.SetMQTT(&writesMQTT{})
+	return r.WritesOverMQTT
 }
 
 type writesHTTP struct{ n int }
@@ -176,8 +187,8 @@ func TestAfterAChangeOfTheMQTTConnectionTheFactsSendSwitchesOverHTTP(t *testing.
 	facts.ConnChanged = r.MQTTConnChanged()
 	r.SetFacts(facts)
 	r.SetMQTT(mq)
-	a := &runtime{facts: facts}
-	if !a.writesOverMQTT(t.Context(), d) {
+	writesOverMQTT := r.WritesOverMQTT // as setupDeviceCmd wires it
+	if !writesOverMQTT(t.Context(), d) {
 		t.Fatal("fixture: before the change a switch must go over MQTT")
 	}
 	if _, err := r.Command(t.Context(), tasmota.TargetFor(d), "MqttPassword typo"); err != nil || mq.n != 1 || httpc.n != 1 {
@@ -190,7 +201,7 @@ func TestAfterAChangeOfTheMQTTConnectionTheFactsSendSwitchesOverHTTP(t *testing.
 	if p := transport.Choose(f); p.Writes != transport.HTTP || p.Commands != transport.HTTP {
 		t.Fatalf("writes=%s reads=%s (%s), want HTTP while the mark is fresh", p.Writes, p.Commands, p.Reason(transport.ActWrites))
 	}
-	if a.writesOverMQTT(t.Context(), d) {
+	if writesOverMQTT(t.Context(), d) {
 		t.Error("the power toggle would still publish a switch right after the change of the MQTT connection")
 	}
 }

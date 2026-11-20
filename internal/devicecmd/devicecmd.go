@@ -60,14 +60,16 @@ type Options struct {
 	Devices DeviceGetter
 	Client  tasmota.Client
 	Audit   audit.Recorder
-	// MQTT is optional. It is used for Power only when the device's MQTT
-	// capability is MQTTOurs, the connection is usable and WritesOverMQTT
-	// says so. The command channel serialises per device and waits for the
-	// reply (8 s by default).
+	// MQTT is optional. It is used for Power only when WritesOverMQTT says
+	// so. The command channel serialises per device and waits for the reply
+	// (8 s by default).
 	MQTT mqttcmd.Doer
-	// WritesOverMQTT reports whether a change of d goes over MQTT: the write
-	// rule of every other change (transport.Choose's writes path, #605),
-	// injected by the app. Nil: a switch is never published.
+	// WritesOverMQTT reports whether a change of d goes over MQTT: the
+	// router's own decision for every other write (transport.Router.
+	// WritesOverMQTT, #605, #1053; it also answers no for a device not on our
+	// broker or with the bus down, and for a d whose MQTT settings are not the
+	// ones it judged, T6), injected by the app. Nil: a switch is never
+	// published.
 	WritesOverMQTT func(ctx context.Context, d model.Device) bool
 	// NoteUnanswered is told of a switch published over MQTT that got no answer (err is the channel's
 	// timeout): the router's mark for an unanswered write in the app (transport.Router.NoteUnansweredWrite,
@@ -149,8 +151,7 @@ func (s *service) Power(ctx context.Context, actor string, id model.DeviceID, re
 }
 
 func (s *service) useMQTT(ctx context.Context, d model.Device) bool {
-	return s.o.MQTT != nil && d.MQTT == model.MQTTOurs && d.Topic != "" && s.o.MQTT.Connected() &&
-		s.o.WritesOverMQTT != nil && s.o.WritesOverMQTT(ctx, d)
+	return s.o.MQTT != nil && s.o.WritesOverMQTT != nil && s.o.WritesOverMQTT(ctx, d)
 }
 
 func (s *service) powerHTTP(ctx context.Context, d model.Device, relay int, action string) (string, error) {
