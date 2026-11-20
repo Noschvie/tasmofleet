@@ -359,7 +359,8 @@ test("Refresh identity follows the live refusal both ways, without a reload", { 
       const live = document.getElementById("devlive")!;
       if (r === null) live.removeAttribute("data-reads-off");
       else live.setAttribute("data-reads-off", r);
-      document.dispatchEvent(new Event("htmx:afterSettle", { bubbles: true }));
+      // htmx fires its events on the swapped element, never on the document (#1059: the listeners read e.target)
+      live.dispatchEvent(new Event("htmx:afterSettle", { bubbles: true }));
     }, reason);
   const reason = (await page.locator("#devlive").getAttribute("data-reads-off"))!;
   expect(reason).toContain("HTTP API off (SetOption128 0)");
