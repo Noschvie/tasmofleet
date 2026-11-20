@@ -1,9 +1,8 @@
-// Package policy compares devices against a declared fleet policy (M2) and
-// reports drift, e.g. the flash-wear policy PowerOnState 0,
-// SetOption0 0 (save_state), SaveData 0, Timezone 99, with per-device or
-// per-family exceptions (ESP32: SetOption0 1). Values come from decoded
-// backups when available, else from live status. Fixing drift is an explicit
-// bulk action, never automatic.
+// Package policy compares devices against the rules a person declares (M2) and
+// reports drift, e.g. a rule PowerOnState 0, a rule SetOption0 0 (save_state)
+// or a rule Timezone 99, with per-device or per-family exceptions. Values come
+// from decoded backups when available, else from live status. Fixing drift is
+// an explicit bulk action, never automatic.
 package policy
 
 import (

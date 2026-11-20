@@ -708,3 +708,61 @@ func TestToggleHelpDoesNotRepeatItsLabel(t *testing.T) {
 		t.Fatal("no toggle fields found")
 	}
 }
+
+// Why (#1064): the product ships no built-in power-loss policy. A help text that names one value
+// as "the fleet policy" steers every user to one person's flash-wear choice. For the three power
+// fields the help must also not mention a policy at all (stricter than "recommends no value", so
+// a later "policy rule" mention there is a deliberate change). OtaUrl may say "a policy rule",
+// which names the feature, not a value.
+func TestNoHelpPresentsOnePowerLossPolicyAsTheFleetPolicy(t *testing.T) {
+	for _, f := range Fields {
+		if strings.Contains(strings.ToLower(f.Help), "fleet policy") {
+			t.Errorf("%s: help %q presents one policy as the fleet policy", f.Key, f.Help)
+		}
+	}
+	for _, key := range []string{"PowerOnState", "SaveData", "SetOption0"} {
+		f, ok := Lookup(key)
+		if !ok {
+			t.Fatalf("%s is not a field", key)
+		}
+		if strings.Contains(strings.ToLower(f.Help), "policy") {
+			t.Errorf("%s: help %q recommends a value as policy", key, f.Help)
+		}
+	}
+}
+
+// Why (#1063): on default firmware SetOption19 0 is Tasmota discovery, the announcement Home
+// Assistant's Tasmota integration needs (xdrv_12_discovery.ino); 1 stops it and removes the
+// retained message. The old help said On makes the device announce itself, which invites the
+// value that removes the device from Home Assistant.
+func TestSetOption19HelpSaysOffIsWhatTheTasmotaIntegrationNeeds(t *testing.T) {
+	f, ok := Lookup("SetOption19")
+	if !ok {
+		t.Fatal("SetOption19 is not a field")
+	}
+	off, on, found := strings.Cut(f.Help, "On:")
+	if !found {
+		t.Fatalf("help %q has no On: part", f.Help)
+	}
+	if !strings.Contains(off, "Off (default)") || !strings.Contains(off, "Tasmota integration") {
+		t.Errorf("the Off part %q must name the default and the Tasmota integration", off)
+	}
+	if strings.Contains(on, "announces itself") || !strings.Contains(on, "stops") {
+		t.Errorf("the On part %q must say the announcement stops", on)
+	}
+}
+
+// Why (#1063): the toggle is checked when the value is 1, which turns Tasmota discovery off. A
+// label that only names discovery reads as if checking it turned discovery on.
+func TestSetOption19LabelNamesWhatOnDoes(t *testing.T) {
+	f, ok := Lookup("SetOption19")
+	if !ok {
+		t.Fatal("SetOption19 is not a field")
+	}
+	// Label feeds the policy rule list and Make compliant; the field label is the form's.
+	for _, l := range []string{Label("SetOption19"), f.Label} {
+		if !strings.Contains(l, "discovery off") {
+			t.Errorf("label %q must say that On turns Tasmota discovery off", l)
+		}
+	}
+}

@@ -86,7 +86,7 @@ var descriptions = map[string]string{
 	"setoption3":     "Turn the MQTT connection on or off.",
 	"setoption4":     "Answer commands on the RESULT topic or on a topic named after the command.",
 	"setoption8":     "Show temperatures in Celsius or Fahrenheit.",
-	"setoption19":    "Home Assistant discovery, classic Tasmota integration.",
+	"setoption19":    "Tasmota discovery: 0 (default) on, as Home Assistant's Tasmota integration needs; 1 off.",
 	"teleperiod":     "Seconds between telemetry messages; 0 turns it off.",
 	"timezone":       "Offset from UTC in hours, or 99 to use the TimeStd and TimeDst rules.",
 	"timestd":        "Rule for the switch back to standard time at the end of daylight saving.",

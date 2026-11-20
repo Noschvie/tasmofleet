@@ -115,3 +115,18 @@ func TestDescribeFallsBackToTheCommandForOtherIndexes(t *testing.T) {
 		t.Fatal("no invented description")
 	}
 }
+
+// Why (#1063): the policy editor shows this line for SetOption19. On default firmware 0 keeps
+// Tasmota discovery on, which Home Assistant's Tasmota integration needs; the old line called it
+// the "classic" integration and never said which value is the default.
+func TestDescribeSetOption19SaysZeroIsWhatTheTasmotaIntegrationNeeds(t *testing.T) {
+	d := Describe("SetOption19")
+	for _, want := range []string{"0 (default) on", "Tasmota integration"} {
+		if !strings.Contains(d, want) {
+			t.Errorf("Describe(SetOption19) = %q, want it to contain %q", d, want)
+		}
+	}
+	if strings.Contains(strings.ToLower(d), "classic") {
+		t.Errorf("Describe(SetOption19) = %q still calls the integration classic", d)
+	}
+}

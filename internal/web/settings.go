@@ -123,7 +123,7 @@ type settingsCard struct {
 
 var settingsCards = []settingsCard{
 	{"names", "Names", "One per relay or channel.", 0, []string{"FriendlyName1", "FriendlyName2", "FriendlyName3", "FriendlyName4"}},
-	{"options", "Options", "SetOptions for MQTT replies and Home Assistant discovery.", 0, []string{"SetOption3", "SetOption4", "SetOption19"}},
+	{"options", "Options", "SetOptions for MQTT replies and Tasmota discovery.", 0, []string{"SetOption3", "SetOption4", "SetOption19"}},
 	{"network", "Network & telemetry", "How the device is named on the network and how often it reports.", 1, []string{"Hostname", "TelePeriod"}},
 	{"mqtt", "MQTT", "Broker connection and topics.", 1, []string{"Topic", "FullTopic", "MqttHost", "MqttPort", "MqttUser", "MqttPassword"}},
 	{"power", "Power & flash", "What the relay does after power loss, and how often settings are written to flash.", 2, []string{"PowerOnState", "SaveData", "SetOption0"}},

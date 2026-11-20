@@ -17,7 +17,7 @@ var setOptions = map[int]setOption{
 	0:  {"save_state", "restore relay state after power loss"},
 	3:  {"mqtt_enabled", "enable MQTT"},
 	4:  {"mqtt_response", "MQTT replies as RESULT instead of %COMMAND%"},
-	19: {"hass_discovery", "Home Assistant discovery (classic Tasmota integration)"},
+	19: {"hass_discovery", "Tasmota discovery off / legacy Home Assistant discovery"},
 }
 
 // Label returns the display text of a command: SetOption numbers carry

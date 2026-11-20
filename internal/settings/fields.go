@@ -356,18 +356,18 @@ func buildFields() []Field {
 		ranged(numberField("TelePeriod", "Telemetry period (s)", "0 turns telemetry off, otherwise 10 to 3600 seconds.", GroupGeneral, telePeriod), 0, 3600),
 		{
 			Key: "PowerOnState", Label: "Power on state", Kind: KindSelect, Group: GroupGeneral,
-			Help: "Relay state after power loss. Fleet policy: 0, so a power cut never writes the relay state to flash.",
+			Help: "Relay state after power loss. 3 restores the last saved state, and only while SetOption0 is on.",
 			Options: []Option{
 				{"0", "0 (off)"}, {"1", "1 (on)"}, {"2", "2 (toggle)"}, {"3", "3 (last state, saved)"},
 				{"4", "4 (on, ignore commands)"}, {"5", "5 (off, ignore commands)"},
 			},
 			Validate: oneOf("0", "1", "2", "3", "4", "5"), Command: plain("PowerOnState"),
 		},
-		ranged(numberField("SaveData", "Save data (s)", "0 saves settings only on explicit changes (fleet policy); otherwise seconds between saves (up to 3600).", GroupGeneral, intRange(0, 3600)), 0, 3600),
-		toggle(0, "Fleet policy: 0 on ESP8266 to spare the flash; ESP32 devices may use 1."),
+		ranged(numberField("SaveData", "Save data (s)", "0 writes flash only on explicit changes; otherwise seconds between saves (up to 3600).", GroupGeneral, intRange(0, 3600)), 0, 3600),
+		toggle(0, "On: the last relay state is saved and used after a restart. Off: nothing is saved, so PowerOnState 3 has no state to use."),
 		toggle(3, "Turning MQTT off makes the device invisible to tasmofleet's MQTT health."),
 		toggle(4, "Rules and integrations that read command replies over MQTT see the other topic."),
-		toggle(19, "On: the device announces itself to Home Assistant over MQTT."),
+		toggle(19, "Off (default): the device announces itself for Home Assistant's Tasmota integration. On: that announcement stops and its retained message is removed; only builds with USE_HOME_ASSISTANT then use Home Assistant's legacy MQTT discovery."),
 		textField("MqttHost", "MQTT host", "Host name or IP address of the broker.", GroupMQTT, hostV),
 		ranged(numberField("MqttPort", "MQTT port", "1 to 65535.", GroupMQTT, intRange(1, 65535)), 1, 65535),
 		textField("MqttUser", "MQTT user", "No blanks, at most 64 characters.", GroupMQTT, credential),
@@ -388,7 +388,7 @@ func buildFields() []Field {
 		textField("TimeStd", "Standard time rule", "Hemisphere, Week, Month, Day, Hour, Offset (minutes), separated by commas, e.g. 0,0,10,1,3,60.", GroupTime, ruleV),
 		{
 			Key: "OtaUrl", Label: "OTA URL", Kind: KindText, Group: GroupFirmware, PolicyOnly: true,
-			Help:     "Where the device fetches firmware from, e.g. after importing devices from a decommissioned update host. Only a fleet policy sets it; tasmofleet's own updates set and restore it themselves.",
+			Help:     "Where the device fetches firmware from, e.g. after importing devices from a decommissioned update host. Only a policy rule sets it; tasmofleet's own updates set and restore it themselves.",
 			Validate: otaUrlV, Command: plain("OtaUrl"),
 		},
 	}

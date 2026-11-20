@@ -110,13 +110,13 @@ test("suggestions come from the catalogues of the fleet's versions, with range a
 });
 
 test("an indexed command is a name and a number box, and Change gives the text field back", { tag: "@core" }, async ({ page }) => {
-  await draft(page, "Home Assistant discovery");
+  await draft(page, "Tasmota discovery");
   await page.locator("#rule-command").fill("SetOption19");
   await page.locator("#rule-command").dispatchEvent("change");
   const idx = page.locator("#rule-index");
   await expect(idx).toHaveValue("19");
   await expect(page.locator("#command-field")).toContainText("0 to 177");
-  await expect(page.locator("#help-command")).toContainText("Home Assistant discovery");
+  await expect(page.locator("#help-command")).toContainText("Tasmota integration needs");
   await expect(page.locator("#help-command a")).toHaveAttribute("href", "https://tasmota.github.io/docs/Commands/#setoption19");
   await expect(page.locator("#want-control")).toContainText("on / off");
   // the hidden command follows the box, so the preview and the save use SetOption20
