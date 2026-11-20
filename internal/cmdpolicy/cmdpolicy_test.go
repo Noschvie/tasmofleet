@@ -931,6 +931,36 @@ func TestStartsFirmware(t *testing.T) {
 	}
 }
 
+// Why (#1001): the console refuses a Status 0 up front on a device it reaches over MQTT only, because the MQTT
+// channel never carries one (safety rule 2) and HTTP would only time out. The answer must be the one the device
+// itself would run: Tasmota's atoi reads 00, off and an unclear index as 0 too, and a Backlog runs its parts. A
+// spelling missed here goes back to the timeout; a plain Status N or a Status-like write caught here would be
+// refused for nothing.
+func TestRunsStatus0ReadsEverySpellingTheDeviceRuns(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"Status 0":                        true,
+		"status0":                         true,
+		"STATUS 0":                        true,
+		"Status 00":                       true,
+		"Status off":                      true,
+		"Status1 2":                       true, // which one does the device take? read as Status 0
+		"Backlog Power 1; Status 0":       true,
+		"Backlog Power 1;BacklogStatus 0": true,
+		"Status":                          false, // the abbreviated object only
+		"Status 1":                        false,
+		"Status 11":                       false,
+		"Status 12":                       false,
+		"Power 0":                         false,
+		"Backlog Power 1; Status 2":       false,
+		"Status 0;Power 1":                false, // malformed: refused by the policy itself
+		"":                                false,
+	} {
+		if got := RunsStatus0(cmd); got != want {
+			t.Errorf("RunsStatus0(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}
+
 // Why: a typed Upgrade makes the device flash and restart, so a TasmoFleet update must wait for that restart;
 // a bare OtaUrl only stores an address and no restart follows. The answer has to be the one cmdpolicy's own
 // parser gives (case, index suffix, Backlog prefixes and separators), or a spelling Tasmota accepts would

@@ -194,7 +194,7 @@ func (h *handler) bulkCommandRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(reqs) == 0 {
 		h.message(w, r, http.StatusConflict, h.view(r, "Command not sent", "devices",
-			"MQTT does not carry this command and the chosen devices' HTTP is not reachable. Nothing was sent."))
+			"MQTT does not carry this command and the chosen devices' HTTP is not known to work. Nothing was sent."))
 		return
 	}
 	ctx := ota.WithBatchOptions(ota.WithActorKind(r.Context(), p.Method), opts)

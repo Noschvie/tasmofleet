@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/transport"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
@@ -15,9 +16,10 @@ import (
 // URL encrypts only TasmoFleet's leg to the broker. Its confirmation says which, honestly, before anything is sent.
 
 // typedRoutes returns the transport the router sends cmd over now to each of ids, and whether the broker URL uses TLS;
-// nil when cmd names no route (transport.ConfirmsRoute).
+// nil when cmd names no route (transport.ConfirmsRoute). A Status 0 names one in every spelling, also one the audit
+// shows in full (status0): its route can be nowhere (#1001), and a run must not send it anywhere unannounced.
 func (h *handler) typedRoutes(ctx context.Context, cmd string, ids ...model.DeviceID) (map[model.DeviceID]transport.Path, bool) {
-	if !transport.ConfirmsRoute(cmd) {
+	if !transport.ConfirmsRoute(cmd) && !cmdpolicy.RunsStatus0(cmd) {
 		return nil, false
 	}
 	if h.d.TypedRoutes == nil {
@@ -77,7 +79,7 @@ func (h *handler) bulkRoute(ctx context.Context, cmd string, ids ...model.Device
 		key := map[transport.Path]string{transport.MQTT: "Over MQTT", transport.HTTP: "Over HTTP", transport.None: "Not sent"}[p]
 		v := strconv.Itoa(n) + " of " + plural(len(ids), "device") + ". The command goes " + routeText(p, tls, "each device's") + "."
 		if p == transport.None {
-			v = strconv.Itoa(n) + " of " + plural(len(ids), "device") + ". MQTT does not carry this command and their HTTP is not reachable."
+			v = strconv.Itoa(n) + " of " + plural(len(ids), "device") + ". MQTT does not carry this command and their HTTP is not known to work."
 		}
 		rows = append(rows, ui.KVRow{Key: key, Value: v})
 		notice += key + ": " + v + "\n"

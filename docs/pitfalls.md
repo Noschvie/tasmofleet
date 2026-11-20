@@ -243,11 +243,14 @@ means nothing stops you: you have to know it. The full working rules are in
   `Status 11`); neither unknown nor an answer on record counts. A fresh answer on record (`HTTPOK`) is only the
   console's hint whether to ask up front; when the router refuses after all, the console asks then. Up-front
   refusals that would block the whole fleet (bulk preview, Make compliant's plan) use "known to fail" instead and
-  leave the rest to the router.
+  leave the rest to the router. One exception, `Status 0` (#1001): the router has no HTTP check of its own to leave
+  it to, and an unknown HTTP state ends in a timeout per device, so the bulk preview lists a device whose writes go
+  MQTT first and whose HTTP has no fresh answer as "Not sent"; the device's console asks for an HTTP check.
 - **Enforced:** `TestACutOffWriteGoesWithoutAQuestionOnlyWhileHTTPIsProvenUsable`,
   `TestACutOffWriteAfterHTTPClosedIsRefusedDespiteAnAnswerOnRecord`, `TestConsoleAsksWhenTheRouterRefusesACutOffChange`,
   `TestReachedOnlyOverMQTTMeansHTTPIsNotKnownToWork`, `TestKnownOnlyOverMQTTMeansHTTPIsFailing` (claims T8 and T10 of
-  `docs/security/mqtt-transport.md`).
+  `docs/security/mqtt-transport.md`); the `Status 0` exception: `TestBulkStatus0IsNotSentWhereHTTPIsNotKnownToWork`
+  (claim T13).
 
 ### A written value compared in another form than the device reports it (#947)
 

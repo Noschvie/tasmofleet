@@ -195,6 +195,20 @@ func consoleError(err error) (int, string) {
 	return status, msg
 }
 
+// status0NowhereText is the console's refusal of a Status 0 the router sends nowhere (#1001): the MQTT channel never
+// carries one (safety rule 2) and the device's HTTP (hs) is not known to work (transport.Router.TypedRoute), so an
+// HTTP send would only time out. A known failure is named, and another try would meet it again. Otherwise HTTP has
+// only not answered lately: the refusal asks for an HTTP check, which runs only while nothing holds the device, hence
+// "in a moment".
+func status0NowhereText(hs transport.HTTPState) string {
+	why, hint := "its HTTP is not known to work.", " If its HTTP does work, try again in a moment: TasmoFleet asks for an HTTP check now."
+	if hs.State == transport.HTTPFailing {
+		why, hint = "its HTTP is not known to work: "+hs.Describe()+".", ""
+	}
+	return "Not sent: Status 0 never goes over MQTT (safety rule 2), and this device is reached over MQTT only: " + why +
+		" Ask Status 1 to Status 11 instead, one at a time." + hint
+}
+
 // updateJobHoldsText is the refusal of Upgrade/OtaUrl while a TasmoFleet update job holds the device.
 const updateJobHoldsText = "A TasmoFleet update job (queued or running) holds this device. Upgrade and OtaUrl are refused until it has finished, because two updates at once can leave the device unusable."
 
@@ -232,7 +246,10 @@ func (h *handler) confirmation(ctx context.Context, cmd string, v cmdpolicy.Verd
 // askConsole shows the console's confirmation of cmd when it needs one, with status, and reports whether it did: the
 // consequence of a destructive or lock-out command (with the cut-off of a device reached over MQTT only; cutOff: the
 // router just found HTTP silent, so that consequence is named whatever is on record), and the transport a command
-// whose arguments the audit hides takes (#826). The token keeps the cut-off consent and the route for the send. When
+// whose arguments the audit hides takes (#826). A Status 0 the router sends nowhere (transport.None: MQTT never carries
+// it and HTTP is not known to work, #1001) is refused instead, before any confirmation and with nothing sent; that
+// page counts as shown. A confirmed Status 0 whose route turns into nowhere before the send meets that refusal through
+// the re-ask on a changed route sentence. The token keeps the cut-off consent and the route for the send. When
 // it does not ask, routes is the route a send without a confirmation must carry (one that goes nowhere), or nil.
 func (h *handler) askConsole(w http.ResponseWriter, r *http.Request, d model.Device, data consoleData, cmd string, status int, cutOff bool) (bool, map[model.DeviceID]transport.Path) {
 	ctx := r.Context()
@@ -249,6 +266,17 @@ func (h *handler) askConsole(w http.ResponseWriter, r *http.Request, d model.Dev
 		v, cut = cmdpolicy.WithMQTTOnly(cmd, v0), true
 	}
 	routes, notice := h.consoleRoute(ctx, canon, d.ID)
+	if routes[d.ID] == transport.None && cmdpolicy.RunsStatus0(canon) {
+		// Before the heap question: nothing could be sent anyway (#1001). The HTTP check lets a next try find an
+		// answer where HTTP works.
+		if h.d.ProbeHTTP != nil {
+			h.d.ProbeHTTP(d.ID)
+		}
+		f, _, _ := h.transportOf(ctx, d.ID)
+		data.Error = status0NowhereText(f.HTTP)
+		h.renderConsole(w, r, http.StatusConflict, d, data)
+		return true, nil
+	}
 	if v.Confirm == "" && notice == "" {
 		return false, routes
 	}

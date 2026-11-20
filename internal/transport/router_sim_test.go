@@ -128,6 +128,46 @@ func TestSimStatus0CannotBePublishedByAnExecutor(t *testing.T) {
 	}
 }
 
+// Why (#1001, reported from a device reached over MQTT only): a Status 0 typed in the console never crosses the
+// broker (safety rule 2), and on such a device HTTP only times out. With the real channel and a simulated device,
+// TypedRoute names no transport for it while HTTP is not known to work, whether its HTTP port is closed or its state
+// is merely unknown, and the send announced so reaches the device over neither transport. With a fresh HTTP answer on
+// record the admin's Status 0 still reaches the device, once, over HTTP.
+func TestSimStatus0GoesNowhereOnAnMQTTOnlyDevice(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		faults []simulator.Fault
+		setup  func(g *simRig)
+		want   Path
+	}{
+		{"HTTP port closed, state unknown", []simulator.Fault{{Kind: simulator.FaultHTTPUnreachable}}, func(*simRig) {}, None},
+		{"HTTP port closed, failing", []simulator.Fault{{Kind: simulator.FaultHTTPUnreachable}}, func(g *simRig) { g.mem.Fail(7, HTTPFailUnreachable) }, None},
+		{"HTTP state unknown", nil, func(*simRig) {}, None},
+		{"HTTP answered lately", nil, func(g *simRig) { g.f.httpOK = true }, HTTP},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newSimRig(t, tc.faults...)
+			tc.setup(g)
+			if got := g.r.TypedRoute(t.Context(), 7, "Status 0"); got != tc.want {
+				t.Fatalf("TypedRoute = %s, want %s", got, tc.want)
+			}
+			before := len(g.dev.Commands())
+			ctx, tr := WithTrace(WithRoute(WithConsole(t.Context()), tc.want))
+			raw, err := g.r.Command(ctx, g.target(), "Status 0")
+			got := g.dev.Commands()[before:]
+			if tc.want == None {
+				if err == nil || len(got) != 0 || tr.Via() != "none" {
+					t.Fatalf("err=%v via=%s, the device received %v: want nothing sent", err, tr.Via(), got)
+				}
+				return
+			}
+			if err != nil || len(got) != 1 || tr.Via() != "http" || !strings.Contains(string(raw), "StatusFWR") {
+				t.Fatalf("err=%v via=%s, the device received %v, reply %.80s: want Status 0 once over HTTP", err, tr.Via(), got, raw)
+			}
+		})
+	}
+}
+
 func TestSimBacklogAndSaveDataOverMQTT(t *testing.T) {
 	// Why (#45): Make compliant sends "Backlog <setting>" and then SaveData; both are writes and
 	// both have to reach a device HTTP cannot reach.

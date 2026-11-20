@@ -429,6 +429,15 @@ func StartsFirmware(cmd string) bool {
 	return err == nil && strings.Contains(v.Confirm, whyFirmware)
 }
 
+// RunsStatus0 reports whether the device would run a Status 0 for cmd: Status 0 in any spelling Tasmota reads as 0
+// (00, off, an unclear index), alone or inside a Backlog. It reads the command exactly like Classify, so the Status 0
+// rule stays in one place (classifyStatus). The MQTT channel never publishes such a command (safety rule 2); the
+// console uses this to refuse it up front where HTTP is not known to work (#1001).
+func RunsStatus0(cmd string) bool {
+	v, err := Classify(cmd)
+	return err == nil && strings.Contains(v.Confirm, whyStatus0)
+}
+
 // StartsFirmwareUpgrade is StartsFirmware restricted to the Upgrade family: the command makes the device
 // flash and restart (Upgrade with an argument, alone or inside a Backlog). A bare OtaUrl only stores the
 // address and is not one. It reads the command exactly like Classify (same parse, same Backlog split, same

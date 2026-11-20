@@ -284,15 +284,26 @@ func ConfirmsRoute(cmnd string) bool {
 // publishes (mqttcmd.Refuses: it runs other commands, a file transfer) never crosses the broker: HTTP, or None while
 // HTTP is known to fail and Command would try MQTT, which refuses it. With the route announced (WithRoute) the send
 // keeps to it or sends nothing.
+//
+// One case is a policy, not a prediction (#1001): a Status 0 (cmdpolicy.RunsStatus0, safety rule 2: the channel never
+// publishes it) on a device whose writes go MQTT first is None unless HTTP is known to work (a fresh answer on record,
+// HTTPOK). An unknown HTTP state is not that proof: a device live on MQTT is not polled over HTTP and a timeout is
+// never recorded as a failure, so on a device reached over MQTT only the HTTP send would end in a timeout. Command
+// itself is unchanged: unannounced it still sends such a Status 0 over HTTP after the channel's refusal; None holds
+// for a send announced so (WithRoute(None) lets nothing through) and for the console, which refuses it up front.
 func (r *Router) TypedRoute(ctx context.Context, id model.DeviceID, cmnd string) Path {
 	cls := classifyCommand(cmnd)
 	if id == 0 || r.mqttDoer() == nil || r.o.Facts == nil || cls.job || !cls.write {
 		return HTTP
 	}
 	refused := mqttcmd.Refuses(cmnd)
-	if r.o.Facts.HTTPState(id).State != HTTPFailing {
-		if _, _, mqtt := r.writeOverMQTT(ctx, id); mqtt && !refused {
+	if st := r.o.Facts.HTTPState(id).State; st != HTTPFailing {
+		_, _, mqtt := r.writeOverMQTT(ctx, id)
+		switch {
+		case mqtt && !refused:
 			return MQTT
+		case mqtt && st != HTTPOK && cmdpolicy.RunsStatus0(cmnd):
+			return None // HTTP is not known to work, and MQTT never carries it
 		}
 		return HTTP // write goes on over HTTP after the channel refused
 	}

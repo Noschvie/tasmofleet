@@ -330,3 +330,105 @@ func TestACommandThatGoesNowhereNamesNoTransport(t *testing.T) {
 		t.Fatalf("run: %d %v, want device 2 only", resp.StatusCode, fb.reqs)
 	}
 }
+
+// Why (#1001, the maintainer's decision of 2026-11-19): a Status 0 never goes over MQTT (safety rule 2), and on a
+// device reached over MQTT only (the router's route for it is transport.None: HTTP is not known to work) the send
+// over HTTP would only time out. The console refuses it before the heap confirmation, says why and what to ask
+// instead, and sends nothing. Its HTTP state is unknown here (no fresh answer), so the refusal itself asks for an HTTP
+// check: where HTTP does work, the next try finds the answer and goes, instead of being refused again because the
+// console was opened too long ago for its own check to count.
+func TestConsoleRefusesStatus0ForAnMQTTOnlyDevice(t *testing.T) {
+	// "status0" is shown in full in the audit; it is refused all the same.
+	for _, cmd := range []string{"Status 0", "status0", "Backlog Power1 ON; Status 0"} {
+		rs := &routeStub{nowhere: map[model.DeviceID]bool{1: true}}
+		var probed []model.DeviceID
+		f := &fakeCmd{reply: `{"Done":"yes"}`}
+		e := setupWith(t, func(d *Deps) {
+			d.DeviceCmd, d.TypedRoutes, d.SysConfig = f, rs.routes, aclBrokerService(t)
+			d.ProbeHTTP = func(id model.DeviceID) { probed = append(probed, id) }
+		})
+		resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm(cmd))
+		if resp.StatusCode != http.StatusConflict || strings.Contains(body, "Confirm sending") || strings.Contains(body, `name="token"`) {
+			t.Fatalf("%q: status %d: want the refusal, no confirmation: %s", cmd, resp.StatusCode, body)
+		}
+		for _, want := range []string{"Status 0 never goes over MQTT", "reached over MQTT only", "its HTTP is not known to work",
+			"Status 1 to Status 11", "try again in a moment"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("%q: the refusal does not say %q: %s", cmd, want, body)
+			}
+		}
+		if len(f.ran()) != 0 || rs.asks == 0 {
+			t.Fatalf("%q: ran %v, routes asked %d: want the router's route asked and nothing sent", cmd, f.ran(), rs.asks)
+		}
+		if len(probed) != 1 || probed[0] != 1 {
+			t.Fatalf("%q: HTTP checks asked %v, want one for device 1", cmd, probed)
+		}
+	}
+}
+
+// Why (#1001): where the device's HTTP is known to fail, the refusal names that reason (the API is off, the web
+// password is refused, the address is outside DEVICE_NETWORKS). "Try again in a moment" would be false there: the
+// device did answer, or is not asked at all, and another try is refused the same way.
+func TestConsoleStatus0RefusalNamesTheKnownHTTPFailure(t *testing.T) {
+	rs := &routeStub{nowhere: map[model.DeviceID]bool{1: true}}
+	f := &fakeCmd{reply: `{"Done":"yes"}`}
+	e := setupWith(t, func(d *Deps) {
+		d.DeviceCmd, d.TypedRoutes, d.SysConfig = f, rs.routes, aclBrokerService(t)
+		d.Transport = fakeFacts{f: map[model.DeviceID]transport.Facts{1: writesOverMQTTFacts()}} // HTTP API off
+	})
+	resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Status 0"))
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(body, "Status 0 never goes over MQTT") ||
+		!strings.Contains(body, "HTTP API off (SetOption128 0)") || strings.Contains(body, "try again") || len(f.ran()) != 0 {
+		t.Fatalf("status %d, ran %v: want the refusal with the known reason, no retry hint: %s", resp.StatusCode, f.ran(), body)
+	}
+}
+
+// Why (#1001): over a working HTTP nothing changes: the admin confirms the heap warning and the device's own Status 0
+// goes over HTTP, announced so. When the route turns into "nowhere" between the confirmation and the send (HTTP
+// failed meanwhile), the confirmation no longer holds: nothing is sent and the console says why. The stored route
+// alone would let it go over HTTP, which ends in the timeout this fixes.
+func TestConsoleStatus0OverWorkingHTTPStillAsksAndSends(t *testing.T) {
+	for _, cmd := range []string{"Status 0", "status0"} {
+		rs := &routeStub{}
+		e, f := noticeEnv(t, rs)
+		_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm(cmd))
+		if !strings.Contains(body, "very large reply") || strings.Contains(body, "never goes over MQTT") {
+			t.Fatalf("%q: want the heap warning, no refusal: %s", cmd, body)
+		}
+		resp, _ := e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
+		if resp.StatusCode != http.StatusOK || len(f.ran()) != 1 || f.routes[0] != transport.HTTP {
+			t.Fatalf("%q: status %d, ran %v, routes %v: want one send over HTTP", cmd, resp.StatusCode, f.ran(), f.routes)
+		}
+		_, body = e.do(t, "POST", "/devices/1/console", "admin", consoleForm(cmd))
+		rs.mu.Lock()
+		rs.nowhere = map[model.DeviceID]bool{1: true}
+		rs.mu.Unlock()
+		resp, body = e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
+		if resp.StatusCode != http.StatusConflict || !strings.Contains(body, "Status 0 never goes over MQTT") || len(f.ran()) != 1 {
+			t.Fatalf("%q: status %d, ran %v: want the refusal and nothing sent: %s", cmd, resp.StatusCode, f.ran(), body)
+		}
+	}
+}
+
+// Why (#1001): the bulk preview asks the same route as the console (transport.Router.TypedRoute), so a Status 0 is
+// "Not sent" to a device reached over MQTT only and the run leaves that device out. The row must say why truthfully:
+// such a device's HTTP is usually not failing, only not known to work, so "not reachable" would be a false claim.
+// The index spelling "status0" is shown in full in the audit, so it names no route of its own; it is a Status 0 all
+// the same and must not go over HTTP unannounced to the device MQTT cannot carry it to.
+func TestBulkStatus0IsNotSentWhereHTTPIsNotKnownToWork(t *testing.T) {
+	for _, cmd := range []string{"Status 0", "status0"} {
+		rs := &routeStub{nowhere: map[model.DeviceID]bool{1: true}}
+		fb := &fakeBatch{}
+		e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{}; d.CommandBatch = fb; d.TypedRoutes = rs.routes })
+		e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
+		_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", cmd))
+		if !strings.Contains(body, "<dt>Not sent</dt>") || !strings.Contains(body, "1 of 2 devices. MQTT does not carry this command and their HTTP is not known to work.") ||
+			strings.Contains(body, "not reachable") {
+			t.Fatalf("%q: preview: %s", cmd, body)
+		}
+		if resp, _ := e.do(t, "POST", "/devices/bulk/command/run", "admin", bulkForm("token", confirmToken(t, body))); resp.StatusCode != http.StatusSeeOther || len(fb.reqs) != 1 ||
+			len(fb.reqs[0]) != 1 || fb.reqs[0][0].DeviceID != 2 || fb.reqs[0][0].Route != transport.HTTP {
+			t.Fatalf("%q: run: %d %v, want device 2 only, over HTTP", cmd, resp.StatusCode, fb.reqs)
+		}
+	}
+}

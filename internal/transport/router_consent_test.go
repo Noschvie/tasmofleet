@@ -200,3 +200,46 @@ func TestACommandMQTTDoesNotCarryGoesNowhereWhileHTTPFails(t *testing.T) {
 		t.Fatalf("HTTP back: err=%v mqtt=%d http=%d via=%s, want nothing sent", err, g.mq.n(), g.http.n(), tr.Via())
 	}
 }
+
+// Why (#1001, the maintainer's decision of 2026-11-19): the MQTT channel never carries a Status 0 (safety rule 2), so
+// on a device whose command route is MQTT the router would send a typed Status 0 over HTTP, and on a device reached
+// over MQTT only that ends in a timeout instead of a reason. "HTTP not failing" is no proof that HTTP works: a device
+// live on MQTT normally has its HTTP state unknown (docs/pitfalls.md). So TypedRoute says None for a Status 0 there
+// unless a fresh HTTP answer is on record, and the send announced so reaches neither transport. Where HTTP is known
+// to work, or the device's writes go over HTTP anyway, Status 0 still goes over HTTP: refusing it there would take
+// the admin's own query away for nothing.
+func TestTypedRouteSendsStatus0NowhereWhileHTTPIsNotKnownToWork(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(g *rig)
+		want  Path
+	}{
+		{"HTTP unknown, MQTT is the route", func(*rig) {}, None},
+		{"HTTP failing, MQTT is the route", func(g *rig) { g.mem.Fail(7, HTTPFailUnreachable) }, None},
+		{"a fresh HTTP answer on record", func(g *rig) { g.f.httpOK = true }, HTTP},
+		{"writes over MQTT not possible", func(g *rig) { g.f.groupKnown = false }, HTTP},
+		{"not on our broker", func(g *rig) { g.devs.d.MQTT = model.MQTTUnknown }, HTTP},
+		{"MQTT just went unanswered", func(g *rig) { g.r.unanswered.Fail(7, HTTPFailUnreachable) }, HTTP},
+	} {
+		for _, cmd := range []string{"Status 0", "status 00", "Backlog Power1 ON; Status 0"} {
+			t.Run(tc.name+"/"+cmd, func(t *testing.T) {
+				g := newRig(t)
+				tc.setup(g)
+				if got := g.r.TypedRoute(t.Context(), 7, cmd); got != tc.want {
+					t.Fatalf("TypedRoute = %s, want %s", got, tc.want)
+				}
+				ctx, tr := WithTrace(WithRoute(WithConsole(t.Context()), tc.want))
+				_, err := g.r.Command(ctx, g.target(), cmd)
+				if tc.want == None {
+					if err == nil || g.mq.n() != 0 || g.http.n() != 0 || tr.Via() != "none" {
+						t.Fatalf("announced as going nowhere: err=%v mqtt=%d http=%d via=%s, want nothing sent", err, g.mq.n(), g.http.n(), tr.Via())
+					}
+					return
+				}
+				if err != nil || g.mq.n() != 0 || g.http.n() != 1 || tr.Via() != "http" {
+					t.Fatalf("announced over HTTP: err=%v mqtt=%d http=%d via=%s, want one HTTP send", err, g.mq.n(), g.http.n(), tr.Via())
+				}
+			})
+		}
+	}
+}
