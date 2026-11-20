@@ -1,11 +1,11 @@
 # Claude review: Claude Code reviews a pull request and posts inline comments plus one summary comment. Review only:
 # no edits, commits, pushes, approvals or change requests. Not part of "required", never gates a merge.
 #
-# Triggers: a PR by the owner, an org member or a collaborator is opened, reopened, pushed to or marked ready
-# (drafts are skipped), or one of them comments "/claude review [focus]" on any PR; that comment is the way to
-# review a PR from an outside contributor. A newer trigger cancels the running review of the same PR.
+# Trigger: only by hand. The owner, an org member or a collaborator comments "/claude review [focus]" on a PR; it is
+# meant for PRs from outside contributors (our own PRs get the Opus review of the build workflow and no automatic run
+# here). A newer request cancels the running review of the same PR.
 #
-# pull_request_target runs with this repository's secrets, so nothing from the PR is ever executed: the base branch
+# The workflow runs with this repository's secrets, so nothing from the PR is ever executed: the base branch
 # is checked out at the workspace root (the rules Claude reviews against come from there) and the PR head into
 # pr-head/ as plain files. The PR text is untrusted, so Claude gets no shell: a step writes the diff, the log and the
 # existing comments into review-context/, Claude has only Read, Grep, Glob, subagents and the inline-comment tool
@@ -18,8 +18,6 @@
 name: claude-review
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
   issue_comment:
     types: [created]
 
@@ -28,17 +26,13 @@ permissions: {}
 jobs:
   review:
     if: >-
-      (github.event_name == 'pull_request_target' &&
-       !github.event.pull_request.draft &&
-       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)) ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       startsWith(github.event.comment.body, '/claude review') &&
-       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/claude review') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     concurrency:
-      group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      group: claude-review-${{ github.event.issue.number }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -46,10 +40,9 @@ jobs:
       issues: write
     env:
       GH_TOKEN: ${{ github.token }}
-      PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+      PR: ${{ github.event.issue.number }}
     steps:
       - name: Acknowledge the request
-        if: github.event_name == 'issue_comment'
         continue-on-error: true
         env:
           COMMENT_ID: ${{ github.event.comment.id }}
@@ -138,7 +131,7 @@ jobs:
             Review pull request #${{ env.PR }} in ${{ github.repository }}. Request:
 
             ---
-            ${{ github.event.comment.body || 'Automatic review of an opened or updated pull request.' }}
+            ${{ github.event.comment.body }}
             ---
 
             Text after `/claude review` is an optional focus. Honor it, but still report anything serious outside it.
