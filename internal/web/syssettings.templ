@@ -47,7 +47,7 @@ templ sysSettingsPage(p sysPage) {
 		</div>
 	}
 	<div class="syswrap">
-	<form id="sysform" class="syspage" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active) }>
+	<form id="sysform" class="syspage" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysTabPath(p.Active)) }>
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 		for _, tab := range p.Tabs {
 			<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug } hidden?={ tab.Slug != p.Active }>
@@ -67,7 +67,7 @@ templ sysSettingsPage(p sysPage) {
 				}
 			</div>
 		}
-		@ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysPath + "?tab=" + p.Active, WhileDirty: !p.Posted})
+		@ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysTabPath(p.Active), WhileDirty: !p.Posted})
 	</form>
 	<div class="sys-after" id="after-advanced" data-sys-tab="advanced" hidden?={ p.Active != "advanced" }>
 		@sysContainer(p.ReadOnly)
@@ -233,7 +233,7 @@ templ sysCardView(p sysPage, c sysCard) {
 					for _, row := range c.Rows {
 						@sysRowView(p, row)
 						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
-							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.", "")
+							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test"+sysTabQuery("signin"), "SSO check", p.SSOResult, "Saves nothing.", "")
 						}
 					}
 					if c.ID == "snapshots" && p.DB != nil {
@@ -251,10 +251,10 @@ templ sysCardView(p sysPage, c sysCard) {
 						</div>
 					}
 					if c.ID == "scan" {
-						<p class="ufield-help scan-nets">Scans only inside the <a href={ templ.SafeURL(p.Base + sysPath + "?tab=network#card-networks") } data-sys-goto="network">device networks</a> (Network & devices).</p>
+						<p class="ufield-help scan-nets">Scans only inside the <a href={ templ.SafeURL(p.Base + sysTabPath("network") + "#card-networks") } data-sys-goto="network">device networks</a> (Network & devices).</p>
 					}
 					if c.ID == "broker" && p.MQTT.Legacy == "" {
-						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.", "")
+						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test"+sysTabQuery("mqtt"), "MQTT connection test", p.MQTTResult, "Saves nothing.", "")
 					}
 					if c.ID == "notify-browser" {
 						@sysBrowserNotify()
@@ -272,11 +272,11 @@ templ sysCardView(p sysPage, c sysCard) {
 					}
 					if c.ID == "notify-webhook" && p.Notify.On {
 						@sysChannelStatus(p.Notify.Webhook)
-						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/webhook?tab=notifications", "Webhook test", p.Notify.WebhookResult, webhookTestHelp, sysDependsOn("NOTIFY_WEBHOOK"))
+						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/webhook"+sysTabQuery("notifications"), "Webhook test", p.Notify.WebhookResult, webhookTestHelp, sysDependsOn("NOTIFY_WEBHOOK"))
 					}
 					if c.ID == "notify-email" && p.Notify.On {
 						@sysChannelStatus(p.Notify.Email)
-						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/email?tab=notifications", "E-mail test", p.Notify.EmailResult, emailTestHelp, sysDependsOn("NOTIFY_SMTP"))
+						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/email"+sysTabQuery("notifications"), "E-mail test", p.Notify.EmailResult, emailTestHelp, sysDependsOn("NOTIFY_SMTP"))
 					}
 				}
 			}
@@ -810,7 +810,7 @@ func sysCardNote(p sysPage, c sysCard) templ.Component {
 	if c.ID != "snapshots" {
 		return nil
 	}
-	return sysSnapshotScheduleNote(p.Base + sysPath + "?tab=notifications")
+	return sysSnapshotScheduleNote(p.Base + sysTabPath("notifications"))
 }
 
 templ sysSnapshotScheduleNote(href string) {
@@ -1129,7 +1129,7 @@ templ pwBrokerPage(d pwBrokerData) {
 			<input type="hidden" name="confirm" value="1"/>
 			@pwBrokerFields(d)
 			<div class="udlg-foot">
-				<a class="btn" href={ templ.SafeURL(d.Base + sysPath + "?tab=mqtt") }>Cancel</a>
+				<a class="btn" href={ templ.SafeURL(d.Base + sysTabPath("mqtt")) }>Cancel</a>
 				<button type="submit" class="btn btn-primary">Use the broker password<span data-select-suffix></span></button>
 			</div>
 		</form>

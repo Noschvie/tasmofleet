@@ -156,7 +156,7 @@ type pwBrokerData struct {
 }
 
 func (h *handler) pwBrokerRefuse(w http.ResponseWriter, r *http.Request, status int, text string) {
-	h.message(w, r, status, h.view(r, "Nothing changed", "system", messageData{Text: text, LinkText: "Back to the MQTT settings", Link: sysPath + "?tab=mqtt", LinkPrimary: true}))
+	h.message(w, r, status, h.view(r, "Nothing changed", "system", messageData{Text: text, LinkText: "Back to the MQTT settings", Link: sysTabPath("mqtt"), LinkPrimary: true}))
 }
 
 // pwBrokerConfirm is the page that asks before the broker password is given to the devices without one (the twin

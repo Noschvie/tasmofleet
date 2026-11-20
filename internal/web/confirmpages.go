@@ -19,14 +19,6 @@ import (
 // GET twin of a POST route; opening the page changes nothing, the POST keeps
 // its CSRF and role checks. The wording is the dialog's.
 
-type confirmLink struct{ Href, Label string }
-
-// sysTabLink is sysTabCrumb as a step of a confirmation page.
-func sysTabLink(slug string) confirmLink {
-	c := sysTabCrumb(slug)
-	return confirmLink{c.Path, c.Label}
-}
-
 type confirmFact struct {
 	Name, Value string
 	Code        bool
@@ -36,8 +28,8 @@ type confirmField struct{ Name, Value string }
 
 type actionConfirm struct {
 	Title, Heading, Text, Warning string
-	Crumbs                        []confirmLink // steps between the page's sub-navigation entry (Trail) and the current page
-	Last                          string        // the current page in the trail
+	Crumbs                        []ui.Crumb // steps between the page's sub-navigation entry (Trail) and the current page
+	Last                          string     // the current page in the trail
 	Facts                         []confirmFact
 	Action                        string // POST path, without the base
 	Fields                        []confirmField
@@ -52,9 +44,7 @@ type actionConfirm struct {
 // something, so the verb is in the danger tone.
 func (h *handler) renderActionConfirm(w http.ResponseWriter, r *http.Request, nav string, c actionConfirm) {
 	v := h.view(r, c.Title, nav, nil)
-	for _, l := range c.Crumbs {
-		v.Crumbs = append(v.Crumbs, ui.Crumb{Label: l.Label, Path: l.Href})
-	}
+	v.Crumbs = append(v.Crumbs, c.Crumbs...)
 	v.Crumbs = append(v.Crumbs, ui.Crumb{Label: c.Last})
 	d := ui.ConfirmData{
 		Title: c.Title, Heading: c.Heading, Text: c.Text, Warning: c.Warning,
@@ -94,12 +84,12 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 	back := strings.TrimRight(backupsHome(b), "?&") // a deleted device's backup: Devices -> Backups
 	// A device's backup is a page of the device (Devices / kitchen / Backups / Delete); a deleted device's backup
 	// lives on the fleet Backups tab (Devices / Backups / Delete), so the trail and the lit tab agree (#1000).
-	nav, crumbs := "backups", []confirmLink(nil)
+	nav, crumbs := "backups", []ui.Crumb(nil)
 	if b.DeviceID != 0 {
 		dev, err := h.d.Inventory.Get(r.Context(), b.DeviceID)
 		switch {
 		case err == nil:
-			nav, crumbs = "device", []confirmLink{{devPath(dev.ID, ""), dev.Name}, {back, "Backups"}}
+			nav, crumbs = "device", []ui.Crumb{{Label: dev.Name, Path: devPath(dev.ID, "")}, {Label: "Backups", Path: back}}
 		case errors.Is(err, store.ErrNotFound): // deleted since the backup was read: the page reads as a deleted device's backup
 		default:
 			h.fail(w, r, err)
@@ -181,7 +171,7 @@ func (h *handler) batchCancelConfirm(w http.ResponseWriter, r *http.Request) {
 			Title:   "Cancel " + txID(p.Batch) + "?",
 			Heading: "Cancel schedule",
 			Text:    planCancelText(txTitle(first, p.Planned)+" ("+plural(p.Planned, "device")+")", first.StartAt),
-			Crumbs:  []confirmLink{{back, txID(p.Batch)}},
+			Crumbs:  []ui.Crumb{{Label: txID(p.Batch), Path: back}},
 			Last:    "Cancel",
 			Action:  back + "/cancel", Verb: "Cancel schedule",
 			CancelHref: back, CancelLabel: "Keep schedule",
@@ -193,7 +183,7 @@ func (h *handler) batchCancelConfirm(w http.ResponseWriter, r *http.Request) {
 		Title:   "Cancel " + txID(p.Batch) + "?",
 		Heading: "Cancel remaining",
 		Text:    cancelText(p.Queued),
-		Crumbs:  []confirmLink{{back, txID(p.Batch)}},
+		Crumbs:  []ui.Crumb{{Label: txID(p.Batch), Path: back}},
 		Last:    "Cancel",
 		Action:  back + "/cancel", Verb: "Cancel remaining",
 		CancelHref: back, CancelLabel: "Keep running",
@@ -232,7 +222,7 @@ func (h *handler) jobCancelConfirm(w http.ResponseWriter, r *http.Request) {
 			Title:   "Cancel the update of " + name + "?",
 			Heading: "Cancel update",
 			Text:    planCancelText("The update of "+name, j.StartAt),
-			Crumbs:  []confirmLink{{back, txID(j.BatchID)}},
+			Crumbs:  []ui.Crumb{{Label: txID(j.BatchID), Path: back}},
 			Last:    "Cancel update",
 			Action:  fmt.Sprintf("/jobs/%d/cancel", j.ID), Verb: "Cancel update",
 			CancelHref: back, CancelLabel: "Keep schedule",
@@ -243,7 +233,7 @@ func (h *handler) jobCancelConfirm(w http.ResponseWriter, r *http.Request) {
 		Title:   "Cancel the update of " + name + "?",
 		Heading: "Cancel update",
 		Text:    "A running flash cannot be stopped; a device that has not started keeps its previous state.",
-		Crumbs:  []confirmLink{{back, txID(j.BatchID)}},
+		Crumbs:  []ui.Crumb{{Label: txID(j.BatchID), Path: back}},
 		Last:    "Cancel update",
 		Action:  fmt.Sprintf("/jobs/%d/cancel", j.ID), Verb: "Cancel update",
 		CancelHref: back, CancelLabel: "Keep running",

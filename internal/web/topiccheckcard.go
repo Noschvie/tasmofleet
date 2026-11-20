@@ -29,7 +29,7 @@ type DeviceFactsSource interface {
 }
 
 // topicCheckAnchor is the card on the Settings page; the hint's "+N more" links there (admins only: the page is theirs).
-const topicCheckAnchor = sysPath + "?tab=mqtt#card-topiccheck"
+var topicCheckAnchor = sysTabPath("mqtt") + "#card-topiccheck"
 
 // topicsCard is the card: the status line, the collisions and the unknown devices.
 type topicsCard struct {

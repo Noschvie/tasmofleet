@@ -120,7 +120,7 @@ func aclHideHref(ctx context.Context) string {
 	if p, ok := auth.FromContext(ctx); !ok || p.Role < model.RoleAdmin {
 		return ""
 	}
-	return httpx.BasePath(ctx) + "/settings/system?tab=mqtt#" + aclHideID
+	return httpx.BasePath(ctx) + sysTabPath("mqtt") + "#" + aclHideID
 }
 
 // backupACLText is the sentence of the notice by what starts a backup (#853), empty without a broker or after the

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The Web Push card of Settings -> Notifications (#611): this browser's state (push.js draws it), and the
@@ -155,8 +156,8 @@ func (h *handler) pushRemoveConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	h.renderActionConfirm(w, r, "system", actionConfirm{
 		Title: "Remove " + label + "?", Heading: "Remove this browser", Text: pushRemoveText(label, h.pr.Text(i.OwnerSubject)),
-		Crumbs: []confirmLink{sysTabLink("notifications")}, Last: "Remove browser",
-		Action: sysPath + "/push/remove/" + id, Verb: "Remove", CancelHref: sysPath + "?tab=notifications", CancelLabel: "Cancel",
+		Crumbs: []ui.Crumb{sysTabCrumb("notifications")}, Last: "Remove browser",
+		Action: sysPath + "/push/remove/" + id, Verb: "Remove", CancelHref: sysTabPath("notifications"), CancelLabel: "Cancel",
 	})
 }
 
@@ -178,7 +179,7 @@ func (h *handler) pushRemove(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 	default:
 		h.recordPushHost(r, "push.remove", i.Host, "ok")
-		redirect(w, r, sysPath+"?tab=notifications&ok=push-removed")
+		redirect(w, r, sysTabPath("notifications")+"&ok=push-removed")
 	}
 }
 

@@ -342,7 +342,7 @@ func (h *handler) scanBoxData(r *http.Request) scanBodyView {
 	b := h.scanTabData(r, nil).Body
 	if h.d.SysConfig != nil {
 		b.Scheduled = "off"
-		b.SettingsHref = b.Base + sysPath + "?tab=discovery"
+		b.SettingsHref = b.Base + sysTabPath("discovery")
 		if h.storedValue("DISCOVERY_SCAN") == "true" {
 			b.Scheduled = "every " + h.storedValue("DISCOVERY_SCAN_INTERVAL")
 		}

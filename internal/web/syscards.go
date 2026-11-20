@@ -128,11 +128,27 @@ const sysBackupsSlug = "backups"
 func sysTabCrumb(slug string) ui.Crumb {
 	for _, t := range sysLayout {
 		if t.Slug == slug {
-			return ui.Crumb{Label: t.Label, Path: sysPath + "?tab=" + t.Slug}
+			return ui.Crumb{Label: t.Label, Path: sysTabPath(t.Slug)}
 		}
 	}
 	return ui.Crumb{Label: slug} // not a tab: sysLayout is the list, and the guard on the trails names the page
 }
+
+// sysTabQuery is the query that opens one tab of the Settings page ("?tab=mqtt"), the one place that spells it, so
+// a renamed or mistyped slug cannot lead to another tab than the tab bar shows (#1056). An entry that sysLayout does
+// not list gives "": the page then opens its first tab, never a dead link. It is the part to put behind a sub-path
+// of sysPath that carries the tab to return to (sysPath + "/mqtt-test" + sysTabQuery("mqtt")).
+func sysTabQuery(slug string) string {
+	if sysTabSlug(slug) == "" {
+		return ""
+	}
+	return "?tab=" + slug
+}
+
+// sysTabPath is the path of one tab of the Settings page, without the base. A query or a fragment goes behind it at
+// the caller (sysTabPath(tab) + "&ok=saved"); a caller that appends "&..." must pass a slug that sysLayout lists
+// (sysTabSlug checks one from a URL), as an unknown slug gives the plain path of the first tab.
+func sysTabPath(slug string) string { return sysPath + sysTabQuery(slug) }
 
 // sysAdvanced is the index of the Advanced tab and its catch-all card.
 const sysAdvanced, sysOtherCard = 8, 0

@@ -453,7 +453,7 @@ func (h *handler) confirmRunDeletion(w http.ResponseWriter, r *http.Request, d m
 	c := actionConfirm{
 		Title: "Delete " + plural(n, "backup") + "?", Heading: "Delete " + plural(n, "backup"),
 		Text:   plural(n, "backup") + " of " + d.Name + " (dump, snapshot and decoded copy of each) will be deleted. This cannot be undone.",
-		Crumbs: []confirmLink{{devPath(d.ID, ""), d.Name}, {back, "Backups"}},
+		Crumbs: []ui.Crumb{{Label: d.Name, Path: devPath(d.ID, "")}, {Label: "Backups", Path: back}},
 		Last:   "Delete selected", Action: fmt.Sprintf("/devices/%d/backups/delete", d.ID), Verb: "Delete " + plural(n, "backup"),
 		CancelHref: back, CancelLabel: "Cancel",
 	}

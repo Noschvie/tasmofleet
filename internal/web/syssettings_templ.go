@@ -162,9 +162,9 @@ func sysSettingsPage(p sysPage) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active)).ResolveURL(ctx)
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + sysTabPath(p.Active))).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 50, Col: 139}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 50, Col: 131}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -285,7 +285,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysPath + "?tab=" + p.Active, WhileDirty: !p.Posted}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysTabPath(p.Active), WhileDirty: !p.Posted}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -937,7 +937,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
-							templ_7745c5c3_Err = sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.", "").Render(ctx, templ_7745c5c3_Buffer)
+							templ_7745c5c3_Err = sysTestRow("Test discovery", p.Base+sysPath+"/sso-test"+sysTabQuery("signin"), "SSO check", p.SSOResult, "Saves nothing.", "").Render(ctx, templ_7745c5c3_Buffer)
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1014,9 +1014,9 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var40 string
-						templ_7745c5c3_Var40, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + sysPath + "?tab=network#card-networks")).ResolveURL(ctx)
+						templ_7745c5c3_Var40, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + sysTabPath("network") + "#card-networks")).ResolveURL(ctx)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 254, Col: 133}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 254, Col: 135}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 						if templ_7745c5c3_Err != nil {
@@ -1032,7 +1032,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					if c.ID == "broker" && p.MQTT.Legacy == "" {
-						templ_7745c5c3_Err = sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.", "").Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test"+sysTabQuery("mqtt"), "MQTT connection test", p.MQTTResult, "Saves nothing.", "").Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1089,7 +1089,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = sysTestRow("Send test", p.Base+sysPath+"/notify-test/webhook?tab=notifications", "Webhook test", p.Notify.WebhookResult, webhookTestHelp, sysDependsOn("NOTIFY_WEBHOOK")).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = sysTestRow("Send test", p.Base+sysPath+"/notify-test/webhook"+sysTabQuery("notifications"), "Webhook test", p.Notify.WebhookResult, webhookTestHelp, sysDependsOn("NOTIFY_WEBHOOK")).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -1103,7 +1103,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = sysTestRow("Send test", p.Base+sysPath+"/notify-test/email?tab=notifications", "E-mail test", p.Notify.EmailResult, emailTestHelp, sysDependsOn("NOTIFY_SMTP")).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = sysTestRow("Send test", p.Base+sysPath+"/notify-test/email"+sysTabQuery("notifications"), "E-mail test", p.Notify.EmailResult, emailTestHelp, sysDependsOn("NOTIFY_SMTP")).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -4348,7 +4348,7 @@ func sysCardNote(p sysPage, c sysCard) templ.Component {
 	if c.ID != "snapshots" {
 		return nil
 	}
-	return sysSnapshotScheduleNote(p.Base + sysPath + "?tab=notifications")
+	return sysSnapshotScheduleNote(p.Base + sysTabPath("notifications"))
 }
 
 func sysSnapshotScheduleNote(href string) templ.Component {
@@ -6009,9 +6009,9 @@ func pwBrokerPage(d pwBrokerData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var267 string
-		templ_7745c5c3_Var267, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(d.Base + sysPath + "?tab=mqtt")).ResolveURL(ctx)
+		templ_7745c5c3_Var267, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(d.Base + sysTabPath("mqtt"))).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 1132, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 1132, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var267)
 		if templ_7745c5c3_Err != nil {

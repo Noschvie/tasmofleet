@@ -264,7 +264,7 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 	case len(labels) > 0:
 		what = "Changing " + strings.Join(labels, ", ")
 	}
-	back := sysPath + "?tab=" + p.Active + "&restore=1"
+	back := sysTabPath(p.Active) + "&restore=1"
 	keyQuery := ""
 	if p.Active == sysBackupsSlug {
 		back = fleetPath + "?restore=1"
@@ -281,7 +281,7 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 	if h.stepUpKind(r) == stepUpOIDC {
 		d.IdP, d.IdPHref, d.Action = h.idpName(), p.Base+"/oidc/stepup", p.Base+"/oidc/stepup"
 	} else {
-		d.Local, d.Action = true, p.Base+sysPath+"/stepup?tab="+p.Active+keyQuery
+		d.Local, d.Action = true, p.Base+sysPath+"/stepup"+sysTabQuery(p.Active)+keyQuery
 		if p.Active == sysBackupsSlug {
 			d.Action = p.Base + fleetPath + "/stepup"
 		}
@@ -363,8 +363,8 @@ const sysResetText = "Every setting on this page goes back to its default: the d
 func (h *handler) sysResetConfirm(w http.ResponseWriter, r *http.Request) {
 	h.renderActionConfirm(w, r, "system", actionConfirm{
 		Title: "Reset all settings?", Heading: "Reset all settings", Text: sysResetText,
-		Crumbs: []confirmLink{sysTabLink("advanced")}, Last: "Reset",
-		Action: sysPath + "/reset", Verb: "Reset settings", CancelHref: sysPath + "?tab=advanced", CancelLabel: "Cancel",
+		Crumbs: []ui.Crumb{sysTabCrumb("advanced")}, Last: "Reset",
+		Action: sysPath + "/reset", Verb: "Reset settings", CancelHref: sysTabPath("advanced"), CancelLabel: "Cancel",
 	})
 }
 
@@ -380,7 +380,7 @@ func (h *handler) sysReset(w http.ResponseWriter, r *http.Request) {
 	var need *sysconfig.StepUpRequiredError
 	switch {
 	case err == nil:
-		redirect(w, r, sysPath+"?tab=advanced&ok=reset")
+		redirect(w, r, sysTabPath("advanced")+"&ok=reset")
 	case errors.As(err, &need):
 		p := h.sysData(r, nil, nil)
 		p.Active = "advanced"
@@ -525,7 +525,7 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	// Back to the tab that was saved, so the values just written are what the person sees.
 	back := sysPath + "?ok=saved"
 	if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug && tab != sysBackupsSlug {
-		back = sysPath + "?tab=" + tab + "&ok=saved"
+		back = sysTabPath(tab) + "&ok=saved"
 	}
 	switch {
 	case onSnapshots(r):
@@ -608,11 +608,11 @@ func (h *handler) sysTestFragment(w http.ResponseWriter, r *http.Request, msg st
 // sysMQTTFragment and sysSSOFragment are the rows of the two test buttons that answer with
 // sysTestFragment; they must match the rows in syssettings.templ.
 func (h *handler) sysMQTTFragment(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	h.sysTestFragment(w, r, msg, err, "Test connection", httpBase(r)+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", mqttTestHelp)
+	h.sysTestFragment(w, r, msg, err, "Test connection", httpBase(r)+sysPath+"/mqtt-test"+sysTabQuery("mqtt"), "MQTT connection test", mqttTestHelp)
 }
 
 func (h *handler) sysSSOFragment(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	h.sysTestFragment(w, r, msg, err, "Test discovery", httpBase(r)+sysPath+"/sso-test?tab=signin", "SSO check", "Saves nothing.")
+	h.sysTestFragment(w, r, msg, err, "Test discovery", httpBase(r)+sysPath+"/sso-test"+sysTabQuery("signin"), "SSO check", "Saves nothing.")
 }
 
 // sysMQTTTest checks the broker. The "Test MQTT" button sits in the MQTT tab of the settings
@@ -688,7 +688,7 @@ func (h *handler) sysStepUpPost(w http.ResponseWriter, r *http.Request) {
 	default:
 		back := sysPath + "?restore=1" // form.js puts the typed values back
 		if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug && tab != sysBackupsSlug {
-			back = sysPath + "?tab=" + tab + "&restore=1"
+			back = sysTabPath(tab) + "&restore=1"
 		}
 		if onBackups(r) {
 			back = fleetPath + "?restore=1"
@@ -886,7 +886,7 @@ func (h *handler) storedMQTTURL() string {
 func sysTabLinks(p sysPage) []ui.Tab {
 	out := make([]ui.Tab, 0, len(p.Tabs))
 	for _, t := range p.Tabs {
-		out = append(out, ui.Tab{Label: t.Label, Href: p.Base + sysPath + "?tab=" + t.Slug, Current: t.Slug == p.Active})
+		out = append(out, ui.Tab{Label: t.Label, Href: p.Base + sysTabPath(t.Slug), Current: t.Slug == p.Active})
 	}
 	return out
 }

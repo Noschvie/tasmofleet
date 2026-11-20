@@ -199,7 +199,7 @@ func (v fleetView) PWNote() string {
 func setPasswordPath(id model.DeviceID) string { return devPath(id, "/edit") }
 
 // devicePasswordsPath is the Device MQTT passwords card on System, MQTT, with "Use the broker password for these…".
-const devicePasswordsPath = sysPath + "?tab=mqtt#card-devicepasswords"
+var devicePasswordsPath = sysTabPath("mqtt") + "#card-devicepasswords"
 
 // needBackupPassword says which of ids could be backed up over MQTT once their MQTT password is usable, from the live
 // facts (transport.BackupPasswordBlocker, the router's own rule, #997). The links it drives are a hint: facts that
