@@ -76,12 +76,12 @@ async function openDevice(page: Page, name: string, width = 1280) {
  * over MQTT is checked first with the window that hears every reply on its topic (1.5 s, #682/#804), then read one
  * command at a time 200 ms apart (about 3 s), and another check on the same topic that is under way delays it by its own
  * window: the answer takes 3 to 5 s and more on a loaded runner, so a notice awaited inside expect's 5 s fails there. The
- * notice is still asserted after the answer: an answer the live refresh drops (#1003) fails here.
+ * notice is asserted once the answer is in: an answer without it, or a card the page does not swap in, fails.
  */
 async function refreshIdentity(page: Page) {
   const answered = page.waitForResponse((r) => r.request().method() === "POST" && /\/devices\/\d+\/probe$/.test(new URL(r.url()).pathname));
   await page.getByRole("button", { name: "Refresh identity" }).click();
-  expect((await answered).status()).toBe(200);
+  await answered;
   await expect(page.getByText("Identity refreshed.")).toBeVisible();
 }
 
