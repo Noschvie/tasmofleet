@@ -412,9 +412,7 @@ main {
   padding: var(--sp-16) var(--page-pad) 0;
 }
 
-/* Page header: title left, at most one primary action right (more → secondary
-   buttons or an Actions menu). The crumb sits above the title. */
-
+/* A row of actions: buttons and forms side by side, wrapping. */
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -425,11 +423,9 @@ main {
   margin: 0;
 }
 
-/* Columns: 12-column modular grid. */
-
 /* ==========================================================================
-   Buttons. Labels are centered (compact and in-table buttons); only .block
-   buttons (full width) are flush left. One fixed height per size.
+   Buttons. Labels are centered (compact and in-table buttons). One fixed
+   height per size.
    ========================================================================== */
 button {
   font: inherit;
@@ -905,16 +901,18 @@ th.sel {
   padding-left: 6px;
   padding-right: 0;
 }
+/* :not(:disabled) is true for every link: it only keeps these rules at the specificity the removed
+   :not(.button) gave them, which the colours of .dv-mono a and other cell links are measured against (#1069) */
 td.p1 a,
-td a {
+td a:not(:disabled) {
   color: var(--color-text);
   font-weight: 600;
   text-decoration: none;
 }
 td.p1 a:hover,
 td.p1 a.is-hover,
-td a:hover,
-td a.is-hover {
+td a:not(:disabled):hover,
+td a:not(:disabled).is-hover {
   color: var(--color-accent-fg);
   text-decoration: underline;
 }
@@ -1215,7 +1213,6 @@ details.fold > summary .meta {
 details.fold[open] > summary {
   margin-bottom: var(--sp-8);
 }
-/* the fold inside a card: the summary is the framed title */
 
 @media (prefers-reduced-motion: reduce) {
   details.fold > summary::after {
@@ -1244,16 +1241,15 @@ details.fold[open] > summary {
     --ctl-sm: 40px;
   }
   .menu a,
-.menu button,
-.rowmenu-body a,
-.rowmenu-body button {
+  .menu button,
+  .rowmenu-body a,
+  .rowmenu-body button {
     height: 40px;
   }
   .hit {
     min-width: 40px;
     min-height: 40px;
   }
-
   .m-hide,
   .d-only {
     display: none !important;
@@ -1264,8 +1260,6 @@ details.fold[open] > summary {
   main {
     padding-top: var(--sp-16);
   }
-
-  /* more than one action: actions go under the title */
 
   /* dense tables become one block per row (flex, wrapping):
      [sel] p1 (name) .................. p2 (power)
@@ -1813,8 +1807,8 @@ td .hint {
 /* ---- phones (up to 44.99rem: the prototype switches at 720px) ---- */
 @media (max-width: 44.99rem) {
   /* #13 links that act as row or form actions get a 40px hit area */
-  td a:not(.cell a),
-  .confirm a {
+  td a:not(:disabled):not(.cell a),
+  .confirm a:not(:disabled) {
     display: inline-flex;
     align-items: center;
     min-height: 40px;
@@ -3340,8 +3334,6 @@ table[data-table="bulk_command"] td.p1 a {
   }
 }
 /* ---- QA v0.9.0 follow-up: policy pages (packages K, L) ---------- */
-
-/* L: closed card folds on a phone are one 40 px target each, also when they are stacked (Setup steps) */
 
 /* K: the card footer of a confirmation stays inside the card's padding box on a phone */
 @media (max-width: 44.99rem) {

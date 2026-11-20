@@ -728,19 +728,19 @@ test("the page size is saved with the other preferences", async ({ page, browser
   await page.setExtraHTTPHeaders(adam);
   await page.goto(app.url + "/audit");
   await resetAll(page, "/audit", "pager");
-  await expect(page.locator(".pager-size [aria-current="page"]")).toHaveText("25");
+  await expect(page.locator(".pager-size [aria-current=page]")).toHaveText("25");
   await page.locator(".pager-size").getByRole("link", { name: "100" }).click(); // the save races the navigation: no response to wait for
   await expect(page).toHaveURL(/per=100/);
   await page.waitForTimeout(300); // let the keepalive save land
   await page.goto(app.url + "/audit"); // no per= in the URL
-  await expect(page.locator(".pager-size [aria-current="page"]")).toHaveText("100");
+  await expect(page.locator(".pager-size [aria-current=page]")).toHaveText("100");
   const second = await otherBrowser(browser, adam);
   await second.page.goto(app.url + "/audit");
-  await expect(second.page.locator(".pager-size [aria-current="page"]")).toHaveText("100");
+  await expect(second.page.locator(".pager-size [aria-current=page]")).toHaveText("100");
   await second.ctx.close();
   const other = await otherBrowser(browser, eve);
   await other.page.goto(app.url + "/audit");
-  await expect(other.page.locator(".pager-size [aria-current="page"]")).toHaveText("25");
+  await expect(other.page.locator(".pager-size [aria-current=page]")).toHaveText("25");
   await other.ctx.close();
   await resetAll(page, "/audit", "pager");
 });
