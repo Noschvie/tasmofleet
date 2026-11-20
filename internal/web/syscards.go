@@ -122,6 +122,18 @@ const sysSnapshotsSlug = "snapshots"
 // sysBackupsSlug is the layout entry of the Devices -> Backups page.
 const sysBackupsSlug = "backups"
 
+// sysTabCrumb is the step of the trail that names one tab of the Settings page ("MQTT", "Advanced"): a page
+// opened from that tab sits below it, as it sits below the Settings entry. The label is the tab's own, read from
+// sysLayout, so the trail cannot call a tab by another name than the tab bar does (#1000).
+func sysTabCrumb(slug string) ui.Crumb {
+	for _, t := range sysLayout {
+		if t.Slug == slug {
+			return ui.Crumb{Label: t.Label, Path: sysPath + "?tab=" + t.Slug}
+		}
+	}
+	return ui.Crumb{Label: slug} // not a tab: sysLayout is the list, and the guard on the trails names the page
+}
+
 // sysAdvanced is the index of the Advanced tab and its catch-all card.
 const sysAdvanced, sysOtherCard = 8, 0
 

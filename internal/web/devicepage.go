@@ -555,7 +555,7 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	parts := []templ.Component{identityCard(c)}
 	if failure == "" {
 		// The header, breadcrumb and title show the same stored device as the card (#104).
-		parts = append(parts, deviceHeadSwap(tabs, deviceCrumbs(d)))
+		parts = append(parts, deviceHeadSwap(tabs, trailOf(v, "device", deviceCrumbs(d)...)))
 	}
 	if err := templ.Join(parts...).Render(r.Context(), w); err != nil {
 		h.log.WarnContext(r.Context(), "probe: render", "err", err)

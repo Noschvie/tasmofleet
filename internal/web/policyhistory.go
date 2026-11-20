@@ -148,7 +148,7 @@ func (h *handler) historyRender(w http.ResponseWriter, r *http.Request, live boo
 	}
 
 	v := h.view(r, "Policy history", "policy", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "History"}}
+	v.Crumbs = []ui.Crumb{{Label: "History"}}
 	switch q.Get("ok") {
 	case "reverted":
 		v.Flash = policyFlashes["reverted"]

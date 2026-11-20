@@ -1156,11 +1156,9 @@ func (h *handler) batchPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	nav := "transactions"
-	if p.Policy || p.Template {
-		nav = "policy" // started from the policy page: Devices / Policy / TX-…
-	}
-	v := h.view(r, p.ID, nav, nil)
+	// A transaction lives on the Transactions tab, whoever started it (#1000): the trail tells where the page is,
+	// not where the person came from. A "Make compliant" or template run is in that list like any other.
+	v := h.view(r, p.ID, "transactions", nil)
 	v.Live = true
 	p.CSRF = v.CSRF
 	h.show(w, r, http.StatusOK, "update_batch", v, batchPageView(p))
@@ -1719,7 +1717,7 @@ func (h *handler) batchRetryForm(w http.ResponseWriter, r *http.Request) {
 		page.Error = "Nothing would be sent. " + why
 	}
 	v := h.view(r, fmt.Sprintf("Retry transaction %d", p.Batch), "transactions", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: txID(p.Batch), Path: "/transactions/" + bid(p.Batch)}, {Label: "Retry"}}
+	v.Crumbs = []ui.Crumb{{Label: txID(p.Batch), Path: "/transactions/" + bid(p.Batch)}, {Label: "Retry"}}
 	h.show(w, r, http.StatusOK, "transaction_retry", v, retryPageView(h.retryViewOf(v, page)))
 }
 

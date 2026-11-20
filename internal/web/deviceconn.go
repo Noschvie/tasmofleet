@@ -198,9 +198,9 @@ func (h *handler) apiOffBlockCommand(ctx context.Context, id model.DeviceID, cmd
 }
 
 // refuseAPIOff answers a page that cannot be used because the device's HTTP API is off and nothing else reaches
-// it: a message page with the reason, status 409, before anything is sent.
-func (h *handler) refuseAPIOff(w http.ResponseWriter, r *http.Request, title, active, nothing, why string) {
-	h.message(w, r, http.StatusConflict, h.view(r, title, active, nothing+why))
+// it: the message page v with the reason, status 409, before anything is sent.
+func (h *handler) refuseAPIOff(w http.ResponseWriter, r *http.Request, v view) {
+	h.message(w, r, http.StatusConflict, v)
 }
 
 // overMQTT says whether a path travels over MQTT. An offline device can only be reached that way:

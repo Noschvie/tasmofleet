@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -206,10 +205,10 @@ func (h *handler) restoreStart(w http.ResponseWriter, r *http.Request) {
 		p.Error = "Something changed since the page was shown: confirm the risk named below."
 		h.renderConfirm(w, r, http.StatusUnprocessableEntity, p)
 	case errors.Is(err, restore.ErrBusy), errors.Is(err, restore.ErrOTAActive):
-		h.message(w, r, http.StatusConflict, h.view(r, "Restore not started", "devices", "Another operation on this device is running. Try again when it has finished."))
+		h.message(w, r, http.StatusConflict, h.deviceMessageView(r, d, "Restore not started", "Another operation on this device is running. Try again when it has finished."))
 	case errors.Is(err, restore.ErrIdentity), errors.Is(err, restore.ErrFamilyMismatch), errors.Is(err, restore.ErrVersionUnknown),
 		errors.Is(err, restore.ErrNewerBackup), errors.Is(err, restore.ErrNotDump), errors.Is(err, restore.ErrNoAddress):
-		h.message(w, r, http.StatusUnprocessableEntity, h.view(r, "Restore not started", "devices", refusalText(err)))
+		h.message(w, r, http.StatusUnprocessableEntity, h.deviceMessageView(r, d, "Restore not started", refusalText(err)))
 	case err != nil:
 		h.fail(w, r, err)
 	default:
@@ -274,8 +273,8 @@ func (h *handler) restoreJob(w http.ResponseWriter, r *http.Request) {
 	default:
 		target, pre, preFiles := h.jobBackups(r, p.Job)
 		jv := restoreJobOf(p.Base, p, target, pre, preFiles, h.filesProgress(p.Job.ID))
-		v := h.view(r, jv.Title, "devices", nil)
-		v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: p.Device.Name, Path: fmt.Sprintf("/devices/%d", p.Device.ID)}, {Label: lastCrumb(p.Job)}}
+		v := h.view(r, jv.Title, "device", nil)
+		v.Crumbs = []ui.Crumb{{Label: p.Device.Name, Path: devPath(p.Device.ID, "")}, {Label: lastCrumb(p.Job)}}
 		h.show(w, r, http.StatusOK, "restore_job", v, restoreJobPage(jv))
 	}
 }

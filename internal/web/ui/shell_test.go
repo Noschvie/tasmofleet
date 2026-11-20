@@ -171,40 +171,58 @@ func TestCurrentPageMarkedEverywhere(t *testing.T) {
 	}
 }
 
-// Why: the crumbs say where a page sits; they follow the prototype's PATH table: a group's
-// first page is the group alone, other pages name the group (linked unless it is System, which
-// has no page) and the page, deeper pages add their own title.
+// Why: the crumbs say where a page sits (#1000): the group, then the sub-navigation entry the page
+// lights up (the first entry too, so /transactions reads Updates / Transactions and not Updates), then
+// the page's own steps. A device lights no entry and hangs directly under its group; System has no page
+// of its own, so it is never a link.
 func TestTrailFollowsTheNavigation(t *testing.T) {
-	cases := []struct{ nav, path, title, want string }{
-		{"dashboard", "/", "Dashboard", "Dashboard"},
-		{"devices", "/devices", "Devices", "Devices"},
-		{"devices", "/devices/7/backups", "Backups", "Devices>/devices|Backups"},
-		{"policy", "/policy", "Policy", "Devices>/devices|Policy"},
-		{"discovery", "/devices/new", "Add devices", "Devices>/devices|Add"},
-		{"snapshots", "/settings/system/snapshots", "Snapshots", "System|Snapshots"},
-		{"transactions", "/transactions", "Transactions", "Updates"},
-		{"firmware", "/firmware", "Firmware", "Updates>/transactions|Firmware"},
-		{"about", "/about", "About", "System|About"},
-		{"users", "/users", "Users", "System|Users"},
-		{"account", "/account", "Account", "System|Account"},
-		{"", "/nowhere", "Not found", "Dashboard>/|Not found"},
+	cases := []struct {
+		nav, path, title string
+		steps            []Crumb
+		want             string
+	}{
+		{"dashboard", "/", "Dashboard", nil, "Dashboard"},
+		{"devices", "/devices", "Devices", nil, "Devices>/devices|List"},
+		{"backups", "/devices/backups", "Backups", nil, "Devices>/devices|Backups"},
+		{"policy", "/policy", "Policy", nil, "Devices>/devices|Policy"},
+		{"discovery", "/devices/new", "Add devices", nil, "Devices>/devices|Add"},
+		{"snapshots", "/settings/system/snapshots", "Snapshots", nil, "System|Snapshots"},
+		{"transactions", "/transactions", "Transactions", nil, "Updates>/transactions|Transactions"},
+		{"firmware", "/firmware", "Firmware", nil, "Updates>/transactions|Firmware"},
+		{"about", "/about", "About", nil, "System|About"},
+		{"users", "/users", "Users", nil, "System|Users"},
+		{"account", "/account", "Account", nil, "System|Account"},
+		{"", "/nowhere", "Not found", nil, "Dashboard>/|Not found"},
 		// the answer to "Run now" (POST /policy/live) is titled like its entry: no doubled crumb
-		{"policy", "/policy/live", "Policy", "Devices>/devices|Policy"},
-		// a missing device keeps Devices highlighted and says what is missing
-		{"devices", "/devices/9999", "Device not found", "Devices>/devices|Device not found"},
+		{"policy", "/policy/live", "Policy", nil, "Devices>/devices|Policy"},
+		// a missing device keeps List highlighted and says what is missing
+		{"devices", "/devices/9999", "Device not found", nil, "Devices>/devices|List>/devices|Device not found"},
+		// a page below an entry: the entry is a link, the page's own steps follow
+		{"devices", "/devices/bulk", "Bulk action", []Crumb{{Label: "Bulk action"}}, "Devices>/devices|List>/devices|Bulk action"},
+		{"transactions", "/transactions/7/retry", "Retry", []Crumb{{Label: "TX-0007", Path: "/transactions/7"}, {Label: "Retry"}},
+			"Updates>/transactions|Transactions>/transactions|TX-0007>/transactions/7|Retry"},
+		{"system", "/settings/system/reset", "Reset", []Crumb{{Label: "Advanced", Path: "/settings/system?tab=advanced"}, {Label: "Reset"}},
+			"System|Settings>/settings/system|Advanced>/settings/system?tab=advanced|Reset"},
+		// a device lights no entry: Devices / the device, whatever tab or subpage it is
+		{"device", "/devices/7", "kitchen", []Crumb{{Label: "kitchen"}}, "Devices>/devices|kitchen"},
+		{"device", "/devices/7/edit", "Edit kitchen", []Crumb{{Label: "kitchen", Path: "/devices/7"}, {Label: "Edit"}}, "Devices>/devices|kitchen>/devices/7|Edit"},
+		{"dashboard", "/whats-new", "What’s new", []Crumb{{Label: "What’s new"}}, "Dashboard>/|What’s new"},
 	}
-	for _, c := range cases {
-		d := admin()
-		d.Nav, d.Path, d.Title = c.nav, c.path, c.title
+	flat := func(trail []Crumb) string {
 		var parts []string
-		for _, cr := range d.Trail() {
+		for _, cr := range trail {
 			p := cr.Label
 			if cr.Path != "" {
 				p += ">" + cr.Path
 			}
 			parts = append(parts, p)
 		}
-		if got := strings.Join(parts, "|"); got != c.want {
+		return strings.Join(parts, "|")
+	}
+	for _, c := range cases {
+		d := admin()
+		d.Nav, d.Path, d.Title, d.Crumbs = c.nav, c.path, c.title, c.steps
+		if got := flat(d.Trail()); got != c.want {
 			t.Errorf("%s %s: %s, want %s", c.nav, c.path, got, c.want)
 		}
 	}
@@ -217,10 +235,64 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 			t.Errorf("nav %q: no sub-navigation row", nav)
 		}
 	}
+}
+
+// Why (#1000, rule 4): the trail and the lit sub-navigation entry must agree, for every entry the
+// navigation has. Both come out of Groups(), so a page below an entry names exactly the entry the
+// menu lights, in the group the top bar lights; renaming an entry cannot leave a stale trail.
+func TestTrailNamesTheLitEntry(t *testing.T) {
+	for _, nav := range []string{"transactions", "firmware", "devices", "policy", "backups", "discovery", "snapshots", "audit", "users", "about", "system"} {
+		d := admin()
+		d.Nav, d.Path, d.Title, d.Crumbs = nav, "/somewhere/deeper", "Deeper", []Crumb{{Label: "Deeper"}}
+		g, ok := d.currentGroup()
+		if !ok {
+			t.Fatalf("%s: no current group", nav)
+		}
+		var lit NavItem
+		for _, it := range g.Items {
+			if it.Current {
+				lit = it
+			}
+		}
+		if lit.Key == "" {
+			t.Fatalf("%s lights no entry", nav)
+		}
+		trail := d.Trail()
+		if len(trail) != 3 || trail[0].Label != g.Label || trail[1].Label != lit.Label {
+			t.Errorf("%s: trail %v, want %s / %s / Deeper", nav, trail, g.Label, lit.Label)
+		}
+	}
+}
+
+// Why (#1000): a crumb that is a link the person cannot open ends on a 403. An operator sees the
+// entry of an admin-only page as plain text (the menu still lists it), an admin gets the link.
+func TestTrailLinksOnlyWhatThePersonMayOpen(t *testing.T) {
 	d := admin()
-	d.Crumbs = []Crumb{}
-	if got := render(t, d); strings.Contains(got, `class="crumbs"`) {
-		t.Error("a page with its own trail got a second one from the shell")
+	d.Nav, d.Path, d.Title, d.Crumbs = "about", "/whats-new", "What’s new", []Crumb{{Label: "What’s new"}}
+	if got := d.Trail(); got[1].Path != "/about" {
+		t.Errorf("admin: About is not linked: %v", got)
+	}
+	d.IsAdmin = false
+	if got := d.Trail(); got[1].Label != "About" || got[1].Path != "" {
+		t.Errorf("operator: About must be plain text: %v", got)
+	}
+	d.Nav, d.Path, d.Title, d.Crumbs = "policy", "/policy/history", "History", []Crumb{{Label: "History"}}
+	if got := d.Trail(); got[1].Path != "/policy" {
+		t.Errorf("operator: Policy is open to every role and must stay a link: %v", got)
+	}
+}
+
+// Why (#127): the Devices crumb of a device page leads back to the list as the person left it
+// (listback.js reads the marker); no other page carries it.
+func TestOnlyDevicePagesKeepTheListQuery(t *testing.T) {
+	d := admin()
+	d.Nav, d.Path, d.Crumbs = "device", "/devices/7", []Crumb{{Label: "kitchen"}}
+	if tr := d.Trail(); !tr[0].KeepQuery || tr[0].Path != "/devices" {
+		t.Errorf("device page: %v", tr)
+	}
+	d.Nav, d.Crumbs = "devices", []Crumb{{Label: "Bulk action"}}
+	if tr := d.Trail(); tr[0].KeepQuery {
+		t.Errorf("a page that is no device page carries the marker: %v", tr)
 	}
 }
 

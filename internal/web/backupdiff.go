@@ -175,7 +175,7 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
-	v := h.view(r, d.Name+" drift", "devices", nil)
+	v := h.view(r, d.Name+" drift", "device", nil)
 	self := v.Base + devPath(d.ID, "/drift")
 	all := r.URL.Query().Get("all") == "1"
 	p := driftView{Base: v.Base, CSRF: v.CSRF, Self: self, Hiding: !v.IsAdmin, All: all, AllHref: self + "?all=1"}

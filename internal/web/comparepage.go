@@ -182,8 +182,8 @@ func (h *handler) backupDiff(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	case pairUndecoded:
-		v := h.view(r, "Compare backups", "devices", nil)
-		v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: d.Name, Path: fmt.Sprintf("/devices/%d", d.ID)}, {Label: "Compare backups"}}
+		v := h.view(r, "Compare backups", "device", nil)
+		v.Crumbs = []ui.Crumb{{Label: d.Name, Path: fmt.Sprintf("/devices/%d", d.ID)}, {Label: "Compare backups"}}
 		h.show(w, r, http.StatusOK, "compare", v, compareUndecoded(d.Name, fmt.Sprintf("%s/devices/%d/backups", v.Base, d.ID), v.Base))
 		return
 	case pairOK:
@@ -211,7 +211,7 @@ func (h *handler) backupDiff(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	v := h.view(r, "Compare backups", "devices", nil)
+	v := h.view(r, "Compare backups", "device", nil)
 	if !v.IsAdmin {
 		all = backup.HideBodies(all)
 	}
@@ -248,6 +248,6 @@ func (h *handler) backupDiff(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: d.Name, Path: fmt.Sprintf("/devices/%d", d.ID)}, {Label: "Compare backups"}}
+	v.Crumbs = []ui.Crumb{{Label: d.Name, Path: fmt.Sprintf("/devices/%d", d.ID)}, {Label: "Compare backups"}}
 	h.show(w, r, http.StatusOK, "compare", v, comparePage(p))
 }

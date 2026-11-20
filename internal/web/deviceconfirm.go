@@ -127,9 +127,9 @@ func (h *handler) renderDeviceDelete(w http.ResponseWriter, r *http.Request, sta
 			return
 		}
 	}
-	v := h.view(r, "Delete device", "devices", nil)
+	v := h.view(r, "Delete device", "device", nil)
 	devPath := "/devices/" + strconv.FormatInt(int64(d.ID), 10)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: d.Name, Path: devPath}, {Label: "Delete"}}
+	v.Crumbs = []ui.Crumb{{Label: d.Name, Path: devPath}, {Label: "Delete"}}
 	p.Name, p.Address = d.Name, d.Address
 	if d.Port != 0 {
 		p.Address += ":" + strconv.Itoa(d.Port)
@@ -183,9 +183,9 @@ func (h *handler) deviceRestartConfirm(w http.ResponseWriter, r *http.Request) {
 func (h *handler) renderDeviceConfirm(w http.ResponseWriter, r *http.Request, c deviceConfirmData) {
 	dev := c.Device
 	title := "Restart " + dev.Name + "?"
-	v := h.view(r, strings.TrimSuffix(title, "?"), "devices", nil)
+	v := h.view(r, strings.TrimSuffix(title, "?"), "device", nil)
 	devPath := "/devices/" + strconv.FormatInt(int64(dev.ID), 10)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: dev.Name, Path: devPath}, {Label: "Restart"}}
+	v.Crumbs = []ui.Crumb{{Label: dev.Name, Path: devPath}, {Label: "Restart"}}
 	addr := dev.Address
 	if dev.Port != 0 {
 		addr += ":" + strconv.Itoa(dev.Port)
@@ -210,7 +210,7 @@ func (h *handler) deviceRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	limitBody(w, r)
 	if why := h.apiOffBlockCommand(r.Context(), d.ID, "Restart 1"); why != "" {
-		h.refuseAPIOff(w, r, "Restart not sent", "devices", "Nothing was sent. ", why)
+		h.refuseAPIOff(w, r, h.deviceMessageView(r, d, "Restart not sent", "Nothing was sent. "+why))
 		return
 	}
 	p, _ := auth.FromContext(r.Context())
@@ -219,7 +219,7 @@ func (h *handler) deviceRestart(w http.ResponseWriter, r *http.Request) {
 		if status == http.StatusInternalServerError {
 			h.log.ErrorContext(r.Context(), "device restart failed", "device", d.ID, "err", err)
 		}
-		h.message(w, r, status, h.view(r, "Restart failed", "devices", msg))
+		h.message(w, r, status, h.deviceMessageView(r, d, "Restart failed", msg))
 		return
 	}
 	back := "/devices/" + r.PathValue("id")

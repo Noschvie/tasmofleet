@@ -176,7 +176,7 @@ func (h *handler) pwBrokerConfirm(w http.ResponseWriter, r *http.Request) {
 		h.pwBrokerRefuse(w, r, http.StatusOK, "Nothing to do: every device on TasmoFleet's broker has a password.")
 		return
 	}
-	v.Crumbs = []ui.Crumb{{Label: "System", Path: sysPath}, {Label: "Settings", Path: sysPath + "?tab=mqtt"}, {Label: "Use the broker password"}}
+	v.Crumbs = []ui.Crumb{sysTabCrumb("mqtt"), {Label: "Use the broker password"}}
 	d := pwBrokerData{Base: v.Base, CSRF: v.CSRF, Rows: rows}
 	if h.brokerACLOpen() {
 		d.ACLText = aclTextPasswordTestBulk

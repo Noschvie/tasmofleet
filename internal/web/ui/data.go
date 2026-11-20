@@ -12,8 +12,8 @@ type ShellData struct {
 	Path string // request path below Base: tells a group's page from a page deeper in it (crumbs)
 	Base string // URL path prefix when served below a path
 	CSRF string
-	// Crumbs is the page's own breadcrumb trail; nil derives one from the navigation (Trail).
-	// Not-yet-ported pages that draw their own trail get an empty, non-nil slice.
+	// Crumbs is the end of the page's breadcrumb trail: the steps below its group and sub-navigation
+	// entry, which Trail puts in front (#1000). Nil derives the end from the title.
 	Crumbs []Crumb
 	// Theme is the user's choice, "light" or "dark"; "" follows the system (Auto).
 	Theme string

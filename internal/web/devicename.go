@@ -122,7 +122,7 @@ func (h *handler) nameAnswer(w http.ResponseWriter, r *http.Request, answer func
 	w.Header().Set("Cache-Control", "no-store")
 	parts := []templ.Component{identityCard(c)}
 	if failure == "" {
-		parts = append(parts, deviceHeadSwap(tabs, deviceCrumbs(d)))
+		parts = append(parts, deviceHeadSwap(tabs, trailOf(v, "device", deviceCrumbs(d)...)))
 	}
 	if err := templ.Join(parts...).Render(r.Context(), w); err != nil {
 		h.log.WarnContext(r.Context(), "name answer: render", "err", err)

@@ -130,7 +130,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request, status int, d auth
 	}
 	if d.New {
 		v := p.h.view(r, "Add local user", "users", nil)
-		v.Crumbs = []ui.Crumb{{Label: "System"}, {Label: "Users", Path: "/users"}, {Label: "Add local user"}}
+		v.Crumbs = []ui.Crumb{{Label: "Add local user"}}
 		a := userAddView{D: d, StepUp: stepUpOf(d, p.h.d.Clock.Now(), "Adding a user")}
 		if d.ErrField != "" && d.Error != "" {
 			a.Errors = 1
@@ -393,7 +393,7 @@ func (p *Pages) UserDetail(w http.ResponseWriter, r *http.Request, status int, d
 	nameOf := p.h.pr.Text
 	u := userDetailViewOf(d, p.h.d.Clock.Now(), nameOf)
 	v := p.h.view(r, u.Title, "users", nil)
-	v.Crumbs = []ui.Crumb{{Label: "System"}, {Label: "Users", Path: "/users"}, {Label: u.Title}}
+	v.Crumbs = []ui.Crumb{{Label: u.Title}}
 	if u.StepUp != nil {
 		u.StepUp.Name = v.User.Name
 		u.StepUp.Sub = v.User.Name + " · " + signInMethod(v.User.Method, d.IdP)
@@ -409,7 +409,7 @@ func (p *Pages) OneTimePassword(w http.ResponseWriter, r *http.Request, status i
 		return
 	}
 	v := p.h.view(r, "One-time password", "users", nil)
-	v.Crumbs = []ui.Crumb{{Label: "System"}, {Label: "Users", Path: "/users"}, {Label: "One-time password"}}
+	v.Crumbs = []ui.Crumb{{Label: "One-time password"}}
 	o := otpView{D: d, Detail: d.BasePath + "/users/" + url.PathEscape(d.User),
 		Expires: d.ExpiresAt.In(p.h.d.Clock.Now().Location()).Format("2 Jan 2006, 15:04")}
 	p.h.show(w, r, status, "users", v, otpPage(o))

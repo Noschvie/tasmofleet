@@ -459,8 +459,8 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 	h.show(w, r, http.StatusOK, "policy_fix_started", v, fixStartedPage(v.Base, s))
 }
 
-// fixCrumbs is the trail of the Make compliant pages.
-var fixCrumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "Make compliant"}}
+// fixCrumbs is the end of the trail of the Make compliant pages: Devices / Policy / Make compliant.
+var fixCrumbs = []ui.Crumb{{Label: "Make compliant"}}
 
 // fixRender shows the plan as a page: the no-JavaScript way of "Make compliant (N)…", and the
 // answer when the values changed after the dialog was drawn.

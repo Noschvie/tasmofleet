@@ -1,0 +1,4 @@
+---
+section: Changed
+---
+One rule now builds the breadcrumb trail of every page, and it always agrees with the lit tab of the sub-navigation: a page under a tab names that tab (`Devices / List / Bulk action`, `Updates / Transactions / TX-0012`, `System / Settings / Advanced / Reset`), a device hangs directly under Devices (`Devices / kitchen / Edit`, never "Device"), the list and the Transactions page read `Devices / List` and `Updates / Transactions`, and a transaction started from Policy now lives on the Transactions tab. System confirmations start with System. Visible change: a device page (tabs, edit, restore, delete) no longer lights the List tab, because a device belongs to the whole Devices area; its Devices crumb leads back to the list as you left it on every device page (#1000, thanks @Noschvie)

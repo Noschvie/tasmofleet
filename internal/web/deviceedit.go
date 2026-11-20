@@ -64,8 +64,8 @@ func (h *handler) renderForm(w http.ResponseWriter, r *http.Request, status int,
 	}
 	f.Device.HTTPPassword, f.Device.MQTTPassword = "", "" // never rendered
 	f.TagsText = strings.Join(f.Device.Tags, ", ")
-	v := h.view(r, "Edit "+f.Stored, "devices", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: f.Stored, Path: devPath(f.Device.ID, "")}, {Label: "Edit"}}
+	v := h.view(r, "Edit "+f.Stored, "device", nil)
+	v.Crumbs = []ui.Crumb{{Label: f.Stored, Path: devPath(f.Device.ID, "")}, {Label: "Edit"}}
 	h.show(w, r, status, "device_form", v, editPage(f, v.Base, v.CSRF))
 }
 

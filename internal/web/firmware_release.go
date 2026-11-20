@@ -187,7 +187,7 @@ func (h *handler) firmwareRelease(w http.ResponseWriter, r *http.Request) {
 func (h *handler) showRelease(w http.ResponseWriter, r *http.Request, status int, p releasePage) {
 	v := h.view(r, "Release notes", "firmware", nil)
 	v.Flash = p.Notice
-	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: "Firmware", Path: "/firmware"}, {Label: "Tasmota " + p.Version}}
+	v.Crumbs = []ui.Crumb{{Label: "Tasmota " + p.Version}}
 	h.show(w, r, status, "release", v, releaseContent(v, p))
 }
 

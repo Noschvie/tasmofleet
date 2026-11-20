@@ -222,7 +222,8 @@ func (h *handler) showBulkScope(w http.ResponseWriter, r *http.Request, sv bulkS
 // bulkTitle names every bulk page in the window title and the phone header (the prototype's TITLE).
 const bulkTitle = "Bulk action"
 
-var bulkCrumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Bulk action"}}
+// bulkCrumbs is the end of the trail of the bulk pages: Devices / List / Bulk action (#1000).
+var bulkCrumbs = []ui.Crumb{{Label: "Bulk action"}}
 
 // healthTone is the dot of a device's health: online green, offline red, the rest grey.
 func healthTone(st model.HealthState) ui.Tone {

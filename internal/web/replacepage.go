@@ -59,7 +59,7 @@ func targetValue(addr string, port int) string {
 }
 
 func (h *handler) renderReplace(w http.ResponseWriter, r *http.Request, status int, p replacePage) {
-	v := h.view(r, "Replace "+p.Device.Name, "devices", nil)
+	v := h.view(r, "Replace "+p.Device.Name, "device", nil)
 	d := p.Device
 	rv := replaceView{Base: v.Base, CSRF: v.CSRF, Device: d, Error: p.Error, Address: p.Address, Port: p.Port,
 		PreviewHref: fmt.Sprintf("%s/devices/%d/replace/preview", v.Base, d.ID),

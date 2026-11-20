@@ -421,7 +421,8 @@ type view struct {
 	EventSeq uint64 // events published before the page was built (Hub.Seq): the stream resyncs when more followed (#160)
 	Path     string // request path below the base path (crumbs)
 	Theme    string // the user's theme choice, "" = Auto
-	// Crumbs is a ported page's own breadcrumb trail; nil derives it from the navigation
+	// Crumbs is the end of the page's breadcrumb trail, below its group and sub-navigation entry: those two
+	// come from Nav (ui.ShellData.Trail), so a handler never types an area or tab label. Nil ends at the title.
 	Crumbs []ui.Crumb
 	// NewDevices counts discovered devices waiting to be added (admins with discovery)
 	NewDevices int

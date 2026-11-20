@@ -201,7 +201,7 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	v := h.view(r, d.Name+" backups", "devices", nil)
+	v := h.view(r, d.Name+" backups", "device", nil)
 	tabs := h.tabsOf(r, v, d, "backups")
 	_, canDelete := h.backupAdmin()
 	_, canKeep := h.backupKeeper()
@@ -412,10 +412,10 @@ func (h *handler) backupPruneConfirm(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, b.ID)
 	}
 	if len(ids) == 0 {
-		v := h.view(r, "Nothing to prune", "devices", messageData{
+		v := h.view(r, "Nothing to prune", "device", messageData{
 			Text: "Nothing to prune: every backup of " + d.Name + " is within the retention or kept.", LinkText: "Back to the backups",
 			Link: fmt.Sprintf("/devices/%d/backups", d.ID), LinkPrimary: true})
-		v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: d.Name, Path: fmt.Sprintf("/devices/%d", d.ID)}, {Label: "Backups", Path: fmt.Sprintf("/devices/%d/backups", d.ID)}, {Label: "Prune"}}
+		v.Crumbs = []ui.Crumb{{Label: d.Name, Path: devPath(d.ID, "")}, {Label: "Backups", Path: devPath(d.ID, "/backups")}, {Label: "Prune"}}
 		h.message(w, r, http.StatusOK, v)
 		return
 	}
@@ -432,7 +432,7 @@ func (h *handler) confirmRunDeletion(w http.ResponseWriter, r *http.Request, d m
 		return
 	}
 	if len(ids) == 0 {
-		h.message(w, r, http.StatusUnprocessableEntity, h.view(r, "Nothing selected", "devices", messageData{
+		h.message(w, r, http.StatusUnprocessableEntity, h.deviceMessageView(r, d, "Nothing selected", messageData{
 			Text: "Nothing to delete: no backup was selected.", LinkText: "Back to the backups", Link: back}))
 		return
 	}
@@ -453,7 +453,7 @@ func (h *handler) confirmRunDeletion(w http.ResponseWriter, r *http.Request, d m
 	c := actionConfirm{
 		Title: "Delete " + plural(n, "backup") + "?", Heading: "Delete " + plural(n, "backup"),
 		Text:   plural(n, "backup") + " of " + d.Name + " (dump, snapshot and decoded copy of each) will be deleted. This cannot be undone.",
-		Crumbs: []confirmLink{{"/devices", "Devices"}, {fmt.Sprintf("/devices/%d", d.ID), d.Name}, {back, "Backups"}},
+		Crumbs: []confirmLink{{devPath(d.ID, ""), d.Name}, {back, "Backups"}},
 		Last:   "Delete selected", Action: fmt.Sprintf("/devices/%d/backups/delete", d.ID), Verb: "Delete " + plural(n, "backup"),
 		CancelHref: back, CancelLabel: "Cancel",
 	}
@@ -470,5 +470,5 @@ func (h *handler) confirmRunDeletion(w http.ResponseWriter, r *http.Request, d m
 		c.Fields = append(c.Fields, confirmField{Name: "id", Value: strconv.FormatInt(int64(id), 10)})
 	}
 	c.Fields = append(c.Fields, confirmField{Name: "confirm", Value: "1"})
-	h.renderActionConfirm(w, r, "devices", c)
+	h.renderActionConfirm(w, r, "device", c)
 }

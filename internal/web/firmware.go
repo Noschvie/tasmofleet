@@ -12,7 +12,6 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/firmware"
 	"github.com/hellwand/tasmofleet/internal/model"
-	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 type firmwarePage struct {
@@ -537,8 +536,7 @@ func (h *handler) firmwarePage(w http.ResponseWriter, r *http.Request) {
 func (h *handler) showFirmware(w http.ResponseWriter, r *http.Request, status int, p firmwarePage) {
 	v := h.view(r, "Firmware", "firmware", nil)
 	v.Flash = p.Notice
-	// the answer to a POST (a check, a fetch, a delete) is the firmware page, not a page below it
-	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: "Firmware"}}
+	// the answer to a POST (a check, a fetch, a delete) is titled like the entry, so Trail ends at Firmware
 	h.show(w, r, status, "firmware", v, firmwareContent(v, p))
 }
 

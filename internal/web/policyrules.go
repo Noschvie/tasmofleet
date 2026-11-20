@@ -739,7 +739,7 @@ func (h *handler) policyIO(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) policyIORender(w http.ResponseWriter, r *http.Request, status int, p policyIOView) {
 	v := h.view(r, "Import / export rules", "policy", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "Import / export"}}
+	v.Crumbs = []ui.Crumb{{Label: "Import / export"}}
 	p.Base, p.CSRF, p.Admin = v.Base, v.CSRF, v.IsAdmin
 	if p.Import && !p.Admin {
 		p.Import = false // viewers only export

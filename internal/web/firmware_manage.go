@@ -81,7 +81,7 @@ func (h *handler) renderFirmwareConfirm(w http.ResponseWriter, r *http.Request, 
 		title = "Delete unused files"
 	}
 	v := h.view(r, title, "firmware", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: "Firmware", Path: "/firmware"}, {Label: "Delete"}}
+	v.Crumbs = []ui.Crumb{{Label: "Delete"}}
 	h.show(w, r, status, "firmware_confirm", v, fwConfirmContent(v, c))
 }
 
@@ -355,7 +355,7 @@ func (h *handler) firmwarePrefetchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := h.view(r, "Prefetch "+run.Release, "firmware", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: "Firmware", Path: "/firmware"}, {Label: "Prefetch"}}
+	v.Crumbs = []ui.Crumb{{Label: "Prefetch"}}
 	h.show(w, r, http.StatusOK, "firmware_prefetch", v, fwPrefetchContent(h.prefetchView(r, run), h.pr.Text(run.Actor)))
 }
 

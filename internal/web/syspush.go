@@ -155,7 +155,7 @@ func (h *handler) pushRemoveConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	h.renderActionConfirm(w, r, "system", actionConfirm{
 		Title: "Remove " + label + "?", Heading: "Remove this browser", Text: pushRemoveText(label, h.pr.Text(i.OwnerSubject)),
-		Crumbs: []confirmLink{{"", "System"}, {sysPath + "?tab=notifications", "Settings"}}, Last: "Remove browser",
+		Crumbs: []confirmLink{sysTabLink("notifications")}, Last: "Remove browser",
 		Action: sysPath + "/push/remove/" + id, Verb: "Remove", CancelHref: sysPath + "?tab=notifications", CancelLabel: "Cancel",
 	})
 }

@@ -583,14 +583,16 @@ func TestBackupTimesAreInOneZone(t *testing.T) {
 	}
 }
 
-// Why (#127): the "Devices" crumb on a device tab must lead back to the list as the user left it
-// (filter and sort). The server cannot know that (it is per browser tab), so it only marks the
-// crumb for listback.js; the list itself and the other pages carry no marker, so the navigation's
-// "Devices" link stays the way to an unfiltered list.
-func TestDevicesCrumbIsMarkedOnDeviceTabsOnly(t *testing.T) {
+// Why (#127, #1000): the "Devices" crumb on a device page (a tab or a page that acts on the device:
+// edit, restore, delete) must lead back to the list as the user left it (filter and sort). The server
+// cannot know that (it is per browser tab), so it only marks the crumb for listback.js. Every device
+// page has the same Devices / device start (rule 2 of #1000), so every one is marked; the list itself
+// and the other pages carry no marker, so the navigation's "Devices" link stays the way to an
+// unfiltered list.
+func TestDevicesCrumbIsMarkedOnDevicePagesOnly(t *testing.T) {
 	e := setup(t)
 	const mark = `data-keep-query`
-	for _, p := range []string{"/devices/1", "/devices/1/backups"} {
+	for _, p := range []string{"/devices/1", "/devices/1/backups", "/devices/1/edit"} {
 		_, body := e.do(t, "GET", p, "admin", nil)
 		i := strings.Index(body, `aria-label="Breadcrumb"`)
 		if i < 0 {
@@ -601,10 +603,10 @@ func TestDevicesCrumbIsMarkedOnDeviceTabsOnly(t *testing.T) {
 			t.Errorf("%s: the Devices crumb is not the one marked crumb: %s", p, nav)
 		}
 	}
-	for _, p := range []string{"/devices", "/firmware", "/devices/1/edit"} {
+	for _, p := range []string{"/devices", "/firmware", "/about"} {
 		_, body := e.do(t, "GET", p, "admin", nil)
 		if strings.Contains(body, mark) {
-			t.Errorf("%s carries the marker; only device tabs may", p)
+			t.Errorf("%s carries the marker; only device pages may", p)
 		}
 	}
 }

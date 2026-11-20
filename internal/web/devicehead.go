@@ -41,9 +41,18 @@ func devPath(id model.DeviceID, rest string) string {
 	return "/devices/" + strconv.FormatInt(int64(id), 10) + rest
 }
 
-// deviceCrumbs is the trail of a device tab: Devices / the device (every tab, as the prototype).
+// deviceCrumbs is the end of the trail of a device page: the device, which hangs directly under the Devices
+// group (nav "device" lights no sub-navigation entry, so Trail goes from the group to the device).
 func deviceCrumbs(d model.Device) []ui.Crumb {
-	return []ui.Crumb{{Label: "Devices", Path: "/devices", KeepQuery: true}, {Label: d.Name}}
+	return []ui.Crumb{{Label: d.Name}}
+}
+
+// deviceMessageView is the view of a message page that answers an action on one device: it reads
+// Devices / <device> / <title> and lights no tab, like the confirmation page it follows.
+func (h *handler) deviceMessageView(r *http.Request, d model.Device, title string, data any) view {
+	v := h.view(r, title, "device", data)
+	v.Crumbs = []ui.Crumb{{Label: d.Name, Path: devPath(d.ID, "")}, {Label: title}}
+	return v
 }
 
 // headOf builds the device header and tabs for the viewer: tabsFor plus what needs the

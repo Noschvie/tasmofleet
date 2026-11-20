@@ -364,7 +364,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 	}
 	v := h.view(r, name, "policy", nil)
 	canEdit := v.IsAdmin
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}
+	v.Crumbs = []ui.Crumb{{Label: name}}
 	ok := r.URL.Query().Get("ok")
 	if f := ruleFlash(ok); f != "" {
 		v.Flash = f
@@ -590,7 +590,7 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 	}
 	head := ruleHead{Name: name, Required: spec.Severity != policy.SeverityInfo, Draft: d.ID == "new", Disabled: spec.Disabled, Base: httpBase(r),
 		WantWarn: wantWarning(spec.Command, spec.Want),
-		Crumbs:   []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}}
+		Crumbs:   trailOf(h.view(r, name, "policy", nil), "policy", ui.Crumb{Label: name})} // the swap replaces the whole trail
 	if d.Origin == "command" {
 		head.Source = "A new rule for " + spec.Command + ". Nothing is saved until you press Save rule."
 	}
@@ -820,7 +820,7 @@ func (h *handler) deviceByID(r *http.Request, id model.DeviceID) (model.Device, 
 
 func (h *handler) ruleNewRender(w http.ResponseWriter, r *http.Request, status int, o newRuleOpts) {
 	v := h.view(r, "New rule", "policy", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "New rule"}}
+	v.Crumbs = []ui.Crumb{{Label: "New rule"}}
 	devs, err := h.d.Inventory.List(r.Context())
 	if err != nil {
 		h.fail(w, r, err)

@@ -171,7 +171,7 @@ func (h *handler) registerSettings(route func(string, func(http.Handler) http.Ha
 }
 
 func (h *handler) renderSettings(w http.ResponseWriter, r *http.Request, status int, p settingsPage) {
-	v := h.view(r, "Settings of "+p.Device.Name, "devices", nil)
+	v := h.view(r, "Settings of "+p.Device.Name, "device", nil)
 	p.Tabs = h.tabsOf(r, v, p.Device, "settings")
 	if len(p.Groups) > 0 {
 		p.PolicyWant = h.policyWants(r, p.Device.ID)
@@ -373,7 +373,7 @@ func (h *handler) settingsApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActWrites); why != "" {
-		h.refuseAPIOff(w, r, "Settings not written", "devices", "Nothing was written. ", why)
+		h.refuseAPIOff(w, r, h.deviceMessageView(r, d, "Settings not written", "Nothing was written. "+why))
 		return
 	}
 	results, err := h.d.Settings.Apply(r.Context(), actor(r), d.ID, changes)
@@ -384,7 +384,7 @@ func (h *handler) settingsApply(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, settings.ErrUnknownField):
 		http.Error(w, "unknown field", http.StatusBadRequest)
 	case errors.Is(err, devlock.ErrBusy):
-		h.message(w, r, http.StatusConflict, h.view(r, "Device busy", "devices",
+		h.message(w, r, http.StatusConflict, h.deviceMessageView(r, d, "Device busy",
 			"Nothing was written. Another operation on this device is running ("+busyHolder(err)+"). Try again when it has finished."))
 	case err != nil:
 		h.fail(w, r, err)

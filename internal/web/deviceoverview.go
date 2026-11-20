@@ -629,7 +629,7 @@ func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v := h.view(r, d.Name, "devices", nil)
+	v := h.view(r, d.Name, "device", nil)
 	v.EventSeq = seq
 	if h.d.ProbeHTTP != nil {
 		// A device fine on MQTT is not polled over HTTP: opening its page is the moment to check (#456).
@@ -697,7 +697,7 @@ func (h *handler) stateHistory(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	v := h.view(r, d.Name+": activity", "devices", nil)
+	v := h.view(r, d.Name+": activity", "device", nil)
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	def := savedPageSize(h.userPrefs(r))

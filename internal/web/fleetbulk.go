@@ -170,9 +170,8 @@ func (h *handler) orphansDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	c := actionConfirm{
 		Title: "Delete " + plural(plan.Runs, "backup") + " of deleted devices?", Heading: "Delete " + plural(plan.Runs, "backup") + " of deleted devices",
-		Text:   text + " This cannot be undone; the audit log lists every backup.",
-		Crumbs: []confirmLink{{"/devices", "Devices"}, {fleetPath, "Backups"}},
-		Last:   "Delete selected", Action: orphansDeletePath, Verb: "Delete " + plural(plan.Runs, "backup"),
+		Text: text + " This cannot be undone; the audit log lists every backup.",
+		Last: "Delete selected", Action: orphansDeletePath, Verb: "Delete " + plural(plan.Runs, "backup"),
 		CancelHref: fleetPath, CancelLabel: "Cancel",
 	}
 	for _, id := range ids {
@@ -213,7 +212,7 @@ func (h *handler) unrefDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var size int64
-	c := actionConfirm{Crumbs: []confirmLink{{"/devices", "Devices"}, {fleetPath, "Backups"}}, Last: "Delete unreferenced files",
+	c := actionConfirm{Last: "Delete unreferenced files",
 		Action: unrefDeletePath, CancelHref: fleetPath, CancelLabel: "Cancel"}
 	for _, f := range files {
 		size += f.Size
@@ -297,7 +296,7 @@ func (h *handler) pruneNowConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var size int64
-	c := actionConfirm{Crumbs: []confirmLink{{"/devices", "Devices"}, {fleetPath, "Backups"}}, Last: "Prune now",
+	c := actionConfirm{Last: "Prune now",
 		Action: pruneNowPath, CancelHref: fleetPath, CancelLabel: "Cancel"}
 	for _, run := range runs {
 		size += run.Bytes

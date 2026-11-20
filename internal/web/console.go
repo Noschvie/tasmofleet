@@ -128,7 +128,7 @@ func consoleLines(data consoleData, since, now time.Time) []ui.ConsoleLine {
 func (h *handler) renderConsole(w http.ResponseWriter, r *http.Request, status int, d model.Device, data consoleData) {
 	data.Device = d
 	data.History = h.consoleHistory(r, d.ID)
-	v := h.view(r, d.Name+" console", "devices", nil)
+	v := h.view(r, d.Name+" console", "device", nil)
 	data.Tabs = h.tabsOf(r, v, d, "console")
 	since := r.FormValue("since")
 	now := h.d.Clock.Now()

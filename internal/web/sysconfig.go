@@ -363,7 +363,7 @@ const sysResetText = "Every setting on this page goes back to its default: the d
 func (h *handler) sysResetConfirm(w http.ResponseWriter, r *http.Request) {
 	h.renderActionConfirm(w, r, "system", actionConfirm{
 		Title: "Reset all settings?", Heading: "Reset all settings", Text: sysResetText,
-		Crumbs: []confirmLink{{"/settings/system", "Settings"}, {sysPath + "?tab=advanced", "Advanced"}}, Last: "Reset",
+		Crumbs: []confirmLink{sysTabLink("advanced")}, Last: "Reset",
 		Action: sysPath + "/reset", Verb: "Reset settings", CancelHref: sysPath + "?tab=advanced", CancelLabel: "Cancel",
 	})
 }

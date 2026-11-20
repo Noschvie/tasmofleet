@@ -749,7 +749,7 @@ func (h *handler) gtPreviewRender(w http.ResponseWriter, r *http.Request, req te
 		return
 	}
 	v := h.view(r, "Apply GPIO template", "policy", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "GPIO templates", Path: policyTemplatesPath}, {Label: "Apply"}}
+	v.Crumbs = []ui.Crumb{{Label: "GPIO templates", Path: policyTemplatesPath}, {Label: "Apply"}}
 	p := h.gtPreviewOf(pv, req, r.PostForm.Get("how"), v)
 	p.Stale, p.NeedTick = stale, needTick
 	h.show(w, r, status, "policy_templates_preview", v, gpioPreviewPage(p))
@@ -841,6 +841,6 @@ func (h *handler) gtApply(w http.ResponseWriter, r *http.Request) {
 		s.Skipped = append(s.Skipped, fixSkipView{Label: d.Name, Reason: x.Reason})
 	}
 	v := h.view(r, "Apply GPIO template", "policy", nil)
-	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "GPIO templates", Path: policyTemplatesPath}, {Label: "Apply"}}
+	v.Crumbs = []ui.Crumb{{Label: "GPIO templates", Path: policyTemplatesPath}, {Label: "Apply"}}
 	h.show(w, r, http.StatusOK, "policy_templates_started", v, gpioStartedPage(v.Base, s))
 }

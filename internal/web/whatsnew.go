@@ -123,10 +123,7 @@ func (h *handler) whatsNew(w http.ResponseWriter, r *http.Request) {
 	h.markNewsSeen(r)
 	v := h.view(r, "What’s new", "about", nil)
 	p.Base, p.IsAdmin = v.Base, v.IsAdmin
-	v.Crumbs = []ui.Crumb{{Label: "System"}, {Label: "About"}, {Label: "What’s new"}}
-	if v.IsAdmin { // About is an admin page; the others see the step without a link
-		v.Crumbs[1].Path = "/about"
-	}
+	v.Crumbs = []ui.Crumb{{Label: "What’s new"}} // About is an admin page: Trail links it for admins only
 	h.show(w, r, http.StatusOK, "whatsnew", v, whatsNewPage(p))
 }
 

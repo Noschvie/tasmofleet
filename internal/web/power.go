@@ -178,7 +178,8 @@ func (h *handler) devicePower(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get("HX-Request") == "" {
 		if perr != nil || why != "" {
-			v := h.view(r, d.Name, "devices", cell.Error)
+			v := h.view(r, d.Name, "device", cell.Error)
+			v.Crumbs = deviceCrumbs(d)
 			h.message(w, r, status, v)
 			return
 		}

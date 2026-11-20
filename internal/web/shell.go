@@ -29,6 +29,13 @@ func shellData(v view) ui.ShellData {
 	}
 }
 
+// trailOf is the whole trail of a page, for an htmx out-of-band swap that must replace the page's trail:
+// the same one the full page draws, because the group and the lit entry come from Trail, not from the caller.
+func trailOf(v view, nav string, steps ...ui.Crumb) []ui.Crumb {
+	v.Nav, v.Crumbs = nav, steps
+	return shellData(v).Trail()
+}
+
 // themeOf reads the stored theme choice; anything but light or dark is Auto.
 func themeOf(prefs map[string]string) string {
 	var t string
@@ -54,8 +61,7 @@ func validateTheme(raw []byte) (string, error) {
 	return "", errPref
 }
 
-// page writes a full page: the shell around content. A not-yet-ported page passes its legacy
-// content; when that content draws its own breadcrumb trail, the shell draws none.
+// page writes a full page: the shell around content.
 func (h *handler) page(r *http.Request, v view, prefs map[string]string, content templ.Component) ([]byte, error) {
 	v.Theme = themeOf(prefs)
 	v.News = newsCount(prefs)
@@ -68,11 +74,6 @@ func (h *handler) page(r *http.Request, v view, prefs map[string]string, content
 	var inner bytes.Buffer
 	if err := content.Render(r.Context(), &inner); err != nil {
 		return nil, err
-	}
-	// Only a legacy trail (nav.crumb.trail) replaces the shell's; a ui.Crumbs inside the content
-	// (the style guide's sample) is content.
-	if bytes.Contains(inner.Bytes(), []byte(`<nav class="crumb trail" aria-label="Breadcrumb">`)) {
-		d.Crumbs = []ui.Crumb{}
 	}
 	var buf bytes.Buffer
 	if err := ui.Shell(d, rendered(inner.Bytes())).Render(r.Context(), &buf); err != nil {

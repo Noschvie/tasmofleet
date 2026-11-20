@@ -10,7 +10,8 @@ import "strings"
 type NavItem struct {
 	Key, Label, Path string
 	Current          bool
-	Badge            int // a count that needs attention (new devices on "Add"); 0 = none
+	Badge            int  // a count that needs attention (new devices on "Add"); 0 = none
+	Admin            bool // the page answers 403 to other roles: a crumb of it is plain text for them
 }
 
 // NavGroupData is one top-bar group with its pages. Path is where the group button leads: its
@@ -28,14 +29,16 @@ type Crumb struct {
 	KeepQuery   bool
 }
 
-// NavGroup names the group a page belongs to ("dashboard", "devices", "updates", "system"). Pages
-// outside the menu (messages, not found, the setup) belong to Dashboard, as the prototype's error
+// NavGroup names the group a page belongs to ("dashboard", "devices", "updates", "system"). The
+// key "device" is a page of one device (its tabs and the pages that act on it): it belongs to the
+// Devices group and lights no sub-navigation entry, because a device is reached from several
+// tabs and hangs directly under the group in the trail. Pages outside the menu (messages, not found, the setup) belong to Dashboard, as the prototype's error
 // screens do, so the top bar keeps its sub-navigation row and the title never jumps.
 func NavGroup(nav string) string {
 	switch nav {
 	case "dashboard", "", "setup":
 		return "dashboard"
-	case "devices", "discovery", "policy", "backups":
+	case "devices", "device", "discovery", "policy", "backups":
 		return "devices"
 	case "updates", "transactions", "firmware":
 		return "updates"
@@ -73,7 +76,7 @@ func (d ShellData) Groups() []NavGroupData {
 		g := NavGroupData{Key: key, Label: label, Current: NavGroup(d.Nav) == key}
 		for _, e := range items {
 			if e.on {
-				it := NavItem{Key: e.key, Label: e.label, Path: e.path, Current: e.key == cur && g.Current}
+				it := NavItem{Key: e.key, Label: e.label, Path: e.path, Current: e.key == cur && g.Current, Admin: e.admin}
 				if e.key == "add" {
 					it.Badge = d.NewDevices
 				}
@@ -128,50 +131,59 @@ func (d ShellData) currentGroup() (NavGroupData, bool) {
 	return NavGroupData{}, false
 }
 
-// Trail is the breadcrumb trail of the page: the page's own (Crumbs) when the handler built
-// one, else group / page / title from the navigation model, like the prototype's PATH table.
-// Pages outside the groups get Dashboard / title.
+// Trail is the breadcrumb trail of the page, and the only place that builds its start (#1000):
+// the group (the top-bar button), then the sub-navigation entry the page lights up, then the
+// page's own steps (Crumbs, which therefore holds no group and no entry). The trail and the
+// lit entry cannot disagree, because both come from Groups(). A page that lights no entry (a
+// device, the account page) goes straight from the group to its own steps. Without own steps
+// the trail ends at the entry, or at the title when the page is deeper than the entry. Pages
+// outside the groups get Dashboard / title.
 func (d ShellData) Trail() []Crumb {
-	if d.Crumbs != nil {
-		return d.Crumbs
-	}
 	home := Crumb{Label: "Dashboard", Path: "/"}
 	g, ok := d.currentGroup()
 	if !ok || len(g.Items) == 0 {
-		return []Crumb{home, {Label: d.Title}}
+		return append([]Crumb{home}, d.steps()...)
 	}
 	var item NavItem
-	first := false
-	for i, it := range g.Items {
+	for _, it := range g.Items {
 		if it.Current {
-			item, first = it, i == 0
+			item = it
 		}
 	}
 	onItem := item.Key != "" && strings.TrimSuffix(d.Path, "/") == strings.TrimSuffix(item.Path, "/")
 	if g.Key == "dashboard" {
-		if onItem {
+		if onItem && len(d.Crumbs) == 0 {
 			return []Crumb{{Label: "Dashboard"}}
 		}
-		return []Crumb{home, {Label: d.Title}}
+		return append([]Crumb{home}, d.steps()...)
 	}
 	group := Crumb{Label: g.Label}
 	if g.Key != "system" { // System has no page of its own
 		group.Path = g.Path
 	}
-	switch {
-	case item.Key == "": // a page of the group that is no menu entry (the account page)
-		return []Crumb{group, {Label: d.Title}}
-	case onItem && first && g.Key != "system":
-		return []Crumb{{Label: g.Label}}
-	case onItem:
-		return []Crumb{group, {Label: item.Label}}
-	case first && g.Key != "system":
-		return []Crumb{group, {Label: d.Title}}
+	// A device page leads back to the list as the person left it (#127, listback.js).
+	group.KeepQuery = d.Nav == "device"
+	if item.Key == "" { // a page of the group that is no menu entry (a device, the account page)
+		return append([]Crumb{group}, d.steps()...)
 	}
-	if d.Title == item.Label { // the page is the entry's own answer (POST result): no doubled crumb
-		return []Crumb{group, {Label: item.Label}}
+	entry := Crumb{Label: item.Label}
+	// A page that is the entry's own answer (a POST result titled like it) is the entry: no doubled crumb.
+	below := len(d.Crumbs) > 0 || (!onItem && d.Title != item.Label)
+	if below && (d.IsAdmin || !item.Admin) { // not a link the person cannot open
+		entry.Path = item.Path
 	}
-	return []Crumb{group, {Label: item.Label, Path: item.Path}, {Label: d.Title}}
+	if !below {
+		return []Crumb{group, entry}
+	}
+	return append([]Crumb{group, entry}, d.steps()...)
+}
+
+// steps is the page's own steps, or its title when it has none.
+func (d ShellData) steps() []Crumb {
+	if len(d.Crumbs) > 0 {
+		return d.Crumbs
+	}
+	return []Crumb{{Label: d.Title}}
 }
 
 // Initials are the avatar's letters: the first letters of the first two words of the name, or

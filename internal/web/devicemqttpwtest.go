@@ -74,7 +74,7 @@ func (h *handler) passwordTest(w http.ResponseWriter, r *http.Request) {
 		if outcome == "error" {
 			h.log.WarnContext(r.Context(), "password test did not get an answer", "device", int64(d.ID)) // no err: the channel's text is not ours
 		}
-		h.message(w, r, http.StatusOK, h.view(r, "Password not tested", "devices", messageData{Text: text, LinkText: "Back to " + d.Name, Link: devPath(d.ID, "")}))
+		h.message(w, r, http.StatusOK, h.deviceMessageView(r, d, "Password not tested", messageData{Text: text, LinkText: "Back to " + d.Name, Link: devPath(d.ID, "")}))
 	}
 }
 
