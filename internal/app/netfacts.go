@@ -19,7 +19,7 @@ const (
 
 // netFactsReader reads the network facts (Prober.ReadNet) in the background, never as part of
 // first contact or a refresh: devices that are online and were never read (import, add), and
-// devices whose identity was just refreshed (later), one queued read per device however many refreshes
+// devices whose identity was just refreshed and found on Wi-Fi (later), one queued read per device however many refreshes
 // asked. One device at a time, so a device sees at most one Status command at a time from here.
 type netFactsReader struct {
 	list   func(context.Context) ([]model.Device, error)

@@ -65,7 +65,7 @@ type Prober struct {
 	// Broker is the tasmofleet broker; nil when none is configured.
 	Broker brokerMatcher
 	// ReadNetLater queues the background read of a device's network facts (ReadNet) after a
-	// refresh; nil in processes without one (the CLI): the server's reader catches up.
+	// refresh that found the device on Wi-Fi (a wired one has no Status 11 to wait for); nil in processes without one (the CLI): the server's reader catches up.
 	ReadNetLater func(model.DeviceID)
 	// Hub, if set, hears of every stored probe result (Refresh, ReadNet) as a device event, so open
 	// device tables reload and show the new firmware, module and network facts. Nil in the CLI.
@@ -620,10 +620,15 @@ func dnsServers(servers ...string) string {
 	return strings.Join(set, ", ")
 }
 
+// onWifi says whether the link of freshly read network facts is Wi-Fi, so the access point facts of Status 11 apply.
+// A wired board is on no access point: no Status 11 is asked and no Wi-Fi facts are kept. The answer always comes from
+// a fresh Status 5, never from the stored facts, because a board can move between Ethernet and Wi-Fi (#1015).
+func onWifi(n model.NetFacts) bool { return !n.Wired }
+
 // withStoredWifi completes the facts of a Status 5 read with the Wi-Fi facts stored earlier
 // (Status 11 is read only in the background); a wired board is on no access point.
 func (p *Prober) withStoredWifi(stored, n model.NetFacts) model.NetFacts {
-	if !n.Wired {
+	if onWifi(n) {
 		n.SSID, n.BSSID, n.Channel = stored.SSID, stored.BSSID, stored.Channel
 	}
 	n.ReadAt = p.now()
@@ -659,7 +664,7 @@ func (p *Prober) status11(ctx context.Context, t tasmota.Target, net *model.NetF
 // time, never Status 0) and stores them. It runs in the background (netFactsReader), never as
 // part of first contact or a refresh. Minimal firmware and the safeboot image answer neither command: nothing is read.
 // Status 5 is its own check: over MQTT it hears every reply on the topic (hearsAll, #804), and when that learns
-// nothing it goes to the address alone; Status 11 follows it where it was answered.
+// nothing it goes to the address alone; Status 11 follows it where it was answered, for a board on Wi-Fi only (onWifi).
 func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
@@ -715,7 +720,7 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		at = pinTo(ctx, check)
 	}
 	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
-	if !net.Wired {
+	if onWifi(net) {
 		rp.status11(at, t, &net)
 	}
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
@@ -1268,7 +1273,10 @@ func (p *Prober) refresh(ctx context.Context, id model.DeviceID, actor string, f
 		p.record(ctx, actor, "identity.mqtt_ask", d.ID, "ok", map[string]any{"topic": pr.checkedTopic, "via": "mqtt", "reason": "refresh identity"})
 	}
 	p.announce(id)
-	if p.ReadNetLater != nil && !pr.minimal {
+	// res.SetNet is false only for minimal firmware, which answers neither Status 5 nor Status 11. A device the
+	// refresh found wired gets no read: ReadNet would skip Status 11 and only repeat the Status 5 just stored, holding
+	// the topic for the hear-all window (#1015).
+	if p.ReadNetLater != nil && res.SetNet && onWifi(res.Net) {
 		p.ReadNetLater(id) // the Wi-Fi facts of Status 11 fill in when they arrive
 	}
 	return topicKept

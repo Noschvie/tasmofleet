@@ -366,7 +366,7 @@ data directory (TasmoAdmin lesson A4).
   bare `Upgrade` and the image source of the minimal detection rule), then `Status 6`, `SetOption3`, `Status 1` and plain
   `Status`; docs/security/mqtt-transport.md T20 and "What still uses HTTP"): firmware, build, chip, hardware, language and flash (Status 2/4), the network
   facts of Status 5 (hostname, IP, gateway, subnet mask, DNS servers; Wi-Fi from Status 11 follows
-  in the background), MQTT broker (Status 6, SetOption3), the OTA URL (one read-only `Status 1`, best
+  in the background, only for a device the refresh found on Wi-Fi: a wired board is on no access point), MQTT broker (Status 6, SetOption3), the OTA URL (one read-only `Status 1`, best
   effort, never the `OtaUrl` command; credentials in the URL are stripped before it is stored, a value
   that cannot be parsed is dropped) and DeviceName, resolved topic and relay names (the FriendlyName
   array) from plain `Status`. Subnet, DNS, OTA URL and relay names are stored on the device

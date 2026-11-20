@@ -11,6 +11,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
@@ -266,6 +267,53 @@ func TestFirstContactAndRefreshDoNotWaitForNetworkFacts(t *testing.T) {
 	// Status 11 come with the background read.
 	if dv, _ := st.GetDevice(context.Background(), id); dv.Net.Hostname == "" || dv.Net.SSID != "" {
 		t.Fatalf("after the refresh: %+v", dv.Net)
+	}
+}
+
+// Why: each queued network read holds the device's topic for the 1.5 s hear-all window, so it can delay the next
+// refresh; a wired board's read only repeats the Status 5 the refresh has just stored, because a wired board is on
+// no access point and gets no Status 11 (#1015). The decision follows the refresh's fresh Status 5, never the stored
+// facts: a board can move between Ethernet and Wi-Fi, and a wired-to-Wi-Fi board must still get its Status 11.
+func TestRefreshQueuesTheWifiReadOnlyForADeviceOnWifi(t *testing.T) {
+	eth := strings.Replace(status5Eth, "08:D1:F9:2B:E9:70", "AA:BB:CC:00:00:01", 1) // the stored device's MAC
+	wired := model.NetFacts{Hostname: "old", IP: "192.0.2.77", Wired: true, ReadAt: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)}
+	onWifi := model.NetFacts{Hostname: "old", IP: "192.0.2.77", SSID: "IoT", BSSID: "02:00:5E:00:00:01", Channel: 11, ReadAt: wired.ReadAt}
+	for _, tc := range []struct {
+		name      string
+		stored    model.NetFacts
+		status5   string
+		wantKicks int
+	}{
+		{"stored on Wi-Fi, now wired: nothing to read", onWifi, eth, 0},
+		{"stored wired, now on Wi-Fi: Status 11 is due", wired, status5Net, 1},
+		{"on Wi-Fi before and now", onWifi, status5Net, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, st, id, _, _ := raceSetup(t)
+			cur, err := st.GetDevice(context.Background(), id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.UpdateNet(context.Background(), id, store.ProbeGuard{Address: cur.Address, Port: cur.Port, MAC: cur.MAC}, tc.stored); err != nil {
+				t.Fatal(err)
+			}
+			p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": tc.status5}}
+			var kicked []model.DeviceID
+			p.ReadNetLater = func(id model.DeviceID) { kicked = append(kicked, id) }
+			if err := p.Refresh(context.Background(), id, ""); err != nil {
+				t.Fatal(err)
+			}
+			if len(kicked) != tc.wantKicks {
+				t.Fatalf("refresh queued %d network reads, want %d", len(kicked), tc.wantKicks)
+			}
+			if tc.wantKicks == 0 {
+				// The refresh itself must bring everything a wired board shows: nothing follows it.
+				dv, _ := st.GetDevice(context.Background(), id)
+				if !dv.Net.Wired || dv.Net.SSID != "" || dv.Net.Subnet != "255.255.255.0" || dv.Net.DNS != "192.168.7.1" {
+					t.Fatalf("stored Net after a wired refresh: %+v", dv.Net)
+				}
+			}
+		})
 	}
 }
 
