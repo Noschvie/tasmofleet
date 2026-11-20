@@ -40,6 +40,10 @@ type Controller interface {
 	// SetWifi changes the reported signal (dBm) and LinkCount from now on, as if the link got worse;
 	// 0 keeps the current value.
 	SetWifi(signalDBm, linkCount int)
+	// SetNet changes the subnet mask and the first DNS server Status 5 reports from now on (of the active
+	// interface: the Ethernet object of a wired device), as if the DHCP lease changed; "" keeps the current
+	// value. RAM only: kept across a reboot, gone with the device.
+	SetNet(subnet, dns string)
 	// PowerOff is the plug being pulled: the MQTT connection drops uncleanly (the
 	// broker publishes the will, LWT Offline) and the HTTP port stops. The device
 	// does not come back.
@@ -237,6 +241,17 @@ func (d *simDevice) SetWifi(signalDBm, linkCount int) {
 	}
 	if linkCount != 0 {
 		d.spec.LinkCount = linkCount
+	}
+}
+
+func (d *simDevice) SetNet(subnet, dns string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if subnet != "" {
+		d.netSubnet = subnet
+	}
+	if dns != "" {
+		d.netDNS = dns
 	}
 }
 

@@ -102,6 +102,11 @@ type simDevice struct {
 	attempts       int     // download attempts of the latest OTA
 	nextImage      *flashed
 	restartQueued  bool // a settings change already scheduled the restart
+
+	// netSubnet and netDNS replace the capture's Subnetmask and DNSServer1 in Status 5 when not "" (SetNet).
+	// RAM only, kept across a reboot like a DHCP lease that stays the same; gone with the device.
+	netSubnet, netDNS string
+
 	// uploadType is Web.upload_file_type: GET /up, /rs and /ufsd set it, a finished /u2 upload
 	// clears it. A POST the Referer check drops leaves it as it was.
 	uploadType uploadKind
@@ -269,7 +274,7 @@ func (d *simDevice) viewLocked() view {
 		now: time.Now(), startup: d.bootAt.Add(-time.Duration(d.uptimeBase) * time.Second),
 		uptimeSec: d.uptimeBase + int(time.Since(d.bootAt).Seconds()),
 		relays:    slices.Clone(d.relays), light: d.spec.Light, noRelay: d.spec.NoRelay, otaURL: d.runtime.otaURL, bootCount: d.runtime.bootCount,
-		signalDBm: d.spec.SignalDBm, linkCount: d.spec.LinkCount,
+		signalDBm: d.spec.SignalDBm, linkCount: d.spec.LinkCount, netSubnet: d.netSubnet, netDNS: d.netDNS,
 		mqttCount: d.mqttCount, reason: d.reason, image: d.image, version: d.version, kv: cloneKV(d.runtime.kv),
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Why: the e2e tests pull plugs and press buttons through the control server by device name. A
@@ -172,5 +173,69 @@ func TestStabilityShapesAreOptInAndAllStart(t *testing.T) {
 		if !strings.Contains(text, "name="+s.Name+" ") {
 			t.Errorf("shape %s did not start", s.Name)
 		}
+	}
+}
+
+// Why: the Ethernet refresh e2e test (#1044) changes the subnet mask and DNS a device reports through the control
+// server; a name it does not know must answer 404, a missing or non-IPv4 value 400 that changes nothing (a typo in a
+// test must not look like "the app did not read it"), and a good request 204 with the values in Status 5.
+func TestControlNetRefusesWhatItDoesNotKnowAndChangesStatus5(t *testing.T) {
+	f, err := simulator.NewFleetWith(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures", TelePeriod: time.Second}, simulator.Extra{TimeScale: 0.02})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	d, err := f.Add(t.Context(), simulator.DeviceSpec{Name: "rack", Profile: simulator.ProfileESP32, Wired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := &deviceRegistry{byName: map[string]simulator.Device{"rack": d}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /device/{name}/net", reg.netFacts)
+	status5 := func() string {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+d.Addr()+"/cm?cmnd=Status%205", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	post := func(path string) int {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("POST", path, nil))
+		return rec.Code
+	}
+	before := status5()
+	for path, want := range map[string]int{
+		"/device/nobody/net?subnet=255.255.254.0":        http.StatusNotFound,
+		"/device/rack/net":                               http.StatusBadRequest,
+		"/device/rack/net?subnet=not-an-address":         http.StatusBadRequest,
+		"/device/rack/net?dns=2001:db8::1":               http.StatusBadRequest,
+		"/device/rack/net?subnet=255.255.254.0&dns=nope": http.StatusBadRequest,
+	} {
+		if got := post(path); got != want {
+			t.Errorf("%s: %d, want %d", path, got, want)
+		}
+	}
+	if after := status5(); after != before {
+		t.Errorf("a refused request changed Status 5:\nbefore %s\nafter  %s", before, after)
+	}
+	if got := post("/device/rack/net?dns=203.0.113.7"); got != http.StatusNoContent {
+		t.Fatalf("one value alone: %d, want 204", got)
+	}
+	s := status5()
+	if !strings.Contains(s, `"DNSServer1":"203.0.113.7"`) || !strings.Contains(s, `"Subnetmask":"255.255.255.0"`) {
+		t.Errorf("dns alone must change the DNS and keep the subnet mask: %s", s)
+	}
+	if got := post("/device/rack/net?subnet=255.255.254.0"); got != http.StatusNoContent {
+		t.Fatalf("subnet alone: %d, want 204", got)
+	}
+	if s := status5(); !strings.Contains(s, `"Subnetmask":"255.255.254.0"`) || !strings.Contains(s, `"DNSServer1":"203.0.113.7"`) {
+		t.Errorf("subnet alone must change the mask and keep the DNS: %s", s)
 	}
 }

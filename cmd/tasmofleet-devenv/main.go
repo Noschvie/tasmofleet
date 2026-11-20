@@ -19,6 +19,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path"
@@ -463,6 +464,8 @@ func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, reg
 	mux.HandleFunc("POST /device/{name}/relay/{n}/{state}", reg.relay)
 	mux.HandleFunc("POST /device/{name}/restart", reg.restart)
 	mux.HandleFunc("POST /device/{name}/wifi", reg.wifi)
+	// /net?subnet=255.255.254.0&dns=203.0.113.7: the subnet mask and DNS server its Status 5 reports change from now on.
+	mux.HandleFunc("POST /device/{name}/net", reg.netFacts)
 	if df != nil {
 		mux.HandleFunc("POST /fixture/offline", func(w http.ResponseWriter, _ *http.Request) {
 			df.GoOffline()
@@ -743,5 +746,29 @@ func (r *deviceRegistry) wifi(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	c.SetWifi(sig, links)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// netFacts is POST /device/{name}/net?subnet=..&dns=..: the device reports another subnet mask and first DNS server
+// of its active interface from now on, as if its DHCP lease changed (#1044). At least one value is given; each
+// must be an IPv4 address, otherwise nothing changes (400).
+func (r *deviceRegistry) netFacts(w http.ResponseWriter, req *http.Request) {
+	c, ok := r.control(w, req)
+	if !ok {
+		return
+	}
+	q := req.URL.Query()
+	subnet, dns := q.Get("subnet"), q.Get("dns")
+	if subnet == "" && dns == "" {
+		http.Error(w, "give subnet and/or dns", http.StatusBadRequest)
+		return
+	}
+	for _, v := range []string{subnet, dns} {
+		if a, err := netip.ParseAddr(v); v != "" && (err != nil || !a.Is4()) {
+			http.Error(w, "subnet and dns are IPv4 addresses", http.StatusBadRequest)
+			return
+		}
+	}
+	c.SetNet(subnet, dns)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -26,6 +26,8 @@ type view struct {
 	image                string
 	version              string
 	kv                   map[string]string
+	// netSubnet and netDNS replace the captured Subnetmask and DNSServer1 of Status 5 when not "".
+	netSubnet, netDNS string
 }
 
 var (
@@ -88,8 +90,12 @@ func (d *simDevice) render(file string, v view) []byte {
 	if d.spec.Locale != "" {
 		s = reLocale.ReplaceAllLiteralString(s, `"Features":["`+d.spec.Locale+`"`)
 	}
-	if file == "status-5.json" && d.spec.Wired {
-		s = d.wiredStatus5(s)
+	if file == "status-5.json" {
+		// before the wired transform, which then carries the values into the Ethernet object by itself
+		s = applyNet(s, v.netSubnet, v.netDNS)
+		if d.spec.Wired {
+			s = d.wiredStatus5(s)
+		}
 	}
 	if d.f.x.Verbatim {
 		return []byte(s)
@@ -175,6 +181,27 @@ var (
 	ethKeys       = []string{"Hostname", "IPAddress", "Gateway", "Subnetmask", "DNSServer1", "DNSServer2", "Mac"}
 	idleEthValues = []string{"IPAddress", "Gateway", "Subnetmask", "DNSServer1"}
 )
+
+// applyNet replaces the first Subnetmask and DNSServer1 of the StatusNET object (the top level one, ahead
+// of any "Ethernet" object) with the given values; "" keeps the captured one, and a key the capture lacks
+// stays absent.
+func applyNet(s, subnet, dns string) string {
+	m := reStatusNET.FindString(s)
+	if m == "" {
+		return s
+	}
+	n := m
+	for k, v := range map[string]string{"Subnetmask": subnet, "DNSServer1": dns} {
+		if v == "" {
+			continue
+		}
+		re := regexp.MustCompile(`"` + k + `":"[^"]*"`)
+		if loc := re.FindStringIndex(n); loc != nil {
+			n = n[:loc[0]] + `"` + k + `":` + jsonString(v) + n[loc[1]:]
+		}
+	}
+	return strings.Replace(s, m, n, 1)
+}
 
 // wiredStatus5 turns the captured Status 5 into an Ethernet board's: the Wi-Fi values at the top
 // level stay unset and the "Ethernet" object carries the active interface (own MAC, as on a

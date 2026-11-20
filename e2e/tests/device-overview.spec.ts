@@ -236,14 +236,31 @@ for (const shape of shapes) {
   }
 }
 
-// Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them.
-test("an Ethernet device shows subnet mask and DNS after Refresh identity", async ({ page }) => {
+// Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them (#1044).
+// The simulator reports the same captured values on every read and the shape tests above already refreshed this device,
+// so a refresh that read nothing would still show them. The test therefore changes what the device reports, to values
+// that differ from what the page shows now and from the capture, and expects exactly those after the refresh. They are
+// derived from the repetition (--repeat-each) and moved on until they differ from what an earlier run stored: the stack
+// keeps the stored facts for the rest of the file.
+const captured = { subnet: "255.255.255.0", dns: "172.31.13.1" };
+const subnets = ["255.255.254.0", "255.255.252.0", "255.255.248.0", "255.255.240.0", "255.255.224.0", "255.255.192.0"];
+test("an Ethernet device shows the subnet mask and DNS the refresh read", async ({ page }, testInfo) => {
   await openDevice(page, "ov-ethernet-rack");
+  const dd = (label: string) => page.locator("#devconn").locator("dt", { hasText: label }).locator("xpath=following-sibling::dd");
+  // read before the control call: the page that is open now was loaded before the values change, so it cannot have them;
+  // a device nothing has been read from yet has no such row (the card is not the Ethernet card), which is no failure here
+  const text = async (label: string) => ((await dd(label).count()) ? (await dd(label).textContent())?.trim() : undefined);
+  const shown = { subnet: await text("Subnet mask"), dns: await text("DNS") };
+  const subnet = subnets.map((_, i) => subnets[(testInfo.repeatEachIndex + i) % subnets.length]).find((v) => v !== shown.subnet && v !== captured.subnet)!;
+  const dns = Array.from({ length: 254 }, (_, i) => `203.0.113.${1 + ((testInfo.repeatEachIndex + i) % 254)}`).find((v) => v !== shown.dns && v !== captured.dns)!;
+  expect(shown.subnet).not.toBe(subnet);
+  expect(shown.dns).not.toBe(dns);
+
+  await control(`/device/ov-ethernet-rack/net?subnet=${subnet}&dns=${dns}`);
   await refreshIdentity(page);
   await page.reload();
-  const conn = page.locator("#devconn");
-  await expect(conn.locator("dt", { hasText: "Subnet mask" }).locator("xpath=following-sibling::dd")).not.toHaveText("Unknown");
-  await expect(conn.locator("dt", { hasText: "DNS" }).locator("xpath=following-sibling::dd")).not.toHaveText("Unknown");
+  await expect(dd("Subnet mask")).toHaveText(subnet);
+  await expect(dd("DNS")).toHaveText(dns);
 });
 
 // Mockup 8 in both schemes and sizes: an offline device with relays dimmed. One test, because the plug
