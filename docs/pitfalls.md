@@ -388,9 +388,15 @@ means nothing stops you: you have to know it. The full working rules are in
   changed or not. A `syncAll` that walks the whole document was added to `htmx:afterSwap` (#594), and the
   open page fell 10 s and more behind its server; the nightly e2e job failed on it (#703).
 - **Rule:** a listener on `htmx:afterSwap` or `htmx:afterSettle` runs for every live cell: check the swap's
-  target first and keep per-swap work off the whole document (`syncAll` at `htmx:afterSettle` still walks it
-  once per swap: the next thing to scope). Live cells whose fragment did not change are not swapped (`live.js`).
-- **Enforced:** `e2e/tests/live-cell-swaps.spec.ts` counts swaps and document-wide syncs per live cell.
+  target first and keep per-swap work off the whole document. Since #1059 every such listener in
+  `internal/web/static` reads the swapped element (`e.target`) and its subtree and returns at once when what it
+  works on cannot be in it; `syncAll` (`select.js`) runs document-wide only for a swap that is or holds a
+  selection control, box or output (the list reload), and a health cell only touches its own row. The runs at
+  `DOMContentLoaded` and `pageshow` stay document-wide (#594). A new listener follows the same pattern. Live
+  cells whose fragment did not change are not swapped (`live.js`).
+- **Enforced:** `e2e/tests/live-cell-swaps.spec.ts` counts swaps per live cell and every
+  `document.querySelector` and `document.querySelectorAll` call during the `htmx:afterSwap` and
+  `htmx:afterSettle` of a live cell (expected 0), and that a list reload still runs `syncAll`.
 
 ## Releases
 

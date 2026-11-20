@@ -108,6 +108,32 @@ test("the settings placeholder is busy and says it is still working after 10 s",
   await expect(page.locator("form[data-track-changes]")).toBeVisible();
 });
 
+// Why (#1059): a section that arrives inside a swap (the age line of a settings form that is being refreshed) is
+// watched like one the page was served with. form.js looks at the swapped element only, no longer at the whole
+// document after every swap, so the element and its subtree must still be found.
+test("a loading section that arrives by a swap says it is still working after 10 s (#1059)", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices");
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/late-section", async (route) => {
+    await gate;
+    await route.fulfill({ status: 200, contentType: "text/html", body: "<p>done</p>" });
+  });
+  await page.evaluate(() => {
+    const host = document.createElement("div");
+    host.id = "late-host";
+    document.body.append(host);
+    // @ts-expect-error htmx is a page global
+    window.htmx.swap(host, '<p id="late" aria-busy="true" hx-get="/late-section" hx-trigger="load" hx-swap="outerHTML">Loading</p>', { swapStyle: "innerHTML" });
+  });
+  await expect(page.locator("#late")).toHaveAttribute("data-busy-watch", "");
+  await expect(page.locator("#toasts")).not.toContainText("Still working");
+  await expect(page.locator("#toasts")).toContainText("Still working", { timeout: 15_000 });
+  release();
+  await expect(page.locator("#late")).toHaveCount(0);
+});
+
 // Why: the busy state must start only after the browser has read the form, because a disabled
 // button is left out of it. A quick command is a submit button whose name/value IS the command.
 test("a named submitter still sends its value", { tag: "@core" }, async ({ page }) => {

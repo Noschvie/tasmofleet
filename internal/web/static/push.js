@@ -449,7 +449,14 @@
     true,
   );
 
-  document.addEventListener("htmx:afterSettle", mark); // a row came back from a swap
+  // a row came back from a swap: only a swap that is or holds a row needs mark, which walks the document
+  // (#1059; the live cells of the device list swap about 90 times a second)
+  document.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    if (t instanceof Element && (t.matches("[data-push-this]") || t.querySelector("[data-push-this]"))) {
+      mark();
+    }
+  });
   try {
     root.navigator.permissions
       .query({ name: "notifications" })

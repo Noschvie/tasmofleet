@@ -114,46 +114,91 @@ test("a live cell is swapped only when its fragment differs from the last one it
   await expect(cell).not.toContainText("stale", { timeout: 15_000 });
 });
 
-// syncAll (select.js) walks the whole document: it shows the select-all controls and fills the bulk bar
-// (#594). It runs when a swap brings those controls in (the list, the scan results), not for the single
-// cells of the live stream, which settle one by one (htmx:afterSettle still runs it for them).
-test("a live cell swap does not run the document-wide select sync, a list reload does", async ({
+// A listener of htmx:afterSwap or htmx:afterSettle runs once per swapped element, and the live cells of the list
+// swap about 90 times a second on 60 devices (#726, #1059). What it asks the whole document there is the cost: so
+// no document.querySelector or document.querySelectorAll call may happen while a live cell settles; each listener
+// reads the swapped element and its subtree (select.js, copy.js, form.js, notify.js, push.js, live.js, listback.js,
+// tabs.js). syncAll (select.js) is the one that must still walk the document, for a list reload: it shows the
+// select-all controls and fills the bulk bar (#594).
+test("a live cell swap asks the document nothing, a list reload still runs the select sync", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.setExtraHTTPHeaders(adam);
-  type Sync = { runs: number; cell: number[]; list: number[] };
+  type Phase = { cell: number[]; list: number[] };
+  type Sync = {
+    all: number; // every document.querySelector and document.querySelectorAll call
+    selectAll: number; // the calls of syncAll for the select-all controls
+    swap: Phase; // calls during htmx:afterSwap, per live cell and per list reload
+    settle: Phase; // calls during htmx:afterSettle
+    selectSwap: number[]; // select-all calls during the afterSwap / afterSettle of a list reload
+    selectSettle: number[];
+    offenders: string[]; // the selectors asked during a live cell's afterSwap or afterSettle
+    inCell: boolean;
+  };
   await page.addInitScript(() => {
-    // syncAll asks the document for the select-all controls once per run; nothing else does.
     const w = window as unknown as { __sync: Sync };
-    w.__sync = { runs: 0, cell: [], list: [] };
+    w.__sync = {
+      all: 0,
+      selectAll: 0,
+      swap: { cell: [], list: [] },
+      settle: { cell: [], list: [] },
+      selectSwap: [],
+      selectSettle: [],
+      offenders: [],
+      inCell: false,
+    };
     const qsa = document.querySelectorAll.bind(document);
+    const qs = document.querySelector.bind(document);
     document.querySelectorAll = ((sel: string) => {
-      if (sel === "[data-select-all]") w.__sync.runs++;
+      w.__sync.all++;
+      if (sel === "[data-select-all]") w.__sync.selectAll++;
+      if (w.__sync.inCell) w.__sync.offenders.push("querySelectorAll " + sel);
       return qsa(sel);
     }) as typeof document.querySelectorAll;
+    document.querySelector = ((sel: string) => {
+      w.__sync.all++;
+      if (w.__sync.inCell) w.__sync.offenders.push("querySelector " + sel);
+      return qs(sel);
+    }) as typeof document.querySelector;
   });
   await page.goto(app.url + "/devices");
   await expect(
     page.locator("#devtable [data-select-all]").first(),
   ).toBeAttached({ timeout: 40_000 });
-  // Registered now, so it runs after the page's own document listeners (like swap-no-flash.spec.ts):
-  // the capture listener on window notes the run count before any of them, this one after all of them.
+  // Registered now, so the document listener runs after the page's own document and body listeners (like
+  // swap-no-flash.spec.ts): the capture listener on window notes the counts before any of them, the document
+  // listener after all of them. The same for both events.
   await page.evaluate(() => {
     const w = window as unknown as { __sync: Sync };
-    let before = 0;
-    window.addEventListener(
-      "htmx:afterSwap",
-      () => (before = w.__sync.runs),
-      true,
-    );
-    document.addEventListener("htmx:afterSwap", (e) => {
-      const t = e.target as Element;
-      const ran = w.__sync.runs - before;
-      if (t.matches?.("table [sse-swap], li.dcard [sse-swap]"))
-        w.__sync.cell.push(ran);
-      else if (t.id === "devtable") w.__sync.list.push(ran);
-    });
+    const isCell = (t: Element) =>
+      !!t.matches?.("table [sse-swap], li.dcard [sse-swap]");
+    for (const phase of ["swap", "settle"] as const) {
+      const name = phase === "swap" ? "htmx:afterSwap" : "htmx:afterSettle";
+      let all = 0;
+      let sel = 0;
+      window.addEventListener(
+        name,
+        (e) => {
+          all = w.__sync.all;
+          sel = w.__sync.selectAll;
+          w.__sync.inCell = isCell(e.target as Element);
+        },
+        true,
+      );
+      document.addEventListener(name, (e) => {
+        const t = e.target as Element;
+        w.__sync.inCell = false;
+        const ran = w.__sync.all - all;
+        if (isCell(t)) w.__sync[phase].cell.push(ran);
+        else if (t.id === "devtable") {
+          w.__sync[phase].list.push(ran);
+          (phase === "swap" ? w.__sync.selectSwap : w.__sync.selectSettle).push(
+            w.__sync.selectAll - sel,
+          );
+        }
+      });
+    }
     // The reload makes new cells, and the first fragment of a new cell is always swapped.
     // @ts-expect-error htmx is a page global
     window.htmx.trigger("#devtable", "sse:resync");
@@ -161,22 +206,38 @@ test("a live cell swap does not run the document-wide select sync, a list reload
   const read = () =>
     page.evaluate(() => (window as unknown as { __sync: Sync }).__sync);
   await expect
-    .poll(async () => (await read()).list.length, { timeout: 15_000 })
+    .poll(async () => (await read()).settle.list.length, { timeout: 15_000 })
     .toBeGreaterThan(0);
   await expect
-    .poll(async () => (await read()).cell.length, {
+    .poll(async () => (await read()).settle.cell.length, {
       timeout: 60_000,
       intervals: [500],
     })
     .toBeGreaterThanOrEqual(5);
   const got = await read();
   expect(
-    got.cell.filter((n) => n > 0),
-    "syncAll runs during the afterSwap of live cells",
+    got.swap.cell.length,
+    "live cells swapped at afterSwap as well",
+  ).toBeGreaterThanOrEqual(5);
+  expect(
+    got.offenders,
+    "a listener asked the whole document while a live cell swapped or settled",
   ).toEqual([]);
   expect(
-    got.list.every((n) => n > 0),
+    got.swap.cell.filter((n) => n > 0),
+    "the document is asked during the afterSwap of live cells",
+  ).toEqual([]);
+  expect(
+    got.settle.cell.filter((n) => n > 0),
+    "the document is asked during the afterSettle of live cells",
+  ).toEqual([]);
+  expect(
+    got.selectSwap.every((n) => n > 0),
     "the list reload still syncs at afterSwap (#594)",
+  ).toBe(true);
+  expect(
+    got.selectSettle.every((n) => n > 0),
+    "the list reload still syncs at afterSettle: settle puts the server's hidden attribute back (#594)",
   ).toBe(true);
 });
 

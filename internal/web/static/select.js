@@ -179,8 +179,9 @@
     return st === "online" || st === "stale";
   }
   // The row menus of the device list: Back up and Restart need a live device.
-  function markDown() {
-    document.querySelectorAll("[data-needs-device]").forEach(function (el) {
+  // root is the document, or the one row whose badge a swap replaced (#1059).
+  function markDown(root) {
+    root.querySelectorAll("[data-needs-device]").forEach(function (el) {
       if (!el.closest("[data-bulkbar]")) {
         var row = el.closest("tr, li.dcard");
         var off = !!row && !answers(row);
@@ -207,7 +208,7 @@
     true,
   );
   function syncAll() {
-    markDown();
+    markDown(document);
     document.querySelectorAll("[data-plan-devices]").forEach(function (p) {
       var f = picker(p);
       if (f) {
@@ -309,7 +310,36 @@
   document.addEventListener("DOMContentLoaded", syncAll);
   // the browser restores checkbox states after back/forward, without a change event
   window.addEventListener("pageshow", syncAll);
-  document.addEventListener("htmx:afterSettle", syncAll);
+
+  // What syncAll and sync read or write: the controls, the boxes and the outputs of a selection. A swap that
+  // is, holds or sits inside none of them has nothing for syncAll to do, and the live cells of the device list
+  // (about 90 swaps a second on 60 devices) are such swaps: the one thing in them that syncAll reads is the
+  // health badge, which only touches its own row (below). The list reload and the scan results hold boxes.
+  var SELECTION =
+    '[data-select-all], [data-plan-devices], [data-needs-device], [data-bulkbar], [data-bar-note], [data-needs-selection], [data-select-suffix], [data-select-n], [data-needs-pair], [data-bar-count], [data-bar-label], input[type="checkbox"][name="id"], input[type="checkbox"][name="device"]';
+  function within(t, sel) {
+    return t.matches(sel) || !!t.querySelector(sel);
+  }
+  document.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    if (!(t instanceof Element)) {
+      return;
+    }
+    if (within(t, SELECTION)) {
+      syncAll(); // cross-region by nature: the bulk bar counts every ticked row
+    } else if (t.closest("[data-state]") || t.querySelector("[data-state]")) {
+      // a health cell: the row menu (Back up now, Restart) and the bar note follow the badge of this row
+      var row = t.closest("tr, li.dcard");
+      var box = row && row.querySelector('input[name="id"]:checked, input[name="device"]:checked');
+      if (row) {
+        markDown(row);
+      }
+      var f = box && picker(box);
+      if (f) {
+        sync(f);
+      }
+    }
+  });
 
   // The device list (#devtable) and the Devices card of the Backups page (#950) reload themselves on
   // server events: both are a [data-live-region] whose own insides htmx swaps. A reload would close the
@@ -456,8 +486,8 @@
   // and fills them. Run it as soon as the content is in, after the restore of the ticked rows above (the
   // count follows the ticks), not only at afterSettle: the controls blinked on every list refresh (#594).
   // Only for the swaps that bring those controls (the list and the scan results): syncAll walks the whole
-  // document, and the live cells of a 60-device list swap about 90 times a second (#726); those are still
-  // covered by the afterSettle run above.
+  // document, and the live cells of a 60-device list swap about 90 times a second (#726); the afterSettle
+  // handler above gives those the one thing they change for it, the health badge of their row (#1059).
   document.addEventListener("htmx:afterSwap", function (e) {
     var t = e.target;
     if (t instanceof Element && (region(t) || t.id === "scan" || t.id === "scan-live")) {

@@ -273,3 +273,30 @@ test("insecure page: the card says notifications need HTTPS or localhost", async
   await expect(card(page)).toContainText("HTTPS");
   await expect(card(page).getByRole("button")).toHaveCount(0);
 });
+
+// Why (#1059): the server draws only a neutral frame ("Needs JavaScript"); notify.js fills in the state when
+// the card arrives. The script no longer renders after every settled swap of the page, only after one that
+// brings the card (or the settings page's own swaps would leave the frame as the server sent it).
+test("a card swapped in from the server is drawn again, not left as the neutral frame (#1059)", async ({
+  page,
+  context,
+}) => {
+  await record(context); // headless Chromium reports "denied"; the wrapper answers as a browser that was not asked yet
+  await signIn(page);
+  await openCard(page);
+  await expect(card(page)).toContainText("Off in this browser");
+  await page.evaluate(async () => {
+    const html = await (await fetch(location.href)).text();
+    const fresh = new DOMParser()
+      .parseFromString(html, "text/html")
+      .querySelector("[data-bn]")!.outerHTML;
+    // @ts-expect-error htmx is a page global
+    window.htmx.swap(document.querySelector("[data-bn]")!, fresh, {
+      swapStyle: "outerHTML",
+    });
+  });
+  await expect(card(page)).toContainText("Off in this browser");
+  await expect(
+    card(page).getByRole("button", { name: "Enable browser notifications" }),
+  ).toBeVisible();
+});

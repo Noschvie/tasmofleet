@@ -99,3 +99,29 @@ test("row menu: Back up now is off for a device that does not answer", async ({ 
   await menu(online).locator("summary").click();
   await expect(menu(online).getByRole("menuitem", { name: "Back up now" })).not.toHaveAttribute("aria-disabled", "true");
 });
+
+// #1059: select.js no longer walks the whole document for every settled live cell. The one thing in a live
+// cell that its sync reads is the health badge, so a health cell that turns offline must still switch the
+// row menu's Back up now off and bring the bulk bar's note: a scope that stops at the select-all controls
+// would leave both stale until the next list reload.
+test("a health cell that turns offline switches its row menu and the bulk bar off (#1059)", async ({ page }) => {
+  await open(page, 1280);
+  await deviceBox(page, online).check();
+  const bar = page.locator("[data-bulkbar]");
+  await expect(bar.locator("[data-bar-note]")).toBeHidden();
+  const menu = deviceEntry(page, online).locator("details.rowmenu").first();
+  await menu.locator("summary").click();
+  const item = menu.getByRole("menuitem", { name: "Back up now" });
+  await expect(item).not.toHaveAttribute("aria-disabled", "true");
+  // the swap of one live cell, as the stream does it, with the badge the server renders for a down device
+  await deviceEntry(page, online)
+    .locator("[sse-swap^=health-]")
+    .first()
+    .evaluate((el) => {
+      // @ts-expect-error htmx is a page global
+      window.htmx.swap(el, '<span class="bdg dv-st" data-state="down">Down</span>', { swapStyle: "innerHTML" });
+    });
+  await expect(item).toHaveAttribute("aria-disabled", "true");
+  await expect(bar.locator("[data-bar-note]")).toHaveText(/it is not online$/);
+  for (const b of await bar.locator("[data-needs-device]").all()) await expect(b).toBeDisabled();
+});

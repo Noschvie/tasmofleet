@@ -20,5 +20,11 @@
   }
   // fonts change tab widths; measure again once they are in
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(reveal);
-  document.body.addEventListener("htmx:afterSwap", reveal);
+  // only a swap that is or holds a strip: reveal walks the document (#1059)
+  document.body.addEventListener("htmx:afterSwap", function (e) {
+    var t = e.target;
+    if (t instanceof Element && (t.matches("nav.utabs") || t.querySelector("nav.utabs"))) {
+      reveal();
+    }
+  });
 })();

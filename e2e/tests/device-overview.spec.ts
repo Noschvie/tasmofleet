@@ -145,6 +145,24 @@ test("a pulled plug shows the offline banner, dims and disables, and adds an Act
   await expectNoOverflow(page, "overview offline");
 });
 
+// #1059: syncDeviceDim (live.js) runs for a swap of #devlive, #identity or #devconn, no longer for every settled
+// swap of the page. The Identity card is swapped on its own (#1003), and the server renders it without the dimmed
+// look: a card that arrives while the device is offline has to be dimmed again, and its hidden Copy button
+// (copy.js) has to be shown, or the person gets a card that looks live and a button that is missing.
+test("an Identity card swapped in alone is dimmed for an offline device and keeps its Copy button (#1059)", async ({ page }) => {
+  await openDevice(page, "plug-4m");
+  await page.locator("#devlive").evaluate((el) => el.setAttribute("data-off", ""));
+  await page.evaluate(async () => {
+    const html = await (await fetch(location.href)).text();
+    const fresh = new DOMParser().parseFromString(html, "text/html").querySelector("#identity")!.outerHTML;
+    // @ts-expect-error htmx is a page global
+    window.htmx.swap(document.querySelector("#identity")!, fresh, { swapStyle: "outerHTML" });
+  });
+  await expect(page.locator("#identity")).toHaveClass(/is-dim/);
+  await expect(page.locator("#identity")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator("#identity").getByRole("button", { name: "Copy the TasmoFleet ID" })).toBeVisible();
+});
+
 // #145: the credentials of a device never reach the page
 test("no credentials in the overview", async ({ page }) => {
   const href = await openDevice(page, "locked-plug");

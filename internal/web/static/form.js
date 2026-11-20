@@ -672,20 +672,29 @@
   });
 
   // a section that loads by itself says it is still working too
-  function watchPlaceholders() {
-    document
-      .querySelectorAll(
-        '[aria-busy=true][hx-trigger="load"]:not([data-busy-watch])',
-      )
-      .forEach(function (s) {
-        s.setAttribute("data-busy-watch", "");
-        note(s, function () {
-          return s.isConnected && s.getAttribute("aria-busy") === "true";
-        });
-      });
+  var PLACEHOLDER = '[aria-busy=true][hx-trigger="load"]:not([data-busy-watch])';
+  function watch(s) {
+    s.setAttribute("data-busy-watch", "");
+    note(s, function () {
+      return s.isConnected && s.getAttribute("aria-busy") === "true";
+    });
   }
-  document.addEventListener("DOMContentLoaded", watchPlaceholders);
-  document.addEventListener("htmx:afterSettle", watchPlaceholders);
+  // watchPlaceholders looks at root (the document, or the element a swap settled) and its subtree
+  function watchPlaceholders(root) {
+    if (root.matches(PLACEHOLDER)) {
+      watch(root);
+    }
+    root.querySelectorAll(PLACEHOLDER).forEach(watch);
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    watchPlaceholders(document.documentElement);
+  });
+  // only the swapped element: a document-wide walk per live cell swap is what #726 and #1059 removed
+  document.addEventListener("htmx:afterSettle", function (e) {
+    if (e.target instanceof Element) {
+      watchPlaceholders(e.target);
+    }
+  });
 })();
 
 // A refresh that fetches values by itself must not overwrite what the person is typing (#599). A

@@ -288,7 +288,14 @@
     }
   });
 
-  document.addEventListener("htmx:afterSettle", render); // the card came back from a swap
+  // the card came back from a swap: only a swap that is or holds the card needs the render (a live cell of
+  // the device list does not, and render walks the document, #1059)
+  document.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    if (t instanceof Element && (t.matches("[data-bn]") || t.querySelector("[data-bn]"))) {
+      render();
+    }
+  });
   root.addEventListener("storage", refresh); // another tab turned it on or off
   try {
     root.navigator.permissions

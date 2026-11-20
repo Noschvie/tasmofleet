@@ -194,7 +194,18 @@
         }
       });
   }
-  document.addEventListener("htmx:afterSettle", syncDeviceDim);
+  // Only a swap of #devlive, #identity or #devconn, of something inside one of them or of something that holds
+  // one changes what syncDeviceDim reads or writes; a live cell of the device list is none of these (#1059).
+  var DEVICE_CARDS = "#devlive, #identity, #devconn";
+  document.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    if (
+      t instanceof Element &&
+      (t.closest(DEVICE_CARDS) || t.querySelector(DEVICE_CARDS))
+    ) {
+      syncDeviceDim();
+    }
+  });
 
   // The live refresh carries the Identity card when what it shows changed (#1003), judged by the signature the
   // page sent with the request. The answer to a Refresh identity (its notice or error) is only in the card that

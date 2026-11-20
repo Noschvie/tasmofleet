@@ -105,3 +105,34 @@ test("375 px crumb with a kept filter", async ({ browser }) => {
   }
   await ctx.close();
 });
+
+// Why (#1059): listback.js runs for a settled swap that holds the list or the crumb, no longer for every swap of
+// the page. A list that reloads itself (a device event, 0.5 s after a burst) must still be remembered, or the
+// crumb of a device page opened afterwards falls back to the unfiltered list.
+test("a list reload remembers the list for the crumb (#1059)", async ({ browser }) => {
+  const ctx = await browser.newContext({ extraHTTPHeaders: adam });
+  const page = await ctx.newPage();
+  try {
+    await page.goto(app.url + "/devices?health=online&sort=name&dir=desc");
+    await expect(page.locator("table.devtable tbody tr").first()).toBeVisible({ timeout: 30_000 });
+    await page.evaluate(() => {
+      sessionStorage.removeItem("tasmofleet.devicelist");
+      (window as unknown as { __settled: number }).__settled = 0;
+      document.body.addEventListener("htmx:afterSettle", (e) => {
+        if ((e.target as Element).id === "devtable") (window as unknown as { __settled: number }).__settled++;
+      });
+      // @ts-expect-error htmx is a page global
+      window.htmx.trigger("#devtable", "sse:resync");
+    });
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __settled: number }).__settled), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    await page.locator("table.devtable tbody a[href*='/devices/']:not([href$='/new'])").first().click();
+    await expect(page.locator("nav.crumbs a", { hasText: "Devices" })).toHaveAttribute(
+      "href",
+      /\?health=online&sort=name&dir=desc/,
+    );
+  } finally {
+    await ctx.close();
+  }
+});

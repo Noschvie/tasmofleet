@@ -216,3 +216,24 @@ test("without scripts: confirmation page for Remove, Send test reloads with the 
     await plain.close();
   }
 });
+
+// Why (#1059): a row that Send test swaps in comes from the server without the mark of the browser that
+// is looking at it. push.js marks it and puts it first again, but only after a swap that brings a row, no
+// longer after every settled swap of the page: the person must still see which row is this browser.
+test("a row swapped by Send test is still marked as this browser and listed first (#1059)", async ({ page, context }) => {
+  await stubPush(context);
+  await signIn(page);
+  await openCard(page);
+  await seed(page, "other-browser");
+  await openCard(page);
+  await card(page).getByRole("button", { name: "Subscribe this browser" }).click();
+  await expect(card(page)).toContainText("Subscribed browsers (2)");
+  const mine = card(page).locator("[data-push-id]").filter({ has: page.locator("[data-push-this]:visible") });
+  await expect(mine).toHaveCount(1);
+  const id = await mine.getAttribute("data-push-id");
+  await mine.getByRole("button", { name: "Send test" }).click();
+  await expect(mine.getByRole("alert")).toContainText("Push test: failed", { timeout: 20_000 });
+  const row = card(page).locator(`[data-push-id="${id}"]`);
+  await expect(row.locator("[data-push-this]")).toBeVisible();
+  await expect(card(page).locator("[data-push-id]").first()).toHaveAttribute("data-push-id", id!);
+});

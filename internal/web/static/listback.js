@@ -42,6 +42,14 @@
   } else {
     run();
   }
-  document.body.addEventListener("htmx:afterSettle", run);
+  // The list's table and the crumb are all that run reads; a live cell of the list swaps about 90 times a
+  // second and needs neither (#1059). A swap of the body (history restore) holds both.
+  document.body.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    var sel = '[data-table="devices"], nav.crumbs a[data-keep-query]';
+    if (t instanceof Element && (t.matches(sel) || t.querySelector(sel))) {
+      run();
+    }
+  });
   window.addEventListener("pageshow", run); // back/forward cache
 })();

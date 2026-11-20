@@ -6,14 +6,15 @@
 // No inline script: CSP forbids that.
 (function () {
   "use strict";
-  function show() {
-    document
-      .querySelectorAll(
-        "button[data-copy-text][hidden], button[data-copy-from][hidden]",
-      )
-      .forEach(function (b) {
-        b.hidden = false;
-      });
+  var HIDDEN = "button[data-copy-text][hidden], button[data-copy-from][hidden]";
+  // show reveals the hidden copy buttons of root (the document, or the element a swap settled) and root itself.
+  function show(root) {
+    if (root.matches(HIDDEN)) {
+      root.hidden = false;
+    }
+    root.querySelectorAll(HIDDEN).forEach(function (b) {
+      b.hidden = false;
+    });
   }
   // Plain http on a LAN has no navigator.clipboard; fall back to a selection.
   function write(text) {
@@ -69,7 +70,15 @@
         }, 1500);
       });
   });
-  document.addEventListener("DOMContentLoaded", show);
-  window.addEventListener("pageshow", show);
-  document.addEventListener("htmx:afterSettle", show);
+  function showAll() {
+    show(document.documentElement);
+  }
+  document.addEventListener("DOMContentLoaded", showAll);
+  window.addEventListener("pageshow", showAll);
+  // a swap only needs its own element: a document-wide walk per live cell swap is what #726 and #1059 removed
+  document.addEventListener("htmx:afterSettle", function (e) {
+    if (e.target instanceof Element) {
+      show(e.target);
+    }
+  });
 })();
