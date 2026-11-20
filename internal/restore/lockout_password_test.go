@@ -11,6 +11,7 @@ import (
 // mode sends ""; its backup with an empty password changes nothing, and one with a password does. The
 // comparison must follow the password transfers send (model.FilePassword), not a list of its own.
 func TestANoPasswordDeviceComparesWithAnEmptyBackupPassword(t *testing.T) {
+	t.Parallel()
 	dev := model.Device{MQTTPasswordMode: model.MQTTPasswordEmpty}
 	if differsPassword("", dev, nil) {
 		t.Error("an empty backup password differs from the empty mode")

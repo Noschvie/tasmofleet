@@ -41,6 +41,7 @@ func (l *fileLog) all() []string {
 // "?" asks for data. Tasmota answers that abort with one more chunk of the dump and then "Aborted";
 // that chunk is the test's exposure on the broker, and the next real download must still be whole.
 func TestPasswordTestStartsThenAborts(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	var log fileLog
 	unsub := e.bus.Subscribe([]mqttbus.Kind{mqttbus.KindFile}, log.add)
@@ -81,6 +82,7 @@ func TestPasswordTestStartsThenAborts(t *testing.T) {
 // after a test must open with FileDownload 0 again, even when the topic was clean before the test; a test that
 // marked it clean would let the next download start into the leftovers of the test.
 func TestThePasswordTestLeavesTheTopicToBeReset(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	if _, err := e.ch.Download(t.Context(), e.dvc, dlPassword); err != nil { // the topic is clean now
 		t.Fatal(err)
@@ -105,6 +107,7 @@ func TestThePasswordTestLeavesTheTopicToBeReset(t *testing.T) {
 // Why (#609): a refused password is the result the test exists for (the router marks it). The device
 // allocated nothing, so no abort follows, and the error never holds the password.
 func TestPasswordTestRefusedNeedsNoAbort(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	err := e.ch.TestPassword(t.Context(), e.dvc, "not-the-password")
 	if !errors.Is(err, ErrPasswordRefused) {
@@ -121,6 +124,7 @@ func TestPasswordTestRefusedNeedsNoAbort(t *testing.T) {
 // Why (#609): a device the last will reports offline gets nothing, the password least of all; a
 // password the device's parser might read differently is refused before anything is published.
 func TestPasswordTestOfflineSendsNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	if err := c.TestPassword(t.Context(), plug(), `a"b`); !errors.Is(err, ErrRefused) || errors.Is(err, ErrPublished) {
@@ -135,6 +139,7 @@ func TestPasswordTestOfflineSendsNothing(t *testing.T) {
 // Why (#609): an unanswered start leaves the device in an unknown state; the test ends it like a
 // download does, and the failure counts as published (the password went out).
 func TestPasswordTestUnansweredStartIsAborted(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	s := &scriptedDevice{}
 	s.attach(b)
@@ -152,6 +157,7 @@ func TestPasswordTestUnansweredStartIsAborted(t *testing.T) {
 // or tested over MQTT, nor send its files on its topic (Type 8, #924); the router decides whether a device has
 // a password to send at all.
 func TestAnEmptyPasswordIsSent(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{UfsMQTT: true})
 	e.waitConnected(t)
 	if err := e.ch.TestPassword(t.Context(), e.dvc, ""); err != nil {
@@ -197,6 +203,7 @@ func (b *timeoutBus) Command(ctx context.Context, topic, command, payload string
 // gave up while another command held the topic, a channel that closes, and a firmware upload of unknown
 // outcome on the device. Nothing is published in any of them.
 func TestPasswordTestRefusesWhatADownloadRefuses(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		setup func(b *fakeBus, c *Channel) (context.Context, func())
 		dev   func() model.Device
@@ -225,6 +232,7 @@ func TestPasswordTestRefusesWhatADownloadRefuses(t *testing.T) {
 		}, want: ErrFirmwarePending},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			c := newChan(b)
 			ctx, done := t.Context(), func() {}
@@ -247,6 +255,7 @@ func TestPasswordTestRefusesWhatADownloadRefuses(t *testing.T) {
 // the test before the password goes out; a lost start may have started a download, so the test ends it with
 // FileDownload 0. Both count as published.
 func TestPasswordTestLostPublishes(t *testing.T) {
+	t.Parallel()
 	b := &timeoutBus{fakeBus: &fakeBus{}, lost: func(p string) bool { return p == "0" }}
 	if err := New(b, fast()).TestPassword(t.Context(), plug(), dlPassword); !errors.Is(err, tasmota.ErrTimeout) || !errors.Is(err, ErrPublished) {
 		t.Fatalf("lost abort: %v", err)
@@ -267,6 +276,7 @@ func TestPasswordTestLostPublishes(t *testing.T) {
 // must fail without taking that echo for an answer. A leftover of an earlier transfer before "Started" is
 // skipped, not read as the answer.
 func TestPasswordTestReadsOnlyTheAnswerToItsStart(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	(&scriptedDevice{steps: [][]string{{`{"Command":"Unknown"}`}}}).attach(b)
 	err := New(b, fast()).TestPassword(t.Context(), plug(), dlPassword)
@@ -283,6 +293,7 @@ func TestPasswordTestReadsOnlyTheAnswerToItsStart(t *testing.T) {
 // Why (#609): the facts source asks this before a transfer is chosen, so a password the start command cannot
 // carry is shown as unusable instead of failing late; an empty password is carried (the "No password" mode).
 func TestCheckFilePasswordIsTheChannelsRule(t *testing.T) {
+	t.Parallel()
 	for pw, ok := range map[string]bool{"": true, "pw-1": true, `a"b`: false, `a\b`: false, "a\tb": false} {
 		err := CheckFilePassword(pw)
 		if (err == nil) != ok || (err != nil && (!errors.Is(err, ErrRefused) || (pw != "" && strings.Contains(err.Error(), pw)))) {

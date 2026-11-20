@@ -12,6 +12,7 @@ import (
 // first. The restore refuses a device it cannot identify with the sentence the backup uses for its files, and sends
 // nothing to a host it cannot tell from the device.
 func TestRestoreRefusesADeviceWithoutAStoredMACWithTheSentenceTheBackupUses(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	err := e.m.checkIdentity(t.Context(), model.Device{Address: e.device.Address, Port: e.device.Port})
 	if !errors.Is(err, ErrIdentity) {
@@ -29,6 +30,7 @@ func TestRestoreRefusesADeviceWithoutAStoredMACWithTheSentenceTheBackupUses(t *t
 // Why (#846): a restore that cannot store the live MAC of a device without one (no inventory to adopt it into) refuses
 // with the same sentence too, and asks the host nothing.
 func TestARestoreThatCannotAdoptAMACSaysProbeItFirstLikeTheBackup(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	e.m.o.Hardware = nil
 	dev := model.Device{Address: e.device.Address, Port: e.device.Port}

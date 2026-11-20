@@ -86,6 +86,7 @@ const whyNoFlash = "the device has no flash file system, so only the settings ar
 // device says on its topic that it has no file system; the confirmation page and the run say that, and nothing is
 // asked over HTTP: no identity question, no file system question.
 func TestARestoreOverMQTTOfADeviceWithoutAFileSystemSaysSoAndAsksNothingOverHTTP(t *testing.T) {
+	t.Parallel()
 	for name, set := range map[string]func(*flowEnv, *topicFS){
 		"no single HTTP address": func(e *flowEnv, _ *topicFS) {
 			e.m.o.Resolve = func(context.Context, string) ([]netip.Addr, error) {
@@ -97,6 +98,7 @@ func TestARestoreOverMQTTOfADeviceWithoutAFileSystemSaysSoAndAsksNothingOverHTTP
 		"HTTP does not answer":    func(e *flowEnv, _ *topicFS) { e.httpDown.Store(true) },
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e, a := filesFlow(t)
 			m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 			f := watchTopicFS(t, e, m, ufsNone)
@@ -128,6 +130,7 @@ func TestARestoreOverMQTTOfADeviceWithoutAFileSystemSaysSoAndAsksNothingOverHTTP
 		})
 	}
 	t.Run("cancelled while the topic is asked", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsCancel)
@@ -154,6 +157,7 @@ func TestARestoreOverMQTTOfADeviceWithoutAFileSystemSaysSoAndAsksNothingOverHTTP
 // unanswered it is asked over HTTP as before, and only after the HTTP identity check: the HTTP question carries the
 // stored web password, which must never reach a host that was not shown to be this device.
 func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
+	t.Parallel()
 	fsOverHTTP := func(reqs []string) []string {
 		var out []string
 		for _, r := range reqs {
@@ -164,6 +168,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 		return out
 	}
 	t.Run("the topic answers", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsPass)
@@ -187,6 +192,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 	})
 	// Guard (passes without #875 too): what the topic leaves unanswered goes to HTTP only after the identity check.
 	t.Run("the topic is silent", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsSilent)
@@ -202,6 +208,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 	// Guard (passes without #875 too): a silent topic and an HTTP known to fail leave the files out with HTTP's reason,
 	// without one HTTP request and without failing the page.
 	t.Run("the topic is silent and HTTP known to fail", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsSilent)
@@ -217,6 +224,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 	// Firmware before MinFilesFirmware answers UfsList in another shape: the files cannot go back, and the topic's
 	// answer with the version (Status 2, also on the topic) is enough to say so without asking HTTP.
 	t.Run("the topic answers, the firmware is too old for files", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsPass)
@@ -234,6 +242,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 	// A version that cannot be read is no reason to guess: the plan ends with the error (the page says the files could
 	// not be checked, the run fails loudly), and HTTP is not asked for it.
 	t.Run("the topic answers, the version cannot be read", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		f := watchTopicFS(t, e, m, ufsPass)
@@ -249,6 +258,7 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 	// Guard (passes without #875 too): a restore over HTTP still asks its file system over HTTP, and a version that
 	// cannot be read still ends its plan with the error.
 	t.Run("over HTTP the version cannot be read", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.HTTP)
 		f := watchTopicFS(t, e, m, ufsPass)

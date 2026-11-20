@@ -70,6 +70,7 @@ func (e *simEnv) waitConnected(t *testing.T) {
 // Connected() meant "subscribed" and the channel registered its listener before it published, a
 // fast device answered into the void and the caller waited out its timeout.
 func TestFirstCommandAfterConnectIsAnswered(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{})
 	for i := range 15 {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -97,6 +98,7 @@ func brokerOf(t *testing.T, e *simEnv) string {
 // Why (#45): a device whose HTTP port refuses everything but which is on our broker is managed
 // over MQTT: reads, a write that takes effect, and a Backlog with one reply per command.
 func TestCommandsReachADeviceHTTPCannotReach(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{Faults: []simulator.Fault{{Kind: simulator.FaultHTTPUnreachable}}})
 	e.waitConnected(t)
 	ctx := t.Context()
@@ -116,6 +118,7 @@ func TestCommandsReachADeviceHTTPCannotReach(t *testing.T) {
 // Why (safety rule 2): Status 0 never reaches the device, which the simulator's own command log
 // proves (the bus-side fake in channel_test.go only shows what we handed to the bus).
 func TestStatus0NeverReachesTheSimulatedDevice(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{})
 	e.waitConnected(t)
 	for _, c := range []string{"Status 0", "status0", "Backlog Power ON; Status 0"} {
@@ -132,6 +135,7 @@ func TestStatus0NeverReachesTheSimulatedDevice(t *testing.T) {
 // must go and the new boot's INFO1 must replace it; a Do while the device is down is refused
 // without publishing, and the command that caused the restart reports its reply.
 func TestRestartDropsInfoAndTheNewBootIsSeen(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{})
 	e.waitConnected(t)
 	if raw, err := e.ch.Do(t.Context(), e.dvc, "Restart 1"); err != nil || !strings.Contains(string(raw), "Restarting") {
@@ -165,8 +169,10 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // command is answered at once, not after the reply timeout, and the device that switches the option
 // off is answered on RESULT again from the same command on. A RESULT device is the control.
 func TestSetOption4DeviceAnswersEveryReadAtOnce(t *testing.T) {
+	t.Parallel()
 	for _, so4 := range []string{"1", "0"} {
 		t.Run("SetOption4 "+so4, func(t *testing.T) {
+			t.Parallel()
 			e := newSimEnv(t, simulator.DeviceSpec{Settings: map[string]string{"setoption4": so4}})
 			e.waitConnected(t)
 			ch := New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 4 * time.Second})
@@ -194,6 +200,7 @@ func TestSetOption4DeviceAnswersEveryReadAtOnce(t *testing.T) {
 // Why (#632): SetOption4 is switched over MQTT itself (the Settings page offers it); the answer to
 // that command comes on the topic of the NEW setting, as on a real device, and later reads follow.
 func TestSwitchingSetOption4OverMQTTKeepsTheChannelWorking(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{})
 	e.waitConnected(t)
 	for _, cmd := range []string{"SetOption4 1", "TelePeriod", "SetOption4 0", "TelePeriod"} {
@@ -210,6 +217,7 @@ func TestSwitchingSetOption4OverMQTTKeepsTheChannelWorking(t *testing.T) {
 // flight; the channel ignores it, the next Upgrade gets its own reply, and every other subscriber
 // of the bus (the OTA engine's hint in app/ota.go) still receives the report.
 func TestSetOption4DeviceAnswersUpgradeAtOnce(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{
 		Settings: map[string]string{"setoption4": "1"},
 		Faults:   []simulator.Fault{{Kind: simulator.FaultFWUnreachable, Duration: 100 * time.Millisecond}},
@@ -253,8 +261,10 @@ func TestSetOption4DeviceAnswersUpgradeAtOnce(t *testing.T) {
 // SetOption4 1 that reply comes on stat/<t>/POWER (the command's name without its index) and must end
 // the command as ErrCommandError, as it does on RESULT, instead of an unknown outcome after the timeout.
 func TestPowerForAMissingRelayIsACommandError(t *testing.T) {
+	t.Parallel()
 	for _, so4 := range []string{"1", "0"} {
 		t.Run("SetOption4 "+so4, func(t *testing.T) {
+			t.Parallel()
 			e := newSimEnv(t, simulator.DeviceSpec{Relays: 2, Settings: map[string]string{"setoption4": so4}})
 			e.waitConnected(t)
 			ch := New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 4 * time.Second})

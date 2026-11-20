@@ -114,6 +114,7 @@ func (e *flowEnv) cmdLog() []string {
 // MQTT upload; nothing depends on FIRMWARE_BASE_URL any more. A restore the facts send over HTTP
 // with a client that cannot upload says so at the start instead of failing late.
 func TestNewNeedsOnePathAndHTTPNeedsTheRestoreUpload(t *testing.T) {
+	t.Parallel()
 	base := Options{Devices: nopDevices{}, Backups: nopBackups{}, Store: nopStore{}, Client: nopClient{}}
 	if _, err := New(base); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("neither path: %v", err)
@@ -150,6 +151,7 @@ func (restoringClient) RestoreConfig(context.Context, tasmota.Target, []byte) er
 // old state is kept, the result is verified), with the same order: safety backup, identity,
 // upload. It never uses the HTTP restore upload and records its transport.
 func TestRestoreOverMQTTRoundTrip(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -213,8 +215,10 @@ func TestRestoreOverMQTTRoundTrip(t *testing.T) {
 // settings alone is proved against the simulator in mqttcmd (TestUploadCutMidTransferFailsAndFlashesNothing,
 // TestUploadType1SafebootNoRoomAndDualSuccess, TestUploadErrorCodes).
 func TestRestoreOverMQTTFailedUploadLeavesTheDeviceUnchanged(t *testing.T) {
+	t.Parallel()
 	for name, err := range map[string]error{"password": mqttcmd.ErrPasswordRefused, "no room": mqttcmd.ErrNoRoom, "transfer": mqttcmd.ErrTransfer} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlow(t, "15.6.0")
 			a := e.dumpBackup(t, e.dumpA)
 			e.sim.SetConfigDump(e.dumpB)
@@ -237,6 +241,7 @@ func TestRestoreOverMQTTFailedUploadLeavesTheDeviceUnchanged(t *testing.T) {
 // Why: a lost "Done" means the device may have applied the dump. The restore must look at the
 // device (boot count) instead of failing, and must not upload a second time.
 func TestRestoreOverMQTTUnknownOutcomeIsCheckedOnTheDevice(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -254,6 +259,7 @@ func TestRestoreOverMQTTUnknownOutcomeIsCheckedOnTheDevice(t *testing.T) {
 // (an INFO3 of the earlier boot, an unchanged device that merely answers). An upload that
 // returned but never restarted the device is a failure at the restart step.
 func TestRestoreOverMQTTNeedsTheBootCountToRise(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	m := e.mqttManager(t, &fakeUploader{e: e, apply: false}, transport.MQTT) // says Done, nothing happens
@@ -271,6 +277,7 @@ func TestRestoreOverMQTTNeedsTheBootCountToRise(t *testing.T) {
 // Why: a path of None (HTTP failing and MQTT unusable) is a refusal with the reason, before
 // anything is sent; the restore never falls back to a path the facts ruled out.
 func TestRestoreRefusedWhenNoPathExists(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	m := e.mqttManager(t, &fakeUploader{e: e}, transport.None)
@@ -286,6 +293,7 @@ func TestRestoreRefusedWhenNoPathExists(t *testing.T) {
 
 // Why: the confirmation page shows the path; Assess reports it.
 func TestAssessReportsThePath(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
@@ -313,6 +321,7 @@ func (d topicDecoder) Decode(_ context.Context, dmp []byte) ([]byte, error) {
 // answer. It is refused unless the admin accepts that risk; the same backup over HTTP, where the device
 // stays reachable, is not.
 func TestRestoreOverMQTTRefusesABackupThatChangesTheMQTTSettings(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -344,6 +353,7 @@ func TestRestoreOverMQTTRefusesABackupThatChangesTheMQTTSettings(t *testing.T) {
 }
 
 func TestRestoreOverHTTPAcceptsABackupWithAnotherTopic(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -359,6 +369,7 @@ func TestRestoreOverHTTPAcceptsABackupWithAnotherTopic(t *testing.T) {
 // Why (H1): a backup whose decoded twin is missing cannot be compared, so over MQTT it needs the
 // same confirmation.
 func TestRestoreOverMQTTWithoutADecodedTwinNeedsTheLockoutConfirmation(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", failingDecoder{})
 	a := e.dumpBackup(t, e.dumpA)
 	e.httpDown.Store(true)
@@ -379,6 +390,7 @@ func (failingDecoder) Decode(context.Context, []byte) ([]byte, error) {
 
 // Why (H1): the user and the password are compared too, without ever naming a value.
 func TestMQTTLockoutComparesUserAndPassword(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "", user: "someone-else"})
 	a := e.dumpBackup(t, e.dumpA)
 	m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
@@ -397,6 +409,7 @@ func TestMQTTLockoutComparesUserAndPassword(t *testing.T) {
 // Why (M2): a failing safety backup stops the MQTT restore before the identity check, the boot
 // count and the upload, at the backup step.
 func TestFailedPreBackupStopsTheMQTTRestoreBeforeAnyChange(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -424,6 +437,7 @@ func (e *flowEnv) deviceDumpUnguarded(t *testing.T) []byte {
 // Why (M2): an upload whose "Done" is lost and after which the device never restarts fails at the
 // restart step; the dump was sent exactly once.
 func TestRestoreOverMQTTUnknownOutcomeWithoutARestartFailsAtTheRestartStep(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	u := &fakeUploader{e: e, apply: false, err: mqttcmd.ErrOutcomeUnknown}

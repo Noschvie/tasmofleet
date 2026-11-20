@@ -63,6 +63,7 @@ func upload(ctx context.Context, c *Channel, e *simEnv, typ int, data []byte, pw
 // Why (restore over MQTT): the dump must end up as the device's settings, applied by the device
 // only after the MD5 matched, and progress must count acknowledged bytes.
 func TestUploadType2RoundTripAppliesTheDump(t *testing.T) {
+	t.Parallel()
 	e := newUploadEnv(t, simulator.ProfileESP8266_1M)
 	dump := bytes.Repeat([]byte{0x5A}, 4096) // the simulator accepts only 4096 byte dumps
 	var last int64
@@ -85,6 +86,7 @@ func TestUploadType2RoundTripAppliesTheDump(t *testing.T) {
 // Why (D19): Type 1 is refused by the safeboot layout before any data (Error 2, typed, nothing
 // flashed) and works on a dual-OTA layout, where the new version boots.
 func TestUploadType1SafebootNoRoomAndDualSuccess(t *testing.T) {
+	t.Parallel()
 	img := simImage(t)
 	e := newUploadEnv(t, simulator.ProfileESP32)
 	big := bytes.Repeat([]byte{1}, 2234912)
@@ -201,6 +203,7 @@ func runUp(t *testing.T, u *upDevice, typ int, data []byte, mod func(*Options)) 
 }
 
 func TestUploadPayloadStaysInBudgetAndFollowsTheLatestMaxSize(t *testing.T) {
+	t.Parallel()
 	data := make([]byte, 5000)
 	for i := range data {
 		data[i] = byte(i * 13)
@@ -226,6 +229,7 @@ func TestUploadPayloadStaysInBudgetAndFollowsTheLatestMaxSize(t *testing.T) {
 // device assumed) must not get a packet that closes its connection: the chunk is clamped to what
 // fits, the data still arrives complete.
 func TestUploadClampsAnOversizedMaxSize(t *testing.T) {
+	t.Parallel()
 	data := make([]byte, 3000)
 	u := &upDevice{maxes: []int{2000}, final: `{"FileUpload":"Done"}`}
 	if _, err := runUp(t, u, UploadFirmware, data, nil); err != nil {
@@ -245,6 +249,7 @@ func TestUploadClampsAnOversizedMaxSize(t *testing.T) {
 // the default budget is too big: the chunks follow the real one, and a payload that fits only the
 // default topic is refused for both directions.
 func TestUploadAndDownloadBudgetUseTheRealCommandTopic(t *testing.T) {
+	t.Parallel()
 	long := "cmnd/" + strings.Repeat("x", 120) + "/"
 	b := &fakeBus{longPrefix: long}
 	u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
@@ -271,6 +276,7 @@ func TestUploadAndDownloadBudgetUseTheRealCommandTopic(t *testing.T) {
 // Why (H1): an aborted Type 1 runs Update.end(true); an ESP8266 would boot a truncated image.
 // Firmware over MQTT is refused unless the family is a known ESP32, and nothing is published.
 func TestUploadType1NeedsAKnownESP32(t *testing.T) {
+	t.Parallel()
 	for name, fam := range map[string]model.ChipFamily{"esp8266": model.ChipESP8266, "unknown": model.ChipUnknown} {
 		b := &fakeBus{}
 		d := plug()
@@ -294,6 +300,7 @@ func TestUploadType1NeedsAKnownESP32(t *testing.T) {
 
 // Why (M2): a start ack without a usable chunk size must end the transfer without any Data.
 func TestUploadMaxSizeZeroEndsWithoutData(t *testing.T) {
+	t.Parallel()
 	u := &upDevice{maxes: []int{0}, final: `{"FileUpload":"Done"}`}
 	_, err := runUp(t, u, UploadFirmware, make([]byte, 2000), nil)
 	if !errors.Is(err, ErrTransfer) || u.data.Len() != 0 || u.aborts != 2 {
@@ -305,6 +312,7 @@ func TestUploadMaxSizeZeroEndsWithoutData(t *testing.T) {
 // complete image (Update.end(true)). A lost Done is therefore unknown and no abort follows; the
 // same loss for settings ends with the closing abort.
 func TestUploadType1AfterTheLastAckSendsNoAbort(t *testing.T) {
+	t.Parallel()
 	u := &upDevice{maxes: []int{861}} // never answers the Md5
 	_, err := runUp(t, u, UploadFirmware, make([]byte, 2000), nil)
 	if !errors.Is(err, ErrOutcomeUnknown) || u.aborts != 1 {
@@ -319,6 +327,7 @@ func TestUploadType1AfterTheLastAckSendsNoAbort(t *testing.T) {
 
 // Why: the file name goes into the start verbatim; the limit is 64 characters and spaces are fine.
 func TestUploadFileNameLimits(t *testing.T) {
+	t.Parallel()
 	for name, ok := range map[string]bool{strings.Repeat("n", 64): true, strings.Repeat("n", 65): false, "a b": true} {
 		u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
 		b := &fakeBus{}
@@ -334,6 +343,7 @@ func TestUploadFileNameLimits(t *testing.T) {
 // Why: the uploader must not become a generic file pusher, and an unsendable request publishes
 // nothing (the start carries the password).
 func TestUploadRefusesBeforePublishing(t *testing.T) {
+	t.Parallel()
 	ok := bytes.Repeat([]byte{1}, 4096)
 	cases := []struct {
 		name string
@@ -353,6 +363,7 @@ func TestUploadRefusesBeforePublishing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			err := newChan(b).Upload(t.Context(), esp32Plug(), tc.typ, tc.file, tc.size, bytes.NewReader(ok), tc.pw, nil)
 			if !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
@@ -370,6 +381,7 @@ func TestUploadRefusesBeforePublishing(t *testing.T) {
 
 // Why (never publish a start with a cancelled ctx): the start carries the password.
 func TestUploadWithACancelledContextPublishesNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -382,6 +394,7 @@ func TestUploadWithACancelledContextPublishesNothing(t *testing.T) {
 // Why: Error 1 is the wrong-password signal (the caller marks the password bad); the device
 // reset itself, so no abort follows, and the password is in no error.
 func TestUploadErrorCodes(t *testing.T) {
+	t.Parallel()
 	for code, want := range map[int]string{3: "type", 5: "group topic", 6: "prepare the update", 7: "Error 7"} {
 		u := &upDevice{maxes: []int{861}}
 		b := &fakeBus{}
@@ -430,6 +443,7 @@ func wrapStart(inner func(*fakeBus, pub), reply string) func(*fakeBus, pub) {
 // Why (fail closed): every irregularity after the start ends with FileUpload 0 (open + close =
 // 2 aborts), returns a typed error and never resends.
 func TestUploadFaultsAbort(t *testing.T) {
+	t.Parallel()
 	data := bytes.Repeat([]byte{9}, 2000)
 	cases := []struct {
 		name string
@@ -451,6 +465,7 @@ func TestUploadFaultsAbort(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if tc.name == "no confirmation of the start" {
 				tc.u.maxes = nil
 			}
@@ -490,6 +505,7 @@ func TestUploadFaultsAbort(t *testing.T) {
 // Why: a reader that is shorter or longer than the announced size would make the device wait
 // forever or hash different bytes; both fail and abort.
 func TestUploadDataLengthMustMatchSize(t *testing.T) {
+	t.Parallel()
 	for name, size := range map[string]int64{"short": 5000, "long": 4096} {
 		u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
 		b := &fakeBus{}
@@ -506,6 +522,7 @@ func TestUploadDataLengthMustMatchSize(t *testing.T) {
 // "unknown", never a plain failure the caller could retry, and the simulator proves the flash
 // really happened.
 func TestUploadLostDoneIsOutcomeUnknownAndTheDeviceAppliedIt(t *testing.T) {
+	t.Parallel()
 	e := newUploadEnv(t, simulator.ProfileESP32Dual, simulator.Fault{Kind: simulator.FaultMQTTUploadLostDone})
 	e.ch = New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 400 * time.Millisecond})
 	err := upload(t.Context(), e.ch, e, UploadFirmware, simImage(t), upPassword)
@@ -529,6 +546,7 @@ func TestUploadLostDoneIsOutcomeUnknownAndTheDeviceAppliedIt(t *testing.T) {
 
 // Why: a link that dies mid-transfer (simulator fault) leaves nothing flashed and the topic idle.
 func TestUploadCutMidTransferFailsAndFlashesNothing(t *testing.T) {
+	t.Parallel()
 	e := newUploadEnv(t, simulator.ProfileESP32Dual, simulator.Fault{Kind: simulator.FaultMQTTUploadCut, Chunks: 1})
 	e.ch = New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 400 * time.Millisecond})
 	err := upload(t.Context(), e.ch, e, UploadFirmware, simImage(t), upPassword)
@@ -548,6 +566,7 @@ func TestUploadCutMidTransferFailsAndFlashesNothing(t *testing.T) {
 // download opens with FileUpload 0, a second upload after a clean one does not, and a download
 // after an unclean upload opens with FileDownload 0.
 func TestUploadAndDownloadShareTheCleanState(t *testing.T) {
+	t.Parallel()
 	zeros := func(b *fakeBus, cmd string) int {
 		n := 0
 		for _, p := range b.sent() {
@@ -605,6 +624,7 @@ func TestUploadAndDownloadShareTheCleanState(t *testing.T) {
 // Why (coordinator notes): empty payloads exist, the "Aborted" of a download is no answer to an
 // upload, and an Unknown echo (minimal firmware) carries the password: a clear failure, never repeated.
 func TestUploadIgnoresNoiseAndNeverRepeatsAnEcho(t *testing.T) {
+	t.Parallel()
 	data := bytes.Repeat([]byte{4}, 4096)
 	b := &fakeBus{}
 	u := &upDevice{t: t, maxes: []int{861}, final: `{"FileUpload":"Done"}`}
@@ -633,6 +653,7 @@ func TestUploadIgnoresNoiseAndNeverRepeatsAnEcho(t *testing.T) {
 
 // Why: a device that is offline per LWT gets nothing published.
 func TestUploadOfflineDeviceGetsNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
@@ -648,6 +669,7 @@ func base64Std(s string) ([]byte, error) { return base64.StdEncoding.DecodeStrin
 // complete image that FileUpload 0 would commit. Nothing may be published to the topic (neither
 // direction) until the device has restarted; then it is unclean as usual and opens with the abort.
 func TestUploadType1UnknownOutcomeBlocksTheTopicUntilTheDeviceRestarted(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	u := &upDevice{maxes: []int{861}} // never answers the Md5
 	u.t = t
@@ -684,6 +706,7 @@ func TestUploadType1UnknownOutcomeBlocksTheTopicUntilTheDeviceRestarted(t *testi
 // Why: a restart that happened while the upload waited for Done already dropped the device's
 // transfer state, so nothing is pending and the topic is usable (unclean) at once.
 func TestUploadType1RebootDuringTheWaitLeavesNothingPending(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	u := &upDevice{maxes: []int{861}}
 	u.t = t
@@ -711,11 +734,13 @@ func TestUploadType1RebootDuringTheWaitLeavesNothingPending(t *testing.T) {
 // Why (M1): two devices on one topic answer every transfer message twice. A second answer to the
 // start, or a second acknowledgement of a chunk, is fatal and ends with FileUpload 0 (open + close).
 func TestUploadSecondDeviceOnTheTopicIsFatal(t *testing.T) {
+	t.Parallel()
 	for name, u := range map[string]*upDevice{
 		"second answer to the start":   {maxes: []int{861}, final: `{"FileUpload":"Done"}`, dupStart: true},
 		"second chunk acknowledgement": {maxes: []int{861}, final: `{"FileUpload":"Done"}`, dupAck: true},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, err := runUp(t, u, UploadFirmware, make([]byte, 4200), nil)
 			if !errors.Is(err, ErrTransfer) || !strings.Contains(err.Error(), "another device") || u.aborts != 2 {
 				t.Fatalf("%v, aborts %d", err, u.aborts)
@@ -727,6 +752,7 @@ func TestUploadSecondDeviceOnTheTopicIsFatal(t *testing.T) {
 // Why (M1): DoAll listens after the first reply; a second device answering on the topic shows up
 // as a second reply (the router refuses the upload then).
 func TestDoAllReturnsEveryReplyWithinTheWindow(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		if p.command == "Status" {
@@ -756,6 +782,7 @@ func TestDoAllReturnsEveryReplyWithinTheWindow(t *testing.T) {
 // that answers the command counts. A failure comes back as a fixed marker, never with its Input, which for a
 // secret-setting command would be the secret.
 func TestDoAllCountsASecondDevicesFailedReply(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		if p.command == "Status" {
@@ -779,6 +806,7 @@ func TestDoAllCountsASecondDevicesFailedReply(t *testing.T) {
 // reply ends the mark or lets the restore go to a shared topic. A cut window is an error and no list. The command was
 // published and answered, so the outcome is unknown (ErrTimeout), never "not sent" (ErrUnreachable): nothing is resent.
 func TestADoAllWindowCutShortIsAnErrorNotAShortList(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		cut  func(*Channel, context.CancelFunc)
@@ -788,6 +816,7 @@ func TestADoAllWindowCutShortIsAnErrorNotAShortList(t *testing.T) {
 		{"the channel closes", func(ch *Channel, _ context.CancelFunc) { ch.Close() }, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			emitted := make(chan struct{})
 			b.onPub = func(b *fakeBus, p pub) {

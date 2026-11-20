@@ -94,6 +94,7 @@ func (e *replaceEnv) newDump(t *testing.T) []byte {
 // backup, and the inventory entry keeps its name, tags and notes but now
 // stands for the new MAC. The old MAC is in the audit trail.
 func TestReplaceRoundTripAgainstSimulator(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	old := e.device
 	old.Tags, old.Notes = []string{"kitchen"}, "above the sink"
@@ -143,6 +144,7 @@ func TestReplaceRoundTripAgainstSimulator(t *testing.T) {
 // static IP). While the old device still answers at its address, replacing it
 // must be refused before anything is sent to the new board.
 func TestReplaceRefusedWhileTheOldDeviceIsReachable(t *testing.T) {
+	t.Parallel()
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	e.newSim.SetConfigDump(e.dumpB)
@@ -162,6 +164,7 @@ func TestReplaceRefusedWhileTheOldDeviceIsReachable(t *testing.T) {
 // wrong device: the settings layout and the GPIO map differ. The refusal is
 // final (no tick helps) and nothing is sent.
 func TestReplaceWithAnotherChipFamilyIsRefusedForGood(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP32)
 	e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -177,6 +180,7 @@ func TestReplaceWithAnotherChipFamilyIsRefusedForGood(t *testing.T) {
 // Why: hardware that is already an inventory entry cannot take over another
 // entry; the swap would steal its MAC. Refused before anything is sent.
 func TestReplaceRefusesHardwareThatIsAlreadyInTheInventory(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -205,6 +209,7 @@ func TestReplaceRefusesHardwareThatIsAlreadyInTheInventory(t *testing.T) {
 // Why: the entry is not a candidate for itself: if the "new" board is the
 // device being replaced, the admin wants a plain restore.
 func TestReplaceRefusesTheDeviceItself(t *testing.T) {
+	t.Parallel()
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	r := ReplaceRequest{Device: e.dev, Address: e.device.Address, Port: e.device.Port}
@@ -216,6 +221,7 @@ func TestReplaceRefusesTheDeviceItself(t *testing.T) {
 // Why: a dump from newer firmware is never applied to older firmware, and a
 // different major version is a risk only the admin can accept.
 func TestReplaceFirmwareRules(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	t.Run("newer backup refused", func(t *testing.T) {
 		e := newReplaceFlow(t, "16.0.0", "15.6.0", simulator.ProfileESP8266_4M)
 		e.dumpBackup(t, e.dumpA)
@@ -251,6 +257,7 @@ func TestReplaceFirmwareRules(t *testing.T) {
 // UNIQUE constraint): the job fails loudly and the entry still has all of its
 // old hardware data.
 func TestReplaceSwapConflictFailsAndLeavesTheEntryAlone(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -281,6 +288,7 @@ func TestReplaceSwapConflictFailsAndLeavesTheEntryAlone(t *testing.T) {
 // poll (a Wi-Fi hiccup), must not count as a restart: the entry would move onto a board that
 // still runs its factory configuration. A refused upload is certain and never swaps either.
 func TestReplaceWithoutAProvenRestartNeverSwaps(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	for name, uploadErr := range map[string]error{
 		"unknown outcome, no restart, one failed poll": tasmota.ErrTimeout,
 		"refused upload": fmt.Errorf("%w: File invalid", tasmota.ErrUploadRefused),
@@ -323,6 +331,7 @@ func TestReplaceWithoutAProvenRestartNeverSwaps(t *testing.T) {
 // start. If another host takes over the address after the preview, the dump
 // must not go to it.
 func TestReplaceChecksTheNewBoardsMACAgainBeforeSending(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -348,6 +357,7 @@ func TestReplaceChecksTheNewBoardsMACAgainBeforeSending(t *testing.T) {
 // under the entry, but it is not the broken device's configuration. "Newest"
 // must skip it, and an explicit choice of it is refused.
 func TestReplaceNeverRestoresReplacementHardwareBackups(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	a := e.dumpBackup(t, e.dumpA)
 	foreign, err := e.bk.BackupOf(t.Context(), "alice", e.dev, model.Device{Address: e.newHost, Port: e.newPort}, backup.NoteReplacementHardware)
@@ -371,6 +381,7 @@ func TestReplaceNeverRestoresReplacementHardwareBackups(t *testing.T) {
 // Why: a new board that took over the old board's address (DHCP gives it the
 // same lease) must not be mistaken for "the old device is still there".
 func TestReplaceAllowsTheNewBoardOnTheOldAddress(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -387,6 +398,7 @@ func TestReplaceAllowsTheNewBoardOnTheOldAddress(t *testing.T) {
 // Why: the candidate list must offer only boards that answer, are reachable
 // inside the device networks and are not in the inventory.
 func TestCandidatesAreOnlineAndUnbound(t *testing.T) {
+	t.Parallel()
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	eps := []Endpoint{
 		{Address: e.newHost, Port: e.newPort},            // the spare
@@ -403,6 +415,7 @@ func TestCandidatesAreOnlineAndUnbound(t *testing.T) {
 // outright. Reading the live MAC and storing it is enough to make the checks
 // that follow meaningful, and it must be audited.
 func TestRestoreStoresAMissingMAC(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	dev := e.device
@@ -460,6 +473,7 @@ func TestRestoreStoresAMissingMAC(t *testing.T) {
 // Why: the recorded identity is the one re-checked right before the upload is
 // sent, so a host swapped in after the confirmation gets nothing.
 func TestAdoptedMACIsRecheckedBeforeTheUpload(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	dev := e.device
@@ -484,6 +498,7 @@ func TestAdoptedMACIsRecheckedBeforeTheUpload(t *testing.T) {
 // Why: adopting must not paper over a mix-up: if the host at the address has
 // the MAC of another entry, it is not this device.
 func TestRestoreRefusesToAdoptTheMACOfAnotherEntry(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	dev := e.device
@@ -505,6 +520,7 @@ func TestRestoreRefusesToAdoptTheMACOfAnotherEntry(t *testing.T) {
 // Why: the confirmation page shows the risks before the click, so one
 // confirmation covers them all; a hard refusal shows up there too.
 func TestAssessNamesTheRisksAndTheRefusals(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	as, err := e.m.Assess(t.Context(), a.ID)
@@ -527,6 +543,7 @@ func TestAssessNamesTheRisksAndTheRefusals(t *testing.T) {
 // delete the chosen run, or a replace that has to be repeated has nothing to
 // start from.
 func TestReplaceKeepsItsSourceBackupThroughTheRetentionOfItsOwnBackups(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
 	a := e.dumpBackup(t, e.dumpA)
 	e.dumpBackup(t, dumpWith(3, 30))

@@ -54,6 +54,7 @@ func sentLines(b *fakeBus) []string {
 // "Dimmer 50" done with Dimmer 30 on the strength of someone else's change. Only the Status 11 published after the
 // write, a read whose STATUS11 nothing else answers, may confirm it.
 func TestAnUnrelatedLightStateNeverConfirmsALightWrite(t *testing.T) {
+	t.Parallel()
 	b := lightBulb(func(p pub) string {
 		return lightState30 // someone else's change arrives first; the bulb's own state for Dimmer 50 never does
 	}, status11At50)
@@ -79,6 +80,7 @@ func TestAnUnrelatedLightStateNeverConfirmsALightWrite(t *testing.T) {
 // answer: a read, Color3-6 (ResponseCmndIdxChar, their own key) and a Power switch. A light that has no such channel
 // answers Command Error (support_command.ino 504-517: the handler wrote no response), which fails the write.
 func TestEveryLightStateWriteIsConfirmedByStatus11(t *testing.T) {
+	t.Parallel()
 	confirmed := []string{
 		"Color 1", "Color FF0000", "Color1 FF0000", "Color2 00FF00", "Color1 +",
 		"Channel 20", "Channel1 20", "Channel2 20", "Channel5 30", "Channel3 +",
@@ -134,6 +136,7 @@ func TestEveryLightStateWriteIsConfirmedByStatus11(t *testing.T) {
 // cannot be matched go HTTP first (transport.MQTTCannotMatch asks this rule); the light writes are confirmed by a read
 // and must never be read as unmatchable, or the router would send them HTTP first against the transport rule.
 func TestOneReplyRuleForReadsAndWrites(t *testing.T) {
+	t.Parallel()
 	for cmd, want := range map[string]ReplyKind{
 		"State": Unmatchable, "Gpio": Unmatchable, "Gpios": Unmatchable, "Modules": Unmatchable, "gpios": Unmatchable,
 		"Gpio 1": Matched, "Gpio1 0": Matched, "Status 11": Matched, "Hostname": Matched,
@@ -152,6 +155,7 @@ func TestOneReplyRuleForReadsAndWrites(t *testing.T) {
 // confirm it cannot be published) is an unknown outcome, never "not sent": the router would otherwise send the write
 // a second time over HTTP (T2, T3).
 func TestAFailureAfterTheLightWriteIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	b := lightBulb(func(pub) string { return lightState50 }, status11At50)
 	b.failAt = 2
 	_, err := newChan(b).Do(t.Context(), plug(), "Dimmer 50")
@@ -166,6 +170,7 @@ func TestAFailureAfterTheLightWriteIsAnUnknownOutcome(t *testing.T) {
 // Why (#813): a confirmation that comes too late must not answer the next Status 11 on the topic: that read would show
 // a state from before it. The topic is held until the late STATUS11 arrives, as for any other late reply.
 func TestALateConfirmationDoesNotAnswerTheNextStatus11(t *testing.T) {
+	t.Parallel()
 	b := lightBulb(func(pub) string { return lightState50 }, "") // the first Status 11 is not answered in time
 	c := newChan(b)
 	if _, err := c.Do(t.Context(), plug(), "Dimmer 50"); !errors.Is(err, tasmota.ErrTimeout) {
@@ -189,6 +194,7 @@ func TestALateConfirmationDoesNotAnswerTheNextStatus11(t *testing.T) {
 // the parts in order (CmndBacklog, support_command.ino 530-575), so that STATUS11 shows the state after them. Without
 // it the Backlog is not reported done, however many other parts answered.
 func TestABacklogWithALightWriteEndsWithStatus11(t *testing.T) {
+	t.Parallel()
 	answer := func(status11 bool) func(*fakeBus, pub) {
 		return func(b *fakeBus, p pub) {
 			go func() {
@@ -226,6 +232,7 @@ func TestABacklogWithALightWriteEndsWithStatus11(t *testing.T) {
 // line the channel publishes (cmdpolicy reads nothing longer). A longer one is refused before anything is published,
 // so the router sends it over HTTP once (T2) and the console's confirmation names HTTP (Refuses, #826).
 func TestABacklogTooLongForItsStatus11IsRefused(t *testing.T) {
+	t.Parallel()
 	head := "Backlog Dimmer 50; Hostname "
 	cmd := head + strings.Repeat("h", cmdpolicy.MaxCommandLen-5-len(head)) // fits; with "; Status 11" it does not
 	if len(cmd) > cmdpolicy.MaxCommandLen || len(cmd)+len("; "+ConfirmRead) <= cmdpolicy.MaxCommandLen {
@@ -252,6 +259,7 @@ func TestABacklogTooLongForItsStatus11IsRefused(t *testing.T) {
 // Why (#813, #809): the confirmation is a Status 11, which carries the Wi-Fi name. A light write is no secret-setting
 // command, so nothing else would mask its reply: the channel scrubs every confirmation.
 func TestTheConfirmationReplyIsScrubbed(t *testing.T) {
+	t.Parallel()
 	b := lightBulb(func(pub) string { return lightState50 }, status11At50)
 	got, err := newChan(b).Do(t.Context(), plug(), "Dimmer 50")
 	if err != nil {
@@ -269,6 +277,7 @@ func TestTheConfirmationReplyIsScrubbed(t *testing.T) {
 // up meanwhile, or a channel that closes meanwhile, leaves the write published and unconfirmed: an unknown outcome
 // (ErrTimeout), never "not sent" (ErrUnreachable would let the router send the write again over HTTP).
 func TestEndingBeforeTheConfirmationIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	for _, closeIt := range []bool{false, true} {
 		b := lightBulb(func(pub) string { return lightState50 }, status11At50)
 		o := fast()
@@ -294,6 +303,7 @@ func TestEndingBeforeTheConfirmationIsAnUnknownOutcome(t *testing.T) {
 // Why (#813): a STATUS11 without the StatusSTS object (nothing Tasmota sends, but a broker client can) is still the
 // answer to the Status 11 and is returned as it came: unwrapping must never drop a reply.
 func TestAConfirmationWithoutStatusSTSIsReturnedAsItCame(t *testing.T) {
+	t.Parallel()
 	for _, payload := range []string{`{"Uptime":"0T01:00:00"}`, `{"StatusSTS":"x"}`, `[1]`} {
 		b := lightBulb(func(pub) string { return lightState50 }, payload)
 		got, err := newChan(b).Do(t.Context(), plug(), "Dimmer 50")
@@ -309,6 +319,7 @@ func TestAConfirmationWithoutStatusSTSIsReturnedAsItCame(t *testing.T) {
 // done with the state from before it. The topic is held until that STATUS11 arrives, as for any late reply
 // (TestALateReplyDoesNotAnswerTheNextCommand).
 func TestTheStatus11OfAFailedLightWriteNeverAnswersTheNextOne(t *testing.T) {
+	t.Parallel()
 	stale := `{"StatusSTS":{"POWER":"ON","Dimmer":10}}`
 	fresh := `{"StatusSTS":{"POWER":"ON","Dimmer":60}}`
 	for _, first := range []string{"Dimmer 50", "Backlog Channel5 50"} {
@@ -358,6 +369,7 @@ func TestTheStatus11OfAFailedLightWriteNeverAnswersTheNextOne(t *testing.T) {
 // was asked before the write ran (another client's Status 11, or ours overtaking the write on the other topic) and shows
 // the state from before it: it never confirms the write, which then is an unknown outcome.
 func TestAStatus11BeforeTheWritesOwnResponseNeverConfirmsIt(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		if p.command == "Status" {
@@ -376,6 +388,7 @@ func TestAStatus11BeforeTheWritesOwnResponseNeverConfirmsIt(t *testing.T) {
 // keeps its light state, so every later part gets only its own reply. That holds under SetOption4 1 too, where the
 // replies come on stat/<t>/DIMMER and stat/<t>/CHANNEL. Another client's RESULT that is no light state is not kept.
 func TestALightPartKeepsItsLightStateInABacklog(t *testing.T) {
+	t.Parallel()
 	const state = `{"POWER2":"ON","Dimmer":50,"Color":"7F7F7F","HSBColor":"0,0,50","Channel":[50,50,50]}`
 	for _, so4 := range []bool{false, true} {
 		b := &fakeBus{}

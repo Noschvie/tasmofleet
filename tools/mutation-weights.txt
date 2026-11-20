@@ -1,15 +1,16 @@
 # Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost]. Counts from a gremlins dry run of 2026-11-16.
 # "cost <pkg> <seconds per mutant x 100>" and the per-file overrides: the earlier ones scaled per package by measured over estimated seconds in the weekly runs 41510561121 (2026-11-02), 42542151416 (2026-11-09), 43309125119 (2026-11-12), 43783436076 (2026-11-16, shard 4/5 cancelled: restore files.go and lockout.go were set to the rate of replace.go + restore.go, 6.6 s per mutant), and 43864762631 (2026-11-16, manual run of this branch with 8 shards, all complete: policy x1.32, and mqttcmd channel.go, restore files.go, lockout.go and flow.go set to their measured seconds per mutant).
 # "setup <seconds x 100>": what a shard pays once per package it mutates, besides the mutants (test build, coverage run): 22 s, the mean of 29 package runs of 43783436076 (6 to 37 s). See tools/mutation-shard.sh.
+# 2026-11-20 (#1058): the tests of internal/mqttcmd and internal/restore run in parallel (t.Parallel), so their cost lines and per-file overrides are the earlier ones scaled by the measured speed-up of a local gremlins run (3 workers, same machine, before and after, identical killed/lived/not covered): mqttcmd backlog.go 120.7 s -> 26.6 s for 24 mutants (x0.22, scaled x0.25), restore restore.go 166 s -> 88 s for 43 mutants (x0.53, scaled x0.55). Rounded up on purpose: an estimate too low overloads a shard (#886). An estimate, not a weekly run: replace both with the measured seconds per mutant of the next weekly run.
 setup 2200
 cost internal/fwselect 56
 cost internal/ota 175
 cost internal/policy 191
 cost internal/cmdpolicy 31
-cost internal/mqttcmd 691
+cost internal/mqttcmd 173
 cost internal/transport 80
 cost internal/tasmota 292
-cost internal/restore 1598
+cost internal/restore 879
 internal/fwselect decide.go 10 28
 internal/fwselect detect.go 48 28
 internal/fwselect family.go 15 41
@@ -46,13 +47,13 @@ internal/cmdpolicy doc.go 0
 internal/cmdpolicy policyrule.go 6 41
 internal/cmdpolicy scrub.go 26 41
 internal/cmdpolicy secret.go 0
-internal/mqttcmd backlog.go 12 681
-internal/mqttcmd channel.go 36 1890
-internal/mqttcmd correlate.go 58 409
+internal/mqttcmd backlog.go 12 170
+internal/mqttcmd channel.go 36 472
+internal/mqttcmd correlate.go 58 102
 internal/mqttcmd doc.go 0
-internal/mqttcmd filedownload.go 64 989
-internal/mqttcmd info.go 10 581
-internal/mqttcmd upload.go 81 681
+internal/mqttcmd filedownload.go 64 247
+internal/mqttcmd info.go 10 145
+internal/mqttcmd upload.go 81 170
 internal/transport choose.go 78 59
 internal/transport configupload.go 25 101
 internal/transport explain.go 0
@@ -74,9 +75,9 @@ internal/tasmota safeboot.go 8 299
 internal/tasmota status.go 0
 internal/tasmota tasmota.go 1 767
 internal/tasmota upload.go 33 331
-internal/restore files.go 101 440
-internal/restore flow.go 119 420
-internal/restore lockout.go 71 730
-internal/restore replace.go 98 620
-internal/restore restore.go 41 598
-internal/restore steps.go 2 620
+internal/restore files.go 101 242
+internal/restore flow.go 119 231
+internal/restore lockout.go 71 402
+internal/restore replace.go 98 341
+internal/restore restore.go 41 329
+internal/restore steps.go 2 341

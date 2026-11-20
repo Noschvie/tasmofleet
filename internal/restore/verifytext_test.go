@@ -37,6 +37,7 @@ func (listFails) List(context.Context, model.DeviceID) ([]model.Backup, error) {
 // old one taken without it, which sends the person to look for a decoder that is not the problem. Each combination of
 // the two backups lacking a decoded copy has its own sentence, and none of them is a verified result.
 func TestRestoreSaysWhichBackupLacksTheDecodedCopyItCouldNotCompare(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name                            string
 		sourceLacksDecoded, decoderDown bool
@@ -51,6 +52,7 @@ func TestRestoreSaysWhichBackupLacksTheDecodedCopyItCouldNotCompare(t *testing.T
 		{"the restored backup's copy cannot be read", false, false, true, "the decoded copy of the backup being restored could not be read"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dec := &switchDecoder{}
 			e := newFlowWith(t, "15.6.0", dec)
 			a := e.dumpBackup(t, e.dumpA)

@@ -45,6 +45,7 @@ func waitAborts(s *scriptedDevice, n int32) int32 {
 // files of a backup need no HTTP; the bytes must be exactly the file's, checked against the device's MD5, as
 // the simulator (modelled on the firmware) serves them.
 func TestType8DownloadReturnsExactlyTheNamedFile(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{MQTTPassword: dlPassword, UfsMQTT: true})
 	e.waitConnected(t)
 	got, err := e.ch.DownloadFile(t.Context(), e.dvc, dlPassword, "/autoexec.be", 1<<20)
@@ -61,6 +62,7 @@ func TestType8DownloadReturnsExactlyTheNamedFile(t *testing.T) {
 // restore writes back. The firmware names the file without its leading slash, so that form is the match and
 // nothing else is.
 func TestType8HeaderMustNameTheAskedFile(t *testing.T) {
+	t.Parallel()
 	body := []byte("x")
 	for _, tc := range []struct {
 		name, header string
@@ -72,6 +74,7 @@ func TestType8HeaderMustNameTheAskedFile(t *testing.T) {
 		{"a settings header", header(3, 1), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, b, got, err := runType8(t, [][]string{{started, tc.header}, {data(3, body)}, {fmt.Sprintf(`{"Id":3,"Md5":"%s"}`, md5hex(body))}}, nil, "/lib/x.be", 100)
 			if tc.ok {
 				if err != nil || !bytes.Equal(got, body) {
@@ -97,6 +100,7 @@ func TestType8HeaderMustNameTheAskedFile(t *testing.T) {
 // before it sent anything. The same Error 3 after a header is not that answer: data may have started, so it
 // must never read as "this firmware has no file transfer" (T2/T3).
 func TestType8ErrorThreeMeansNoFileTransferInThisFirmware(t *testing.T) {
+	t.Parallel()
 	e := newSimEnv(t, simulator.DeviceSpec{MQTTPassword: dlPassword}) // stock: no USE_UFILESYS_MQTT
 	e.waitConnected(t)
 	_, err := e.ch.DownloadFile(t.Context(), e.dvc, dlPassword, "/autoexec.be", 1<<20)
@@ -121,6 +125,7 @@ func TestType8ErrorThreeMeansNoFileTransferInThisFirmware(t *testing.T) {
 // single "?" asks for data (each chunk is a publish to the device and a few kB on the broker), and the
 // device is left idle with FileDownload 0.
 func TestType8HeaderOverTheLimitAbortsBeforeAnyData(t *testing.T) {
+	t.Parallel()
 	s, b, got, err := runType8(t, [][]string{{started, type8Header("big.be", 3, 5000)}}, nil, "/big.be", 4999)
 	if !errors.Is(err, tasmota.ErrFileTooLarge) || got != nil {
 		t.Fatalf("got %d bytes, %v", len(got), err)
@@ -140,6 +145,7 @@ func TestType8HeaderOverTheLimitAbortsBeforeAnyData(t *testing.T) {
 // file calls (a dot file such as the settings, no leading slash), is refused before anything is published.
 // (An empty password is sendable, the one of a device without an MqttPassword, #609: TestAnEmptyPasswordIsSent.)
 func TestType8PathThatCannotBeSentVerbatimPublishesNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	for _, p := range []string{"", "x.be", `/a"b`, `/a\b`, "/a\nb", "/.settings", "/lib/../x"} {
@@ -158,6 +164,7 @@ func TestType8PathThatCannotBeSentVerbatimPublishesNothing(t *testing.T) {
 // Why (#924): a path the firmware cannot take is the same refusal over MQTT as over HTTP (tasmota.ErrBadPath), so a
 // backup lists that file as "name not accepted" whichever transport read the files, not as "could not be read".
 func TestType8PathTheFirmwareCannotTakeIsANameRefusalAsOverHTTP(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	for _, p := range []string{"/aaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.be", "x.be", `/a"b`} {
@@ -175,6 +182,7 @@ func TestType8PathTheFirmwareCannotTakeIsANameRefusalAsOverHTTP(t *testing.T) {
 // answers each "?" slowly (yet within ReplyWait) must still not hold its topic, and the backup the device
 // lock, for minutes: the bound follows the announced size.
 func TestType8SlowDeviceCannotHoldTheTopicPastItsBound(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	var questions atomic.Int32
 	b.onPub = func(b *fakeBus, p pub) {

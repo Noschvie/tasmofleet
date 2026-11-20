@@ -56,6 +56,7 @@ func fileCmds(e *simEnv) []string {
 // Why: backups from both paths must be interchangeable for restore and diff, so the MQTT bytes
 // are exactly what /dl serves. One "?" is sent per Data message and none after Started.
 func TestDownloadEqualsHTTPDlAndSendsOneQuestionMarkPerData(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	got, err := e.ch.Download(t.Context(), e.dvc, dlPassword)
 	if err != nil {
@@ -85,6 +86,7 @@ func TestDownloadEqualsHTTPDlAndSendsOneQuestionMarkPerData(t *testing.T) {
 
 // Why: a dump larger than one chunk is reassembled in order and checked against the MD5.
 func TestDownloadReassemblesSeveralChunks(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	dump := make([]byte, 10000)
 	for i := range dump {
@@ -109,6 +111,7 @@ func TestDownloadReassemblesSeveralChunks(t *testing.T) {
 // Why: after a clean transfer the device is idle, so the next one does not need the abort; the
 // abort is only for "state unknown" (live test: a stray state produced truncated files).
 func TestSecondDownloadSkipsTheOpeningAbort(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	for i := range 2 {
 		if _, err := e.ch.Download(t.Context(), e.dvc, dlPassword); err != nil {
@@ -129,6 +132,7 @@ func TestSecondDownloadSkipsTheOpeningAbort(t *testing.T) {
 // Why (D6): Error 1 is the wrong-password signal the router turns into the bad mark; the error
 // must be typed, must not contain the password, and nothing may be left half-open.
 func TestDownloadWrongPasswordIsTypedAndDoesNotLeakIt(t *testing.T) {
+	t.Parallel()
 	e := newDownloadEnv(t)
 	_, err := e.ch.Download(t.Context(), e.dvc, "not-the-password")
 	if !errors.Is(err, ErrPasswordRefused) {
@@ -146,6 +150,7 @@ func TestDownloadWrongPasswordIsTypedAndDoesNotLeakIt(t *testing.T) {
 // is published. (An empty password is the password of a device whose MqttPassword is empty, #609;
 // "no password set" is refused by the router, model.FilePassword.)
 func TestDownloadRefusesUnsendablePasswordsWithoutPublishing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	for _, pw := range []string{`a"b`, `a\b`, "a\nb"} {
@@ -164,6 +169,7 @@ func TestDownloadRefusesUnsendablePasswordsWithoutPublishing(t *testing.T) {
 
 // Why: a group topic would run FileDownload on many devices (same rule as Do).
 func TestDownloadRefusesAGroupTopic(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	d := plug()
 	d.Topic = "tasmotas"
@@ -234,6 +240,7 @@ func runScript(t *testing.T, steps [][]string, mod func(*Options)) (*scriptedDev
 // Why (fail closed): every irregularity returns an error, hands back no bytes (nothing is
 // stored) and ends the transfer with FileDownload 0 so the device is not left mid-transfer.
 func TestDownloadFaultsFailClosedAndAbort(t *testing.T) {
+	t.Parallel()
 	body := bytes.Repeat([]byte{0xAB}, 100)
 	good := md5hex(body)
 	cases := []struct {
@@ -255,6 +262,7 @@ func TestDownloadFaultsFailClosedAndAbort(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, _, got, err := runScript(t, tc.steps, nil)
 			if err == nil || got != nil || !errors.Is(err, ErrTransfer) {
 				t.Fatalf("got %d bytes, %v", len(got), err)
@@ -283,6 +291,7 @@ func TestDownloadFaultsFailClosedAndAbort(t *testing.T) {
 // failure (no bytes, the transfer ended with FileDownload 0, no retry), and no other fault may carry
 // the mark, or the memory sentence would be shown for faults it does not explain.
 func TestDownloadEmptyDataIsTypedSoTheCauseCanBeNamed(t *testing.T) {
+	t.Parallel()
 	body := bytes.Repeat([]byte{0xAB}, 100)
 	cases := []struct {
 		name  string
@@ -298,6 +307,7 @@ func TestDownloadEmptyDataIsTypedSoTheCauseCanBeNamed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s, b, got, err := runScript(t, tc.steps, nil)
 			if err == nil || got != nil || !errors.Is(err, ErrTransfer) {
 				t.Fatalf("got %d bytes, %v", len(got), err)
@@ -334,6 +344,7 @@ func TestDownloadEmptyDataIsTypedSoTheCauseCanBeNamed(t *testing.T) {
 // Why: after a bad transfer the device state is unknown, so the next Download opens with
 // FileDownload 0 again, even though this process did transfer before.
 func TestDownloadAfterAFailureOpensWithAbortAgain(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	body := bytes.Repeat([]byte{1}, 64)
 	good := [][]string{{started, header(9, 64)}, {data(9, body)}, {fmt.Sprintf(`{"Id":9,"Md5":"%s"}`, md5hex(body))}}
@@ -362,6 +373,7 @@ func TestDownloadAfterAFailureOpensWithAbortAgain(t *testing.T) {
 // Why: leftovers of an earlier transfer (the late "Aborted", an extra chunk) must not be taken
 // for the answer to the new start.
 func TestDownloadIgnoresMessagesBeforeStarted(t *testing.T) {
+	t.Parallel()
 	body := bytes.Repeat([]byte{7}, 40)
 	steps := [][]string{
 		{`{"FileDownload":"Aborted"}`, data(3, []byte("old")), ``, started, header(9, 40)},
@@ -377,6 +389,7 @@ func TestDownloadIgnoresMessagesBeforeStarted(t *testing.T) {
 // Why (coordinator note): the device always publishes, an empty response too, so empty payloads
 // on the topic are no messages at all.
 func TestDownloadIgnoresEmptyPayloads(t *testing.T) {
+	t.Parallel()
 	body := bytes.Repeat([]byte{7}, 40)
 	steps := [][]string{
 		{started, header(9, 40)},
@@ -391,6 +404,7 @@ func TestDownloadIgnoresEmptyPayloads(t *testing.T) {
 // Why (coordinator note): a firmware without FileDownload answers {"Command":"Unknown"} with the
 // whole payload, password included, in Input. It is a clear failure and the echo goes nowhere.
 func TestDownloadUnknownEchoFailsWithoutLeakingIt(t *testing.T) {
+	t.Parallel()
 	echo := fmt.Sprintf(`{"Command":"Unknown","Input":"FILEDOWNLOAD {\"Password\":\"%s\",\"Type\":2}"}`, dlPassword)
 	_, _, got, err := runScript(t, [][]string{{echo}}, nil)
 	if err == nil || got != nil || !strings.Contains(err.Error(), "does not support") {
@@ -403,6 +417,7 @@ func TestDownloadUnknownEchoFailsWithoutLeakingIt(t *testing.T) {
 
 // Why: Error 5 (group topic) and others are named; only Error 1 is the password signal.
 func TestDownloadErrorCodes(t *testing.T) {
+	t.Parallel()
 	for code, want := range map[int]string{3: "type", 5: "group topic", 7: "Error 7"} {
 		_, _, _, err := runScript(t, [][]string{{fmt.Sprintf(`{"FileDownload":"Error %d"}`, code)}}, nil)
 		if err == nil || errors.Is(err, ErrPasswordRefused) || !strings.Contains(err.Error(), want) {
@@ -418,6 +433,7 @@ func TestDownloadErrorCodes(t *testing.T) {
 // Why: a silent device must not hold the topic forever: ReplyWait per message and FileTotal for
 // the whole transfer, both ending in ErrTimeout.
 func TestDownloadTimeouts(t *testing.T) {
+	t.Parallel()
 	_, _, _, err := runScript(t, nil, func(o *Options) { o.ReplyWait = 50 * time.Millisecond })
 	if !errors.Is(err, tasmota.ErrTimeout) {
 		t.Fatalf("per message: %v", err)
@@ -456,6 +472,7 @@ func TestDownloadTimeouts(t *testing.T) {
 // Why: a start that was (or may have been) published and never answered leaves the device in an
 // unknown state, so it is ended with FileDownload 0; an Error N means the device reset itself.
 func TestDownloadAbortsAfterAnUnansweredStartButNotAfterAnErrorAnswer(t *testing.T) {
+	t.Parallel()
 	s, _, _, err := runScript(t, nil, nil) // nothing ever answers the start
 	if !errors.Is(err, tasmota.ErrTimeout) {
 		t.Fatal(err)
@@ -471,6 +488,7 @@ func TestDownloadAbortsAfterAnUnansweredStartButNotAfterAnErrorAnswer(t *testing
 
 // Why: a caller whose context is already spent must not publish the start (it carries the password).
 func TestDownloadWithACancelledContextPublishesNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -481,6 +499,7 @@ func TestDownloadWithACancelledContextPublishesNothing(t *testing.T) {
 
 // Why: a caller that gives up before it is its turn sends nothing; the topic stays usable.
 func TestDownloadQueuedCallerCanCancelWithoutSending(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	c.sem("plug") <- struct{}{} // another command holds the topic
@@ -493,6 +512,7 @@ func TestDownloadQueuedCallerCanCancelWithoutSending(t *testing.T) {
 
 // Why: a device that is offline per LWT gets nothing published (same as Do).
 func TestDownloadOfflineDeviceGetsNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
@@ -505,6 +525,7 @@ func TestDownloadOfflineDeviceGetsNothing(t *testing.T) {
 // ErrPublished so the caller counts it as an attempt; a refusal decided before the first publish
 // is not.
 func TestDownloadFailureAfterTheOpeningAbortIsMarkedPublished(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	ctx, cancel := context.WithCancel(t.Context())
 	b.onPub = func(b *fakeBus, p pub) {

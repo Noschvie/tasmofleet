@@ -22,6 +22,7 @@ import (
 // writes until the device has been read again. Once the device is back the restore reads them itself, before the
 // verifying backup, which they would otherwise keep off MQTT (a device only MQTT reaches could not be verified).
 func TestARestoreUploadMakesGroupTopics2To4Unread(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		mqtt bool
@@ -41,6 +42,7 @@ func TestARestoreUploadMakesGroupTopics2To4Unread(t *testing.T) {
 		{"MQTT, not accepted", true, func(_ *flowEnv, u *fakeUploader) { u.apply, u.err = false, errors.New("test: FileUpload refused") }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlow(t, "15.6.0")
 			a := e.dumpBackup(t, e.dumpA)
 			e.sim.SetConfigDump(e.dumpB)
@@ -85,6 +87,7 @@ func TestARestoreUploadMakesGroupTopics2To4Unread(t *testing.T) {
 // it (or answers without all four keys) must not fail a restore that the verification can still prove, here over HTTP,
 // which the unread group topics do not hold back.
 func TestAFailedGroupTopicReadLeavesTheRestoreToTheVerification(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)

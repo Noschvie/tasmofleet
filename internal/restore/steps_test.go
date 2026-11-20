@@ -11,6 +11,7 @@ import (
 // reverse). The failure texts are the ones the run code writes (see the flow tests, which
 // check Step on real failed jobs).
 func TestStepOfRunningDoneAndFailedJobs(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		state, detail string
 		want          int
@@ -47,6 +48,7 @@ func TestStepOfRunningDoneAndFailedJobs(t *testing.T) {
 // before the first write changed nothing; one after it did, and the restore of the backup taken
 // first puts the old files back too.
 func TestFilesChangedOnlyForAPartlyWrittenFailure(t *testing.T) {
+	t.Parallel()
 	if FilesChanged(failFilesNone + "x") {
 		t.Error("a files failure before any write must not offer a rollback")
 	}
@@ -58,6 +60,7 @@ func TestFilesChangedOnlyForAPartlyWrittenFailure(t *testing.T) {
 // Why: the finished job keeps what the files step did in the same text as the verification, so
 // the page can show both after a restart of the service.
 func TestSplitDetailSeparatesTheFilesSummary(t *testing.T) {
+	t.Parallel()
 	if f, r := SplitDetail("6 files written (6 flash writes)\nrestored; identical"); f != "6 files written (6 flash writes)" || r != "restored; identical" {
 		t.Errorf("%q %q", f, r)
 	}

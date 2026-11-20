@@ -32,6 +32,7 @@ import (
 // the device is marked, so its next commands go over HTTP while it may not be back on the broker (as after a
 // connection change by a write, T10).
 func TestARestoreThatChangesTheMQTTConnectionAsksNothingWhileHTTPAnswers(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -56,6 +57,7 @@ func TestARestoreThatChangesTheMQTTConnectionAsksNothingWhileHTTPAnswers(t *test
 // Why (#607): the same restore while HTTP does not answer can cut TasmoFleet off, so the lockout question comes back
 // and says that HTTP does not answer; nothing is uploaded without it.
 func TestARestoreThatChangesTheMQTTConnectionAsksWhenHTTPDoesNotAnswer(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.httpDown.Store(true)
@@ -75,6 +77,7 @@ func TestARestoreThatChangesTheMQTTConnectionAsksWhenHTTPDoesNotAnswer(t *testin
 // files can take minutes. HTTP that went silent in between turns the restore back into one that needs the person's
 // confirmation; the job fails at the upload step with nothing uploaded and says how to go on.
 func TestARestoreWhoseHTTPStopsAnsweringBeforeTheUploadUploadsNothing(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -105,6 +108,7 @@ func TestARestoreWhoseHTTPStopsAnsweringBeforeTheUploadUploadsNothing(t *testing
 // transport answers (here HTTP), so the job does not fail with "did not restart"; the verification then takes the
 // transport that proved the restart.
 func TestTheBootCheckAfterAnMQTTConnectionChangeUsesTheTransportThatAnswers(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -134,6 +138,7 @@ func (u *silencingUploader) UploadConfig(ctx context.Context, t tasmota.Target, 
 // has no file transfer over MQTT, so the files go over HTTP while HTTP answers, before the settings, after the identity
 // was checked over HTTP. The confirmation page lists them as for a restore over HTTP.
 func TestRestoreOverMQTTWritesTheFilesOverHTTP(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	u := &fakeUploader{e: e, apply: true}
 	m := e.mqttManager(t, u, transport.MQTT)
@@ -165,6 +170,7 @@ func TestRestoreOverMQTTWritesTheFilesOverHTTP(t *testing.T) {
 // another MAC the files are left out and the job says so; the settings still go over MQTT,
 // which reaches the device by its topic, and nothing is written to the other host.
 func TestFilesOfAnMQTTRestoreAreLeftOutWhenHTTPFindsAnotherDevice(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	u := &fakeUploader{e: e, apply: true}
 	m := e.mqttManager(t, u, transport.MQTT)
@@ -204,6 +210,7 @@ func (s macSwitch) Command(ctx context.Context, t tasmota.Target, c string) (jso
 // The settings still go over MQTT, the files are left out with that reason, and nothing is sent to any address. A backup
 // that changes the MQTT connection then asks the lockout question, since HTTP cannot be shown to answer.
 func TestARestoreOverMQTTWithoutOneHTTPAddressLeavesTheFilesOutAndAsks(t *testing.T) {
+	t.Parallel()
 	for name, set := range map[string]func(*flowEnv){
 		"name with two IPs": func(e *flowEnv) {
 			e.m.o.Resolve = func(context.Context, string) ([]netip.Addr, error) {
@@ -219,6 +226,7 @@ func TestARestoreOverMQTTWithoutOneHTTPAddressLeavesTheFilesOutAndAsks(t *testin
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e, a := filesFlow(t)
 			e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 			set(e)
@@ -243,6 +251,7 @@ func TestARestoreOverMQTTWithoutOneHTTPAddressLeavesTheFilesOutAndAsks(t *testin
 // Why: a restore cancelled while it waits for the restart (TasmoFleet shuts down) ends with the context's error, not
 // with "did not restart", which would claim something about the device.
 func TestTheWaitForTheRestartEndsWithTheCancellation(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -254,6 +263,7 @@ func TestTheWaitForTheRestartEndsWithTheCancellation(t *testing.T) {
 // Why (H1): a decoded backup that is not JSON cannot be compared, so the restore over MQTT counts it as a change of the
 // MQTT connection (the question comes when HTTP does not answer).
 func TestAnUnreadableDecodedBackupCountsAsAChangeOfTheMQTTConnection(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", rawDecoder("not json"))
 	a := e.dumpBackup(t, e.dumpA)
 	m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
@@ -271,6 +281,7 @@ func (d rawDecoder) Decode(context.Context, []byte) ([]byte, error) { return []b
 // Why (#607): the replace page says per backup what it holds of the device's files. Since backups go over MQTT first and
 // read their files over HTTP, "they need HTTP" means HTTP did not answer during that run, not that it went over MQTT.
 func TestTheReplacePageSaysWhyABackupHasNoFiles(t *testing.T) {
+	t.Parallel()
 	m := &Manager{o: Options{Files: noteFiles{"they need HTTP"}}}
 	got := m.dumpFiles(t.Context(), []model.Backup{{ID: 3}})
 	if got[3] != "no files (HTTP did not answer)" {
@@ -320,6 +331,7 @@ var brokerMoves = map[string]string{
 // device's values are read over MQTT; equal values (the defaults the backup writes as "") must not count, or every
 // restore would ask.
 func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
+	t.Parallel()
 	type tc struct {
 		extra string
 		name  string              // the name the sentence must give
@@ -392,6 +404,7 @@ func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
 	}
 	for key, c := range cases {
 		t.Run(key, func(t *testing.T) {
+			t.Parallel()
 			got := lockout(t, c)
 			if !strings.Contains(got, "this backup changes "+c.name) || strings.Contains(got, "did not report") {
 				t.Fatalf("%q: the backup changes %s", got, c.name)
@@ -400,6 +413,7 @@ func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
 	}
 	for name, c := range same {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			if got := lockout(t, c); got != "" {
 				t.Fatalf("%q: the backup holds the device's own MQTT settings", got)
 			}
@@ -410,6 +424,7 @@ func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
 // Why: a setting the device does not report cannot be shown to be unchanged, so it counts as a possible change of the
 // MQTT connection (fail closed), named as one that could not be compared.
 func TestAnMQTTSettingTheDeviceDoesNotReportCountsAsAChange(t *testing.T) {
+	t.Parallel()
 	for cmd, extra := range map[string]string{
 		"MqttClient": `,"mqtt_client":"DVES_%06X"`,
 		// Not on record (a device known only from the broker): read from the device, so a silent one is not equal.
@@ -417,6 +432,7 @@ func TestAnMQTTSettingTheDeviceDoesNotReportCountsAsAChange(t *testing.T) {
 		"MqttPort": `,"mqtt_port":1883`,
 	} {
 		t.Run(cmd, func(t *testing.T) {
+			t.Parallel()
 			e := newFlowWith(t, "15.6.0", connDecoder{extra: extra})
 			a := e.dumpBackup(t, e.dumpA)
 			m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
@@ -440,6 +456,7 @@ func TestAnMQTTSettingTheDeviceDoesNotReportCountsAsAChange(t *testing.T) {
 // read from Status 6, which the router does not mask; the guard plays the router's part. A device that does not
 // answer Status 6 has not reported its login: never equal.
 func TestTheLockoutReadsTheMQTTUserFromStatus6(t *testing.T) {
+	t.Parallel()
 	// fail: "timeout" lets Status 6 time out, "no user" answers it without StatusMQT.MqttUser.
 	lockout := func(t *testing.T, user func(device string) string, fail string) (string, []string) {
 		e := newFlow(t, "15.6.0")
@@ -500,6 +517,7 @@ func (c status6Without) Command(ctx context.Context, t tasmota.Target, cmnd stri
 // and nothing else, so a setting added to the write rule cannot be forgotten by the restore (the two lists drifted
 // once: the restore compared seven settings while the rule counted fourteen).
 func TestEveryCutOffCommandIsComparedByTheRestore(t *testing.T) {
+	t.Parallel()
 	cat, err := tasmotacmd.Default()
 	if err != nil {
 		t.Fatal(err)
@@ -544,8 +562,10 @@ func TestEveryCutOffCommandIsComparedByTheRestore(t *testing.T) {
 // turns TLS on cuts TasmoFleet off from a device it reaches only over MQTT, as a topic change does. While HTTP does not
 // answer the lockout question must come, and nothing is uploaded without it.
 func TestABackupThatMovesTheDeviceOnTheBrokerAsksWhenHTTPDoesNotAnswer(t *testing.T) {
+	t.Parallel()
 	for name, extra := range brokerMoves {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlowWith(t, "15.6.0", connDecoder{extra: extra})
 			a := e.dumpBackup(t, e.dumpA)
 			e.httpDown.Store(true)
@@ -566,8 +586,10 @@ func TestABackupThatMovesTheDeviceOnTheBrokerAsksWhenHTTPDoesNotAnswer(t *testin
 // on the broker, so the old topic stays silent. While HTTP answers, the boot check asks HTTP and the job ends verified;
 // the device is marked so that its next commands go over HTTP, not into the old topic.
 func TestTheBootCheckAfterABackupThatMovesTheDeviceOnTheBrokerUsesHTTP(t *testing.T) {
+	t.Parallel()
 	for name, extra := range brokerMoves {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlowWith(t, "15.6.0", connDecoder{extra: extra})
 			a := e.dumpBackup(t, e.dumpA)
 			e.sim.SetConfigDump(e.dumpB)
@@ -592,6 +614,7 @@ func TestTheBootCheckAfterABackupThatMovesTheDeviceOnTheBrokerUsesHTTP(t *testin
 // upload, the restore still changes the MQTT connection while HTTP works, so the device is marked like any other: its
 // next commands go over HTTP instead of waiting for timeouts on the old topic.
 func TestAnAcceptedLockoutStillMarksTheDeviceWhenHTTPAnswersAtTheUpload(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -614,6 +637,7 @@ func TestAnAcceptedLockoutStillMarksTheDeviceWhenHTTPAnswersAtTheUpload(t *testi
 // them unasked): the HTTP way back opens only after an HTTP proof at the upload. The job then ends "did not restart",
 // the outcome of an accepted lockout.
 func TestAnAcceptedLockoutNeverSendsTheWebPasswordToTheHostAtTheAddress(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -721,7 +745,9 @@ func watchCreds(t *testing.T, e *flowEnv, m *Manager) *credsWatch {
 // come before the first file call, which carries the password: a host that is not the device must never see it. Over
 // HTTP the restore has always worked this way (liveMAC); the confirmation page (Assess) and the run must too.
 func TestTheFilesOfAnMQTTRestoreNeverSendTheWebPasswordToAnotherHost(t *testing.T) {
+	t.Parallel()
 	t.Run("confirmation page", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		w := watchCreds(t, e, m)
@@ -736,6 +762,7 @@ func TestTheFilesOfAnMQTTRestoreNeverSendTheWebPasswordToAnotherHost(t *testing.
 		}
 	})
 	t.Run("run", func(t *testing.T) {
+		t.Parallel()
 		e, a := filesFlow(t)
 		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 		w := watchCreds(t, e, m)
@@ -778,6 +805,7 @@ func (c replyClient) Command(_ context.Context, _ tasmota.Target, cmnd string) (
 // counts every answer it cannot read as "not reported", never as equal: a garbled answer must not let a connection
 // change through without the question.
 func TestTheDevicesMQTTSettingsAreReadAsTasmotaAnswersThem(t *testing.T) {
+	t.Parallel()
 	fp := func(b string) string { return strings.TrimSpace(strings.Repeat(b+" ", 20)) }
 	for name, tc := range map[string]struct {
 		replies map[string]string
@@ -805,6 +833,7 @@ func TestTheDevicesMQTTSettingsAreReadAsTasmotaAnswersThem(t *testing.T) {
 			run: func(c *connCompare) { c.fingerprint(1, json.RawMessage(fingerprintJSON(0))) }, unread: []string{"MqttFingerprint1"}},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			c := &connCompare{m: &Manager{o: Options{Client: replyClient{replies: tc.replies}}}, ctx: t.Context(), dev: model.Device{ID: 1}}
 			tc.run(c)
 			if !slices.Equal(c.diff, tc.diff) || !slices.Equal(c.unread, tc.unread) {
@@ -822,6 +851,7 @@ func (gatedWatch) FilesUsable(tasmota.Target) error { return transport.ErrFilesN
 // Why (#607, T15): while the device's HTTP is known to fail, the files of a restore over MQTT are left out without one
 // HTTP request: the identity question before the files would only wait for the same timeout as the file calls.
 func TestTheFilesOfAnMQTTRestoreAskNothingWhileHTTPIsKnownToFail(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 	w := watchCreds(t, e, m)
@@ -881,6 +911,7 @@ func (u restartUploader) UploadConfig(ctx context.Context, t tasmota.Target, dum
 // compare the files it had written. A device that restarts says nothing about its HTTP API, so those polls must not
 // mark it; the router's real observer and memory decide here.
 func TestTheWaitForTheRestartDoesNotMarkHTTPFailing(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -921,6 +952,7 @@ func status3(flag4, flag5 string) string {
 // answered, for a backup with the device's own TLS settings. The restore reads them as numbers from Status 3 instead,
 // which no StateText changes; an answer without the bit is still "not reported", never equal (fail closed).
 func TestSetOptionsAreReadAsNumbersWhateverTheDevicesStateText(t *testing.T) {
+	t.Parallel()
 	german := func(tls, fp string, status string) map[string]string {
 		return map[string]string{"SetOption103": `{"SetOption103":"` + tls + `"}`, "SetOption132": `{"SetOption132":"` + fp + `"}`,
 			"Status 3": status}
@@ -953,6 +985,7 @@ func TestSetOptionsAreReadAsNumbersWhateverTheDevicesStateText(t *testing.T) {
 			run: func(c *connCompare) { both(c, 0, 0) }, unread: []string{"SetOption103 (MQTT TLS)", "SetOption132 (TLS fingerprint)"}},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			c := &connCompare{m: &Manager{o: Options{Client: replyClient{replies: tc.replies}}}, ctx: t.Context(), dev: model.Device{ID: 1}}
 			tc.run(c)
 			if !slices.Equal(c.diff, tc.diff) || !slices.Equal(c.unread, tc.unread) {
@@ -966,6 +999,7 @@ func TestSetOptionsAreReadAsNumbersWhateverTheDevicesStateText(t *testing.T) {
 // or bit compares another option with the backup. kitchen-spotlight's real answer has SetOption3, 15, 21, 30, 53, 55,
 // 57, 95, 96 and 128 on; SetOption32-49 are numbers, not bits, and there is no SetOption178.
 func TestEachSetOptionIsReadFromItsWordOfStatus3(t *testing.T) {
+	t.Parallel()
 	on := map[int]bool{3: true, 15: true, 21: true, 30: true, 53: true, 55: true, 57: true, 95: true, 96: true, 128: true}
 	for n := range 180 {
 		c := &connCompare{m: &Manager{o: Options{Client: replyClient{replies: map[string]string{"Status 3": status3("00006000", "00004000")}}}},
@@ -1008,6 +1042,7 @@ func (a answering) Command(ctx context.Context, t tasmota.Target, c string) (jso
 // are compared, every value with a '%' as the one the firmware puts in its place at boot. A side that cannot be read is
 // "not reported", never equal (fail closed).
 func TestAPlaceholderTopicIsComparedRawWithTheDevicesTopic(t *testing.T) {
+	t.Parallel()
 	const (
 		changesTopic    = "this backup changes Topic"
 		changesHostname = "this backup changes Hostname (in the Topic)"
@@ -1042,6 +1077,7 @@ func TestAPlaceholderTopicIsComparedRawWithTheDevicesTopic(t *testing.T) {
 			device: map[string]string{"Topic": ""}, want: "the device did not report its Topic" + tail},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			extra := fmt.Sprintf(`,"mqtt_topic":%q`, tc.topic)
 			if tc.hostname != "" {
 				extra += fmt.Sprintf(`,"hostname":%q`, tc.hostname)
@@ -1066,6 +1102,7 @@ func TestAPlaceholderTopicIsComparedRawWithTheDevicesTopic(t *testing.T) {
 // device answers Topic with the same setting, so its own topic is no change of the MQTT connection, no lockout question
 // comes and the device is not marked.
 func TestARestoreOfADeviceWithAPlaceholderTopicAsksNothing(t *testing.T) {
+	t.Parallel()
 	e := newFlowWith(t, "15.6.0", connDecoder{extra: `,"mqtt_topic":"tasmota_%06X"`})
 	dev, err := e.st.GetDevice(t.Context(), e.dev)
 	if err != nil {

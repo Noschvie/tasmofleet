@@ -457,6 +457,7 @@ func (e *flowEnv) deviceDump(t *testing.T) []byte {
 // afterwards holds exactly that configuration, the configuration it had
 // before is kept as an automatic backup, and the result is verified.
 func TestRestoreRoundTripAgainstSimulator(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB) // the device drifted away from backup A
@@ -506,6 +507,7 @@ func TestRestoreRoundTripAgainstSimulator(t *testing.T) {
 // restarts with nothing applied. The restart alone proves nothing; the verification afterwards
 // must say that the device does not hold the backup.
 func TestRestartWithoutTheSettingsIsNotVerified(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -531,6 +533,7 @@ func TestRestartWithoutTheSettingsIsNotVerified(t *testing.T) {
 // Why: the device rewrites checksums and counters when it saves; that must not
 // make a good restore look failed. A real setting that differs must.
 func TestVerificationIgnoresVolatileButNotRealDifferences(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name         string
 		after        []byte
@@ -541,6 +544,7 @@ func TestVerificationIgnoresVolatileButNotRealDifferences(t *testing.T) {
 		{"real setting (and its secret twin)", dumpWith(1, 99), false, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlow(t, "15.6.0")
 			a := e.dumpBackup(t, e.dumpA)
 			e.sim.SetConfigDump(e.dumpB)
@@ -567,6 +571,7 @@ func TestVerificationIgnoresVolatileButNotRealDifferences(t *testing.T) {
 // Why: without the safety backup a bad restore cannot be undone, so a failing
 // pre-restore backup must stop the run before the device is touched.
 func TestFailedPreBackupStopsBeforeAnyChange(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -591,6 +596,7 @@ func TestFailedPreBackupStopsBeforeAnyChange(t *testing.T) {
 // Why: if the device answers the upload but never restarts, nothing proves the settings were
 // applied: the job must fail loudly at the restart step, and the upload is never sent again.
 func TestDeviceThatNeverRestartsFails(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.cl.swallow = true
@@ -618,6 +624,7 @@ func TestDeviceThatNeverRestartsFails(t *testing.T) {
 // Why: only a config dump can be restored, never to a device running older
 // firmware than the backup (Tasmota migrates forward only), and never two at once.
 func TestStartRefusals(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	made, _ := e.bk.List(t.Context(), e.dev)
@@ -655,6 +662,7 @@ func TestStartRefusals(t *testing.T) {
 // Why: "one restore per device" must hold when requests arrive at the same moment, not only one
 // after the other.
 func TestConcurrentStartsAdmitExactlyOne(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.cl.swallow = true
@@ -692,6 +700,7 @@ func (e *flowEnv) setStatus(mac, ver string) {
 // address is not that device (DHCP reassignment, a name taken over), nothing
 // must be sent: no command, no upload, no pre-backup.
 func TestWrongDeviceAtTheAddressIsRefusedBeforeAnything(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.setStatus("aa:bb:cc:dd:ee:ff", "")
@@ -706,6 +715,7 @@ func TestWrongDeviceAtTheAddressIsRefusedBeforeAnything(t *testing.T) {
 // Why: M3. The address may change hands between Start and the upload; the
 // check is repeated right before the dump is sent.
 func TestIdentityIsCheckedAgainBeforeTheUpload(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.hb.hook = func(call int) {
@@ -733,6 +743,7 @@ func TestIdentityIsCheckedAgainBeforeTheUpload(t *testing.T) {
 // Why: M3. A name is resolved once; the stored name must never be dialled
 // again, and an ambiguous answer is refused.
 func TestAddressIsResolvedOnceAndAmbiguityRefused(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	dev := e.device
@@ -767,6 +778,7 @@ func TestAddressIsResolvedOnceAndAmbiguityRefused(t *testing.T) {
 // has been restored anyway and the job must follow through and verify, not report a false
 // failure, and never send the dump again.
 func TestLostUploadReplyStillVerifies(t *testing.T) {
+	t.Parallel()
 	for _, cerr := range []error{tasmota.ErrTimeout, tasmota.ErrBadResponse} {
 		e := newFlow(t, "15.6.0")
 		a := e.dumpBackup(t, e.dumpA)
@@ -789,6 +801,7 @@ func TestLostUploadReplyStillVerifies(t *testing.T) {
 // Why: L1. A certain refusal (the device's "Failed" page, or an upload that never left
 // TasmoFleet) is a real failure at the upload step, at once, without waiting for a restart.
 func TestRealUploadFailureStaysFailure(t *testing.T) {
+	t.Parallel()
 	for _, cerr := range []error{
 		fmt.Errorf("%w: File invalid", tasmota.ErrUploadRefused),
 		fmt.Errorf("%w: %w", tasmota.ErrNotSent, tasmota.ErrAuth),
@@ -814,6 +827,7 @@ func TestRealUploadFailureStaysFailure(t *testing.T) {
 // Why: L5. A restore must exclude and be excluded by other writers on the
 // same device: the shared lock, and an active OTA job.
 func TestRestoreExcludesOtherWritersOnTheDevice(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	locks := devlock.New()
@@ -852,6 +866,7 @@ func TestRestoreExcludesOtherWritersOnTheDevice(t *testing.T) {
 // running (broker read)"). A restore and a Replace device must take the device lock through it, so the
 // decision is the given Acquire's.
 func TestRestoreAndReplaceTakeTheLockThroughTheGivenAcquire(t *testing.T) {
+	t.Parallel()
 	var owners []string
 	stillHeld := func(_ context.Context, _ model.DeviceID, owner string) (func(), string, bool) {
 		owners = append(owners, owner)
@@ -881,6 +896,7 @@ func (f fakeJobs) ActiveJobs(context.Context) ([]model.Job, error) { return f, n
 // uncheckable chip family need the admin's explicit confirmation, each
 // waived only by its own flag; a family mismatch can never be waived.
 func TestVersionAndFamilyGuards(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 
@@ -920,6 +936,7 @@ func TestVersionAndFamilyGuards(t *testing.T) {
 // Why: L4. Without a decoded twin the chip family cannot be read from the
 // backup; that is not guessed, the admin has to confirm.
 func TestUncheckableFamilyNeedsConfirmation(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	made, _ := e.bk.List(t.Context(), e.dev)
@@ -951,11 +968,13 @@ func TestUncheckableFamilyNeedsConfirmation(t *testing.T) {
 // undoable"). The source run must still be there when the restore is over,
 // whether it worked or not.
 func TestRestoreKeepsItsSourceBackupThroughTheRetentionOfItsSafetyBackup(t *testing.T) {
+	t.Parallel()
 	for name, uploadErr := range map[string]error{
 		"restore done":   nil,
 		"upload refused": fmt.Errorf("%w: File invalid", tasmota.ErrUploadRefused),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newFlow(t, "15.6.0")
 			a := e.dumpBackup(t, e.dumpA)
 			e.dumpBackup(t, e.dumpB)

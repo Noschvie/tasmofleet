@@ -114,6 +114,7 @@ func assertNoSecret(t *testing.T, e *flowEnv, j Job) {
 // must be on the device before the settings go over, in one sequence; a file the device already
 // holds in the backup's version costs no flash write; and nothing the backup lacks is touched.
 func TestRestoreWritesTheFilesBeforeTheSettings(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.setDevFile(t, "/tlskey", backupFiles["/tlskey"]) // the key is already right: no write needed
 
@@ -162,12 +163,14 @@ func TestRestoreWritesTheFilesBeforeTheSettings(t *testing.T) {
 // files were written and the settings never touched. A localized device must restore like an
 // English one: done, verified, nothing lost.
 func TestFileRestoreOnALocalizedDevice(t *testing.T) {
+	t.Parallel()
 	for _, w := range []simulator.PageWords{
 		{Lang: "de", Upload: "Upload", Successful: "erfolgreich", Failed: "fehlgeschlagen", ManageFileSystem: "Dateisystem verwalten"},
 		{Lang: "fr", Upload: "Upload", Successful: "Réussi", Failed: "Échoué", ManageFileSystem: "Gestion du Système de Fichier"},
 		{Lang: "zh", Upload: "上传", Successful: "成功", Failed: "失败", ManageFileSystem: "Manage File system"},
 	} {
 		t.Run(w.Lang, func(t *testing.T) {
+			t.Parallel()
 			e, a := filesFlowWords(t, w)
 			job, err := e.m.StartWith(t.Context(), "alice", a.ID, StartOptions{ConfirmedFiles: 3})
 			if err != nil {
@@ -193,6 +196,7 @@ func TestFileRestoreOnALocalizedDevice(t *testing.T) {
 // the file it read before writing and puts it back, writes nothing of the settings, and says that
 // files were changed so the page offers the rollback.
 func TestFailedUploadPutsTheOldFileBack(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.cl.uploadHook = func(p string, attempt int) error {
 		if p == "/lib/a.be" && attempt == 1 {
@@ -241,6 +245,7 @@ func TestFailedUploadPutsTheOldFileBack(t *testing.T) {
 // Why: if the old file cannot be put back either, the person must be told loudly which file is
 // gone, not "failed" in general.
 func TestFileThatCannotBePutBackIsReportedAsLost(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.cl.uploadHook = func(p string, attempt int) error {
 		if p != "/lib/a.be" {
@@ -267,6 +272,7 @@ func TestFileThatCannotBePutBackIsReportedAsLost(t *testing.T) {
 // Why: the confirmation page says before the person confirms what will be written, what stays
 // because the backup does not hold it, and the size.
 func TestAssessListsTheFilesAndWhatStaysAsItIs(t *testing.T) {
+	t.Parallel()
 	files := fsFiles(backupFiles)
 	files["/big.bin"] = simulator.FSFile{Data: bytes.Repeat([]byte{1}, 1100*1024)}
 	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: files, FSSizeKB: 4096})
@@ -293,6 +299,7 @@ func TestAssessListsTheFilesAndWhatStaysAsItIs(t *testing.T) {
 // Why: a device without a file system (ESP8266 1 MB, minimal) restores its settings as before,
 // without a single file system request, and the page says why there are no files.
 func TestDeviceWithoutAFileSystemRestoresSettingsOnly(t *testing.T) {
+	t.Parallel()
 	e := newFlow(t, "15.6.0")
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
@@ -317,6 +324,7 @@ func TestDeviceWithoutAFileSystemRestoresSettingsOnly(t *testing.T) {
 // (the Router answers ErrFilesNeedHTTP) puts the settings back, writes no file, and the confirmation page
 // says so before the person confirms; the run does not fail on the files (#607).
 func TestRestoreOverMQTTWhileHTTPFailsPutsBackSettingsOnlyAndSaysSo(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	u := &fakeUploader{e: e, apply: true}
 	m := e.mqttManager(t, u, transport.MQTT)
@@ -368,6 +376,7 @@ func replaceFilesFlow(t *testing.T, fresh map[string]string) *replaceEnv {
 // with the settings. A fresh board lacks the /lib folder and no binary-safe folder creation
 // exists, so those files are skipped with the reason instead of failing the replacement.
 func TestReplaceOntoAFreshDeviceWritesFilesAndReportsMissingFolders(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := replaceFilesFlow(t, map[string]string{"/autoexec.be": "factory"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.newSim.SetConfigDump(e.dumpB)
@@ -406,6 +415,7 @@ func TestReplaceOntoAFreshDeviceWritesFilesAndReportsMissingFolders(t *testing.T
 
 // Why: a replace that fails while writing files must leave the entry on the old hardware record.
 func TestReplaceFilesFailureLeavesTheEntryAlone(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := replaceFilesFlow(t, map[string]string{"/autoexec.be": "factory", "/lib/x.be": "x"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -435,6 +445,7 @@ func TestReplaceFilesFailureLeavesTheEntryAlone(t *testing.T) {
 // Why: the identity is checked right before the first file, as it is before the upload: if the
 // address changed hands after the start, no file of this device may land on the other host.
 func TestFilesAreNotWrittenToAnotherDeviceAtTheAddress(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.hb.hook = func(call int) {
 		if call == 1 { // the safety backup is the last step before the files
@@ -466,6 +477,7 @@ func (badArchives) OpenFilesArchive(context.Context, model.BackupID) (*backup.Fi
 // Why: nothing of a damaged archive may be written to a device (it could carry a path outside the
 // rules), but the settings of the same backup are still worth restoring, and the page says so.
 func TestDamagedFilesArchiveRestoresSettingsOnly(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.m.o.Files = badArchives{e.bk}
 	as, err := e.m.Assess(t.Context(), a.ID)
@@ -500,6 +512,7 @@ func (e *flowEnv) startFiles(t *testing.T, id model.BackupID, confirmed int) Job
 // settings go over (here: the address changed hands after the files) must say so, keep the step,
 // and offer the rollback to the backup taken first, which also puts the old files back.
 func TestFailureAfterTheFilesWereWrittenDoesNotClaimNothingChanged(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.cl.uploadHook = func(p string, _ int) error {
 		if p == "/lib/a.be" { // the second file: from now on another host answers at the address
@@ -526,6 +539,7 @@ func TestFailureAfterTheFilesWereWrittenDoesNotClaimNothingChanged(t *testing.T)
 // file on the device is not in it, and overwriting it would lose it for good. It is skipped and
 // said loudly, and the job is not "verified".
 func TestFileThePreBackupCannotHoldIsNotOverwritten(t *testing.T) {
+	t.Parallel()
 	files := fsFiles(backupFiles)
 	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: files, FSSizeKB: 4096})
 	a := e.dumpBackup(t, e.dumpA)
@@ -560,6 +574,7 @@ func TestFileThePreBackupCannotHoldIsNotOverwritten(t *testing.T) {
 // left the old file untouched: no put-back, no flash write counted, and the text says it was not
 // written instead of "partly written".
 func TestUploadThatNeverStartedIsNotCountedOrPutBack(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.cl.uploadHook = func(p string, _ int) error {
 		if p == "/lib/a.be" {
@@ -587,6 +602,7 @@ func TestUploadThatNeverStartedIsNotCountedOrPutBack(t *testing.T) {
 // bytes; a 48 byte name must not be read or written (it would hit another file) and is skipped
 // with the reason, while the 47 byte one is restored.
 func TestNamesTheDeviceWouldCutAreSkipped(t *testing.T) {
+	t.Parallel()
 	ok47, bad48 := "/"+strings.Repeat("a", 47), "/"+strings.Repeat("b", 48)
 	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: fsFiles(map[string]string{ok47: "backup", bad48: "backup"})})
 	a := e.dumpBackup(t, e.dumpA)
@@ -612,6 +628,7 @@ func TestNamesTheDeviceWouldCutAreSkipped(t *testing.T) {
 // Why (M2): a restore cancelled in the middle of an upload (shutdown) must still put the old file
 // back; a half-written file is worse than a slow shutdown.
 func TestPutBackSurvivesACancelledRestore(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	e.m.o.Context = ctx
@@ -635,11 +652,13 @@ func TestPutBackSurvivesACancelledRestore(t *testing.T) {
 // Why (M3): the person confirms a plan. If the page showed no files (or MQTT) and the run then
 // finds HTTP and files, nothing but the settings may be written; the same when the count differs.
 func TestFilesAreWrittenOnlyForThePlanThatWasConfirmed(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		confirmed int
 	}{{"page showed no files", 0}, {"page showed another list", 2}} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			e, a := filesFlow(t)
 			done := e.finish(t, e.startFiles(t, a.ID, tc.confirmed).ID)
 			if done.State != store.RestoreDone || len(e.cl.uploads()) != 0 {
@@ -658,6 +677,7 @@ func TestFilesAreWrittenOnlyForThePlanThatWasConfirmed(t *testing.T) {
 // Why (M4): the files line must stay while the later steps run (Detail is overwritten by each
 // step), so the summary lives with the progress.
 func TestFilesSummaryStaysAvailableForTheLaterSteps(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	done := e.finish(t, e.startFiles(t, a.ID, 3).ID)
 	pr := progressOf(t, e, done.ID)
@@ -669,6 +689,7 @@ func TestFilesSummaryStaysAvailableForTheLaterSteps(t *testing.T) {
 // Why (L2): "differs" and "could not be read back" are different statements: the first says the
 // device holds other content, the second only that the check could not look.
 func TestVerificationSeparatesDifferingFromUnreadableFiles(t *testing.T) {
+	t.Parallel()
 	files := fsFiles(backupFiles)
 	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: files, FSSizeKB: 4096})
 	a := e.dumpBackup(t, e.dumpA)
@@ -690,6 +711,7 @@ func TestVerificationSeparatesDifferingFromUnreadableFiles(t *testing.T) {
 // Why (L1): a job interrupted while it wrote files has probably changed files; the generic
 // "interrupted" text would not say so and the page would hide the rollback.
 func TestInterruptedFilesStepSaysFilesMayBeWritten(t *testing.T) {
+	t.Parallel()
 	d := InterruptedDetails()[store.RestoreFiles]
 	if !FilesChanged(d) || FailedStep(d) != StepFiles || !strings.Contains(d, "restart") {
 		t.Errorf("%q", d)
@@ -713,6 +735,7 @@ func (p emptyPre) RunFiles(ctx context.Context, id model.BackupID) (backup.RunFi
 // that differs may be overwritten, because nothing could be undone; files the device does not
 // have yet are still written.
 func TestNoFileIsOverwrittenWhenThePreBackupHasNoFiles(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.m.o.Files = emptyPre{e.bk, a.ID}
 	done := e.finish(t, e.startFiles(t, a.ID, 3).ID)
@@ -732,6 +755,7 @@ func TestNoFileIsOverwrittenWhenThePreBackupHasNoFiles(t *testing.T) {
 // Why (N3): a settings-only restore (the page showed no files) must not depend on the file system:
 // a device whose file system cannot be read right now still gets its settings.
 func TestSettingsOnlyRestoreDoesNotTouchTheFileSystem(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	e.cl.fsInfoErr = errors.New("device busy")
 	done := e.finish(t, e.startFiles(t, a.ID, 0).ID)
@@ -747,8 +771,10 @@ func TestSettingsOnlyRestoreDoesNotTouchTheFileSystem(t *testing.T) {
 // not only the identity check: the device is not "unchanged" at the boot count read or when the
 // restore upload is refused.
 func TestLaterFailuresAfterWrittenFilesAreNeverUnchanged(t *testing.T) {
+	t.Parallel()
 	for name, cmd := range map[string]string{"boot count read": "Status 1", "restore upload refused": "RestoreConfig"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e, a := filesFlow(t)
 			e.cl.failCmd = func(c string) error {
 				if c == cmd && len(e.cl.uploads()) > 0 {
@@ -766,6 +792,7 @@ func TestLaterFailuresAfterWrittenFilesAreNeverUnchanged(t *testing.T) {
 
 // Why (N4, H1): the same for a replace, where the address can change hands between files and settings.
 func TestReplaceIdentityLostAfterFilesIsNotUnchanged(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := replaceFilesFlow(t, map[string]string{"/autoexec.be": "factory", "/lib/x.be": "x"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -791,6 +818,7 @@ func TestReplaceIdentityLostAfterFilesIsNotUnchanged(t *testing.T) {
 // Why (N4, M2): a restore cancelled between two files has written one: it must not claim the
 // device is unchanged (the prefix follows the writes made so far).
 func TestCancelBetweenFilesSaysFilesWereWritten(t *testing.T) {
+	t.Parallel()
 	e, a := filesFlow(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	e.m.o.Context = ctx
@@ -809,6 +837,7 @@ func TestCancelBetweenFilesSaysFilesWereWritten(t *testing.T) {
 // no files, so the run restores settings only. The page must say the files are not copied, not that
 // they will be checked again.
 func TestReplacePreviewSaysFilesAreNotCopiedWhenTheFileSystemCannotBeRead(t *testing.T) {
+	// Serial on purpose: breakOld closes a simulator and needs its freed port to stay dead (pitfall #39); serial tests finish before any parallel test of this package starts.
 	e := replaceFilesFlow(t, map[string]string{"/autoexec.be": "factory"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.breakOld(t)
@@ -840,6 +869,7 @@ func (f freshArchive) OpenFilesArchive(context.Context, model.BackupID) (*backup
 // and "1 file differ" read like a typo and make the whole result look unreliable. The verb agrees
 // with the number, for one file as for three.
 func TestFileCompareAgreesWithOneFile(t *testing.T) {
+	t.Parallel()
 	fresh := []model.Backup{{ID: 9, Kind: model.BackupFiles}}
 	m := &Manager{o: Options{Files: freshArchive{files: map[string]string{"/x.be": "aa"}}}}
 	got, ok := m.verifyFiles(t.Context(), fresh, &filesCheck{want: map[string]string{"/x.be": "aa"}})

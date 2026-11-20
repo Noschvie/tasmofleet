@@ -109,6 +109,7 @@ func newChan(b *fakeBus) *Channel { return New(b, fast()) }
 // Why: the heap rule. Two callers for one device must never have two commands in flight, or a
 // slow ESP8266 answers neither; the second waits until the first has its reply.
 func TestTwoCommandsToOneDeviceAreSerialised(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	var mu sync.Mutex
 	inflight, maxInflight := 0, 0
@@ -145,6 +146,7 @@ func TestTwoCommandsToOneDeviceAreSerialised(t *testing.T) {
 // Why: a bus-wide gap between publishes to different devices keeps a fleet from being asked at
 // once after a broker outage.
 func TestPublishesAreSpacedByTheGap(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"`+p.command+`":"x"}`) }
 	o := fast()
@@ -186,6 +188,7 @@ func slicesSortByTime(s []pub) {
 // Why (safety rule 2, heap bursts corrupt ESP8266 replies): Status 0 is never published, in any
 // spelling Tasmota reads as 0, alone or hidden in a Backlog. The bus must stay silent.
 func TestStatus0IsNeverPublished(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{
 		"Status 0", "status 0", "Status0", "status0", "Status  0", "Status 00", "Status +0", "Status 0x0", "Status off",
 		"Status1 0", "Status 14", "Status -1", "Status 1 2", "Status 01",
@@ -210,6 +213,7 @@ func TestStatus0IsNeverPublished(t *testing.T) {
 // Why: the plain Status and the numbered ones the readers use must keep working, with the number
 // as the payload of cmnd/<topic>/Status.
 func TestStatusNumbersAreAllowedAndAnsweredOnTheirTopic(t *testing.T) {
+	t.Parallel()
 	for cmd, suffix := range map[string]string{"Status": "STATUS", "Status 2": "STATUS2", "Status2": "STATUS2", "status 13": "STATUS13", "Status 10": "STATUS10"} {
 		b := &fakeBus{}
 		b.onPub = func(b *fakeBus, p pub) {
@@ -227,6 +231,7 @@ func TestStatusNumbersAreAllowedAndAnsweredOnTheirTopic(t *testing.T) {
 // Why: a device that announced Offline gets nothing: the command would be lost, and the caller
 // must know nothing was sent (so a router may try another path).
 func TestOfflineDeviceGetsNoPublish(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Hostname":"x"}`) }
 	c := newChan(b)
@@ -246,6 +251,7 @@ func TestOfflineDeviceGetsNoPublish(t *testing.T) {
 
 // Why: a down bus is "nothing was sent", wrapped so callers can tell it from a device problem.
 func TestBusDownIsUnreachable(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{down: true}
 	_, err := newChan(b).Do(t.Context(), plug(), "Hostname")
 	if !errors.Is(err, tasmota.ErrUnreachable) || !errors.Is(err, mqttbus.ErrNotConnected) || len(b.sent()) != 0 {
@@ -256,6 +262,7 @@ func TestBusDownIsUnreachable(t *testing.T) {
 // Why: retained messages are old news (the broker replays them to every new subscriber); taking
 // one as the answer would report a stale value as the result of this command.
 func TestRetainedResultIsNotAnAnswer(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		b.emit(mqttbus.KindResult, p.topic, "RESULT", `{"Hostname":"stale"}`, true)
@@ -271,6 +278,7 @@ func TestRetainedResultIsNotAnAnswer(t *testing.T) {
 // TelePeriod. The press must not be taken for the answer; only the right key is. And when only
 // noise arrives the outcome is a timeout, never the noise.
 func TestForeignResultIsIgnored(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		b.result(p.topic, `{"POWER":"ON"}`)
@@ -290,6 +298,7 @@ func TestForeignResultIsIgnored(t *testing.T) {
 // Why: the reply key follows Tasmota's naming, not our spelling: Power1 is answered by POWER1 or
 // POWER, SO19 by SetOption19.
 func TestKeysMatchTheCommandNameCaseAndIndexInsensitive(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ cmd, reply string }{
 		{"Power1 ON", `{"POWER1":"ON"}`}, {"Power1 ON", `{"POWER":"ON"}`}, {"power ON", `{"POWER":"ON"}`},
 		{"SO19 1", `{"SetOption19":"ON"}`}, {"SetOption19 1", `{"SetOption19":"ON"}`}, {"Rule1 1", `{"Rule1":{"State":"ON"}}`},
@@ -306,6 +315,7 @@ func TestKeysMatchTheCommandNameCaseAndIndexInsensitive(t *testing.T) {
 // Why: Gpios has no key of its own and stays console-only (DoLoose): an automated read refuses to guess.
 // Loose is not "anything goes": a command with a normal reply still needs its key.
 func TestGpiosTakesTheFirstResultOnlyOnTheConsole(t *testing.T) {
+	t.Parallel()
 	reply := `{"GPIO0":"None"}`
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, reply) }
@@ -327,6 +337,7 @@ func TestGpiosTakesTheFirstResultOnlyOnTheConsole(t *testing.T) {
 // MQTT-only device must still be readable (and a template change verifiable), so the automated read
 // accepts exactly that shape: NAME as a string and GPIO as an array.
 func TestStrictTemplateReadMatchesNameAndGPIOArray(t *testing.T) {
+	t.Parallel()
 	reply := `{"NAME":"Plug","GPIO":[0,1,2],"FLAG":0,"BASE":18}`
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, reply) }
@@ -340,6 +351,7 @@ func TestStrictTemplateReadMatchesNameAndGPIOArray(t *testing.T) {
 // Why: a strict match that accepts the wrong RESULT would make a template verify against someone
 // else's message (or a power report) and call a failed change a success.
 func TestStrictTemplateReadIgnoresEveryOtherResult(t *testing.T) {
+	t.Parallel()
 	for _, other := range []string{
 		`{"POWER":"ON"}`,
 		`{"NAME":"Plug"}`,                  // no GPIO
@@ -363,6 +375,7 @@ func TestStrictTemplateReadIgnoresEveryOtherResult(t *testing.T) {
 // Chip Type"} under the command's own key. Both must reach the caller, or an MQTT-only device could never
 // be changed (the reply would time out) and a refusal would look like a lost reply.
 func TestTemplateWriteIsAnsweredByTheShapeOrTheRefusal(t *testing.T) {
+	t.Parallel()
 	const write = `Template {"NAME":"Plug","GPIO":[0],"FLAG":0,"BASE":18}`
 	for name, reply := range map[string]string{
 		"success": `{"NAME":"Plug","GPIO":[0],"FLAG":0,"BASE":18}`,
@@ -387,6 +400,7 @@ func TestTemplateWriteIsAnsweredByTheShapeOrTheRefusal(t *testing.T) {
 // Why: {"Command":"Unknown"} is the device saying it does not know the command (minimal
 // firmware); but only when it is about OUR command, or another poller's failure would fail ours.
 func TestCommandUnknownAndErrorAreMappedForOurCommandOnly(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		b.result(p.topic, `{"Command":"Unknown","Input":"SOMETHINGELSE 1"}`)
@@ -410,6 +424,7 @@ func TestCommandUnknownAndErrorAreMappedForOurCommandOnly(t *testing.T) {
 // Why: no answer is an unknown outcome (the command may have run). The channel reports it and
 // sends exactly once; resending is the caller's decision.
 func TestNoReplyIsATimeoutAndIsNeverResent(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	_, err := newChan(b).Do(t.Context(), plug(), "Restart 1")
 	if !errors.Is(err, tasmota.ErrTimeout) {
@@ -424,6 +439,7 @@ func TestNoReplyIsATimeoutAndIsNeverResent(t *testing.T) {
 // Why: a restart publishes LWT Offline. A command that is waiting for its answer must end then
 // with an unknown outcome (not an "unreachable", which would claim nothing was sent).
 func TestOfflineWhileWaitingIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		go func() {
@@ -443,6 +459,7 @@ func TestOfflineWhileWaitingIsAnUnknownOutcome(t *testing.T) {
 // not answer". Matching the error text would copy this package's wording into the app, so the cause is a typed
 // error; it still wraps ErrTimeout, because every caller treats the outcome as unknown (not "unreachable").
 func TestOfflineWhileWaitingIsTypedAndStillATimeout(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{"Upgrade 1", "Backlog Power 1; Power 2"} {
 		b := &fakeBus{}
 		b.onPub = func(b *fakeBus, p pub) {
@@ -472,6 +489,7 @@ func TestOfflineWhileWaitingIsTypedAndStillATimeout(t *testing.T) {
 // (docs/research/tasmota-mqtt-transport.md section 4). All replies are collected and merged in
 // order, later keys winning, like the merged /cm reply the callers know.
 func TestBacklogCollectsOneReplyPerQueuedCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		go func() {
@@ -501,6 +519,7 @@ func TestBacklogCollectsOneReplyPerQueuedCommand(t *testing.T) {
 // Why: a queued command without a reply (Delay) must not hold the Backlog until the 10 s cap;
 // it ends a quiet period after the last reply. A Backlog nobody answers is a timeout.
 func TestBacklogEndsWhenQuietAndTimesOutWithoutAnyReply(t *testing.T) {
+	// Serial on purpose: CPU timing bound (250 ms), not shared state; run it alone, not beside parallel tests.
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { go b.result(p.topic, `{"Hostname":"x"}`) }
 	start := time.Now()
@@ -515,6 +534,7 @@ func TestBacklogEndsWhenQuietAndTimesOutWithoutAnyReply(t *testing.T) {
 
 // Why: Unknown for one queued command is surfaced, not swallowed in a merge.
 func TestBacklogSurfacesAnUnknownQueuedCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { go b.result(p.topic, `{"Command":"Unknown","Input":"NOPE"}`) }
 	if _, err := newChan(b).Do(t.Context(), plug(), "Backlog Nope"); !errors.Is(err, tasmota.ErrUnknownCommand) {
@@ -525,6 +545,7 @@ func TestBacklogSurfacesAnUnknownQueuedCommand(t *testing.T) {
 // Why (#274): WebPassword and MqttPassword echo the new secret in their RESULT, which travels on
 // stat/<topic>/RESULT. Nothing the channel returns may contain it.
 func TestSecretSettingRepliesAreScrubbed(t *testing.T) {
+	t.Parallel()
 	for cmd, reply := range map[string]string{
 		"WebPassword hunter2hunter2":                     `{"WebPassword":"hunter2hunter2"}`,
 		"MqttPassword hunter2hunter2":                    `{"MqttPassword":"hunter2hunter2"}`,
@@ -546,6 +567,7 @@ func TestSecretSettingRepliesAreScrubbed(t *testing.T) {
 // they have their own API, so the generic channel refuses them (also the echo in an Unknown reply
 // must never exist).
 func TestFileCommandsAreRefused(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{`FileUpload {"Password":"x","Type":2}`, `fileupload`, `FileDownload 0`, `Backlog FileDownload 0`, `Upload 1`} {
 		b := &fakeBus{}
 		if _, err := newChan(b).Do(t.Context(), plug(), cmd); !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
@@ -557,6 +579,7 @@ func TestFileCommandsAreRefused(t *testing.T) {
 // Why: a group topic would reach every device of the group, and wildcards or levels would reach
 // other topics; the channel addresses exactly one device.
 func TestTopicsThatReachMoreThanOneDeviceAreRefused(t *testing.T) {
+	t.Parallel()
 	for _, d := range []model.Device{
 		{Topic: "tasmotas", GroupTopic: "tasmotas"}, {Topic: "tasmotas"}, {Topic: "x", GroupTopic: "x"}, {Topic: "a/b"}, {Topic: "+"}, {Topic: "#"}, {Topic: ""}, {Topic: " x"},
 	} {
@@ -572,6 +595,7 @@ func TestTopicsThatReachMoreThanOneDeviceAreRefused(t *testing.T) {
 // reply as the answer (a bare name is index 1, GroupTopic1 carries index 1), or every read would time out and leave
 // the group topics unread, holding back the MQTT writes of the whole fleet. An indexed read takes the same reply.
 func TestTheBareGroupTopicIsAnsweredByTheFourKeys(t *testing.T) {
+	t.Parallel()
 	const reply = `{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}`
 	for _, cmd := range []string{"GroupTopic", "GroupTopic3"} {
 		b := &fakeBus{}
@@ -585,6 +609,7 @@ func TestTheBareGroupTopicIsAnsweredByTheFourKeys(t *testing.T) {
 // Why (#1005): a device whose topic is one of its own group topics, GroupTopic2 to GroupTopic4 included, would pass a
 // command to it on to every device of that group; the channel refuses it before it publishes anything.
 func TestATopicThatIsOneOfTheDevicesGroupTopicsIsRefused(t *testing.T) {
+	t.Parallel()
 	for _, d := range []model.Device{
 		{ID: 1, Topic: "kitchen", GroupTopic: "tasmotas", MoreGroupTopics: []string{"hall", "kitchen"}},
 		{ID: 1, Topic: "hall", GroupTopic: "tasmotas", MoreGroupTopics: []string{"hall"}},
@@ -605,6 +630,7 @@ func TestATopicThatIsOneOfTheDevicesGroupTopicsIsRefused(t *testing.T) {
 // Why: a switch must be confirmed by its own relay. A multi-relay device reports POWER1 for
 // relay 1; taking that as the answer to Power2 would show relay 2 as switched when it is not.
 func TestAReplyForAnotherRelayDoesNotAnswer(t *testing.T) {
+	t.Parallel()
 	ask := func(cmd, reply string) error {
 		b := &fakeBus{}
 		b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, reply) }
@@ -627,6 +653,7 @@ func TestAReplyForAnotherRelayDoesNotAnswer(t *testing.T) {
 
 // Why: a caller that gives up while queued behind another command must not publish afterwards.
 func TestCancelledWhileQueuedPublishesNothing(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	c.sem("plug") <- struct{}{} // another command holds the device
@@ -641,6 +668,7 @@ func TestCancelledWhileQueuedPublishesNothing(t *testing.T) {
 // boot is wrong (old version, old image), so the cache must drop it; a retained INFO1 is no
 // reading of now either.
 func TestInfoIsDroppedOnOfflineAndRetainedInfoIsIgnored(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	b.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"15.0.0"}}`, true)
@@ -665,6 +693,7 @@ func TestInfoIsDroppedOnOfflineAndRetainedInfoIsIgnored(t *testing.T) {
 
 // Why: a broker full of foreign topics must not grow the tables; only inventory devices count.
 func TestKnownLimitsTheTables(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	o := fast()
 	o.Known = func(m mqttbus.Message) bool { return m.Topic == "plug" }
@@ -682,6 +711,7 @@ func TestKnownLimitsTheTables(t *testing.T) {
 // Why: a Backlog inside a Backlog is refused (Tasmota strips the inner word, so it would only hide
 // the real command from the checks); nothing is published.
 func TestNestedBacklogIsRefused(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{"Backlog Backlog Power ON", "Backlog Power ON; Backlog Power OFF", "Backlog backlog", "Backlog Backlog"} {
 		b := &fakeBus{}
 		if _, err := newChan(b).Do(t.Context(), plug(), cmd); !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
@@ -694,6 +724,7 @@ func TestNestedBacklogIsRefused(t *testing.T) {
 // command with the same key (a stale value reported as the result of a new write): the topic stays
 // busy until the late reply arrives, and that reply is dropped.
 func TestALateReplyDoesNotAnswerTheNextCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	n := 0
 	var mu sync.Mutex
@@ -722,6 +753,7 @@ func TestALateReplyDoesNotAnswerTheNextCommand(t *testing.T) {
 
 // Why: a device that never answers must not block its topic for ever; the hold ends after a grace.
 func TestTheTopicIsReleasedAfterTheGrace(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	if _, err := c.Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrTimeout) {
@@ -737,6 +769,7 @@ func TestTheTopicIsReleasedAfterTheGrace(t *testing.T) {
 // the unknown outcome (ErrTimeout, still matching the context error), unlike giving up while
 // queued, where nothing was sent.
 func TestGivingUpAfterThePublishIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	o := fast()
 	o.ReplyWait = 5 * time.Second
@@ -760,6 +793,7 @@ func TestGivingUpAfterThePublishIsAnUnknownOutcome(t *testing.T) {
 // Why: a retained LWT arrives only right after we subscribed; the device may have rebooted while we
 // were away, so an INFO1 cached before is of unknown age and must not be used for minimal detection.
 func TestRetainedLWTDropsTheInfo(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	b.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"15.0.0"}}`, false)
@@ -777,6 +811,7 @@ func TestRetainedLWTDropsTheInfo(t *testing.T) {
 // Why: with SetOption4 1 a device reports a switched relay on stat/<t>/POWERn and not on RESULT;
 // that still confirms the switch (the old behaviour of Power over MQTT), for its own relay only.
 func TestPowerTopicAnswersAPowerCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER2", "ON", false) }
 	got, err := newChan(b).Do(t.Context(), plug(), "Power2 ON")
@@ -797,6 +832,7 @@ func TestPowerTopicAnswersAPowerCommand(t *testing.T) {
 // Tasmota upper-cases the name and cuts the index (SO19 is SO). Before the fix none of these
 // replies was decoded, so every read of such a device ran into the 8 s timeout.
 func TestSetOption4RepliesOnTheCommandTopicAreAnswers(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ cmd, suffix, payload string }{
 		{"TelePeriod", "TELEPERIOD", `{"TelePeriod":300}`},
 		{"teleperiod 60", "TELEPERIOD", `{"TelePeriod":60}`},
@@ -806,6 +842,7 @@ func TestSetOption4RepliesOnTheCommandTopicAreAnswers(t *testing.T) {
 		{"Hostname", "HOSTNAME", `{"Hostname":"plug"}`},
 	} {
 		t.Run(tc.cmd, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			b.onPub = func(b *fakeBus, p pub) {
 				if tc.suffix == "POWER" {
@@ -830,6 +867,7 @@ func TestSetOption4RepliesOnTheCommandTopicAreAnswers(t *testing.T) {
 // command's own topic AND carry its key; a different command's topic, a retained message and
 // the shared COMMAND topic (failed commands only) never answer it.
 func TestSetOption4RepliesOfOtherCommandsDoNotAnswer(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, cmd, suffix, payload string
 		retained                   bool
@@ -845,6 +883,7 @@ func TestSetOption4RepliesOfOtherCommandsDoNotAnswer(t *testing.T) {
 		{"not an object", "TelePeriod", "TELEPERIOD", `60`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindCommand, p.topic, tc.suffix, tc.payload, tc.retained) }
 			if _, err := newChan(b).Do(t.Context(), plug(), tc.cmd); !errors.Is(err, tasmota.ErrTimeout) {
@@ -870,6 +909,7 @@ func TestSetOption4RepliesOfOtherCommandsDoNotAnswer(t *testing.T) {
 // COMMAND (Unknown, support_command.ino:498-517); both must end the wait with the right error, and
 // only for the command that was sent.
 func TestSetOption4FailuresAreMappedForOurCommandOnly(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		b.emit(mqttbus.KindCommand, p.topic, "COMMAND", `{"Command":"Unknown","Input":"SOMETHINGELSE 1"}`, false)
@@ -890,6 +930,7 @@ func TestSetOption4FailuresAreMappedForOurCommandOnly(t *testing.T) {
 // Why (#632): a Backlog of a SetOption4 1 device is answered by one stat/<t>/<COMMAND> per queued
 // command, each on its own name; the merged reply must hold all of them, as it does for RESULT.
 func TestSetOption4BacklogCollectsOneReplyPerQueuedCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		go func() {
@@ -914,12 +955,14 @@ func TestSetOption4BacklogCollectsOneReplyPerQueuedCommand(t *testing.T) {
 // engine lost the "Version X from <url>" echo it checks the URL with (#504); a bare Upgrade (a read
 // since #605 goes over MQTT first) timed out the same way.
 func TestSetOption4UpgradeRepliesAreAnswers(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ cmd, payload string }{
 		{"Upgrade 1", `{"Upgrade":"Version 15.6.0 from http://192.0.2.1/tasmota.bin.gz"}`},
 		{"Upgrade", `{"Upgrade":"1 or >15.6.0 to upgrade"}`},
 		{"Upgrade 2", `{"Upgrade":"Safeboot"}`}, // ESP32 with a safeboot partition
 	} {
 		t.Run(tc.cmd, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindUpgrade, p.topic, "UPGRADE", tc.payload, false) }
 			got, err := newChan(b).Do(t.Context(), plug(), tc.cmd)
@@ -936,9 +979,11 @@ func TestSetOption4UpgradeRepliesAreAnswers(t *testing.T) {
 // download that may be running, and taken as the answer to any other command it would confirm a
 // command the device never answered. Only the immediate reply answers, and only an Upgrade.
 func TestUpgradeReportsNeverAnswerACommand(t *testing.T) {
+	t.Parallel()
 	reports := []string{`{"Upgrade":"Failed HTTP error: connection failed"}`, `{"Upgrade":"Successful. Restarting"}`}
 	for _, cmd := range []string{"Upgrade 1", "Upgrade", "TelePeriod"} {
 		t.Run(cmd, func(t *testing.T) {
+			t.Parallel()
 			b := &fakeBus{}
 			b.onPub = func(b *fakeBus, p pub) {
 				for _, r := range reports {
@@ -986,6 +1031,7 @@ func TestUpgradeReportsNeverAnswerACommand(t *testing.T) {
 // index (support_command.ino:498-517). Before the fix that topic was read only as relay POWER1, so the
 // failure ran into the reply timeout: an unknown outcome for a command the device refused at once.
 func TestSetOption4PowerErrorOnTheUnindexedTopicFailsTheCommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	b.onPub = func(b *fakeBus, p pub) {
 		b.emit(mqttbus.KindPower, p.topic, "POWER", `{"Command":"Error","Input":"POWER3 ON"}`, false)
@@ -1011,6 +1057,7 @@ func TestSetOption4PowerErrorOnTheUnindexedTopicFailsTheCommand(t *testing.T) {
 // has POWER) and come on their own period; taken as an answer they would confirm a command the device
 // never answered. Only RESULT, STATUSn, POWERn, UPGRADE and the SetOption4 command topics answer.
 func TestOtherKindsNeverAnswerACommand(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	b.onPub = func(_ *fakeBus, p pub) {
@@ -1036,6 +1083,7 @@ func TestOtherKindsNeverAnswerACommand(t *testing.T) {
 // (KNX: KnxTx_Cmnd) answers on stat/<t>/KNXTX_CMND; the channel compares that name like any other.
 // cmdpolicy does not let such a name be sent today; the match must still hold when it does.
 func TestSetOption4ReplyOfANameWithAnUnderscoreMatches(t *testing.T) {
+	t.Parallel()
 	r := &request{name: "KnxTx_Cmnd1", args: "1", base: baseOf("KnxTx_Cmnd1")}
 	m := mqttbus.Message{Kind: mqttbus.KindCommand, Topic: "plug", Suffix: "KNXTX_CMND", Payload: []byte(`{"KnxTx_Cmnd1":"1"}`)}
 	if v, ok := r.match(m, false); !ok || string(v.reply) != `{"KnxTx_Cmnd1":"1"}` {
@@ -1049,6 +1097,7 @@ func TestSetOption4ReplyOfANameWithAnUnderscoreMatches(t *testing.T) {
 
 // Why: on shutdown a command in flight must not hold the process for its whole reply wait.
 func TestCloseWakesACommandInFlight(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	o := fast()
 	o.ReplyWait = time.Minute
@@ -1071,6 +1120,7 @@ func TestCloseWakesACommandInFlight(t *testing.T) {
 
 // Why: the same for a Backlog being collected when the process shuts down.
 func TestCloseDuringABacklogIsAnUnknownOutcome(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	o := fast()
 	o.ReplyWait = time.Minute
@@ -1092,6 +1142,7 @@ func TestCloseDuringABacklogIsAnUnknownOutcome(t *testing.T) {
 // Why: after Close a free semaphore must not win the select against the closed channel; the
 // command is refused with nothing published.
 func TestDoAfterCloseNeverPublishes(t *testing.T) {
+	t.Parallel()
 	b := &fakeBus{}
 	c := newChan(b)
 	c.Close()
@@ -1109,6 +1160,7 @@ func TestDoAfterCloseNeverPublishes(t *testing.T) {
 // command topic, a Rule runs it, WebSend/WebQuery/Br/Script can reach it too. Status 0 is never
 // sent, so none of these may be published, alone or in a Backlog, in any spelling.
 func TestCommandsThatRunOtherCommandsAreRefused(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{
 		`Json {"Status":0}`, `json {"Backlog":"Status 0"}`, `Publish cmnd/plug/Status 0`, `Publish2 cmnd/plug/Status 0`,
 		`Rule1 ON System#Boot DO Status 0 ENDON`, `Rule ON System#Boot DO Status 0 ENDON`, `RuleTimer1 5`,
@@ -1143,6 +1195,7 @@ func TestCommandsThatRunOtherCommandsAreRefused(t *testing.T) {
 // every ';' the channel saw a Template without CMND and published an executor; a Backlog the device would split
 // differently is never published.
 func TestABacklogTheDeviceSplitsDifferentlyIsRefused(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{
 		`Backlog Template {"NAME":"x; Time 1","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Module 0|WebPassword hunter2"}`,
 		`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Time x","CMND":"WebPassword hunter2"}`,
@@ -1164,6 +1217,7 @@ func TestABacklogTheDeviceSplitsDifferentlyIsRefused(t *testing.T) {
 // history for the same reason (the device runs its text as commands). Both must read the key the same way, or one
 // such Template crosses the broker while its secret is masked, or is refused while its secret is shown in clear.
 func TestTheChannelRefusesATemplateExactlyWhenThePolicyMasksIt(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{
 		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Power1 ON"}`,
 		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"cmnd":"Power1 ON"}`,
@@ -1184,6 +1238,7 @@ func TestTheChannelRefusesATemplateExactlyWhenThePolicyMasksIt(t *testing.T) {
 // never publishes; Refuses must say exactly what Do does, or the confirmation names HTTP for a command that crosses
 // the broker, or the broker for one that never reaches it.
 func TestRefusesSaysWhatDoPublishes(t *testing.T) {
+	t.Parallel()
 	for _, cmd := range []string{
 		`Json {"Status":0}`, `If (1==1) WebPassword hunter2`, `Rule1 ON System#Boot DO Status 0 ENDON`, `FileDownload 1`,
 		`Backlog2 Power ON`, `Status 0`, `Backlog Power ON; Json {"Status":0}`, `Power ON;Status 0`,
