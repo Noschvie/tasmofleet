@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
+import { faded, textRuns } from "../support/contrast";
 import { expectNoOverflow } from "../support/layout";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -122,34 +123,39 @@ test("the relay box switch updates in place", async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1);
 });
 
-// #145 mockup 8 and #126: a pulled plug turns the page offline by itself: banner, dimmed state,
-// disabled switches and actions; Edit, Delete and Activity stay; the Activity list gets the new row.
-test("a pulled plug shows the offline banner, dims and disables, and adds an Activity row live", async ({ page }) => {
+// #145 mockup 8 and #126: a pulled plug turns the page offline by itself: banner, "Last reported" on the state it
+// kept, disabled switches and actions; Edit, Delete and Activity stay; the Activity list gets the new row. The state
+// is said in words, not by opacity on text (#1071): after the live swap no text of the live region or the two cards
+// live.js follows is faded (a control that cannot act keeps its disabled look).
+test("a pulled plug shows the offline banner and Last reported, disables, and adds an Activity row live", async ({ page }) => {
   await openDevice(page, "esp32c3-sensor");
   await expect(page.locator("#devhd-off")).toHaveCount(0);
   const rows = await page.locator("#devact .dev-act li").count();
   await control("/device/esp32c3-sensor/off");
   await expect(page.locator("#devhd-off")).toContainText("Offline since", { timeout: 60_000 });
   await expect(page.locator("#devlive")).toHaveAttribute("data-off", "");
-  await expect(page.locator("#identity")).toHaveClass(/is-dim/);
-  await expect(page.locator("#devconn")).toHaveClass(/is-dim/);
+  expect(faded(await textRuns(page, "#devlive, #identity, #devconn")), "no text of an offline device is drawn at half opacity").toEqual([]);
+  await expect(page.locator("#identity [data-stale]")).toBeVisible();
+  await expect(page.locator("#devconn [data-stale]")).toBeVisible();
+  await expect(page.locator("#devlive .dev-tile-l [data-stale]").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh identity" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Restart" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Back up" })).toBeDisabled();
   for (const sw of await page.locator("#devlive [role=switch]").all()) await expect(sw).toBeDisabled();
   await expect(page.getByRole("link", { name: "Edit" })).toBeEnabled();
   await expect(page.getByRole("link", { name: "Delete" })).toBeEnabled();
-  await expect(page.locator("#devact")).not.toHaveClass(/is-dim/);
+  await expect(page.locator("#devact [data-stale]")).toHaveCount(0);
   await expect(page.locator("#devact .dev-act li")).toHaveCount(rows + 1, { timeout: 20_000 });
   await shot(page, "overview-offline-1280");
   await expectNoOverflow(page, "overview offline");
 });
 
-// #1059: syncDeviceDim (live.js) runs for a swap of #devlive, #identity or #devconn, no longer for every settled
-// swap of the page. The Identity card is swapped on its own (#1003), and the server renders it without the dimmed
-// look: a card that arrives while the device is offline has to be dimmed again, and its hidden Copy button
-// (copy.js) has to be shown, or the person gets a card that looks live and a button that is missing.
-test("an Identity card swapped in alone is dimmed for an offline device and keeps its Copy button (#1059)", async ({ page }) => {
+// #1059: syncDeviceOffline (live.js) runs for a swap of #devlive, #identity or #devconn, no longer for every settled
+// swap of the page. The Identity card is swapped on its own (#1003), and the server renders it from the state of that
+// moment: a card that arrives while the device is offline has to show "Last reported" (the page's live region says
+// offline), and its hidden Copy button (copy.js) has to be shown, or the person gets a card that looks live and a
+// button that is missing.
+test("an Identity card swapped in alone says Last reported for an offline device and keeps its Copy button (#1059)", async ({ page }) => {
   await openDevice(page, "plug-4m");
   await page.locator("#devlive").evaluate((el) => el.setAttribute("data-off", ""));
   await page.evaluate(async () => {
@@ -158,8 +164,8 @@ test("an Identity card swapped in alone is dimmed for an offline device and keep
     // @ts-expect-error htmx is a page global
     window.htmx.swap(document.querySelector("#identity")!, fresh, { swapStyle: "outerHTML" });
   });
-  await expect(page.locator("#identity")).toHaveClass(/is-dim/);
-  await expect(page.locator("#identity")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.locator("#identity [data-stale]")).toBeVisible();
+  await expect(page.locator("#identity")).not.toHaveAttribute("aria-disabled", /.*/);
   await expect(page.locator("#identity").getByRole("button", { name: "Copy the TasmoFleet ID" })).toBeVisible();
 });
 

@@ -61,20 +61,21 @@ test("without JavaScript the row menu moves a rule down and back up", async ({ b
   await ctx.close();
 });
 
-// Why: a switched-off rule is dimmed and says it is not checked; the tile counts it as disabled.
-test("a disabled rule is dimmed, not checked and counted as disabled", async ({ page }) => {
+// Why: a switched-off rule says so in words and says it is not checked; the tile counts it as disabled. It is not drawn at
+// half opacity: that dropped its text below the AA contrast (#1071, contrast-dim.spec.ts measures it).
+test("a disabled rule says Disabled, is not checked and is counted as disabled", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy");
   await page.getByLabel("Actions for Rule B").click();
   await page.getByRole("menuitem", { name: "Disable" }).click();
   const row = page.locator("section#rules tbody tr", { hasText: "Rule B" });
-  await expect(row).toHaveClass(/is-dim/);
   await expect(row).toContainText("Disabled");
   await expect(row).toContainText("not checked while disabled");
   await expect(page.locator("[data-tile=rules]")).toContainText("2 enabled · 1 disabled");
   await page.getByLabel("Actions for Rule B").click();
   await page.getByRole("menuitem", { name: "Enable" }).click();
-  await expect(row).not.toHaveClass(/is-dim/);
+  await expect(row).not.toContainText("Disabled");
+  await expect(row).not.toContainText("not checked while disabled");
 });
 
 // Why: the editor left the overview. Old bookmarks are not redirected (no compatibility shims) but

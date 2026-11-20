@@ -156,6 +156,14 @@ func TestRulePageShowsTheRuleAndWhatItDoesToEachDevice(t *testing.T) {
 	if k < 0 || k >= s || s >= a {
 		t.Errorf("deviating first, then not judged, then matching (kitchen, shed, attic):\n%s", devs)
 	}
+	// #1071: a device that could not be judged says why in its Source cell; the row is not drawn at half
+	// opacity, which dropped its text to 2.6 against the AA bar of 4.5 and was the only other signal.
+	if strings.Contains(devs, "is-dim") {
+		t.Errorf("a Not judged row must keep full-strength text:\n%s", devs)
+	}
+	if row := sliceBetween(devs, "shed", "</tr>"); !strings.Contains(row, "no backup yet") {
+		t.Errorf("the Not judged row names its reason in the Source cell:\n%s", row)
+	}
 	// tiles: applies 3, match 1, deviate 1, not judged 1
 	for _, w := range []string{`data-tile="applies"`, `data-tile="match"`, `data-tile="deviate"`, `data-tile="unknown"`, "required"} {
 		if !strings.Contains(body, w) {

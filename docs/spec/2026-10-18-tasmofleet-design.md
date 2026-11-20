@@ -2217,7 +2217,7 @@ run, Run now, Pause or Resume for admins, Retry now after a failure). Tabs follo
 Import or export has its own page, `/policy/io`), then the rule table in stored order: a drag handle (admins), name (a link to
 `/policy/rules/{id}`, Disabled chip), setting, applies to with the device count, Required or Advisory, a
 compliance bar from `policy.Tally` read by rule id, and the row menu (Edit, Duplicate, Enable or Disable,
-Move up, Move down, Delete). A disabled rule is dimmed and is not checked. A banner names the devices that
+Move up, Move down, Delete). A disabled rule says Disabled and is not checked (its text is not drawn at reduced opacity, #1071). A banner names the devices that
 break a Required rule, with Show and Make compliant. Every list operation names its rule by id and the
 version the person saw (stale: 409); the drag posts positions plus the version. Unknown query
 parameters are ignored: the old `?edit=`, `?new=` and `?v=` no longer open an editor or a diff.

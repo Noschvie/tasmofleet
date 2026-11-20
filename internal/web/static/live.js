@@ -160,17 +160,18 @@
   // Device overview (#145, #126): the page refreshes #devlive, the header and the Activity list
   // when the device changes, but never the Connection card and the Identity card only when what it
   // shows changed (#1003; both hold answers and notices). Those follow the offline state from here:
-  // dimmed, and Refresh identity disabled.
-  function syncDeviceDim() {
+  // their "Last reported" label shown (a word, never an opacity: #1071), and Refresh identity disabled.
+  function syncDeviceOffline() {
     var live = document.getElementById("devlive");
     if (!live) {
       return;
     }
     var off = live.hasAttribute("data-off");
-    document.querySelectorAll("#identity, #devconn").forEach(function (el) {
-      el.classList.toggle("is-dim", off);
-      el.setAttribute("aria-disabled", off ? "true" : "false");
-    });
+    document
+      .querySelectorAll("#identity [data-stale], #devconn [data-stale]")
+      .forEach(function (el) {
+        el.hidden = !off;
+      });
     // The live region says why Refresh identity cannot work (the device's HTTP API is off and nothing else
     // reads it, #659): the Identity card is not swapped for it, so the button follows that reason both ways.
     var refused = live.getAttribute("data-reads-off") || "";
@@ -195,7 +196,7 @@
       });
   }
   // Only a swap of #devlive, #identity or #devconn, of something inside one of them or of something that holds
-  // one changes what syncDeviceDim reads or writes; a live cell of the device list is none of these (#1059).
+  // one changes what syncDeviceOffline reads or writes; a live cell of the device list is none of these (#1059).
   var DEVICE_CARDS = "#devlive, #identity, #devconn";
   document.addEventListener("htmx:afterSettle", function (e) {
     var t = e.target;
@@ -203,7 +204,7 @@
       t instanceof Element &&
       (t.closest(DEVICE_CARDS) || t.querySelector(DEVICE_CARDS))
     ) {
-      syncDeviceDim();
+      syncDeviceOffline();
     }
   });
 

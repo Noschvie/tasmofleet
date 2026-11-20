@@ -198,7 +198,7 @@ func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
 		`role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`,
 		`id="devlive" class="devlive" data-off`, `data-needs-device disabled>Refresh identity`,
-		`id="identity" class="devcard dev-dim is-dim r2" data-dim aria-disabled="true"`, `id="devconn" class="devcard dev-dim is-dim r3" data-dim aria-disabled="true"`,
+		`id="identity" class="devcard r2" aria-labelledby="dc-ident"`, `id="devconn" class="devcard r3" aria-labelledby="dc-conn"`,
 		`<button type="button" class="btn" disabled>Restart</button>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("offline overview lacks %q", want)

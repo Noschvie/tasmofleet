@@ -325,7 +325,7 @@ func TestPolicyPageShowsRulesInOrderWithStateAndSeverity(t *testing.T) {
 		t.Fatalf("cards %s, want the stored order C,A,B", got)
 	}
 	cards := regexp.MustCompile(`(?s)<tr class[^>]*>.*?</tr>`).FindAllString(body, -1)
-	if len(cards) != 3 || !strings.Contains(cards[1], "is-dim") || !strings.Contains(cards[1], ">Disabled<") || strings.Contains(cards[0], ">Disabled<") {
+	if len(cards) != 3 || strings.Contains(strings.Join(cards, ""), "is-dim") || !strings.Contains(cards[1], ">Disabled<") || strings.Contains(cards[0], ">Disabled<") {
 		t.Fatalf("only A is disabled:\n%s", strings.Join(cards, "\n---\n"))
 	}
 	if !strings.Contains(cards[1], "not checked while disabled") || strings.Contains(cards[1], "health-bar") {

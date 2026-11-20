@@ -1,7 +1,8 @@
 // The Settings page (System -> Settings). All eight tabs are in one form; this file
 //  - shows one tab at a time without a page load, so edits on another tab are not lost,
 //  - tracks unsaved changes per tab (save bar, dot in the tab strip, leave warning),
-//  - dims settings and cards whose switch or sign-in mode is off (data-depends),
+//  - marks settings and cards whose switch or sign-in mode is off (data-depends) is-off and inert; the controls inside
+//    take the disabled look from app.css, the text keeps its colour (#1071),
 //  - runs the phone section picker.
 // Without this file the tabs are links (a page load per tab) and everything is enabled.
 (function () {

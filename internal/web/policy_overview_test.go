@@ -76,8 +76,15 @@ func TestPolicyOverviewTilesFollowTheDefinitions(t *testing.T) {
 			t.Errorf("row %d lacks %q:\n%s", i, want, rows[i])
 		}
 	}
-	if !strings.Contains(rows[2], "is-dim") || strings.Contains(rows[0], "is-dim") || strings.Contains(rows[2], "health-bar") {
-		t.Error("only the disabled rule is dimmed, and it draws no bar")
+	// #1071: the state is said in words (the Disabled badge, "not checked while disabled"); a row at half
+	// opacity dropped its text to 2.6 against the AA bar of 4.5.
+	if !strings.Contains(rows[2], ">Disabled<") || strings.Contains(rows[0], ">Disabled<") || strings.Contains(rows[2], "health-bar") {
+		t.Error("only the disabled rule says Disabled, and it draws no bar")
+	}
+	for i, row := range rows {
+		if strings.Contains(row, "is-dim") {
+			t.Errorf("row %d is dimmed: opacity on text is what #1071 removed", i)
+		}
 	}
 	if !strings.Contains(rows[0], `aria-label="2 match, 1 deviate, 2 not judged"`) {
 		t.Errorf("the bar says its numbers:\n%s", rows[0])

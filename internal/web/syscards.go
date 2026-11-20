@@ -17,7 +17,7 @@ import (
 // sysCardDef is a card of a tab. Stack is the column stack it sits in (#391: cards stack directly
 // under each other per column, see ui.CardStacks); cards are listed stack by stack, so the document
 // order is the phone reading order, unless Phone gives a card another place. Depends is the
-// data-depends rule that dims the card (sysform.js). Special cards (Backups storage, the deleted devices' backups) have no keys.
+// data-depends rule that switches the card off while it does not apply (sysform.js: is-off and inert). Special cards (Backups storage, the deleted devices' backups) have no keys.
 type sysCardDef struct {
 	ID, Title, Note, Depends string
 	Stack                    int

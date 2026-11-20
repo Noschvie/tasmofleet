@@ -308,7 +308,7 @@ func policyRow(p policyView, i int, r ruleRow) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var10 = []any{templ.KV("is-dim", r.Disabled), templ.KV("is-saved", r.Saved)}
+			var templ_7745c5c3_Var10 = []any{templ.KV("is-saved", r.Saved)}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var10...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

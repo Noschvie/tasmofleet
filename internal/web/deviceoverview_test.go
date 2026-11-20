@@ -523,8 +523,8 @@ func TestSensorsBoxReplacesTheRelayBox(t *testing.T) {
 }
 
 // Why: the page shows a sensor box for a relay-less device and a relay box for one with relays,
-// never both; the box is dimmed with the rest of the live state when the device is offline (its
-// readings are stale).
+// never both; the box says "Last reported" in words when the device is offline (its readings are
+// stale). It is not drawn at half opacity: that dropped the text below the AA contrast (#1071).
 func TestOverviewShowsSensorsOnlyWithoutRelays(t *testing.T) {
 	var hh telemetryHealth
 	e := setupWith(t, func(d *Deps) {
@@ -538,50 +538,73 @@ func TestOverviewShowsSensorsOnlyWithoutRelays(t *testing.T) {
 	if !strings.Contains(body, `<h2 id="dc-sensors">Sensors</h2>`) || !strings.Contains(body, "Temperature · BME280") || !strings.Contains(body, "12.4 °C") || strings.Contains(body, `id="dc-relays"`) {
 		t.Errorf("sensor device:\n%s", body)
 	}
-	if strings.Contains(body, `class="devcard dev-box dev-dim is-dim"`) {
-		t.Error("an online device's sensors are not dimmed")
+	if strings.Contains(sliceBetween(body, `aria-labelledby="dc-sensors"`, `</section>`), "Last reported") {
+		t.Error("an online device's sensors are current: no Last reported label")
 	}
 	hh.fakeHealth[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-time.Hour)}
 	_, off := e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(off, `class="devcard dev-box dev-dim is-dim"`) || !strings.Contains(off, `aria-labelledby="dc-sensors"`) {
-		t.Errorf("offline sensors must be dimmed:\n%s", off)
+	if box := sliceBetween(off, `aria-labelledby="dc-sensors"`, `</section>`); !strings.Contains(box, "Last reported") || strings.Contains(box, "is-dim") {
+		t.Errorf("offline sensors must say Last reported and carry no dim:\n%s", off)
 	}
 }
 
-// Why: the dim on an offline device says "this is the last reported value" (#145). The
-// Reachability tile is the exception: its "Offline" is the current state, not a stale reading, and
-// at opacity .55 it falls to about 2.6:1 (light) and 3.5:1 (dark), below the design system's AA
-// rule (#513). Every other tile, and the relay box, keeps the dim (#676).
-func TestOfflineDeviceDimsItsTilesButNotReachability(t *testing.T) {
+// Why (#1071): an offline device shows what it last reported, and the page must say so in words:
+// the former half-opacity dim dropped every tile and card to 2.1 to 4.0 against the AA bar of 4.5
+// and told a screen reader nothing (aria-disabled on a section, which is not a control). The
+// Reachability tile is the exception: its "Offline" is the current state, not a last report. The
+// label sits once in the heading line of each tile and of the Relays, Connection and Identity cards, and an online
+// page carries it only as a hidden span in the two cards the live refresh does not swap.
+func TestOfflineDeviceSaysLastReported(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
 		d.Health.(fakeHealth)[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-5 * time.Hour), Since: time.Now().Add(-5 * time.Hour), Power: map[string]string{"POWER": "OFF"}}
 	})
-	tags := func(body string) map[string]string {
+	tiles := func(body string) map[string]string {
 		got := map[string]string{}
-		for _, m := range regexp.MustCompile(`<div class="(dev-tile[^"]*)" data-tile="(\w+)"[^>]*>`).FindAllStringSubmatch(body, -1) {
-			got[m[2]] = m[0]
+		for _, m := range regexp.MustCompile(`(?s)<div class="dev-tile" data-tile="(\w+)"><div class="dev-tile-l">(.*?)</div>`).FindAllStringSubmatch(body, -1) {
+			got[m[1]] = m[0]
 		}
 		return got
 	}
 	_, off := e.do(t, "GET", "/devices/1", "admin", nil)
-	tiles := tags(off)
-	reach, ok := tiles["reach"]
-	if !ok || len(tiles) < 2 {
-		t.Fatalf("the offline page needs the Reachability tile and at least one other: %v", tiles)
+	got := tiles(off)
+	reach, ok := got["reach"]
+	if !ok || len(got) < 2 {
+		t.Fatalf("the offline page needs the Reachability tile and at least one other: %v", got)
 	}
-	if strings.Contains(reach, "is-dim") || strings.Contains(reach, `aria-disabled="true"`) {
-		t.Errorf("Reachability shows the current state and must not be dimmed or disabled: %s", reach)
+	if strings.Contains(reach, "Last reported") {
+		t.Errorf("Reachability shows the current state, not a last report: %s", reach)
 	}
 	if !strings.Contains(off, `>Offline</div>`) {
 		t.Error("the Reachability tile says Offline")
 	}
-	for key, tag := range tiles {
-		if key != "reach" && (!strings.Contains(tag, "is-dim") || !strings.Contains(tag, `aria-disabled="true"`)) {
-			t.Errorf("tile %q keeps the offline dim: %s", key, tag)
+	for key, tile := range got {
+		if key != "reach" && !strings.Contains(tile, `data-stale><span class="bdg t-neutral">Last reported</span>`) {
+			t.Errorf("tile %q must say Last reported: %s", key, tile)
 		}
 	}
-	if !strings.Contains(off, `class="devcard dev-box dev-dim is-dim"`) {
-		t.Error("the relay box keeps the offline dim")
+	for _, card := range []string{`aria-labelledby="dc-relays"`, `aria-labelledby="dc-conn"`, `aria-labelledby="dc-ident"`} {
+		if sec := sliceBetween(off, card, `</section>`); !strings.Contains(sec, `data-stale><span class="bdg t-neutral">Last reported</span>`) || strings.Contains(sec, "data-stale hidden") {
+			t.Errorf("the card %s must show Last reported while the device is offline:\n%s", card, sec)
+		}
+	}
+	// What was an opacity is now a word: nothing on the page is dimmed, and no section claims to be disabled.
+	for _, old := range []string{"is-dim", "dev-dim", "data-dim"} {
+		if strings.Contains(off, old) {
+			t.Errorf("the offline page still carries %q: opacity on text is what #1071 removed", old)
+		}
+	}
+	if regexp.MustCompile(`<(section|div)\b[^>]*aria-disabled="true"`).MatchString(off) {
+		t.Error("aria-disabled belongs on a control, not on a section or a tile")
+	}
+
+	_, on := e.do(t, "GET", "/devices/2", "admin", nil)
+	for _, card := range []string{`aria-labelledby="dc-conn"`, `aria-labelledby="dc-ident"`} {
+		if sec := sliceBetween(on, card, `</section>`); !strings.Contains(sec, `data-stale hidden>`) {
+			t.Errorf("the card %s is not swapped by the live refresh: its label is always there and hidden while online:\n%s", card, sec)
+		}
+	}
+	if strings.Contains(sliceBetween(on, `id="devlive"`, `aria-labelledby="dc-conn"`), "Last reported") {
+		t.Error("the live region is rendered from the state: an online device has no label in it")
 	}
 }
 
@@ -679,6 +702,21 @@ func TestLiveRefreshLeavesAnUnchangedActivityBoxAlone(t *testing.T) {
 	_, unknown := e.do(t, "GET", "/devices/1/live", "operator", nil)
 	if !strings.Contains(unknown, `id="devact"`) {
 		t.Error("without a signature the box is always sent")
+	}
+}
+
+// Why (#1071, A2-015): the Activity row of a state change draws two badges and an arrow. A screen reader skips
+// an aria-label on a plain span, so it read "Online Offline" with no direction. The words "From" and "to" are
+// visually hidden text, the arrow itself is decoration.
+func TestActivityRowReadsFromOnlineToOffline(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.History = &fakeHistory{events: stateChanges(1)} })
+	_, body := e.do(t, "GET", "/devices/1", "operator", nil)
+	want := `<span class="dev-act-what"><span class="sr-only">From </span><span class="bdg t-ok">Online</span> <span aria-hidden="true">→</span> <span class="sr-only">to </span><span class="bdg t-danger">Offline</span></span>`
+	if !strings.Contains(regexp.MustCompile(`\s+`).ReplaceAllString(body, " "), want) {
+		t.Errorf("the state change must read as words:\n%s", sliceBetween(body, `<ul class="dev-act">`, `</ul>`))
+	}
+	if strings.Contains(body, `aria-label="to"`) {
+		t.Error(`aria-label="to" on a span is ignored by screen readers`)
 	}
 }
 

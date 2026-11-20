@@ -464,7 +464,7 @@ templ ruleDevicesCard(v ruleDevicesView) {
 						</thead>
 						<tbody>
 							for _, r := range v.Rows {
-								<tr class={ templ.KV("is-dim", r.Kind == policy.OutcomeUnknown) }>
+								<tr>
 									<td class="p1" data-label="Device"><a class="mono" href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
 									<td data-label="Actual">
 										if r.Have != "" {

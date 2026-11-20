@@ -925,8 +925,8 @@ func sysDescribe(row sysRow) templ.Attributes {
 	return templ.Attributes{}
 }
 
-// sysDependsAttrs makes an element follow a switch of the settings form (sysform.js dims it and makes
-// it inert while the switch is off); no attribute for an empty rule.
+// sysDependsAttrs makes an element follow a switch of the settings form (sysform.js marks it is-off, which fades
+// its controls, and makes it inert while the switch is off); no attribute for an empty rule.
 func sysDependsAttrs(rule string) templ.Attributes {
 	if rule == "" {
 		return templ.Attributes{}

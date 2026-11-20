@@ -104,7 +104,7 @@ func Info(id, label, text string) templ.Component {
 }
 
 // SettingsCardData describes a card: Class is "" or a phone rank (StackRank); Depends is the
-// data-depends rule (see sysform.js) that dims the card while it does not apply. NoteHTML replaces
+// data-depends rule (see sysform.js) that switches the card off (is-off, inert) while it does not apply. NoteHTML replaces
 // Note where the one-line note holds a link or a path in code type.
 type SettingsCardData struct {
 	ID, Title, Note, Class, Depends string

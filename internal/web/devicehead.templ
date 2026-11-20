@@ -175,7 +175,7 @@ templ restartDialog(t deviceTabs, oob bool) {
 // deviceOverviewPage is the overview tab (#145, #421): the live tiles, the relay box, then two card
 // stacks: Stability, Connection and the reach paths on the left, Identity and Activity on the right
 // (phones keep the reading order Stability, Identity, Connection, paths, Activity through the rank
-// classes). Offline dims everything but Activity.
+// classes). Offline puts "Last reported" on the tiles and cards except Reachability and Activity.
 templ deviceOverviewPage(p deviceOverview) {
 	@deviceHeader(p.Tabs)
 	if u := p.Updating; u != nil {
@@ -190,8 +190,11 @@ templ deviceOverviewPage(p deviceOverview) {
 			if p.Stab != nil {
 				@stabilityCard(*p.Stab, nil)
 			}
-			<section id="devconn" class={ "devcard", dimClass(p.Live.Off), ui.StackRank(3) } data-dim aria-disabled={ ariaBool(p.Live.Off) } aria-labelledby="dc-conn">
-				<h2 id="dc-conn">{ p.Conn.Title }</h2>
+			<section id="devconn" class={ "devcard", ui.StackRank(3) } aria-labelledby="dc-conn">
+				<div class="devcard-head">
+					<h2 id="dc-conn">{ p.Conn.Title }</h2>
+					@staleLabel(!p.Live.Off)
+				</div>
 				@ui.KV(p.Conn.Rows)
 			</section>
 			if p.Paths != nil {
@@ -267,11 +270,12 @@ templ liveRegion(l liveView) {
 	</div>
 }
 
-func dimClass(off bool) string {
-	if off {
-		return "dev-dim is-dim"
-	}
-	return "dev-dim"
+// staleLabel says "Last reported" on a tile or card whose values are what the device reported before it went
+// offline. It is a word, not an opacity: text at half opacity misses the AA contrast, and says nothing to a screen
+// reader (#1071). The live region renders it only while the device is offline; the Connection and Identity cards
+// are not swapped by the live refresh, so they always carry it and live.js shows or hides it (syncDeviceOffline).
+templ staleLabel(hide bool) {
+	<span class="dev-stale" data-stale hidden?={ hide }>@ui.Badge(ui.ToneNeutral, "Last reported")</span>
 }
 
 func toneClass(t ui.Tone) string {
@@ -281,12 +285,16 @@ func toneClass(t ui.Tone) string {
 	return "t-" + string(t)
 }
 
-// liveTile is one tile of the live region. Offline dims it (the last reported state), except
-// Reachability: its "Offline" is the current state, and the dim would push it below the AA
-// contrast rule (#676, #513).
+// liveTile is one tile of the live region. Offline it says "Last reported" (the last reported state), except
+// Reachability: its "Offline" is the current state, not a last report (#676, #513, #1071).
 templ liveTile(t tile, l liveView) {
-	<div class={ "dev-tile", dimClass(tileDim(t, l)) } data-tile={ t.Key } data-dim aria-disabled={ ariaBool(tileDim(t, l)) }>
-		<div class="dev-tile-l">{ t.Label }</div>
+	<div class="dev-tile" data-tile={ t.Key }>
+		<div class="dev-tile-l">
+			{ t.Label }
+			if tileStale(t, l) {
+				@staleLabel(false)
+			}
+		</div>
 		<div class={ "dev-tile-v", toneClass(t.Tone) } data-visual-mask?={ t.Mask }>{ t.Value }</div>
 		if t.Bar > 0 {
 			<svg class={ "dev-bar", toneClass(t.BarTone) } viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" data-visual-mask>
@@ -316,9 +324,12 @@ templ liveTile(t tile, l liveView) {
 // well as for four. The switches are forms that also work without JavaScript; htmx replaces the
 // live region with the answer.
 templ relayBoxView(l liveView) {
-	<section class={ "devcard", "dev-box", dimClass(l.Off) } data-dim aria-disabled={ ariaBool(l.Off) } aria-labelledby="dc-relays">
+	<section class="devcard dev-box" aria-labelledby="dc-relays">
 		<div class="devcard-head">
 			<h2 id="dc-relays">Relays</h2>
+			if l.Off {
+				@staleLabel(false)
+			}
 			<span class="dev-box-meta">{ l.Box.Right }</span>
 		</div>
 		<div class="dev-relays">
@@ -363,11 +374,14 @@ templ relayBoxView(l liveView) {
 }
 
 // sensorBoxView is the Sensors box that takes the place of the relay box on a device without
-// relays. Its readings are the last ones received: dimmed with the rest while the device is offline.
+// relays. Its readings are the last ones received: labelled "Last reported" while the device is offline.
 templ sensorBoxView(l liveView) {
-	<section class={ "devcard", "dev-box", dimClass(l.Off) } data-dim aria-disabled={ ariaBool(l.Off) } aria-labelledby="dc-sensors">
+	<section class="devcard dev-box" aria-labelledby="dc-sensors">
 		<div class="devcard-head">
 			<h2 id="dc-sensors">Sensors</h2>
+			if l.Off {
+				@staleLabel(false)
+			}
 			<span class="dev-box-meta">{ l.Sensors.Right }</span>
 		</div>
 		if len(l.Sensors.Cells) > 0 {
@@ -386,7 +400,7 @@ templ sensorBoxView(l liveView) {
 }
 
 // devActBox is the Activity list: state changes and transactions of the device, newest first.
-// It is history, so an offline device does not dim it.
+// It is history, so an offline device does not label it "Last reported".
 templ devActBox(a devActivity, attrs templ.Attributes) {
 	<section id="devact" class={ "devcard", ui.StackRank(5) } aria-labelledby="dc-act" { attrs... }>
 		<div class="devcard-head">
@@ -407,7 +421,15 @@ templ devActList(rows []devActRow, base string) {
 			<li>
 				<time class="dev-act-at" { ui.StampAttrs(r.At, ui.StampDateTimeSec)... }>{ ui.StampText(r.At, ui.StampDateTimeSec) }</time>
 				if e := r.Event; e != nil {
-					<span class="dev-act-what">@ui.Badge(uiTone(e.From), label(e.From)) <span aria-label="to">→</span> @ui.Badge(uiTone(e.To), label(e.To))</span>
+					<span class="dev-act-what">
+						<span class="sr-only">From </span>
+						@ui.Badge(uiTone(e.From), label(e.From))
+						{ " " }
+						<span aria-hidden="true">→</span>
+						{ " " }
+						<span class="sr-only">to </span>
+						@ui.Badge(uiTone(e.To), label(e.To))
+					</span>
 					<span class="dev-act-more">{ string(e.Source) }{ healthMore(e.Source, e.Detail) }</span>
 				} else if j := r.Job; j != nil {
 					<span class="dev-act-what"><a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Transaction #{ strconv.FormatInt(int64(j.BatchID), 10) }</a> @ui.Badge(uiTone(j.State), label(j.State))</span>
@@ -451,9 +473,7 @@ templ deviceHistoryPage(p historyView) {
 templ identityCard(c identCard) {
 	<section
 		id="identity"
-		class={ "devcard", dimClass(c.Off), ui.StackRank(2) }
-		data-dim
-		aria-disabled={ ariaBool(c.Off) }
+		class={ "devcard", ui.StackRank(2) }
 		aria-labelledby="dc-ident"
 		if c.Changed {
 			hx-swap-oob="true"
@@ -462,6 +482,7 @@ templ identityCard(c identCard) {
 		<input type="hidden" id="identsig" name="ident" value={ c.Sig }/>
 		<div class="devcard-head">
 			<h2 id="dc-ident">Identity</h2>
+			@staleLabel(!c.Off)
 			if c.CanProbe {
 				<button
 					type="button"

@@ -508,7 +508,8 @@ button[aria-pressed="true"] {
   color: var(--color-surface);
 }
 button[disabled],
-button[aria-disabled="true"] {
+button[aria-disabled="true"],
+[data-depends].is-off button {
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
@@ -623,7 +624,11 @@ textarea.is-focus {
 }
 input[disabled],
 select[disabled],
-textarea[disabled] {
+textarea[disabled],
+[data-depends].is-off input:not([type="checkbox"]),
+[data-depends].is-off select,
+[data-depends].is-off textarea,
+[data-depends].is-off .useg {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -8241,8 +8246,16 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   border-radius: var(--r-card);
 }
 .dev-tile-l {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-8);
   font: 500 12.5px var(--font-sans);
   color: var(--color-text-2);
+}
+/* "Last reported": the word that replaced the offline dim (#1071). Beside the heading of a card, after the title */
+.devcard-head .dev-stale {
+  margin-right: auto;
 }
 .dev-tile-v {
   font: 600 var(--fs-stat) / 1 var(--font-sans);
@@ -8273,8 +8286,9 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .dev-bar-fill {
   fill: var(--t, var(--color-warn));
 }
-/* offline: the last reported state, dimmed. The controls inside are disabled by the page */
-.is-dim {
+/* the console's dim lines are a log line kind, not a state. Opacity on text that carries a state (offline, not
+   judged, disabled, off) is gone (#1071): the state is said in words, and only a control that cannot act is faded */
+.console-line.is-dim {
   opacity: 0.55;
 }
 /* the policy rule the editor just saved */
@@ -11494,11 +11508,6 @@ a.bk-namelink:hover {
 }
 #card-schedule .sbody {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-}
-.scard.is-off,
-.dep.is-off,
-.sys-test.is-off {
-  opacity: 0.5;
 }
 .sch {
   display: flex;

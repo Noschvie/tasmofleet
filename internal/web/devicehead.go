@@ -164,8 +164,9 @@ func chipText(f model.ChipFamily) string {
 // sinceText is a timestamp for running text, "22 Oct 2026, 09:41" (the prototype's format).
 func sinceText(t time.Time) string { return t.Local().Format("2 Jan 2006, 15:04") }
 
-// tileDim reports whether a tile is dimmed: every tile of an offline device except Reachability.
-func tileDim(t tile, l liveView) bool {
+// tileStale reports whether a tile says "Last reported": every tile of an offline device except Reachability,
+// whose "Offline" is the current state.
+func tileStale(t tile, l liveView) bool {
 	return l.Off && t.Key != "reach"
 }
 

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { contrast } from "../support/contrast";
 import { test, expect } from "../support/fixtures";
 import {
   App,
@@ -63,34 +64,6 @@ async function mount(page: Page, html: string): Promise<void> {
     box.innerHTML = h;
     document.querySelector("main")!.append(box);
   }, html);
-}
-
-/** contrast is the WCAG ratio of two CSS colours (any syntax the browser parses). */
-async function contrast(page: Page, fg: string, bg: string): Promise<number> {
-  return page.evaluate(
-    ([a, b]) => {
-      const c = document
-        .createElement("canvas")
-        .getContext("2d", { willReadFrequently: true })!;
-      const rgb = (col: string) => {
-        c.clearRect(0, 0, 1, 1);
-        c.fillStyle = "#000";
-        c.fillStyle = col;
-        c.fillRect(0, 0, 1, 1);
-        return [...c.getImageData(0, 0, 1, 1).data].slice(0, 3);
-      };
-      const lum = ([r, g, bl]: number[]) => {
-        const f = (v: number) =>
-          (v /= 255) <= 0.03928
-            ? v / 12.92
-            : Math.pow((v + 0.055) / 1.055, 2.4);
-        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bl);
-      };
-      const [l1, l2] = [lum(rgb(a)), lum(rgb(b))].sort((x, y) => y - x);
-      return (l1 + 0.05) / (l2 + 0.05);
-    },
-    [fg, bg],
-  );
 }
 
 // Why: the flash once sat at top:1rem, over the brand and the menu button. As a toast (design

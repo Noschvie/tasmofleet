@@ -1668,7 +1668,7 @@ func sysPushGone(msg string) templ.Component {
 }
 
 // sysRowView draws one setting in the control its kind calls for, then the settings that depend
-// on it, together in one group the page dims while the switch is off.
+// on it, together in one group that is marked is-off and inert while the switch is off.
 func sysRowView(p sysPage, row sysRow) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -4807,7 +4807,7 @@ func sysResetBox(p sysPage) templ.Component {
 // result next to it. With scripts it swaps only this row, so a password typed into the form is
 // still there for the save that follows (a secret is never rendered back); without scripts it
 // posts the form and the page reloads. A failure in the danger tone as an alert, a success as a status.
-// depends names the form control of the switch the test needs (sysDependsOn); sysform.js dims the row
+// depends names the form control of the switch the test needs (sysDependsOn); sysform.js marks the row is-off (its button is faded)
 // and makes it inert while that switch is off, so a channel that is off cannot be tested (#471).
 func sysTestRow(label, action, what, result, help, depends string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
