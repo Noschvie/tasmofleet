@@ -78,6 +78,8 @@ type sysMQTT struct {
 	HasPassword            bool   // a password is stored: the broker row offers to keep it for a changed broker
 	TLS                    bool
 	ACLHidden              bool   // an admin hid the broker ACL warning for this broker (#880, #962)
+	ACLOpen                bool   // the broker ACL notice stands at the top of the tab (brokerACLOpen, #1078)
+	Off                    bool   // no broker is configured: the tab says MQTT is off instead (#1078)
 	ACLReady               bool   // the stored broker can carry the hidden warning (it splits into host and port); else the box is not offered
 	Legacy                 string // why the parts cannot hold the stored URL; empty when they can
 }
@@ -162,6 +164,7 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	p.Notify.Push = h.sysPushOf(r, p.Base)
 	p.MQTT.HasPassword = hasMQTTPassword
 	p.MQTT.ACLHidden = h.aclWarningHidden()
+	p.MQTT.ACLOpen, p.MQTT.Off = h.brokerACLOpen(), !h.brokerConfigured()
 	p.MQTT.ACLReady = aclBinding(h.mqttSettings()) != ""
 	p.MQTT.KeepTicked = posted["reuse.MQTT_PASSWORD"] == "1"
 	p.Tabs = sysTabsOf(rows)

@@ -114,7 +114,7 @@ func styleguidePage(v sgView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = ui.BrokerACLNotice("TasmoFleet sends commands, passwords and whole configuration backups through this broker. Unless it has an ACL, every client of the broker can read them.", "").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.BrokerACLNotice().Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

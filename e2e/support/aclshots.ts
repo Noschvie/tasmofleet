@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /**
  * aclShots keeps full-page screenshots of the page as it stands, at 1280 and 375 px in light and dark, in SHOT_DIR
@@ -19,4 +19,12 @@ export async function aclShots(page: Page, name: string): Promise<void> {
   }
   await page.emulateMedia({ colorScheme: null });
   if (before) await page.setViewportSize(before);
+}
+
+/** ACL_LEAD is the lead of the broker ACL notice (ui.BrokerACLLead), the same on every page that shows it (#1078). */
+export const ACL_LEAD = "Your MQTT broker has no ACL.";
+
+/** aclNotice is the broker ACL notice on the page (or inside a part of it): the banner that carries the shared lead. */
+export function aclNotice(scope: Page | Locator): Locator {
+  return scope.locator(".banner", { hasText: ACL_LEAD });
 }

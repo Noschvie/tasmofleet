@@ -1,15 +1,18 @@
 import { mkdirSync } from "node:fs";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { expectNoOverflow } from "../support/layout";
-import { aclShots } from "../support/aclshots";
+import { ACL_LEAD, aclNotice, aclShots } from "../support/aclshots";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
-// #840: the broker ACL notice is big, red and bold on the pages where MQTT settings and MQTT-carried secrets appear.
-// Without an ACL every client of the broker reads commands, passwords and device backups, and nothing in TasmoFleet can
-// show that this is fixed, so the notice cannot be closed. SHOT_DIR keeps screenshots of each screen.
+// #840, #1078: without an ACL every client of the broker reads commands, passwords and device backups, and nothing in
+// TasmoFleet can show that this is fixed, so the notice cannot be closed. Since #1078 it is one short warn banner, the
+// same on every page that shows it (the lead, one sentence, one action: the guide): the big red version read as an
+// incident and pushed each page's own content away. Pages that are not the place for it (the setup, the device's Edit
+// form) carry a plain help line with the guide instead. SHOT_DIR keeps screenshots of each screen.
 const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 const olga = { "X-authentik-username": "olga", "X-authentik-groups": "ops" };
+const sentence = "Any client on it can read device passwords and backups.";
 let app: App;
 let env: Devenv;
 test.beforeAll(async () => {
@@ -40,34 +43,31 @@ async function shot(page: Page, name: string, width: number, scheme: string): Pr
   await page.screenshot({ path: `${process.env.SHOT_DIR}/${name}-${width}-${scheme}.png`, fullPage: true });
 }
 
-// the notice is red (a danger banner), its lead is bold and larger than the text, and there is nothing to close it
-async function expectLoudNotice(page: Page): Promise<void> {
-  const notice = page.locator("[data-acl-warning]").first();
+// the notice is the one short warn banner: tone warn (never danger), the shared lead in bold, the one sentence in
+// regular weight, exactly one action (the guide, in a new tab) and nothing that closes it
+async function expectShortNotice(scope: Page | Locator): Promise<void> {
+  const notice = aclNotice(scope);
+  await expect(notice).toHaveCount(1);
   await expect(notice).toBeVisible();
-  const lead = notice.locator(".acl-lead");
-  await expect(lead).toContainText("Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups.");
-  const style = await lead.evaluate((e) => {
-    const s = getComputedStyle(e);
-    return { weight: Number(s.fontWeight), size: parseFloat(s.fontSize) };
-  });
-  expect(style.weight).toBeGreaterThanOrEqual(700);
-  expect(style.size).toBeGreaterThanOrEqual(16);
-  const text = await notice.locator(".acl-text").evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
-  expect(text).toBeGreaterThanOrEqual(14);
-  // red: the danger tokens give the border a red hue (r clearly above g and b), light and dark
-  const [r, g, b] = await notice.evaluate((e) => {
-    // the computed colour may be in any CSS colour space: paint it and read the pixel
-    const c = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
-    c.fillStyle = getComputedStyle(e).borderTopColor;
-    c.fillRect(0, 0, 1, 1);
-    return [...c.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-  });
-  expect(r).toBeGreaterThan(g + 40);
-  expect(r).toBeGreaterThan(b + 40);
+  await expect(notice).toHaveClass(/\btone-warn\b/);
+  await expect(notice).not.toHaveClass(/\btone-danger\b/);
+  await expect(notice.locator("b")).toHaveText(ACL_LEAD);
+  await expect(notice.locator(".banner-text")).toHaveText(`${ACL_LEAD} ${sentence}`);
+  const weight = await notice.locator(".banner-text").evaluate((e) => Number(getComputedStyle(e).fontWeight));
+  expect(weight, "the sentence is regular weight, only the lead is bold").toBeLessThan(600);
   await expect(notice.getByRole("button")).toHaveCount(0);
+  await expect(notice.getByRole("link")).toHaveCount(1);
   const link = notice.getByRole("link", { name: /Set up the ACL/ });
   await expect(link).toHaveAttribute("href", /github\.com\/hellwand\/tasmofleet\/blob\/main\/docs\/mqtt-broker-acl\.md$/);
   await expect(link).toHaveAttribute("target", "_blank");
+}
+
+// the plain help line where the notice does not stand: the guide, in a new tab, and no notice
+async function expectHelpLine(page: Page): Promise<void> {
+  await expect(aclNotice(page)).toHaveCount(0);
+  const help = page.locator(".acl-help");
+  await expect(help).toHaveCount(1);
+  await expect(help.getByRole("link", { name: /Set up the ACL/ })).toHaveAttribute("target", "_blank");
 }
 
 for (const width of [1280, 375]) {
@@ -78,22 +78,26 @@ for (const width of [1280, 375]) {
       await page.emulateMedia({ colorScheme: scheme });
 
       await page.goto(app.url + "/settings/system?tab=mqtt");
-      await expectLoudNotice(page);
+      await expectShortNotice(page);
       // it stands at the top of the MQTT tab, above the broker fields
-      const noticeBox = await page.locator("[data-acl-warning]").first().boundingBox();
+      const noticeBox = await aclNotice(page).boundingBox();
       const hostBox = await page.locator("input[name='mqtt.host']").boundingBox();
       expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(hostBox!.y);
       await shot(page, "system-mqtt", width, scheme);
       await expectNoOverflow(page, "system MQTT tab");
 
-      // the first-run setup, where the broker is entered first
+      // the setup's last step: no notice (no broker is usable there yet), a help line with the guide
       await page.goto(app.url + "/setup");
-      await expectLoudNotice(page);
+      await expectHelpLine(page);
       await shot(page, "setup", width, scheme);
       await expectNoOverflow(page, "setup");
 
+      // the device's Edit form: no notice, a help line under the MQTT password source
       await page.goto(app.url + "/devices/1/edit");
-      await expectLoudNotice(page);
+      await expectHelpLine(page);
+      const source = await page.getByLabel("MQTT password source").boundingBox();
+      const help = await page.locator(".acl-help").boundingBox();
+      expect(help!.y).toBeGreaterThanOrEqual(source!.y + source!.height);
       await shot(page, "device-edit", width, scheme);
       await expectNoOverflow(page, "device edit");
 
@@ -121,20 +125,40 @@ for (const width of [1280, 375]) {
           f.submit();
         });
       }
-      await expectLoudNotice(page);
+      await expectShortNotice(page);
       await shot(page, "bulk-backup", width, scheme);
       await expectNoOverflow(page, "bulk backup scope");
     });
   }
 }
 
+// #1078 (A6-002): the setup's last step was about 1400 px tall at 1280, most of it the red notice between the device
+// networks and the broker host. The wizard card is now shorter than 900 px.
+test("the setup's last step is short at 1280px", async ({ page }) => {
+  await page.setExtraHTTPHeaders(adam);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto(app.url + "/setup");
+  await expect(page.getByRole("heading", { name: "Basic settings" })).toBeVisible();
+  const card = await page.locator(".auth-card").boundingBox();
+  expect(card!.height, "the setup wizard card at 1280 px").toBeLessThan(900);
+});
+
+// #1078 (A6-021): the help under "Hide the broker ACL warning" starts where the label's text starts, not under the box
+test("the hide option's help is aligned with its label", async ({ page }) => {
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  const option = page.locator("label.sopt", { hasText: "Hide the broker ACL warning" });
+  const label = await option.locator("span").first().boundingBox();
+  const help = await option.locator("xpath=following-sibling::small[1]").boundingBox();
+  expect(Math.abs(help!.x - label!.x), "the help's left edge is the label text's").toBeLessThanOrEqual(1);
+});
+
 // a page that has nothing to do with the broker does not carry the notice
 test("the notice stays off other pages", async ({ page }) => {
   await page.setExtraHTTPHeaders(adam);
   for (const path of ["/devices", "/settings/system?tab=network"]) {
     await page.goto(app.url + path);
-    const shown = await page.locator("[data-acl-warning]:visible").count();
-    expect(shown, path).toBe(0);
+    await expect(aclNotice(page).filter({ visible: true }), path).toHaveCount(0);
   }
 });
 
@@ -149,12 +173,11 @@ test("the notice stands by Back up all now only, not on a card or by an HTTP dev
   const button = head.getByRole("button", { name: "Back up all now" });
   await expect(button).toBeVisible();
   await expect(page.locator("#card-devices").getByRole("button", { name: "Back up all now" })).toHaveCount(0);
-  await expect(page.locator(".syspage [data-acl-warning]")).toHaveCount(0);
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-  await expectLoudNotice(page);
+  await expect(aclNotice(page.locator(".syspage"))).toHaveCount(0);
+  await expectShortNotice(page);
   // it stands below the button and above the first card
   const buttonBox = await button.boundingBox();
-  const noticeBox = await page.locator("[data-acl-warning]").boundingBox();
+  const noticeBox = await aclNotice(page).boundingBox();
   const cardBox = await page.locator("#card-lastrun").boundingBox();
   expect(buttonBox!.y + buttonBox!.height).toBeLessThanOrEqual(noticeBox!.y);
   expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(cardBox!.y);
@@ -166,33 +189,34 @@ test("the notice stands by Back up all now only, not on a card or by an HTTP dev
 
   await page.goto(app.url + "/devices/1");
   await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeVisible();
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await expect(aclNotice(page)).toHaveCount(0);
 });
 
-// #880, #962: nothing in TasmoFleet can see an ACL, so an admin can hide the warning for this broker (System, MQTT). The
-// notice's second line leads an admin straight to that option; it goes away everywhere, for this broker only. Shots of
-// the notice with its second line, of the option as the link's target, and of the pages after.
-test("an admin hides the notice; the second line leads to the option", async ({ page }) => {
-  await page.setExtraHTTPHeaders(adam);
+// #1078: an operator sees the same short banner as an admin, with no second action to hide it
+test("an operator sees the same banner, with nothing that hides it", async ({ page }) => {
+  await page.setExtraHTTPHeaders(olga);
   await page.goto(app.url + "/devices/backups");
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-  await expect(page.locator("[data-acl-warning] .acl-hide")).toHaveText("Hide it under System → MQTT.");
+  await expectShortNotice(page);
+  await expect(page.getByText("Hide it")).toHaveCount(0);
+  await aclShots(page, "backups-operator");
+});
+
+// #880, #962, #1078: nothing in TasmoFleet can see an ACL, so an admin can hide the warning for this broker on System,
+// MQTT; it goes away everywhere (the dashboard's item too), for this broker only. Shots of the pages before and after.
+test("an admin hides the notice for this broker", async ({ page }) => {
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/");
+  const item = page.locator(".att-item", { hasText: "MQTT broker" });
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText("No ACL");
+  await expect(item).toHaveAttribute("href", /mqtt-broker-acl\.md$/);
+  await aclShots(page, "dashboard-open");
+  await page.goto(app.url + "/devices/backups");
+  await expect(aclNotice(page)).toHaveCount(1);
   await aclShots(page, "backups-open");
   await page.goto(app.url + "/settings/system?tab=mqtt");
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-  await expect(page.locator("[data-acl-warning] .acl-hide")).toHaveCount(0);
+  await expect(aclNotice(page)).toHaveCount(1);
   await aclShots(page, "system-mqtt-open");
-
-  // "Hide it" leads to the option: the MQTT tab is open, the option is in view and highlighted as the target
-  await page.goto(app.url + "/devices/backups");
-  await page.locator("[data-acl-warning] .acl-hide").getByRole("link", { name: "Hide it" }).click();
-  await expect(page).toHaveURL(/\/settings\/system\?tab=mqtt#mqtt-acl-hide$/);
-  const option = page.locator("#mqtt-acl-hide");
-  await expect(option).toBeInViewport();
-  await expect(option).toHaveCSS("outline-style", "solid"); // :target paints the outline, a plain option has none
-  await expect(page.locator("#mqtt-acl-hide:target")).toHaveCount(1);
-  await aclShots(page, "system-mqtt-target");
-  await expectNoOverflow(page, "system MQTT tab at the option");
 
   const box = page.getByLabel("Hide the broker ACL warning");
   await expect(page.getByText("Every client of this broker can read device backups, passwords included. The warning comes back when you change the broker.")).toBeVisible();
@@ -200,12 +224,14 @@ test("an admin hides the notice; the second line leads to the option", async ({ 
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system?tab=mqtt");
   await expect(page.getByLabel("Hide the broker ACL warning")).toBeChecked();
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await expect(aclNotice(page)).toHaveCount(0);
   await aclShots(page, "system-mqtt-hidden");
   await page.goto(app.url + "/devices/backups");
   await expect(page.getByRole("button", { name: "Back up all now" })).toBeVisible();
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await expect(aclNotice(page)).toHaveCount(0);
   await aclShots(page, "backups-hidden");
+  await page.goto(app.url + "/");
+  await expect(page.locator(".att-item", { hasText: "MQTT broker" })).toHaveCount(0);
   // another broker host: the hidden warning no longer applies
   await page.goto(app.url + "/settings/system?tab=mqtt");
   const host = page.locator('input[name="mqtt.host"]');
@@ -213,16 +239,5 @@ test("an admin hides the notice; the second line leads to the option", async ({ 
   await host.fill("other-" + old);
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/backups");
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-});
-
-// #962: only an admin may save the setting, so only an admin gets the link; an operator reads the same line as text.
-// The warning is shown in both states this can run in: a fresh app, and the app after the test above (it ends on a new broker).
-test("an operator sees where to hide the notice but gets no link", async ({ page }) => {
-  await page.setExtraHTTPHeaders(olga);
-  await page.goto(app.url + "/devices/backups");
-  const line = page.locator("[data-acl-warning] .acl-hide");
-  await expect(line).toHaveText("Hide it under System → MQTT.");
-  await expect(line.getByRole("link")).toHaveCount(0);
-  await aclShots(page, "backups-operator");
+  await expect(aclNotice(page)).toHaveCount(1);
 });

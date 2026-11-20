@@ -159,14 +159,14 @@ type BannerData struct {
 	Alert       bool // role=alert (a failure the user has to act on) instead of role=status
 }
 
-// The broker ACL notice (#840): the page that explains the access control list, and the sentence every place
-// leads with. Without an ACL the broker hands what TasmoFleet sends through it to every client that may subscribe.
+// The broker ACL notice (#840, #1078): the page that explains the access control list (the long explanation lives
+// there only), and the notice's lead, its one sentence and its one action, the same on every page. Without an ACL the
+// broker hands what TasmoFleet sends through it to every client that may subscribe.
 const (
-	BrokerACLDocURL   = "https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"
-	BrokerACLHideLink = "Hide it" // the words of BrokerACLHide that are the link for an admin
-	BrokerACLHideRest = " under System → MQTT."
-	BrokerACLHide     = BrokerACLHideLink + BrokerACLHideRest
-	BrokerACLLead     = "Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups."
+	BrokerACLDocURL = "https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"
+	BrokerACLLead   = "Your MQTT broker has no ACL."
+	BrokerACLText   = "Any client on it can read device passwords and backups."
+	BrokerACLAction = "Set up the ACL"
 )
 
 // ToastData is a toast shown in the flow (the style guide); live toasts come from toast.js.
@@ -267,9 +267,8 @@ type ConfirmData struct {
 	Verb                          string
 	Danger                        bool
 	CancelHref, CancelLabel       string
-	NoBusy                        bool   // the answer is a file, not a page: form.js must not leave the button busy (#538)
-	ACLText                       string // not empty: the broker ACL notice (BrokerACLNotice) with this sentence stands above the facts (#840)
-	ACLHideHref                   string // where the notice's "Hide it" leads (an admin only; empty = plain text, #962)
+	NoBusy                        bool // the answer is a file, not a page: form.js must not leave the button busy (#538)
+	ACL                           bool // the broker ACL notice (BrokerACLNotice) stands above the facts (#840)
 }
 
 // FieldData is a label-above input with help text and the server's error for it.

@@ -145,7 +145,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.OK, d.Off, d.Unk = s.Online, s.Offline, s.Unknown
 	d.Props = dashProposals(v.Base, props, devs)
 	now := h.d.Clock.Now()
-	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow())
+	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow(), h.brokerACLOpen())
 	d.TxnCard = v.Features.Transactions || len(txs) > 0 || plans.N > 0
 	d.Plans = plans
 	if len(txs) > 0 {
@@ -275,7 +275,9 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 
 // dashAttention lists the devices that need a look, worst first: offline, never answered,
 // refusing the login, silent, a boot loop, weak Wi-Fi, then policy deviations; at most dashAttentionMax.
-func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration) []ui.AttItem {
+// With acl (brokerACLOpen) the broker ACL item follows the offline devices, once (#1078): it is not a device, so it
+// does not count against the cap, or a fleet with many offline devices would push it off the list.
+func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool) []ui.AttItem {
 	type cand struct {
 		rank int
 		id   model.DeviceID
@@ -321,15 +323,26 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	// rows come sorted by name.
 	sort.SliceStable(cs, func(i, j int) bool { return cs[i].id < cs[j].id })
 	var out []ui.AttItem
+	offline := 0
 	for rank := 0; rank <= 6 && len(out) < dashAttentionMax; rank++ {
 		for _, c := range cs {
 			if c.rank == rank && len(out) < dashAttentionMax {
 				out = append(out, c.it)
+				if rank == 0 {
+					offline++
+				}
 			}
 		}
 	}
+	if acl {
+		out = slices.Insert(out, offline, brokerACLItem)
+	}
 	return out
 }
+
+// brokerACLItem is the broker ACL notice as an entry of Needs attention (#1078): the same warning, in the list's words,
+// leading to the guide.
+var brokerACLItem = ui.AttItem{Tone: ui.ToneWarn, Name: "MQTT broker", Text: "No ACL · any client on it can read device passwords and backups", Href: ui.BrokerACLDocURL}
 
 // lastContact is when the device last answered: in this run, else when its identity was last
 // read (stored, so it survives a restart). Zero when it never answered.

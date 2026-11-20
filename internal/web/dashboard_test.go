@@ -16,6 +16,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // between returns the part of s after the first from and before the next to ("" when from is
@@ -167,6 +168,65 @@ func TestDashboardNeedsAttentionIsCapped(t *testing.T) {
 	_, body := e.do(t, "GET", "/", "admin", nil)
 	if n := strings.Count(body, `class="att-row att-item"`); n != dashAttentionMax {
 		t.Errorf("%d devices listed, want %d", n, dashAttentionMax)
+	}
+}
+
+// Why (#1078): that the broker has no ACL is a property of the whole fleet, not of a device, and the dashboard is where
+// a person looks first. Needs attention lists it once, right after the offline devices (a dead device is the more
+// urgent look), leading to the guide. It is not a device, so it does not count against the device rows: a fleet with
+// many offline devices must not push it off the list. Without a broker, or after the admin hid the warning for this
+// broker, it is not listed; when it is the only entry, the card shows it instead of "Nothing needs attention".
+func TestDashboardListsTheBrokerACLOnce(t *testing.T) {
+	const item = `<a class="att-row att-item" href="https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"><span class="sdot-dot t-warn" aria-hidden="true"></span> <span class="att-text"><span class="att-name">MQTT broker</span><span class="att-why">No ACL · any client on it can read device passwords and backups</span>`
+	att := func(e *env) string {
+		_, body := e.do(t, "GET", "/", "operator", nil)
+		return between(body, `<h2>Needs attention</h2>`, `</section>`)
+	}
+	svc := aclBrokerService(t)
+	e := setupWith(t, func(d *Deps) { d.SysConfig = svc })
+	e.inv.devs[3] = model.Device{ID: 3, Name: "cellar", Address: "10.0.0.3", Identity: model.Identity{DetectedAt: time.Now()}}
+	e.health[3] = model.Health{DeviceID: 3, State: model.HealthOffline, LastSeen: time.Now()}
+	got := att(e)
+	if n := strings.Count(got, item); n != 1 {
+		t.Fatalf("Needs attention lists the broker ACL %d times, want once:\n%s", n, got)
+	}
+	// after the offline device, before the device that has not answered yet (attic, never seen)
+	off, acl, unk := strings.Index(got, ">cellar<"), strings.Index(got, item), strings.Index(got, ">attic<")
+	if off < 0 || unk < 0 || off >= acl || acl >= unk {
+		t.Errorf("the broker ACL item is not between the offline device (%d) and the next reason (%d): %d", off, unk, acl)
+	}
+
+	// a full list of offline devices keeps it: eight device rows and the item
+	for i := model.DeviceID(10); i < 30; i++ {
+		e.inv.devs[i] = model.Device{ID: i, Name: "dead", Address: "10.0.1.1", Identity: model.Identity{DetectedAt: time.Now()}}
+		e.health[i] = model.Health{DeviceID: i, State: model.HealthOffline, LastSeen: time.Now()}
+	}
+	got = att(e)
+	if n, rows := strings.Count(got, item), strings.Count(got, `class="att-row att-item"`); n != 1 || rows != dashAttentionMax+1 {
+		t.Errorf("with many offline devices: the item %d times in %d rows, want once in %d", n, rows, dashAttentionMax+1)
+	}
+
+	// the only entry: every device answers
+	calm := setupWith(t, func(d *Deps) { d.SysConfig = aclBrokerService(t) })
+	calm.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
+	got = att(calm)
+	if strings.Count(got, item) != 1 || strings.Contains(got, "Nothing needs attention") {
+		t.Errorf("as the only entry the item is missing or the card says nothing needs attention:\n%s", got)
+	}
+
+	// hidden for this broker, and no broker at all: not listed
+	aclHideNow(t, svc)
+	if strings.Contains(att(e), "MQTT broker") {
+		t.Error("the item is listed after the admin hid the warning for this broker")
+	}
+	cleared := aclBrokerService(t)
+	if _, err := cleared.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL"}}); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*Deps){"no settings service": nil, "empty broker URL": func(d *Deps) { d.SysConfig = cleared }} {
+		if got := att(setupWith(t, mutate)); strings.Contains(got, "MQTT broker") {
+			t.Errorf("%s: the item is listed without a broker", name)
+		}
 	}
 }
 

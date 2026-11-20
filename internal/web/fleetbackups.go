@@ -157,7 +157,7 @@ type fleetView struct {
 	Filter      string
 	Sort, Dir   string
 	AllIDs      []model.DeviceID // the devices a run started now would try
-	ACLText     string           // not empty: a broker is configured, so a backup travels over MQTT: the broker ACL notice (#853)
+	ACL         bool             // a broker is configured, so a backup travels over MQTT: the broker ACL notice (#853)
 	SkippedIDs  []model.DeviceID // the ones it would leave out
 	SkippedNow  int
 	OldDays     int
@@ -337,7 +337,7 @@ func (h *handler) registerFleetBackups(route func(string, func(http.Handler) htt
 func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	ctx := r.Context()
 	base := httpBase(r)
-	fv := &fleetView{Base: base, Admin: admin, ACLText: h.backupACLText(), Now: h.d.Clock.Now(), Filter: r.URL.Query().Get("filter"), WithoutHref: base + fleetPath + "?filter=" + fleetNone}
+	fv := &fleetView{Base: base, Admin: admin, ACL: h.brokerACLOpen(), Now: h.d.Clock.Now(), Filter: r.URL.Query().Get("filter"), WithoutHref: base + fleetPath + "?filter=" + fleetNone}
 	if !slices.Contains([]string{fleetNone, fleetOld, fleetFailed, fleetSkipped}, fv.Filter) {
 		fv.Filter = fleetAll
 	}

@@ -82,7 +82,6 @@ templ setupView(p setupPage) {
 					</span>
 				}
 			</label>
-			@ui.BrokerACLNoticeHere(aclTextBroker)
 			<div class="setup-broker">
 				<label class="ufield">
 					<span class="ufield-label">MQTT broker host</span>
@@ -122,6 +121,7 @@ templ setupView(p setupPage) {
 					<span class="sys-test-help">Optional. With a broker devices report at once instead of being polled.</span>
 				}
 			</div>
+			@aclHelp("Without an ACL on the broker, any client on it can read device passwords and backups.")
 			if p.CanScan {
 				<label class="ucheck"><input type="checkbox" name="scan" value="1" checked?={ p.Scan }/><span>Scan these networks for Tasmota devices when I finish<span class="ucheck-text">Ranges up to /22 (1024 addresses) each.</span></span></label>
 			}

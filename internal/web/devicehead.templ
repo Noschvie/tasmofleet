@@ -121,9 +121,9 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: t.Base + devPath(t.ID, "/delete")})
 			}
 		</div>
-		if t.ACLText != "" {
+		if t.ACL {
 			<div class="devhd-acl">
-				@ui.BrokerACLNotice(t.ACLText, aclHideHref(ctx))
+				@ui.BrokerACLNotice()
 			</div>
 		}
 	</div>

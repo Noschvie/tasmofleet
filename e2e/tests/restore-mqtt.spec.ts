@@ -1,5 +1,5 @@
 import { test, expect } from "../support/fixtures";
-import { aclShots } from "../support/aclshots";
+import { aclNotice, aclShots } from "../support/aclshots";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
@@ -58,8 +58,9 @@ test.describe("restore over MQTT", () => {
     await expect(page.locator(".rs-path")).toContainText("MQTT");
     await aclShots(page, "restore-confirm");
     await expect(page.locator(".rs-cred")).toContainText("MQTT broker");
-    // #840: the confirmation of a restore over MQTT shows the broker ACL notice
-    await expect(page.locator("[data-acl-warning]")).toBeVisible();
+    // #1078: the confirmation of a restore over MQTT states the broker's reach in its transport sentence, without the notice
+    await expect(page.locator(".rs-cred")).toContainText("without a broker ACL that is every client of the broker");
+    await expect(aclNotice(page)).toHaveCount(0);
     await page.getByLabel(/I understand/).check();
     await page.getByRole("button", { name: "Restore and restart" }).click();
     await expect(page).toHaveURL(/\/restores\/\d+$/);

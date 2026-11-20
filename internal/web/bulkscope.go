@@ -68,8 +68,8 @@ type bulkScopeView struct {
 	// Back up
 	Label string
 	Keep  bool
-	// ACLText is the broker ACL notice's sentence: backups travel over MQTT when a broker is configured (#840).
-	ACLText string
+	// ACL shows the broker ACL notice: backups travel over MQTT when a broker is configured (#840).
+	ACL bool
 	// Left are the devices "Back up all now" left out (skipped by the fleet rule) with their reason;
 	// LeftIDs are posted back so the list survives a removed row (#409).
 	Left    []leftItem

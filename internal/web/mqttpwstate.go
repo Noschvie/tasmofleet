@@ -119,7 +119,7 @@ type pwActs struct {
 	Test        bool
 	TestLabel   string
 	TestWhy     string // why Test is disabled, "" when it can be pressed
-	ACL         string // the broker ACL notice by Test ("" where the header's notice covers it or none applies)
+	ACL         bool   // the broker ACL notice by Test (false where the header's notice covers it or none applies)
 	Change      bool
 	ChangeLabel string
 	UseBroker   bool // a link to the confirmation of "Use the broker password" for this device
@@ -136,7 +136,7 @@ type pwView struct {
 	// TestACL is the broker ACL notice for the Test button (T18): set where a test would put the password and a
 	// settings chunk on the broker (a broker is configured, the warning is not hidden) and the page's header does
 	// not carry the Back up notice already (the backup does not go over MQTT).
-	TestACL string
+	TestACL bool
 }
 
 // passwordRow is the row "Device MQTT password" of the card: one word, one line, the buttons.

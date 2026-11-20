@@ -34,7 +34,6 @@ type restoreConfirmView struct {
 	Ack        string     // the acknowledgement's text
 	Path       string     // how the restore reaches the device
 	Cred       string     // the sentence about old credentials and the transfer
-	ACLNotice  bool       // the restore goes over MQTT: the broker ACL notice (#840)
 	CancelHref string
 	// Files (#324)
 	Files     *filesCard // the backup's files; nil when it has none to show
@@ -142,7 +141,6 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 	}
 	c.Path = sentence(p.PathNote)
 	c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The upload is plain HTTP on your device network."
-	c.ACLNotice = p.ViaMQTT
 	if p.ViaMQTT {
 		// #607: MQTT first. The broker hands the configuration to every subscriber of the device's topics; the files
 		// have no way over MQTT and go over HTTP.
@@ -229,7 +227,6 @@ func (h *handler) renderConfirm(w http.ResponseWriter, r *http.Request, status i
 	v := h.view(r, "Restore backup", "device", nil)
 	v.Crumbs = []ui.Crumb{{Label: p.Device.Name, Path: devPath(p.Device.ID, "")}, {Label: "Restore"}}
 	c := restoreConfirmOf(v, p)
-	c.ACLNotice = c.ACLNotice && h.brokerACLOpen()
 	h.show(w, r, status, "restore_confirm", v, restoreConfirm(c))
 }
 

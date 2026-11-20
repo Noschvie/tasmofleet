@@ -656,12 +656,12 @@ func deviceHead(t deviceTabs, attrs templ.Attributes) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if t.ACLText != "" {
+		if t.ACL {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<div class=\"devhd-acl\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.BrokerACLNotice(t.ACLText, aclHideHref(ctx)).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.BrokerACLNotice().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

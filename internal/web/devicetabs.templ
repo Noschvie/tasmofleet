@@ -19,7 +19,7 @@ templ consolePage(data consoleData, c ui.ConsoleData, csrf string) {
 			<h2 id="confirm-h">Confirm</h2>
 			<p role="status">Confirm sending <code>{ data.Shown }</code> to { data.Device.Name }. { data.Consequence }</p>
 			if data.ACLNotice {
-				@ui.BrokerACLNotice(aclTextConsole, aclHideHref(ctx))
+				@ui.BrokerACLNotice()
 			}
 			<form method="post" action={ templ.SafeURL(c.Action) } class="btn-row">
 				<input type="hidden" name="csrf" value={ csrf }/>
@@ -373,11 +373,6 @@ templ editPage(f deviceForm, base, csrf string) {
 // mqttPasswordFields is the MQTT password section of the edit form. The value is write-only: it is
 // never rendered, and an empty field keeps the stored one.
 templ mqttPasswordFields(f deviceForm) {
-	if f.ACLText != "" {
-		<div class="ufield-wide">
-			@ui.BrokerACLNotice(f.ACLText, aclHideHref(ctx))
-		</div>
-	}
 	<input type="hidden" name="mqtt_password_mode_shown" value={ string(f.MQTTShown) }/>
 	<label class="ufield">
 		<span class="ufield-label">MQTT password source</span>
@@ -388,6 +383,9 @@ templ mqttPasswordFields(f deviceForm) {
 			<option value="empty" selected?={ f.MQTTMode == "empty" }>No password</option>
 		</select>
 		<span class="ufield-help">Needed only to back up or restore over MQTT (FileDownload, FileUpload). Sent only to this device's topic.</span>
+		if f.ACL {
+			@aclHelp("Without a broker ACL, any client on the broker can read this password and the backups.")
+		}
 	</label>
 	<label class="ufield">
 		<span class="ufield-label">Own MQTT password</span>

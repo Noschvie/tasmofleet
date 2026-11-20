@@ -11672,6 +11672,16 @@ a.bk-namelink:hover {
 .sopt[hidden] {
   display: none;
 }
+/* the help of a checkbox option starts under the option's text, not under its box (#1078, A6-021): the box (16 px)
+   and the .ucheck gap */
+.sopt + .ufield-help {
+  display: block;
+  margin-left: calc(16px + var(--sp-10));
+}
+/* System, MQTT without a broker: the one line in place of the broker ACL notice (#1078) */
+.sys-mqtt-off {
+  margin: 0 0 var(--sp-14);
+}
 .sbody > .sopt,
 .scan-nets {
   grid-column: 1 / -1;
@@ -15584,68 +15594,10 @@ a[aria-busy="true"]::after {
   flex: 1 1 100%;
 }
 
-/* the broker ACL notice (#840): big, red and bold on purpose. It is no ordinary banner: without an ACL every MQTT
-   client reads commands, passwords and device backups, and nothing in TasmoFleet can show that it is fixed. */
-.banner.acl-warning {
-  align-items: flex-start;
-  gap: var(--sp-14);
-  padding: var(--sp-14) var(--sp-18);
-  border-width: 2px;
-  font-size: 14px;
-  line-height: 1.45;
-  font-weight: 600;
-}
-.banner.acl-warning .banner-dot {
-  width: 12px;
-  height: 12px;
-  margin-top: 5px;
-}
-.banner.acl-warning .acl-lead {
-  display: block;
-  margin-bottom: var(--sp-6);
-  font-size: 17px;
-  line-height: 1.3;
-  font-weight: 800;
-}
-.banner.acl-warning .acl-text {
-  display: block;
-  font-weight: 600;
-}
-.banner.acl-warning .acl-hide {
-  display: block;
-  margin-top: var(--sp-6);
-  font-weight: 600;
-}
-.banner.acl-warning .acl-hide a {
+/* the help line on the broker ACL where the notice does not stand (#1078): the setup's broker fields, the device's
+   MQTT password source; its link is the guide */
+.acl-help a {
   color: inherit;
-  font-weight: 700;
-  text-decoration: underline;
-}
-/* the option the notice's "Hide it" link leads to (#962): the browser scrolls to the target, the highlight says which
-   option it is; it ends with the next navigation, as the fragment does */
-#mqtt-acl-hide {
-  scroll-margin-top: 110px; /* below the sticky header, as .wn-rel */
-}
-#mqtt-acl-hide:target {
-  padding: var(--sp-4) var(--sp-8);
-  border-radius: var(--r-sm);
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  background: var(--color-accent-bg);
-}
-.banner.acl-warning .banner-btn {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
-}
-/* the narrow auth card (the setup page) keeps its banners on one line; this one must wrap, or its link leaves the card */
-.auth-card .banner.acl-warning {
-  flex-wrap: wrap;
-  gap: var(--sp-14);
-  padding: var(--sp-14) var(--sp-18);
 }
 
 /* Backups of deleted devices (#622): the MAC beside the device's subhead, Select all above the list */

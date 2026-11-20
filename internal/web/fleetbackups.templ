@@ -22,8 +22,8 @@ templ fleetBackupsPage(p sysPage) {
 			<button type="submit" form="bk-all" class="btn btn-primary" title={ p.Fleet.AllTitle() }>Back up all now</button>
 		}
 	}
-	if p.Fleet.ACLText != "" {
-		@ui.BrokerACLNotice(p.Fleet.ACLText, aclHideHref(ctx))
+	if p.Fleet.ACL {
+		@ui.BrokerACLNotice()
 	}
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})

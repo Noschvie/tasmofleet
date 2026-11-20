@@ -152,7 +152,7 @@ func (h *handler) registerPasswordBulk(route routeFunc, adm func(http.Handler) h
 type pwBrokerData struct {
 	Base, CSRF string
 	Rows       []pwCardRow
-	ACLText    string // the broker ACL notice (T18): the tests put a chunk of each device's settings on the broker
+	ACL        bool // the broker ACL notice (T18): the tests put a chunk of each device's settings on the broker
 }
 
 func (h *handler) pwBrokerRefuse(w http.ResponseWriter, r *http.Request, status int, text string) {
@@ -178,9 +178,7 @@ func (h *handler) pwBrokerConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Crumbs = []ui.Crumb{sysTabCrumb("mqtt"), {Label: "Use the broker password"}}
 	d := pwBrokerData{Base: v.Base, CSRF: v.CSRF, Rows: rows}
-	if h.brokerACLOpen() {
-		d.ACLText = aclTextPasswordTestBulk
-	}
+	d.ACL = h.brokerACLOpen()
 	h.show(w, r, http.StatusOK, "mqtt_password_broker", v, pwBrokerPage(d))
 }
 

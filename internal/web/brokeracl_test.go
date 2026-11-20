@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -17,25 +18,35 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
-// Why (#840, the product owner: "big, red and bold"): since 0.37.0 MQTT is the first transport for everything, so the
-// broker hands every command, password and configuration dump to every client allowed to subscribe to the device's
-// topics. An access control list on the broker is the only thing that keeps those clients out, and TasmoFleet cannot
-// see whether there is one. The warning therefore stands where MQTT settings and MQTT-carried secrets appear, with the
-// same lead and a link to the guide, and nowhere else (a notice everywhere is a notice nobody reads).
+// Why (#840, #1078): since 0.37.0 MQTT is the first transport for everything, so the broker hands every command,
+// password and configuration dump to every client allowed to subscribe to the device's topics. An access control list
+// on the broker is the only thing that keeps those clients out, and TasmoFleet cannot see whether there is one. The
+// warning therefore stands where a secret leaves through the broker by the person's own action and where the broker is
+// set up, and nowhere else (a notice everywhere is a notice nobody reads). Since #1078 (UI audit A1-032, A2-036, A3-041,
+// A6-002) it is one short warn banner, the same on every page: a 210 px red wall of bold text read as an incident and
+// pushed the page's own content away, and each page's own long paragraph made the warning differ from page to page.
+// The long explanation lives in the guide.
 //
-// countACL is how many ACL notices a page has; it also checks the lead and the link of each.
+// aclSentence is the notice's one sentence (ui.BrokerACLText), spelled out so a page that words it otherwise is caught.
+const aclSentence = "Any client on it can read device passwords and backups."
+
+// aclNoticeHTML is the notice as every page must render it: ui.Banner in tone warn (never danger), the shared lead in
+// bold, the one sentence in regular weight, and exactly one action, the guide in a new tab without the opener.
+func aclNoticeHTML() string {
+	return `<div class="banner tone-warn" role="status"><span class="banner-dot"></span><div class="banner-text"><b>` + ui.BrokerACLLead + `</b> ` +
+		aclSentence + `</div><a class="banner-btn" href="` + ui.BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer">Set up the ACL ` +
+		`<span class="sr-only">(opens in a new tab)</span></a></div>`
+}
+
+// aclCount is how many broker ACL notices a page has: each one carries the shared lead once, nothing else does.
+func aclCount(page string) int { return strings.Count(page, ui.BrokerACLLead) }
+
+// countACL is aclCount, and it checks that each notice is the one short warn banner.
 func countACL(t *testing.T, page string) int {
 	t.Helper()
-	n := strings.Count(page, "data-acl-warning")
-	if n == 0 {
-		return 0
-	}
-	if strings.Count(page, ui.BrokerACLLead) != n || strings.Count(page, `href="`+ui.BrokerACLDocURL+`"`) != n {
-		t.Errorf("%d notices, but the lead appears %d times and the guide link %d times", n,
-			strings.Count(page, ui.BrokerACLLead), strings.Count(page, `href="`+ui.BrokerACLDocURL+`"`))
-	}
-	if !strings.Contains(page, `class="banner tone-danger acl-warning"`) {
-		t.Error("the notice is not the danger banner")
+	n := aclCount(page)
+	if got := strings.Count(page, aclNoticeHTML()); got != n {
+		t.Errorf("%d ACL notices, %d of them the one short warn banner (tone warn, the lead, one sentence, one action to the guide)", n, got)
 	}
 	return n
 }
@@ -48,21 +59,10 @@ func TestSystemMQTTTabCarriesTheBrokerACLWarning(t *testing.T) {
 	}
 	// it belongs to the MQTT tab: after its opening tag and before the broker fields
 	start := strings.Index(page, `data-sys-tab="mqtt"`)
-	notice := strings.Index(page, "data-acl-warning")
+	notice := strings.Index(page, ui.BrokerACLLead)
 	fields := strings.Index(page, `name="mqtt.host"`)
 	if start < 0 || notice < start || notice > fields {
 		t.Errorf("the notice is not at the top of the MQTT tab: tab %d, notice %d, broker field %d", start, notice, fields)
-	}
-}
-
-func TestSetupMQTTSectionCarriesTheBrokerACLWarning(t *testing.T) {
-	e, _, _ := setupHandlerEnv(t)
-	_, page := e.do(t, "GET", "/setup", "admin", nil)
-	if n := countACL(t, page); n != 1 {
-		t.Fatalf("the setup page has %d ACL notices, want 1", n)
-	}
-	if strings.Index(page, "data-acl-warning") > strings.Index(page, `name="mqtt.host"`) {
-		t.Error("the notice comes after the broker field")
 	}
 }
 
@@ -96,23 +96,93 @@ func brokerWithOwnDevice(t *testing.T) (*env, *sysconfig.Service) {
 	return e, svc
 }
 
-func TestDeviceMQTTPasswordFieldCarriesTheBrokerACLWarning(t *testing.T) {
-	e, _ := brokerWithOwnDevice(t)
-	_, page := e.do(t, "GET", "/devices/7/edit", "admin", nil)
-	if n := countACL(t, page); n != 1 {
-		t.Fatalf("the edit form has %d ACL notices, want 1", n)
+// aclHelpLine is the plain help line on the broker ACL (#1078) where the notice does not stand: its link is the guide.
+const aclHelpLink = `<a href="` + ui.BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer">Set up the ACL<span class="sr-only"> (opens in a new tab)</span></a>`
+
+// Why (#1078, A2-036, A6-002, A3-041): the notice is about the broker, not about the page the person is on. On the
+// device's Edit form it was the largest element, a red block between the web password and the MQTT password, while the
+// person fixed an address; on the setup's last step it was a 20-line wall above an empty broker host, where nobody can
+// act on it yet; on the restore page it repeated what the page's own transport sentence says. Those three places carry
+// no notice: the edit form and the setup a plain help line with the guide, the restore page its sentence. All three
+// asked with a broker configured and the warning not hidden, the state in which the notice shows everywhere else.
+func TestBrokerACLNoticeLeftSetupEditFormAndRestore(t *testing.T) {
+	se, _, _ := setupHandlerEnv(t)
+	_, setup := se.do(t, "GET", "/setup", "admin", nil)
+	if n := aclCount(setup); n != 0 {
+		t.Errorf("setup step 3 has %d ACL notices, want none", n)
 	}
-	if strings.Index(page, "data-acl-warning") > strings.Index(page, `name="mqtt_password_mode"`) {
-		t.Error("the notice comes after the MQTT password fields, not before them")
+	host, help := strings.Index(setup, `name="mqtt.host"`), strings.Index(setup, aclHelpLink)
+	if host < 0 || help < host {
+		t.Errorf("the setup does not link the guide after the broker fields (broker field %d, guide link %d)", host, help)
 	}
-	if !strings.Contains(page, "backup or restore") {
-		t.Error("the notice does not say that a backup or restore carries the password and the dump through the broker")
+
+	ee, _ := brokerWithOwnDevice(t)
+	_, edit := ee.do(t, "GET", "/devices/7/edit", "admin", nil)
+	if n := aclCount(edit); n != 0 {
+		t.Errorf("the device Edit form has %d ACL notices, want none", n)
+	}
+	mode, line := strings.Index(edit, `name="mqtt_password_mode"`), strings.Index(edit, aclHelpLink)
+	if mode < 0 || line < mode || strings.Count(edit, aclHelpLink) != 1 {
+		t.Errorf("the Edit form has no single help line with the guide under the MQTT password source (source %d, line %d)", mode, line)
+	}
+	if !strings.Contains(edit, `<span class="ufield-help acl-help">Without a broker ACL, any client on the broker can read this password and the backups.`) {
+		t.Error("the Edit form's help line does not say what the broker exposes")
+	}
+
+	re, _, rs, _ := newDiffEnvWith(t, aclBrokerService(t))
+	rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT first (FileUpload)"}
+	_, rp := re.do(t, "GET", "/backups/1/restore", "admin", nil)
+	if n := aclCount(rp); n != 0 {
+		t.Errorf("the restore page over MQTT has %d ACL notices, want none", n)
+	}
+	// the risk is still stated where the transfer starts (T5, T18): by the restore's own transport sentence
+	if !strings.Contains(rp, "without a broker ACL that is every client of the broker") {
+		t.Error("the restore page over MQTT no longer says who can read the configuration")
+	}
+}
+
+// Why (#1078, A6-001, A6-002): with no broker there is nothing a broker could hand out, so a warning that "every client
+// of your broker" can read passwords is false and opens the page in alarm. System, MQTT says that MQTT is off instead.
+// System, MQTT (A6-001: it asked only whether the warning was hidden) and the setup (A6-002: no condition at all) fail
+// without the fix; the Edit form already asked brokerACLOpen and guards that its help line keeps doing so.
+func TestNoBrokerMeansNoACLNotice(t *testing.T) {
+	e, svc, _, _ := sysEnv(t, true)
+	if _, err := svc.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL", "MQTT_PASSWORD"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, tab := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+	if n := aclCount(tab); n != 0 {
+		t.Errorf("System, MQTT without a broker has %d ACL notices", n)
+	}
+	if !strings.Contains(tab, "MQTT is off. Enter a broker host to turn it on.") {
+		t.Error("System, MQTT without a broker does not say that MQTT is off")
+	}
+
+	se, ssvc, _ := setupHandlerEnv(t)
+	if _, err := ssvc.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL", "MQTT_PASSWORD"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, setup := se.do(t, "GET", "/setup", "admin", nil)
+	if n := aclCount(setup); n != 0 {
+		t.Errorf("setup step 3 without a broker has %d ACL notices", n)
+	}
+
+	ee, esvc := brokerWithOwnDevice(t)
+	if _, err := esvc.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL", "MQTT_PASSWORD"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, edit := ee.do(t, "GET", "/devices/7/edit", "admin", nil)
+	if !strings.Contains(edit, `name="mqtt_password_mode"`) {
+		t.Fatal("the MQTT password section vanished with the broker: it must stay (the password can be stored first)")
+	}
+	if n := aclCount(edit); n != 0 || strings.Contains(edit, aclHelpLink) {
+		t.Errorf("the Edit form without a broker has %d ACL notices or the help line", n)
 	}
 }
 
 // Why (#826, #840): the sentence the console puts before a hidden command that goes over MQTT says plainly that,
-// without an ACL, that is every client of the broker, and the confirmation shows the danger notice; over HTTP there
-// is nothing to warn about.
+// without an ACL, that is every client of the broker, and the confirmation shows the notice; over HTTP there is
+// nothing to warn about.
 func TestConsoleConfirmationOverMQTTWarnsAboutTheBrokerACL(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -155,30 +225,8 @@ func TestBulkCommandPreviewOverMQTTWarnsAboutTheBrokerACL(t *testing.T) {
 	// the same preview with every device over HTTP has none
 	rs.set(false)
 	_, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", "PowerDelta 10"))
-	if n := strings.Count(body, "data-acl-warning"); n != 0 {
+	if n := aclCount(body); n != 0 {
 		t.Errorf("a preview over HTTP only has %d ACL notices", n)
-	}
-}
-
-// Why (#607, #840): a restore carries the whole configuration, with every password in it, through the broker. Its
-// confirmation is the last page before that happens, so it shows the danger notice, and only when the restore goes
-// over MQTT.
-func TestRestoreConfirmationOverMQTTWarnsAboutTheBrokerACL(t *testing.T) {
-	e, _, rs := newDiffEnv(t)
-	rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT first (FileUpload)"}
-	_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
-	if n := countACL(t, body); n != 1 {
-		t.Fatalf("the restore page over MQTT has %d ACL notices, want 1", n)
-	}
-	for _, want := range []string{"whole configuration", "every password"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the restore notice lacks %q", want)
-		}
-	}
-	rs.assess = restore.Assessment{PathNote: "over HTTP"}
-	_, body = e.do(t, "GET", "/backups/1/restore", "admin", nil)
-	if n := strings.Count(body, "data-acl-warning"); n != 0 {
-		t.Errorf("the restore page over HTTP has %d ACL notices", n)
 	}
 }
 
@@ -200,15 +248,15 @@ func TestBulkBackupScopePageWarnsAboutTheBrokerACLWhenABrokerIsConfigured(t *tes
 		t.Fatal(err)
 	}
 	_, body = e.do(t, "POST", "/devices/bulk/backup", "admin", url.Values{"csrf": {"tok"}, "id": {"1"}})
-	if n := strings.Count(body, "data-acl-warning"); n != 0 {
+	if n := aclCount(body); n != 0 {
 		t.Errorf("without a broker the bulk backup page has %d ACL notices", n)
 	}
 }
 
 // Why (#853, follow-up of #840): a backup over MQTT carries every secret of the device through the broker (#607), so
 // the places that start one say so, not only the restore: the device's Back up button, "Back up all now" and the
-// schedule that backs up by itself. The one notice (data-acl-warning) is the one component of #840 with its one text;
-// per-user dismissal was decided against, so there is nothing to close it.
+// schedule that backs up by itself. The one notice is the one component of #840 with its one text (#1078); per-user
+// dismissal was decided against, so there is nothing to close it.
 //
 // devHeadOf is the header block of a device page: the Back up button and what stands by it.
 func devHeadOf(t *testing.T, page string) string {
@@ -218,7 +266,7 @@ func devHeadOf(t *testing.T, page string) string {
 		t.Fatal("no device header in the page")
 	}
 	rest := page[i:]
-	if j := strings.Index(rest, `role="tablist"`); j >= 0 {
+	if j := strings.Index(rest, `<nav class="utabs"`); j >= 0 { // the device tabs follow the header
 		rest = rest[:j]
 	}
 	return rest
@@ -247,18 +295,15 @@ func TestDeviceBackUpButtonCarriesTheBrokerACLWarningOnlyOverMQTT(t *testing.T) 
 			t.Fatalf("%s has %d ACL notices, want 1", tab, n)
 		}
 		head := devHeadOf(t, page)
-		if !strings.Contains(head, "data-acl-warning") {
+		if !strings.Contains(head, ui.BrokerACLLead) {
 			t.Errorf("%s: the notice is not in the header, by the Back up button", tab)
 		}
-		if strings.Index(head, "data-acl-warning") < strings.Index(head, ">Back up</button>") {
+		if strings.Index(head, ui.BrokerACLLead) < strings.Index(head, ">Back up</button>") {
 			t.Errorf("%s: the notice comes before the Back up button", tab)
-		}
-		if !strings.Contains(page, "every password in it") {
-			t.Errorf("%s: the notice does not say that the backup carries the passwords", tab)
 		}
 	}
 	_, page := e.do(t, "GET", "/devices/2", "admin", nil)
-	if n := strings.Count(page, "data-acl-warning"); n != 0 {
+	if n := aclCount(page); n != 0 {
 		t.Errorf("a device that is backed up over HTTP has %d ACL notices", n)
 	}
 }
@@ -280,7 +325,7 @@ func TestDeviceBackUpNoticeStaysWhileAJobHoldsTheDevice(t *testing.T) {
 		if !strings.Contains(page, `title="Unavailable while a backup of the device is running."`) {
 			t.Fatalf("%s: the fixture's Back up button is not held by the running backup", tab)
 		}
-		if n := strings.Count(devHeadOf(t, page), "data-acl-warning"); n != 1 {
+		if n := aclCount(devHeadOf(t, page)); n != 1 {
 			t.Errorf("%s: %d ACL notices in the header while a backup runs, want 1", tab, n)
 		}
 	}
@@ -298,11 +343,11 @@ func TestFleetBackupsPageCarriesTheBrokerACLWarningOnceByBackUpAll(t *testing.T)
 				t.Fatalf("the Backups page has %d ACL notices, want 1 (by Back up all now; the same words twice on one page read as noise)", n)
 			}
 			for _, card := range []string{"schedule", "devices", "lastrun"} {
-				if n := strings.Count(cardOf(t, body, card), "data-acl-warning"); n != 0 {
+				if n := aclCount(cardOf(t, body, card)); n != 0 {
 					t.Errorf("the %s card holds %d ACL notices, the notice stands once below the page header", card, n)
 				}
 			}
-			head, notice, wrap := strings.Index(body, `class="pghead"`), strings.Index(body, "data-acl-warning"), strings.Index(body, `class="syswrap"`)
+			head, notice, wrap := strings.Index(body, `class="pghead"`), strings.Index(body, ui.BrokerACLLead), strings.Index(body, `class="syswrap"`)
 			if head < 0 || notice < head || notice > wrap {
 				t.Fatalf("the notice (%d) is not between the page header (%d) and the card stacks (%d)", notice, head, wrap)
 			}
@@ -320,61 +365,60 @@ func TestFleetBackupsPageCarriesTheBrokerACLWarningOnceByBackUpAll(t *testing.T)
 		t.Fatal(err)
 	}
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
-	if n := strings.Count(body, "data-acl-warning"); n != 0 {
+	if n := aclCount(body); n != 0 {
 		t.Errorf("without a broker the Backups page has %d ACL notices", n)
 	}
 }
 
-// Why (#924): on a firmware built with USE_UFILESYS_MQTT a backup over MQTT sends every file through the broker too:
-// Berry scripts with their tokens and the TLS private key, each file after a start command that carries the device's
-// MQTT password. The notices a person decides from must say so; naming only the configuration tells a person on such
-// a build that the scripts and keys stay off the broker.
+// Why (#924, #1078): on a firmware built with USE_UFILESYS_MQTT a backup over MQTT sends every file through the broker
+// too: Berry scripts with their tokens and the TLS private key, each file after a start command that carries the
+// device's MQTT password. The short notice must not narrow what crosses the broker to the configuration (that told a
+// person on such a build that the scripts and keys stay off it): it says "backups", whole, and the guide it leads to
+// names the files.
 func TestTheACLNoticesOfABackupNameTheFilesItSendsOverMQTT(t *testing.T) {
 	e := fleetEnv(t, fleetFixture(time.Now()))
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
-	if countACL(t, body) != 1 {
-		t.Fatal("the Backups page has no ACL notice")
+	if countACL(t, body) != 1 || !strings.Contains(body, aclSentence) {
+		t.Fatal("the Backups page has no ACL notice that says the backups can be read")
 	}
-	for _, w := range []string{"its files", "Berry scripts with their tokens", "TLS private key"} {
-		if !strings.Contains(body, w) {
-			t.Errorf("the Backups page's ACL notice does not say %q", w)
-		}
+	if strings.Contains(body, "whole configuration") {
+		t.Error("the Backups page's notice narrows what a backup sends to the configuration")
 	}
-	ed, _ := brokerWithOwnDevice(t)
-	_, page := ed.do(t, "GET", "/devices/7/edit", "admin", nil)
-	if countACL(t, page) != 1 {
-		t.Fatal("the edit form has no ACL notice")
-	}
-	for _, w := range []string{"the start command of the dump and of every file", "its files"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("the MQTT password's ACL notice does not say %q", w)
-		}
-	}
-}
-
-// Why (#853): the notice by the device's MQTT password field says that a backup or restore sends the password and the
-// dump through the broker. Without a configured broker neither goes anywhere, so the notice would only scare.
-func TestDevicePasswordFieldNoticeNeedsAConfiguredBroker(t *testing.T) {
-	e, svc := brokerWithOwnDevice(t)
-	_, page := e.do(t, "GET", "/devices/7/edit", "admin", nil)
-	if n := countACL(t, page); n != 1 {
-		t.Fatalf("with a broker the edit form has %d ACL notices, want 1", n)
-	}
-	if _, err := svc.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL", "MQTT_PASSWORD"}}); err != nil {
+	guide, err := os.ReadFile("../../docs/mqtt-broker-acl.md")
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, page = e.do(t, "GET", "/devices/7/edit", "admin", nil)
-	if !strings.Contains(page, `name="mqtt_password_mode"`) {
-		t.Fatal("the MQTT password section vanished with the broker: it must stay (the password can be stored first)")
-	}
-	if n := strings.Count(page, "data-acl-warning"); n != 0 {
-		t.Errorf("without a broker the edit form has %d ACL notices", n)
+	for _, w := range []string{"**every file**", "Berry scripts with their tokens", "the TLS private key"} {
+		if !strings.Contains(string(guide), w) {
+			t.Errorf("the broker ACL guide the notice leads to does not say %q", w)
+		}
 	}
 }
 
-// aclPages are the pages whose notice hiding hides, each with how to ask for it: the Backups page (Back up
-// all now), the bulk backup page and the System MQTT tab. The console, restore and bulk command confirmations and the
-// device's Back up button read the same condition (brokerACLOpen); their tests above and below run with it open.
+// Why (#853, #1078): the help line under the device's MQTT password source says that, without a broker ACL, the
+// broker hands out the password and the backups. Without a configured broker neither goes anywhere, and once the
+// admin hid the warning for this broker the line goes with it, like the notice everywhere else.
+func TestDevicePasswordACLHelpFollowsTheBrokerACLCondition(t *testing.T) {
+	e, svc := brokerWithOwnDevice(t)
+	edit := func() string { _, page := e.do(t, "GET", "/devices/7/edit", "admin", nil); return page }
+	if !strings.Contains(edit(), aclHelpLink) {
+		t.Fatal("with a broker the Edit form has no help line on the ACL")
+	}
+	aclHideNow(t, svc)
+	if strings.Contains(edit(), aclHelpLink) {
+		t.Error("the help line stays after the admin hid the warning for this broker")
+	}
+	if _, err := svc.Apply(context.Background(), sysconfig.Request{Actor: "t", Clear: []string{"MQTT_URL", "MQTT_PASSWORD", "MQTT_ACL_WARNING_HIDDEN"}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(edit(), aclHelpLink) {
+		t.Error("without a broker the Edit form has the help line")
+	}
+}
+
+// aclShown counts the notices of the Backups page (Back up all now) and the System MQTT tab, the pages whose notice
+// hiding hides. The console and bulk command confirmations and the device's Back up button read the same condition
+// (brokerACLOpen); their tests above and below run with it open.
 func aclShown(t *testing.T, e *env) (backups, mqttTab int) {
 	t.Helper()
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
@@ -554,16 +598,6 @@ func aclPaths(now time.Time) []aclPath {
 		// the console page of device 1 carries its own notice and the header's one by Back up (its backup path is MQTT too)
 		{"console", 2, page(routed(func(*Deps) {}), "POST", "/devices/1/console",
 			func() url.Values { return consoleForm("WebPassword hunter2-880") })},
-		{"restore confirmation", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
-			svc := aclBrokerService(t)
-			e, _, rs, _ := newDiffEnvWith(t, svc)
-			rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT first (FileUpload)"}
-			return svc, func(role string) string { _, body := e.do(t, "GET", "/backups/1/restore", role, nil); return body }
-		}},
-		{"device MQTT password field", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
-			e, svc := brokerWithOwnDevice(t)
-			return svc, func(role string) string { _, body := e.do(t, "GET", "/devices/7/edit", role, nil); return body }
-		}},
 		{"bulk backup page", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
 			e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) {
 				d.BackupBatch = &fakeBackupBatch{}
@@ -581,62 +615,68 @@ func aclPaths(now time.Time) []aclPath {
 	}
 }
 
-// Why (#880): the notice is one condition everywhere, so hiding it hides it on the confirmations of console,
-// bulk command and restore, by the device's Back up button, on the device's MQTT password field, on the bulk backup
-// page and on the Backups page too, not only on the page it was made on, and a changed broker brings it back on each of them.
+// Why (#880): the notice is one condition everywhere, so hiding it hides it on the confirmations of console and
+// bulk command, by the device's Back up button, on the bulk backup page and on the Backups page too, not only on the
+// page it was made on, and a changed broker brings it back on each of them.
 func TestBrokerACLHiddenWarningHidesTheNoticeOnEveryMQTTPath(t *testing.T) {
 	for _, p := range aclPaths(time.Now()) {
 		t.Run(p.name, func(t *testing.T) {
 			svc, get := p.open(t)
-			aclCycle(t, svc, p.want, func() int { return strings.Count(get("admin"), "data-acl-warning") })
+			aclCycle(t, svc, p.want, func() int { return aclCount(get("admin")) })
 		})
 	}
 }
 
-// Why (#962): "Hide it" leads an admin straight to the option, so nobody has to find System, MQTT and the box by hand.
-// Only an admin may save that setting: for everyone else the sentence stays plain text, as a link would end on a page
-// they are refused. Each page builds the link from its own request context, so every page that carries the notice is
-// rendered here: one that lost the principal or the base path would drop the link without anyone noticing.
-func TestBrokerACLNoticeLinksOnlyAdminsToTheHideOption(t *testing.T) {
-	const link = `<a href="/tf/settings/system?tab=mqtt#mqtt-acl-hide">Hide it</a> under System → MQTT.`
-	plain := 0 // the notices an operator saw: the plain text variant must really have been rendered
+// Why (#1078, A1-032, A3-041): the notice used to differ from page to page (each page added its own paragraph), was
+// red and bold, and carried a second line, "Hide it". Every place that keeps it (T18) renders the same short warn
+// banner: the lead, one sentence and exactly one action, the guide; hiding is the admin's option on System, MQTT,
+// never a second action, and an operator gets the same banner as an admin.
+func TestBrokerACLNoticeIsTheSameWarnBannerEverywhere(t *testing.T) {
+	type place struct {
+		name string
+		want int
+		get  func(t *testing.T, role string) string
+	}
+	places := []place{
+		{"System, MQTT", 1, func(t *testing.T, _ string) string {
+			e, _, _, _ := sysEnv(t, true)
+			_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+			return body
+		}},
+		{"device Test button", 1, func(t *testing.T, role string) string {
+			e, _ := pwEnv(t, &fakePWTester{}, &fakePWFleet{gaps: map[model.DeviceID]PasswordGap{}})
+			_, body := e.do(t, "GET", "/devices/16", role, nil)
+			return body
+		}},
+		{"bulk broker password page", 1, func(t *testing.T, _ string) string {
+			e, _ := pwEnv(t, &fakePWTester{}, &fakePWFleet{})
+			_, body := e.do(t, "GET", "/settings/system/mqtt-passwords/broker", "admin", nil)
+			return body
+		}},
+	}
 	for _, p := range aclPaths(time.Now()) {
+		places = append(places, place{p.name, p.want, func(t *testing.T, role string) string { _, get := p.open(t); return get(role) }})
+	}
+	operator := 0 // the notices an operator saw: the operator's variant must really have been rendered
+	for _, p := range places {
 		t.Run(p.name, func(t *testing.T) {
-			_, get := p.open(t)
-			if got := strings.Count(get("admin"), link); got != p.want {
-				t.Errorf("an admin gets %d links to the option, want %d (one per notice, with the base path)", got, p.want)
-			}
-			for _, role := range []string{"operator", "viewer"} {
-				body := get(role)
-				notices := strings.Count(body, "data-acl-warning")
+			for _, role := range []string{"admin", "operator"} {
+				body := p.get(t, role)
+				n := countACL(t, body) // checks the shape of every notice on the page
+				if role == "admin" && n != p.want {
+					t.Errorf("admin: %d ACL notices, want %d", n, p.want)
+				}
 				if role == "operator" {
-					plain += notices
+					operator += n // a page only an admin may open shows an operator none
 				}
-				if got := strings.Count(body, ui.BrokerACLHide); got != notices {
-					t.Errorf("%s: %d notices, %d say where to hide it", role, notices, got)
-				}
-				if strings.Contains(body, "mqtt-acl-hide") || strings.Contains(body, ">"+ui.BrokerACLHideLink+"</a>") {
-					t.Errorf("%s gets a link to a setting only an admin may save", role)
+				if strings.Contains(body, "Hide it") || strings.Contains(body, "#"+aclHideID) {
+					t.Errorf("%s: the notice has a second action to hide it", role)
 				}
 			}
 		})
 	}
-	if plain == 0 {
-		t.Fatal("an operator saw no notice on any page: the plain text variant was not checked")
-	}
-	// the link has a target: the option exists on the MQTT tab, ticked or not, and also where the broker is not valid
-	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
-	for _, step := range []string{"unticked", "ticked", "no valid broker"} {
-		switch step {
-		case "ticked":
-			aclSave(t, e, "broker.lan", "1883", "", true)
-		case "no valid broker":
-			aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883/path"})
-		}
-		_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-		if strings.Count(body, `id="mqtt-acl-hide"`) != 1 {
-			t.Errorf("%s: the MQTT tab has %d elements with the id the link leads to, want 1", step, strings.Count(body, `id="mqtt-acl-hide"`))
-		}
+	if operator == 0 {
+		t.Error("an operator saw no notice on any page: the operator's banner was not checked")
 	}
 }
 
@@ -681,17 +721,17 @@ func TestBrokerACLHideOptionNeverClaimsAnACL(t *testing.T) {
 			t.Errorf("the MQTT tab (%s) does not show the label and the hint of the option", step)
 		}
 	}
-	// The notice's body says what it warns about, "unless the broker has an ACL": a condition, not a claim. What it
-	// says about hiding it is the line that must not claim one.
-	hideLine := regexp.MustCompile(`<span class="acl-hide">(.*?)</span>`)
+	// The notice no longer has a line about hiding it (#1078); its own words, on every place it stands, must not claim
+	// an ACL either.
+	notice := regexp.MustCompile(`<div class="banner-text"><b>` + regexp.QuoteMeta(ui.BrokerACLLead) + `</b>(.*?)</div>`)
 	for _, p := range aclPaths(time.Now()) {
 		_, get := p.open(t)
-		m := hideLine.FindAllStringSubmatch(get("admin"), -1)
+		m := notice.FindAllStringSubmatch(get("admin"), -1)
 		if len(m) != p.want {
-			t.Errorf("%s: %d hide lines, want %d", p.name, len(m), p.want)
+			t.Errorf("%s: %d notices, want %d", p.name, len(m), p.want)
 		}
 		for _, l := range m {
-			check("the hide line on "+p.name, l[1])
+			check("the notice on "+p.name, ui.BrokerACLLead+l[1])
 		}
 	}
 	aud.mu.Lock()
@@ -758,19 +798,5 @@ func TestBrokerACLBoxIsNotOfferedWithoutAValidBroker(t *testing.T) {
 	_, body = e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
 	if strings.Contains(body, `name="mqtt.aclhide"`) || !strings.Contains(body, "Save a valid broker first") {
 		t.Error("with a broker URL that cannot be split the page still offers the box, or does not say to save a valid broker")
-	}
-}
-
-// Why (#880, #962): the second line tells the person who still sees the warning where to hide it, in words that do not
-// say the broker has an ACL (TasmoFleet cannot know; the maintainer's wording of #962).
-func TestBrokerACLNoticeSaysWhereToHideIt(t *testing.T) {
-	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
-	_, body := e.do(t, "GET", "/devices/backups", "operator", nil)
-	if !strings.Contains(body, ui.BrokerACLHide) {
-		t.Error("the notice by Back up all now does not say where to hide it")
-	}
-	_, body = e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-	if strings.Contains(body, ui.BrokerACLHide) {
-		t.Error("the MQTT tab sends the person to itself")
 	}
 }

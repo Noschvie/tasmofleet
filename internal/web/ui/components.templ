@@ -234,7 +234,21 @@ templ Banner(b BannerData) {
 		</div>
 		if b.Action != nil {
 			if b.Action.Href != "" {
-				<a class="banner-btn" href={ templ.SafeURL(b.Action.Href) }>{ b.Action.Label }</a>
+				<a
+					class="banner-btn"
+					href={ templ.SafeURL(b.Action.Href) }
+					if b.Action.Target != "" {
+						target={ b.Action.Target }
+					}
+					if b.Action.Rel != "" {
+						rel={ b.Action.Rel }
+					}
+				>
+					{ b.Action.Label }
+					if b.Action.Target == "_blank" {
+						<span class="sr-only"> (opens in a new tab)</span>
+					}
+				</a>
 			} else {
 				<button type={ b.Action.buttonType() } class="banner-btn">{ b.Action.Label }</button>
 			}
@@ -242,41 +256,14 @@ templ Banner(b BannerData) {
 	</div>
 }
 
-// BrokerACLNotice is the big, red, bold notice that, without an access control list on the broker, every MQTT
-// client can read what TasmoFleet sends through it: commands, passwords and configuration dumps (#840). It stays
-// on the pages where MQTT settings and MQTT-carried secrets appear and has no way to be closed: it is not a
-// state of TasmoFleet that goes away, it is a property of the broker TasmoFleet cannot see. Text is the one sentence
-// that says what this page puts on the broker; the lead and the link are the same everywhere. HideHref is where the
-// second line's "Hide it" leads (the option on System, MQTT, #962): empty for everyone who may not save it, and then
-// the line is plain text.
-templ BrokerACLNotice(text, hideHref string) {
-	@brokerACL(text, true, hideHref)
-}
-
-// BrokerACLNoticeHere is the notice on the pages where the broker is set up (System, MQTT and the setup): they are the
-// place the second line of BrokerACLNotice points to, so they do not repeat it (#880).
-templ BrokerACLNoticeHere(text string) {
-	@brokerACL(text, false, "")
-}
-
-templ brokerACL(text string, hide bool, hideHref string) {
-	<div class="banner tone-danger acl-warning" role="note" data-acl-warning>
-		<span class="banner-dot"></span>
-		<div class="banner-text">
-			<b class="acl-lead">{ BrokerACLLead }</b>
-			<span class="acl-text">{ text }</span>
-			if hide {
-				<span class="acl-hide">
-					if hideHref != "" {
-						<a href={ templ.SafeURL(hideHref) }>{ BrokerACLHideLink }</a>{ BrokerACLHideRest }
-					} else {
-						{ BrokerACLHide }
-					}
-				</span>
-			}
-		</div>
-		<a class="banner-btn" href={ templ.SafeURL(BrokerACLDocURL) } target="_blank" rel="noopener noreferrer">Set up the ACL<span class="sr-only"> (opens in a new tab)</span></a>
-	</div>
+// BrokerACLNotice is the broker ACL notice (#840, #1078): without an access control list on the broker, every MQTT
+// client can read what TasmoFleet sends through it. It is one short warn banner, the same everywhere: the lead, one
+// sentence and one action, the guide in a new tab. It has no way to be closed (it is a property of the broker that
+// TasmoFleet cannot see); an admin hides it for one broker on System, MQTT. Which pages show it is decided in web
+// (brokerACLOpen and each place's own path condition), never here.
+templ BrokerACLNotice() {
+	@Banner(BannerData{Tone: ToneWarn, Title: BrokerACLLead, Text: BrokerACLText,
+		Action: &Btn{Label: BrokerACLAction, Href: BrokerACLDocURL, Target: "_blank", Rel: "noopener noreferrer"}})
 }
 
 // ErrorSummary is the form's banner when the server rejected a field: what to fix, and that
@@ -612,8 +599,8 @@ templ ConfirmPage(c ConfirmData) {
 		if c.Warning != "" {
 			@Banner(BannerData{Tone: ToneDanger, Text: c.Warning, Alert: true})
 		}
-		if c.ACLText != "" {
-			@BrokerACLNotice(c.ACLText, c.ACLHideHref)
+		if c.ACL {
+			@BrokerACLNotice()
 		}
 		if len(c.Facts) > 0 {
 			@KV(c.Facts)

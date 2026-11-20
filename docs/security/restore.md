@@ -151,6 +151,8 @@ The dump travels unencrypted from TasmoFleet to the device. Tasmota offers no en
 import (the `/u2` upload is plain HTTP, `FileUpload` plain MQTT), so there is no better transport
 without custom firmware. Over MQTT (the first transport since #607) the broker also delivers the dump to every
 client subscribed to the device's topics: restrict them with a broker ACL (`docs/security/mqtt-transport.md`, [broker ACL guide](../mqtt-broker-acl.md)).
+The confirmation of a restore over MQTT says so in its transport sentence ("without a broker ACL that is every client
+of the broker"); it carries no broker ACL notice of its own (#1078, T18).
 
 - The dump holds the Wi-Fi PSK, the MQTT and web passwords and, depending on
   the setup, Zigbee, KeeLoq and PN532 keys and API tokens. On switched Ethernet

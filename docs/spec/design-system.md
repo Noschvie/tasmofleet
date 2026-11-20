@@ -173,7 +173,7 @@ commit the images after changing a component.
 
 A dot, a bold lead, the text and at most one action, in the tones ok, accent (information), warn, danger and neutral (a state that is neither good nor bad, e.g. a deactivated user). A banner is at most 820 px wide (`.banner { max-width: 820px }`), also above a full-width table. Above the page content, under the page header (never above the crumbs and the title); a banner stays until its cause is gone. A failure the user has to act on is `role=alert`, everything else `role=status`. The shell's flash, the setup notice and the connection banners are banners too. Pages render banners only through `ui.Banner` and `ui.ErrorSummary` (about 25 hand-written banners and the second action on three pages go with #1091). `ui.ErrorSummary` is the danger banner of a rejected form and reads "Fix N field(s). Nothing was saved yet."; it shows only when two or more fields fail (#1098).
 
-Component: `ui.Banner(BannerData{Tone, Title, Text, Action, Alert})`.
+Component: `ui.Banner(BannerData{Tone, Title, Text, Action, Alert})`. An action that leads off TasmoFleet keeps its `Target` and `Rel` (`_blank`, `noopener noreferrer`) and says to a screen reader that it opens a new tab. The broker ACL notice is such a banner (`ui.BrokerACLNotice`, #1078): tone warn, the lead "Your MQTT broker has no ACL.", one sentence and the action "Set up the ACL" (the guide), the same on every page; where it stands is `docs/security/mqtt-transport.md` T18.
 
 ![Inline banners, desktop, light](../design/styleguide/banners-desktop-light.png)
 

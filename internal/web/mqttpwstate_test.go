@@ -332,11 +332,11 @@ func TestBulkBrokerPasswordConfirmPageNeedsNoScriptsAndCarriesTheACLNotice(t *te
 	if n := countACL(t, page); n != 1 {
 		t.Errorf("%d ACL notices, want 1", n)
 	}
-	// The test publishes TasmoFleet's own login where a device's own account may read it: the page says so in its body and
-	// in the notice, and no longer says that nothing but the test is sent.
+	// The test publishes TasmoFleet's own login where a device's own account may read it: the page says so in its body
+	// (the notice is the short one of every page, #1078), and no longer says that nothing but the test is sent.
 	text := html.UnescapeString(page)
-	if strings.Count(text, pwBrokerTestWarning) != 2 || strings.Contains(text, "nothing is sent to a device except the test") {
-		t.Errorf("the page must carry the warning in its body and in the ACL notice (%d times):\n%s", strings.Count(text, pwBrokerTestWarning), text)
+	if strings.Count(text, pwBrokerTestWarning) != 1 || strings.Contains(text, "nothing is sent to a device except the test") {
+		t.Errorf("the page must carry the warning in its body (%d times):\n%s", strings.Count(text, pwBrokerTestWarning), text)
 	}
 	_, tab := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
 	if !strings.Contains(html.UnescapeString(tab), pwBrokerTestWarning) || strings.Contains(html.UnescapeString(tab), "nothing is sent to a device except the test") {
@@ -405,22 +405,23 @@ func TestAGapOfAnMQTTOnlyDeviceSaysNoBackupCanBringThePassword(t *testing.T) {
 // one chunk of the settings dump through the broker. The header's notice follows the backup path, the button a looser
 // rule (a refusal does not block it), so a refused device whose backup goes over HTTP or nowhere showed the button
 // and no notice. The notice must stand by the button exactly where the header's does not, so every page that can
-// start the exposure carries one, and none carries two.
+// start the exposure carries one, and none carries two. Since #1078 both are the same short banner: where it stands
+// (in the header or outside it) tells them apart.
 func TestDeviceTestButtonCarriesTheACLNoticeWhenTheBackupIsNotOverMQTT(t *testing.T) {
 	e, _ := pwEnv(t, &fakePWTester{}, &fakePWFleet{gaps: map[model.DeviceID]PasswordGap{}})
 	_, refused := e.do(t, "GET", "/devices/16", "operator", nil) // refused: the backup is not over MQTT, Test again is pressable
 	if !strings.Contains(refused, `action="/tf/devices/16/mqtt-password/test"`) || !strings.Contains(refused, "Test again") {
 		t.Fatal("the refused device does not offer Test again")
 	}
-	if n := countACL(t, refused); n != 1 || !strings.Contains(html.UnescapeString(refused), aclTextPasswordTest) {
-		t.Errorf("refused device: %d ACL notices, want 1 that names the password test", n)
+	if n, head := countACL(t, refused), aclCount(devHeadOf(t, refused)); n != 1 || head != 0 {
+		t.Errorf("refused device: %d ACL notices (%d in the header), want 1 by the Test button", n, head)
 	}
 	_, works := e.do(t, "GET", "/devices/11", "operator", nil) // backup over MQTT: the header's notice covers the button
-	if n := countACL(t, works); n != 1 || strings.Contains(html.UnescapeString(works), aclTextPasswordTest) {
-		t.Errorf("device whose backup goes over MQTT: %d ACL notices, want only the Back up one", n)
+	if n, head := countACL(t, works), aclCount(devHeadOf(t, works)); n != 1 || head != 1 {
+		t.Errorf("device whose backup goes over MQTT: %d ACL notices (%d in the header), want only the Back up one", n, head)
 	}
 	_, unk := e.do(t, "GET", "/devices/12", "admin", nil) // a Test that is disabled puts nothing on the broker
-	if strings.Contains(html.UnescapeString(unk), aclTextPasswordTest) {
-		t.Error("a disabled Test carries the notice")
+	if n, head := aclCount(unk), aclCount(devHeadOf(t, unk)); n != head {
+		t.Errorf("a disabled Test carries the notice (%d notices, %d in the header)", n, head)
 	}
 }

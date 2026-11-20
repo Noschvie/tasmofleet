@@ -45,8 +45,8 @@ func bulkScopePage(v bulkScopeView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if v.ACLText != "" {
-			templ_7745c5c3_Err = ui.BrokerACLNotice(v.ACLText, aclHideHref(ctx)).Render(ctx, templ_7745c5c3_Buffer)
+		if v.ACL {
+			templ_7745c5c3_Err = ui.BrokerACLNotice().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { quickPick } from "../support/updates";
 import { expectNoOverflow } from "../support/layout";
-import { aclShots } from "../support/aclshots";
+import { ACL_LEAD, aclNotice, aclShots } from "../support/aclshots";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Console and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
@@ -96,9 +96,10 @@ test("a console command whose arguments the audit hides names its transport befo
   await page.getByRole("button", { name: "Send" }).click();
   await aclShots(page, "console-confirm");
   await expect(confirm).toContainText("The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands, and without a broker ACL that is every client of the broker.");
-  // #840: and the confirmation shows the broker ACL notice, big and red
-  await expect(confirm.locator("[data-acl-warning]")).toBeVisible();
-  await expect(confirm.locator("[data-acl-warning] .acl-lead")).toContainText("Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups.");
+  // #840, #1078: and the confirmation shows the broker ACL notice, the short warn banner of every page
+  await expect(aclNotice(confirm)).toBeVisible();
+  await expect(aclNotice(confirm)).toHaveClass(/\btone-warn\b/);
+  await expect(aclNotice(confirm).locator("b")).toHaveText(ACL_LEAD);
   await confirm.getByRole("link", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
   await expect(page.getByRole("log", { name: "Console output" }).getByText("PulseTime1")).toHaveCount(0);
@@ -307,9 +308,9 @@ test("the broker ACL notice stands by Back up when the backup goes over MQTT", a
     await page.goto(app.url + "/devices/1");
     await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeEnabled({ timeout: 2_000 });
   }).toPass({ timeout: 90_000, intervals: [3_000] });
-  const notice = page.locator("#devhd [data-acl-warning]");
+  const notice = aclNotice(page.locator("#devhd"));
   await expect(notice).toHaveCount(1);
-  await expect(notice).toContainText("every password in it");
+  await expect(notice).toHaveClass(/\btone-warn\b/);
   // the notice is under the Back up button, not beside it, and nothing runs off the page
   const buttonBox = await page.getByRole("button", { name: "Back up", exact: true }).boundingBox();
   const noticeBox = await notice.boundingBox();
@@ -320,14 +321,14 @@ test("the broker ACL notice stands by Back up when the backup goes over MQTT", a
     await expectNoOverflow(page, `device header at ${width}`);
   }
   await page.goto(app.url + "/devices/1/backups");
-  await expect(page.locator("#devhd [data-acl-warning]")).toHaveCount(1);
+  await expect(aclNotice(page.locator("#devhd"))).toHaveCount(1);
   // #880, #962: the admin's hidden warning takes the notice from the header
   await page.goto(app.url + "/settings/system?tab=mqtt");
   await page.getByLabel("Hide the broker ACL warning").check();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/1");
   await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeVisible();
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await expect(aclNotice(page)).toHaveCount(0);
   await aclShots(page, "device-back-up-hidden");
 });
 

@@ -56,7 +56,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"RowMenu":          RowMenu(h, []MenuItem{{Label: h, Href: "/x"}, {Label: h, Disabled: true, Why: h}}, false),
 		"Banner":           Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h}}),
 		"ErrorSum":         ErrorSummary(h),
-		"BrokerACLNotice":  BrokerACLNotice(h, "/x"),
+		"BannerLink":       Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h, Href: "/x", Target: "_blank", Rel: "noopener"}}),
 		"Toast":            ToastStatic(ToastData{Tone: ToneDanger, Text: h, Action: h}),
 		"Field":            Field(FieldData{Label: h, Name: "n", Value: h, Placeholder: h, Error: h}),
 		"Select":           SelectField(h, "n", []Option{{Value: h, Label: h}}),
@@ -341,40 +341,18 @@ func TestComplianceBarSegmentsAndText(t *testing.T) {
 	}
 }
 
-// Why (#840): the broker ACL notice is a warning about a property of the broker that TasmoFleet cannot see, so it has
-// nothing that closes it, says the lead the same way everywhere, and leads to the guide in a new tab without leaking
-// the opener.
-func TestBrokerACLNoticeHasNoWayToCloseAndLinksTheGuide(t *testing.T) {
-	got := comp(t, BrokerACLNotice("Text of this page.", ""))
-	for _, want := range []string{
-		`class="banner tone-danger acl-warning"`, BrokerACLLead, "Text of this page.",
-		`href="` + BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer"`,
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in %s", want, got)
-		}
+// Why (#1078, #840): a banner whose action leads off TasmoFleet (the broker ACL guide) opens it in a new tab, so the
+// person keeps the page they were on (a confirmation, a form), without handing the guide the opener; a screen reader
+// hears that a tab opens. The banner passes the action's Target and Rel through like ui.Button does, for every banner:
+// dropping them would send the person away from an unsaved confirmation.
+func TestBannerActionLinkKeepsTargetAndRel(t *testing.T) {
+	got := comp(t, Banner(BannerData{Tone: ToneWarn, Title: "Lead.", Text: "Text.", Action: &Btn{Label: "Guide", Href: "https://example.invalid/guide", Target: "_blank", Rel: "noopener noreferrer"}}))
+	want := `<a class="banner-btn" href="https://example.invalid/guide" target="_blank" rel="noopener noreferrer">Guide <span class="sr-only">(opens in a new tab)</span></a>`
+	if !strings.Contains(got, want) {
+		t.Errorf("the external action lost its target, rel or new-tab hint:\n got %s\nwant %s", got, want)
 	}
-	for _, bad := range []string{"<button", "dismiss", "Dismiss", "close"} {
-		if strings.Contains(got, bad) {
-			t.Errorf("the notice has %q: it must not be closable", bad)
-		}
-	}
-}
-
-// Why (#962): the second line says where to hide the warning. For an admin its first words are the link to the option;
-// for everyone else, and on the pages that are the settings themselves, there is no link: the line is plain text or,
-// on those pages, absent, so nobody follows a link into a page they cannot use or one that points to itself.
-func TestBrokerACLNoticeHideLineIsALinkOnlyWithAnAddress(t *testing.T) {
-	linked := comp(t, BrokerACLNotice("Text.", "/tf/settings/system?tab=mqtt#mqtt-acl-hide"))
-	if !strings.Contains(linked, `<a href="/tf/settings/system?tab=mqtt#mqtt-acl-hide">`+BrokerACLHideLink+`</a>`+BrokerACLHideRest) {
-		t.Errorf("no link on %q in %s", BrokerACLHideLink, linked)
-	}
-	plain := comp(t, BrokerACLNotice("Text.", ""))
-	if !strings.Contains(plain, BrokerACLHide) || strings.Contains(plain, "mqtt-acl-hide") || strings.Contains(plain, BrokerACLHideLink+"</a>") {
-		t.Errorf("without an address the line is not plain text: %s", plain)
-	}
-	here := comp(t, BrokerACLNoticeHere("Text."))
-	if strings.Contains(here, BrokerACLHideLink) {
-		t.Errorf("the notice on the settings page sends the person to itself: %s", here)
+	same := comp(t, Banner(BannerData{Tone: ToneWarn, Text: "Text.", Action: &Btn{Label: "Open", Href: "/x"}}))
+	if strings.Contains(same, "target=") || strings.Contains(same, "rel=") || strings.Contains(same, "new tab") {
+		t.Errorf("an action inside TasmoFleet opens in the same tab and says nothing of a new one: %s", same)
 	}
 }

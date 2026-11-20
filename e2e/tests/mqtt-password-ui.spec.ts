@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { expectNoOverflow } from "../support/layout";
-import { aclShots } from "../support/aclshots";
+import { aclNotice, aclShots } from "../support/aclshots";
 import { seedPasswordStates, waitForOurs } from "../support/mqttpw";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -134,7 +134,7 @@ test("the card counts the fleet, lists the devices without a password and gives 
 
   // the page of the same question (browsers without scripts) carries the broker ACL notice, since it starts tests
   await page.goto(app.url + "/settings/system/mqtt-passwords/broker");
-  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
+  await expect(aclNotice(page)).toHaveCount(1);
   await expect(page.getByRole("checkbox", { name: "mq-esp8266-1m" })).toBeChecked();
   await aclShots(page, "confirm-page");
   await expectNoOverflow(page, "bulk confirmation page");

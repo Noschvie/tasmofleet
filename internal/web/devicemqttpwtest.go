@@ -25,7 +25,7 @@ func (h *handler) pwViewOf(ctx context.Context, v view, d model.Device, f transp
 	pw := pwView{LearnOff: !h.learnPasswordsOn(), CanTest: h.d.PasswordTest != nil, CanChange: v.IsAdmin && h.d.MQTTPasswords != nil,
 		CanBroker: v.IsAdmin && h.d.PasswordFleet != nil && h.brokerHasPassword()}
 	if h.brokerACLOpen() && paths.Backup != transport.MQTT {
-		pw.TestACL = aclTextPasswordTest // a backup over MQTT is covered by the header's notice (T18)
+		pw.TestACL = true // a backup over MQTT is covered by the header's notice (T18)
 	}
 	if h.d.PasswordFleet != nil && mqttPasswordState(pwInputOf(d, f), !pw.LearnOff).Kind == pwNotKnown {
 		pw.Gap = h.d.PasswordFleet.Gaps(ctx, []model.DeviceID{d.ID})[d.ID]

@@ -76,7 +76,7 @@ func (h *handler) headWith(v view, d model.Device, hl model.Health, running *mod
 	// The notice follows the device's backup path, not whether Back up is pressable right now: a running job disables
 	// the button, but the warning must stay (and the header must not change height) until the broker has an ACL.
 	if pathsOK && p.Backup == transport.MQTT && h.brokerACLOpen() {
-		t.ACLText = aclTextBackup
+		t.ACL = true
 	}
 	t.CanReplace = h.canReplace(v)
 	_, t.Drift = h.d.Backups.(LiveSnapshotter)
