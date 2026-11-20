@@ -14,7 +14,8 @@ import (
 // (changed, brokerHostReader.identityChanged) of a probed device whose new backup names another firmware version than
 // the stored identity (#1003): the backup's Status 2 may be the first read after an update done outside TasmoFleet. The
 // backup's values have no MAC check, so nothing of them is stored as the identity; the identity read stores what it
-// reads with its own checks (T20). Every file of a run names the same version, and the reader asks once per version. A
+// reads with its own checks (T20). Every file of a run names the same version, and the reader takes a version's ask once
+// until an identity read succeeds, and reads the identity for a version at most once per brokerHostRetry. A
 // lost event (Resync) only delays the read until the next trigger or the daily identity refresh.
 func watchBackupVersions(ctx context.Context, ch <-chan events.Event, get func(context.Context, model.DeviceID) (model.Device, error),
 	changed func(model.DeviceID, string), log *slog.Logger) {

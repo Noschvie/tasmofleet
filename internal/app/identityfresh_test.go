@@ -312,6 +312,142 @@ func TestAFailedReadOfANewVersionIsRetriedSoonAndThenBraked(t *testing.T) {
 	}
 }
 
+// Why (#1003, T20): an INFO1 carries no MAC, and whoever can publish on the device's topic can send one, and a version
+// change reads the identity outside the hour a restart read brakes. Without a limit of its own, an INFO1 repeated with a
+// version the device does not run, two versions in turn, or each after a forged restart would read the identity
+// (Status 5, 2, 4 and the facts, the device lock held for up to 30 s, the person's writes refused as busy) after every
+// message. A version reads the identity of a device at most once per brokerHostRetry, ten minutes: about six times an
+// hour, whatever comes in.
+func TestForgedINFO1ReadTheIdentityAtMostOncePerTenMinutes(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		versions []string
+		fail     bool // the identity read gets no answer
+		restart  bool // a forged restart (INFO3) before each INFO1
+	}{
+		{"one version repeated, reads succeed", []string{"16.0.0.5"}, false, false},
+		{"two versions in turn, reads fail", []string{"16.0.0.5", "16.0.0.6"}, true, false},
+		{"two versions in turn after a restart each", []string{"16.0.0.5", "16.0.0.6"}, false, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+			g.r.wantRestart(1) // a restart read a little earlier: the hour's brake is on
+			g.advance(brokerHostSettle)
+			g.r.pass(t.Context())
+			stored := model.Device{ID: 1, Topic: "plug", MQTT: model.MQTTOurs, Identity: model.Identity{Version: "15.1.0", DetectedAt: g.clock}}
+			ident := 0
+			g.r.readIdentity = func(context.Context, model.DeviceID) error { // the device still runs 15.1.0
+				ident++
+				if c.fail {
+					return tasmota.ErrTimeout
+				}
+				return nil
+			}
+			m := newMQTTIdentity(nil, nil, func(context.Context) ([]model.Device, error) { return []model.Device{stored}, nil }, nil, nil, nil, slog.New(slog.DiscardHandler))
+			m.onVersion = g.r.identityChanged
+			for i := range 60 { // one forged INFO1 a minute for an hour
+				if c.restart {
+					g.r.restarted(1)
+				}
+				m.handle(t.Context(), mqttbus.Message{Kind: mqttbus.KindInfo, Topic: "plug", Suffix: "INFO1", Payload: info1Of(c.versions[i%len(c.versions)] + "(release-tasmota)")})
+				g.kicks()
+				for range 2 {
+					g.advance(30 * time.Second)
+					g.r.pass(t.Context())
+				}
+			}
+			if ident > 7 {
+				t.Fatalf("60 forged INFO1 in an hour read the identity %d times, want at most 7 (one per ten minutes, and one more for the end of the hour)", ident)
+			}
+		})
+	}
+}
+
+// Why (#1003): the ask of a version waits for its ten minutes; it must not be dropped (a rollback within ten minutes is
+// still read) and a stream of further INFO1 must not push it later. A read that moved with every message would never
+// come, and the device's periodic reads, which skip a device with a request waiting, would not come either.
+func TestAStreamOfINFO1CannotPushTheIdentityReadAway(t *testing.T) {
+	g := newRefreshRig(1)
+	far := g.clock.Add(48 * time.Hour)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+	stored := model.Device{ID: 1, Topic: "plug", MQTT: model.MQTTOurs, Identity: model.Identity{Version: "15.1.0", DetectedAt: g.clock}}
+	var reads []time.Time
+	g.r.readIdentity = func(context.Context, model.DeviceID) error { reads = append(reads, g.clock); return nil } // still 15.1.0
+	m := newMQTTIdentity(nil, nil, func(context.Context) ([]model.Device, error) { return []model.Device{stored}, nil }, nil, nil, nil, slog.New(slog.DiscardHandler))
+	m.onVersion = g.r.identityChanged
+	start := g.clock
+	for i := range 6 * 30 { // an INFO1 every ten seconds for half an hour, two versions in turn; the reader looks every brokerHostTick
+		m.handle(t.Context(), mqttbus.Message{Kind: mqttbus.KindInfo, Topic: "plug", Suffix: "INFO1", Payload: info1Of(fmt.Sprintf("16.0.0.%d(release-tasmota)", 5+i%2))})
+		g.kicks()
+		g.advance(10 * time.Second)
+		if i%3 == 2 {
+			g.r.pass(t.Context())
+		}
+	}
+	if len(reads) == 0 {
+		t.Fatal("an INFO1 every ten seconds for half an hour read the identity never: every message pushed the read away")
+	}
+	if first := reads[0].Sub(start); first > brokerHostSettle+brokerHostTick {
+		t.Fatalf("the first read came %v after the first INFO1, want within %v", first, brokerHostSettle+brokerHostTick)
+	}
+	for i := 1; i < len(reads); i++ {
+		if gap := reads[i].Sub(reads[i-1]); gap < brokerHostRetry || gap > brokerHostRetry+brokerHostTick {
+			t.Fatalf("reads at %v: a gap of %v, want between %v and %v", reads, gap, brokerHostRetry, brokerHostRetry+brokerHostTick)
+		}
+	}
+}
+
+// Why (#1003): a real update can follow a version read within ten minutes, a rollback for one. Its ask waits for the
+// ten minutes and is read then, also when it came with a restart whose own read the hour brakes: dropped, it would leave
+// the page on the version the device just left until the daily refresh, the stale page this fix is about.
+func TestAVersionAskInsideTheTenMinutesIsReadWhenTheyAreOver(t *testing.T) {
+	g := newRefreshRig(1)
+	far := g.clock.Add(48 * time.Hour)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+	running := "15.1.0"
+	stored := model.Device{ID: 1, Topic: "plug", MQTT: model.MQTTOurs, Identity: model.Identity{Version: running, DetectedAt: g.clock}}
+	var reads []time.Time
+	g.r.readIdentity = func(context.Context, model.DeviceID) error {
+		reads = append(reads, g.clock)
+		stored.Identity.Version = running
+		return nil
+	}
+	m := newMQTTIdentity(nil, nil, func(context.Context) ([]model.Device, error) { return []model.Device{stored}, nil }, nil, nil, nil, slog.New(slog.DiscardHandler))
+	m.onVersion = g.r.identityChanged
+	boot := func() {
+		g.r.restarted(1)
+		m.handle(t.Context(), mqttbus.Message{Kind: mqttbus.KindInfo, Topic: "plug", Suffix: "INFO1", Payload: info1Of(running + "(release-tasmota)")})
+		g.kicks()
+	}
+	tick := func(d time.Duration) {
+		for end := g.clock.Add(d); g.clock.Before(end); {
+			g.advance(brokerHostTick)
+			g.r.pass(t.Context())
+		}
+	}
+	g.r.wantRestart(1) // a restart read a little earlier: the hour's brake is on
+	tick(time.Minute)
+	reads = nil
+	running = "16.0.0.5"
+	boot()
+	tick(time.Minute)
+	if len(reads) != 1 || stored.Identity.Version != running {
+		t.Fatalf("the boot into %s read the identity %d times and stored %q", running, len(reads), stored.Identity.Version)
+	}
+	running = "15.1.0" // rolled back two minutes later
+	tick(time.Minute)
+	boot()
+	tick(brokerHostRetry)
+	if len(reads) != 2 || stored.Identity.Version != running {
+		t.Fatalf("ten minutes after the boot back into %s the identity was read %d times in all and %q is stored, want 2 and %q", running, len(reads), stored.Identity.Version, running)
+	}
+	if gap := reads[1].Sub(reads[0]); gap < brokerHostRetry || gap > brokerHostRetry+brokerHostTick {
+		t.Fatalf("the rollback was read %v after the update, want between %v and %v", gap, brokerHostRetry, brokerHostRetry+brokerHostTick)
+	}
+}
+
 // Why (#1003, T20): an INFO1 is published by whoever can write the device's topic; it carries no MAC. It only asks for the
 // identity read, and only for a version other than the stored one on regular firmware: a minimal or safeboot INFO1 (the
 // first step of an update), a retained one (no reading of now) and one with the stored version ask for nothing.

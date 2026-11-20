@@ -196,6 +196,31 @@
   }
   document.addEventListener("htmx:afterSettle", syncDeviceDim);
 
+  // The live refresh carries the Identity card when what it shows changed (#1003), judged by the signature the
+  // page sent with the request. The answer to a Refresh identity (its notice or error) is only in the card that
+  // answer swapped in: a card that shows what the card on the page shows is not swapped again (the refresh was on its
+  // way with the old signature), and a card that shows something new (the network facts a probe reads afterwards)
+  // takes the answer over, so it stays until the page is loaded again, as before.
+  document.addEventListener("htmx:oobBeforeSwap", function (e) {
+    var d = e.detail;
+    if (!d || !d.target || d.target.id !== "identity" || !d.fragment) {
+      return;
+    }
+    var incoming = d.fragment.querySelector("#identsig");
+    var current = d.target.querySelector("#identsig");
+    // A Refresh identity (or a name answer) still on its way swaps in its own card, the newest, with its answer: the
+    // card it targets must still be on the page then.
+    if (d.target.querySelector(".htmx-request") || (incoming && current && incoming.value === current.value)) {
+      d.shouldSwap = false;
+      return;
+    }
+    var answer = d.target.querySelector("[data-ident-answer]");
+    var card = d.fragment.querySelector("#identity");
+    if (answer && card && !card.querySelector("[data-ident-answer]")) {
+      card.appendChild(answer.cloneNode(true));
+    }
+  });
+
   // A refresh that was held back by an open dialog is asked for again when the dialog closes (the
   // close event does not bubble, hence the capture).
   document.addEventListener(

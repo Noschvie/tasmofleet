@@ -488,11 +488,16 @@ templ identityCard(c identCard) {
 		if c.NameOffer != "" {
 			@nameOfferNotice(c)
 		}
-		if c.Error != "" {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
-		}
-		if c.Notice != "" {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: c.Notice})
+		if c.Error != "" || c.Notice != "" {
+			// the answer to Refresh identity: live.js carries it into a card the live refresh swaps in (#1003)
+			<div data-ident-answer>
+				if c.Error != "" {
+					@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
+				}
+				if c.Notice != "" {
+					@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: c.Notice})
+				}
+			</div>
 		}
 	</section>
 }

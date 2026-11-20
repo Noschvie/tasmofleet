@@ -59,9 +59,12 @@ import (
 // for a value the identity holds (identityWritten: OtaUrl, a group topic, the topic, the names, the hostname). They
 // only ask: nothing of the INFO1, the backup or the answer is stored, the identity read stores what it reads with its
 // own checks (T20). A version asks once (versionAsked) until an identity read of the device succeeds, so a boot loop on
-// that version stays braked; the requests of a device share its one pending entry, and the reader reads one device at a
-// time, so there is never more than one identity read of a device in flight. A read one of them asked for that fails is
-// retried after brokerHostRetry like a scheduled one (#817), and a restart in between leaves that retry alone.
+// that version stays braked, and a version reads the identity at most once per brokerHostRetry (versionReadNext): an
+// INFO1 carries no MAC, so a forged one repeated, or two versions in turn, must not read the device after every message.
+// Such an ask waits for that time, it is not dropped, and a further ask never moves a waiting read later. The requests of
+// a device share its one pending entry, and the reader reads one device at a time, so there is never more than one
+// identity read of a device in flight. A read one of them asked for that fails is retried after brokerHostRetry like a
+// scheduled one (#817), and a restart in between leaves that retry alone.
 //
 // A device whose HTTP API is off (or HTTP blocked) is never "readable" (the HTTP health poll does not reach it), yet MQTT
 // serves it: when its identity or its data is due, after a restart too, and the router reads it over MQTT, it is
@@ -190,6 +193,10 @@ type brokerHostReader struct {
 	// asks no more until an identity read of the device succeeds (readLocked) or the device is gone (pass): a boot loop
 	// announces its version at every boot.
 	versionAsked map[model.DeviceID]string
+	// versionReadNext: a version reads the identity of a device again no sooner than this (#1003). Set when a visit read
+	// the identity a version asked for (an answer or a refusal; not when the device was busy or did not answer), ended
+	// in pass once it is over or the device is gone.
+	versionReadNext map[model.DeviceID]time.Time
 	// outcomes: why the last background data refresh of a device failed (#818), read by the device page.
 	outcomes *refreshOutcomes
 }
@@ -210,10 +217,11 @@ type retryKey struct {
 
 // brokerWant is a read somebody asked for. broker: the broker is read (a restart, a broker command). restart: the
 // device restarted, so its identity and data are read as well. identity: the identity is read even inside the hour a
-// restart read brakes (a new version or an identity value was written, #1003).
+// restart read brakes (a new version or an identity value was written, #1003). version: only a version asked for that
+// identity, so it is read no sooner than versionReadNext.
 type brokerWant struct {
-	due, until                time.Time
-	broker, restart, identity bool
+	due, until                         time.Time
+	broker, restart, identity, version bool
 }
 
 // identityKick asks for an identity read of id. version: the firmware version an INFO1 or a backup named; "" for a
@@ -229,8 +237,8 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue), kickIdentity: make(chan identityKick, brokerHostQueue),
-		versionAsked: map[model.DeviceID]string{},
-		claims:       make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
+		versionAsked: map[model.DeviceID]string{}, versionReadNext: map[model.DeviceID]time.Time{},
+		claims: make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
 		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}, outcomes: newRefreshOutcomes()}
 }
@@ -343,21 +351,39 @@ func (r *brokerHostReader) noteClaim(c topicClaim) {
 func (r *brokerHostReader) request(id model.DeviceID, restart bool) {
 	now := r.now()
 	old := r.pending[id]
-	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), broker: true, restart: restart || old.restart, identity: old.identity}
+	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), broker: true, restart: restart || old.restart, identity: old.identity, version: old.version}
 }
 
 // wantIdentity records that id's identity is to be read once it has settled, inside the hour a restart read brakes
-// (#1003). A version that already asked is not asked about again until an identity read of the device succeeds.
+// (#1003). A version that already asked is not asked about again until an identity read of the device succeeds, and its
+// read waits until versionReadNext. A read already waiting keeps its time and its end, so further asks cannot push it
+// away; only a write, which reads soon, may bring it forward.
 func (r *brokerHostReader) wantIdentity(k identityKick) {
-	if k.version != "" {
+	byVersion := k.version != ""
+	if byVersion {
 		if r.versionAsked[k.id] == k.version {
 			return
 		}
 		r.versionAsked[k.id] = k.version
 	}
 	now := r.now()
-	w := r.pending[k.id]
-	w.due, w.until, w.identity = now.Add(brokerHostSettle), now.Add(brokerHostPendingFor), true
+	due := now.Add(brokerHostSettle)
+	if at := r.versionReadNext[k.id]; byVersion && at.After(due) {
+		due = at
+	}
+	w, asked := r.pending[k.id]
+	switch {
+	case !asked:
+		w = brokerWant{due: due, until: now.Add(brokerHostPendingFor), version: byVersion}
+	case w.identity:
+		w.version = w.version && byVersion
+	default: // a broker or restart read is waiting: the identity joins it (requested holds a version's back to its time)
+		w.version = byVersion
+	}
+	if !byVersion && w.due.After(due) {
+		w.due = due
+	}
+	w.identity = true
 	r.pending[k.id] = w
 }
 
@@ -380,6 +406,11 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 	for id := range r.versionAsked {
 		if _, ok := listed[id]; !ok {
 			delete(r.versionAsked, id) // deleted: nothing more to ask
+		}
+	}
+	for id, at := range r.versionReadNext {
+		if _, ok := listed[id]; !ok || !now.Before(at) {
+			delete(r.versionReadNext, id) // deleted, or over
 		}
 	}
 	r.recheckTopics(ctx, devs, now)
@@ -408,7 +439,8 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			ask(d) // nothing the read could reach now: HTTP is checked, once the read is due
 		default:
 			what := r.requested(id, w, now)
-			full := what.data // requested reads the data only as the restart's own read
+			full := what.data                     // requested reads the data only as the restart's own read
+			waits := w.identity && !what.identity // the identity a version asked for waits for versionReadNext
 			if !r.readable(d) {
 				// A restart of a device HTTP does not reach: its identity and data go over MQTT (#682, #676), the broker
 				// read waits for HTTP. A restart within the hour leaves them to the end of the hour (requested): nothing
@@ -422,6 +454,10 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			r.inRestartRead = !w.identity
 			err := r.visit(ctx, d, what)
 			r.inRestartRead = false
+			done := err == nil || errors.Is(err, errBrokerRefused)
+			if done && w.version && what.identity {
+				r.versionReadNext[id] = now.Add(brokerHostRetry) // the device answered a version's ask: the next waits (#1003)
+			}
 			switch {
 			case err == nil:
 				delete(r.pending, id)
@@ -435,6 +471,10 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 				w.due = now.Add(brokerHostAskAgain)
 				r.pending[id] = w
 			} // busy: asked again at the next tick, nothing was sent
+			if done && waits { // the rest was read; the version's ask stays for its time
+				at := r.versionReadNext[id]
+				r.pending[id] = brokerWant{due: at, until: at.Add(brokerHostPendingFor), identity: true, version: true}
+			}
 		}
 	}
 	for _, d := range devs {
@@ -580,13 +620,14 @@ func (r *brokerHostReader) pruneClaims(devs []model.Device, now time.Time) {
 // requested says what a visit somebody asked for reads: the broker, and after a restart the identity and the
 // data too, unless a restart read them less than restartRefreshEvery ago. full: this is the restart's read, which
 // starts that hour once it read the device (it is the only visit somebody asked for that includes the data). The identity a new version or
-// a write asked for is read in any case (#1003): a boot loop keeps its version, so that does not undo the brake. Then they are read once when that
+// a write asked for is read in any case (#1003), a version's no sooner than versionReadNext: a boot loop keeps its version, so that does not undo the brake. Then they are read once when that
 // hour is over, and not before (a failed restart read is not retried every ten minutes either): a device that keeps
 // restarting is read in full about once an hour, not after every boot. The exception is the retry of a failed
 // scheduled refresh (#817): it was not caused by a restart, often by this very one (the device restarted while it
 // was read), and moving it to the end of the hour would leave the values stale for most of that hour.
 func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.Time) visitWhat {
-	what := visitWhat{broker: w.broker, identity: w.identity}
+	versionWaits := w.version && now.Before(r.versionReadNext[id])
+	what := visitWhat{broker: w.broker, identity: w.identity && !versionWaits}
 	if !w.restart {
 		return what
 	}

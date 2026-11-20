@@ -2073,8 +2073,10 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   hour. A restart read that read nothing for the device (its check met minimal firmware, another device or a topic it
   could not vouch for) does not count as the restart's read (#1003). A live INFO1 or a backup that names another
   firmware version than the stored identity, and a console or bulk write the device accepted of a value the identity
-  holds (`cmdpolicy.SetsIdentityValue`), make the identity due at once, inside that hour, once per version (a boot loop
-  keeps its version); nothing of the message, the backup or the answer is stored (T20 of `docs/security/mqtt-transport.md`).
+  holds (`cmdpolicy.SetsIdentityValue`), make the identity due at once, inside that hour. A version asks once until an
+  identity read succeeds (a boot loop keeps its version) and reads the identity of a device at most once per 10 minutes,
+  a later ask waiting for them (an INFO1 carries no MAC and can be forged); nothing of the message, the backup or the
+  answer is stored (T20 of `docs/security/mqtt-transport.md`).
   The device page's live refresh carries the Identity card when what it shows changed. The broker and the identity are read under the
   device lock (an operation a person starts on the device meanwhile, restore and Replace device included, waits up to
   5 s for it and for the reader's momentary lock checks instead of being refused as busy; what TasmoFleet starts on
