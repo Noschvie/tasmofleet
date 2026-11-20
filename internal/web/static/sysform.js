@@ -179,7 +179,8 @@
     }
     bar.classList.toggle("is-dirty", dirty.length > 0);
     if (bar.hasAttribute("data-sbar-auto")) {
-      // a page that is mostly not a form (Devices, Backups): no bar while nothing is changed (#949).
+      // no bar while nothing is changed, on every page with a save bar (#949, #990): a sticky bar that
+      // stays on screen covers what scrolls behind it.
       // Shown before the text below changes, so a screen reader hears the new state.
       bar.hidden = dirty.length === 0;
     }

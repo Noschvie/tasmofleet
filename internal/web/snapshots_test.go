@@ -295,9 +295,9 @@ func TestSnapshotsPageShowsDownloadStoredScheduleAndRestore(t *testing.T) {
 	if strings.Contains(body, `name="include_key" value="1" checked`) {
 		t.Error("the key must be off by default")
 	}
-	// Snapshots keeps its save bar on screen all the time; only Backups hides it while clean (#949)
-	if strings.Contains(body, "data-sbar-auto") {
-		t.Error("the Snapshots save bar must not hide itself while the form is clean")
+	// the save bar shows only while the form has unsaved changes (#990, like Backups #949)
+	if !strings.Contains(body, "data-sys-bar data-sbar-auto") {
+		t.Error("the Snapshots save bar must hide itself while the form is clean")
 	}
 	_, backups := s.do(t, "GET", "/devices/backups", "admin", nil)
 	for _, gone := range []string{`id="card-database"`, `id="db-dl"`, "Download snapshot", "SNAPSHOT_DAYS", "Snapshot schedule", "There is no restore button"} {

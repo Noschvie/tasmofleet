@@ -67,7 +67,7 @@ templ sysSettingsPage(p sysPage) {
 				}
 			</div>
 		}
-		@ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysPath + "?tab=" + p.Active})
+		@ui.SaveBar(ui.SaveBarData{Discard: p.Base + sysPath + "?tab=" + p.Active, WhileDirty: !p.Posted})
 	</form>
 	<div class="sys-after" id="after-advanced" data-sys-tab="advanced" hidden?={ p.Active != "advanced" }>
 		@sysContainer(p.ReadOnly)
@@ -116,7 +116,7 @@ templ snapshotsPage(p sysPage) {
 					}
 				</div>
 			}
-			@ui.SaveBar(ui.SaveBarData{Discard: p.Base + snapPath})
+			@ui.SaveBar(ui.SaveBarData{Discard: p.Base + snapPath, WhileDirty: !p.Posted})
 		</form>
 	</div>
 	<form id="db-dl" data-no-busy method="post" action={ templ.SafeURL(p.Base + sysPath + "/snapshot") }>

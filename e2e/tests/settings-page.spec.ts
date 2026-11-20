@@ -24,7 +24,7 @@ test("edits survive a tab change, the bar lists the tabs with changes, one Save 
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system?tab=general");
   const bar = page.locator("[data-sys-bar]");
-  await expect(bar).toContainText("No unsaved changes");
+  await expect(bar).toBeHidden(); // nothing edited yet (#990)
 
   await page.locator("[data-key='METRICS_DEVICE_LABELS'] .swtrack").click();
   await expect(bar).toContainText("Unsaved changes:");
@@ -43,7 +43,7 @@ test("edits survive a tab change, the bar lists the tabs with changes, one Save 
   await expect(page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']")).toHaveValue("7");
   await page.goto(app.url + "/settings/system?tab=general");
   await expect(page.locator("input[name='v.METRICS_DEVICE_LABELS']")).toBeChecked();
-  await expect(page.locator("[data-sys-bar]")).toContainText("No unsaved changes");
+  await expect(page.locator("[data-sys-bar]")).toBeHidden();
 });
 
 // Why: touch and keyboard users cannot hover. The info button opens a popover; Escape closes it;
@@ -174,7 +174,7 @@ test("a freshly loaded page reports no unsaved changes on any tab", async ({ pag
   await page.setExtraHTTPHeaders(admin);
   for (const tab of ["general", "network", "mqtt", "discovery", "firmware", "signin", "advanced"]) {
     await page.goto(app.url + "/settings/system?tab=" + tab);
-    await expect(page.locator("[data-sys-bar]"), tab).toContainText("No unsaved changes");
+    await expect(page.locator("[data-sys-bar]"), tab).toBeHidden(); // the bar shows only for an edit (#990)
   }
 });
 
@@ -188,7 +188,7 @@ test("a backup day ticked and unticked again leaves the tab clean", async ({ pag
   await mon.check();
   await expect(bar).toContainText("Unsaved changes:");
   await mon.uncheck();
-  await expect(bar).toContainText("No unsaved changes");
+  await expect(bar).toBeHidden();
 });
 
 // Why (#336, #338): "Kept per device" and "Never prune younger than" sit side by side as small
@@ -253,7 +253,10 @@ test("phone: section picker, no horizontal overflow, save bar in view", async ({
   await expect(page.locator("#sec-mqtt")).toBeVisible();
   await expect(page.locator("#sec-signin")).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // the bar shows with the first edit (#990), and Save is in view
   const save = page.getByRole("button", { name: "Save settings" });
+  await expect(save).toBeHidden();
+  await page.locator("input[name='mqtt.port']").fill("1999");
   await expect(save).toBeInViewport();
 });
 
@@ -377,34 +380,32 @@ test.describe("with local accounts", () => {
 
 // Why (#362): the yellow unsaved dots (tab, save bar) used to be added as inline content, so every
 // neighbour jumped sideways the moment a value changed. Their space is reserved, so nothing moves.
-test("the unsaved dots appear without moving the tab row, the field label or the save bar", async ({ page }) => {
+// Since #990 the save bar itself is not there while the form is clean, so what must hold clean to dirty is
+// the page content: the tab row, the label and the input stay where they are when the bar appears (the
+// bar is sticky, so it does not push the form), and the dot and the state text are drawn whole.
+test("the unsaved dots appear without moving the tab row or the field label", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   if (process.env.UI362_W) await page.setViewportSize({ width: +process.env.UI362_W, height: 800 });
   if (process.env.UI362_SCHEME) await page.emulateMedia({ colorScheme: process.env.UI362_SCHEME as "light" | "dark" });
   await page.goto(app.url + "/settings/system?tab=firmware");
   const bar = page.locator("[data-sys-bar]");
-  await expect(bar).toContainText("No unsaved changes");
+  await expect(bar).toBeHidden(); // clean: no bar at all (#990)
   const input = page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']");
   const row = input.locator("xpath=ancestor::*[self::label or contains(@class,'kv-row') or @data-key][1]");
   const stripShown = await tabs(page).isVisible();
   const boxes = async () => {
-    // Page coordinates: focusing the field may scroll the page, which is not a layout shift. The
-    // sticky save bar is viewport-anchored, so its boxes stay viewport-relative.
+    // Page coordinates: focusing the field may scroll the page, which is not a layout shift.
     const scrollY = await page.evaluate(() => window.scrollY);
-    const rectIn = async (loc: import("@playwright/test").Locator, dy: number) => {
+    const rect = async (loc: import("@playwright/test").Locator) => {
       const b = await loc.boundingBox();
       expect(b).not.toBeNull();
-      return { x: b!.x, y: b!.y + dy, width: b!.width, height: b!.height };
+      return { x: b!.x, y: b!.y + scrollY, width: b!.width, height: b!.height };
     };
-    const rect = (loc: import("@playwright/test").Locator) => rectIn(loc, scrollY);
-    const barRect = (loc: import("@playwright/test").Locator) => rectIn(loc, 0);
     return {
       // On a phone the strip is replaced by the section picker (display: none), so it has no boxes.
       tabs: stripShown ? await Promise.all((await tabs(page).getByRole("link").all()).map(rect)) : [],
       row: await rect(row),
       input: await rect(input),
-      state: await barRect(bar.locator("[data-sbar-state]")),
-      buttons: await Promise.all((await bar.getByRole("button").all()).map(barRect)),
     };
   };
   const shot = process.env.UI362_DIR;
@@ -412,9 +413,8 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   const w = page.viewportSize()!.width;
   if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-clean.png` });
   const before = await boxes();
-  const cutClean = await bar.locator("[data-sbar-state]").evaluate((e) => e.scrollWidth - e.clientWidth);
-  expect(cutClean, "clean save-bar state text truncated").toBeLessThanOrEqual(0);
   await input.fill("9");
+  await expect(bar).toBeVisible();
   await expect(bar).toContainText("Unsaved changes:");
   await expect(page.locator("a.utab[href*='tab=firmware']")).toHaveClass(/is-dirty/);
   if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-dirty.png` });
@@ -443,13 +443,59 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   before.tabs.forEach((b, i) => same(b, after.tabs[i], `tab ${i}`));
   same(before.row, after.row, "label row");
   same(before.input, after.input, "input");
-  // The state text itself changes ("No unsaved changes" -> "Unsaved changes:"), so only its
-  // origin and height must hold; the buttons sit on the right and must not move at all.
   // The state text is never cut off (the dot is not inline, so it takes no room from the text).
   const cut = await bar.locator("[data-sbar-state]").evaluate((e) => e.scrollWidth - e.clientWidth);
   expect(cut, "save-bar state text truncated").toBeLessThanOrEqual(0);
-  near(before.state.x, after.state.x, "state.x");
-  near(before.state.y, after.state.y, "state.y");
-  near(before.state.height, after.state.height, "state.height");
-  before.buttons.forEach((b, i) => same(b, after.buttons[i], `button ${i}`));
+});
+
+// Why (#990): the save bar is sticky, so it covers whatever scrolls behind it. On System > MQTT it covered the
+// lower part of the Device MQTT passwords card with nothing edited. The bar shows only while the form has
+// unsaved changes (the #949 mechanism, as on the Backups page): clean, the card's bottom edge is not covered;
+// an edit shows the bar with the changed tab and Save in reach; the old value back hides it again.
+for (const width of [1280, 375]) {
+  test(`the save bar covers nothing on the MQTT tab while clean and shows with an edit at ${width}px`, async ({ page }) => {
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(app.url + "/settings/system?tab=mqtt");
+    const bar = page.locator("form#sysform [data-sys-bar]");
+    await expect(bar).toBeHidden();
+    // Scroll the bottom of the card to just above the status bar: that is where a sticky bar would sit.
+    // scrollIntoView would put the card under the status bar, which covers it with or without the bar.
+    const covered = async () =>
+      page.evaluate(() => {
+        const card = document.getElementById("card-devicepasswords")!;
+        const status = document.querySelector("footer.sb")!.getBoundingClientRect();
+        window.scrollBy(0, card.getBoundingClientRect().bottom - (status.top - 4));
+        const r = card.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.bottom - 6);
+        return { onTop: !!hit && card.contains(hit), tag: hit ? hit.tagName + "." + hit.className : "none", bottom: r.bottom, top: status.top };
+      });
+    const clean = await covered();
+    expect(clean.onTop, `the Device MQTT passwords card is covered by ${clean.tag} (card bottom ${clean.bottom}, status bar top ${clean.top})`).toBe(true);
+    // an edit shows the bar with the MQTT chip, and Save is in reach
+    const flip = page.locator("[data-key='MQTT_PASSWORD_FROM_BACKUPS'] .swtrack");
+    await flip.click();
+    await expect(bar).toBeVisible();
+    await expect(bar.locator(".sbar-state")).toHaveText("Unsaved changes:");
+    await expect(bar.locator(".sbar-chip")).toHaveText(["MQTT"]);
+    await expect(page.getByRole("button", { name: "Save settings" })).toBeInViewport();
+    // the old value back: nothing is unsaved any more
+    await flip.click();
+    await expect(bar).toBeHidden();
+  });
+}
+
+// Why (#990): a draft that comes back after a step-up (?restore=1) is an unsaved change. The bar must be on
+// screen for it, or the person would have no Save for the restored value.
+test("a restored draft shows the save bar", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=firmware");
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeHidden();
+  await page.evaluate(() => sessionStorage.setItem("tf-draft:sysconfig", JSON.stringify({ "v.FIRMWARE_KEEP_RELEASES": "6" })));
+  await page.goto(app.url + "/settings/system?tab=firmware&restore=1");
+  await expect(page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']")).toHaveValue("6");
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeVisible();
+  // without ?restore=1 the draft is dropped
+  await page.goto(app.url + "/settings/system?tab=firmware");
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeHidden();
 });

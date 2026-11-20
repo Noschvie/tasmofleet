@@ -672,3 +672,33 @@ func TestSystemSettingsKeepPasswordOptionSurvivesARefusedSave(t *testing.T) {
 		t.Error("the single URL field lacks the keep option")
 	}
 }
+
+// Why (#990): a save bar that is on screen all the time is sticky, so it covers whatever scrolls behind it;
+// on System > MQTT it covered the lower part of the Device MQTT passwords card with nothing edited. Every
+// page with a save bar therefore asks sysform.js to show it only while the form has unsaved changes
+// (data-sbar-auto, the #949 mechanism). The exception is an answer that shows values that were NOT saved
+// (a refused save): sysform.js would call them the starting values and hide the bar, and Save would be gone
+// exactly when the person needs it again, so that answer carries no data-sbar-auto.
+func TestEverySaveBarShowsOnlyWhileDirtyButStaysAfterARefusedSave(t *testing.T) {
+	s := snapSetup(t, true)
+	for _, c := range []struct{ name, path, refused string }{
+		{"settings", "/settings/system?tab=mqtt", "v.FIRMWARE_KEEP_RELEASES"},
+		{"snapshots", "/settings/system/snapshots", "v.SNAPSHOT_KEEP"},
+		{"backups", "/devices/backups", "v.BACKUP_KEEP"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, body := s.do(t, "GET", c.path, "admin", nil)
+			if !strings.Contains(body, "data-sys-bar data-sbar-auto") {
+				t.Errorf("the save bar does not ask to be hidden while the form is clean: %s", between(body, "data-sys-bar", ">"))
+			}
+			post := strings.SplitN(c.path, "?", 2)[0]
+			r, body := s.do(t, "POST", post, "admin", url.Values{"csrf": {"tok"}, c.refused: {"nope"}})
+			if r.StatusCode != http.StatusUnprocessableEntity {
+				t.Fatalf("a refused save answers %d, want 422 with the page", r.StatusCode)
+			}
+			if !strings.Contains(body, "data-sys-bar") || strings.Contains(body, "data-sbar-auto") {
+				t.Errorf("after a refused save the bar must stay visible (no data-sbar-auto): %s", between(body, "data-sys-bar", ">"))
+			}
+		})
+	}
+}

@@ -655,13 +655,15 @@ func SettingField(d SettingFieldData) templ.Component {
 // SaveBarData is what a page tells its save bar.
 type SaveBarData struct {
 	Discard    string // where Discard leads
-	WhileDirty bool   // the bar shows only while the form has unsaved changes (sysform.js), for a page that is mostly not a form
+	WhileDirty bool   // the bar shows only while the form has unsaved changes (sysform.js); every page passes !Posted (#990)
 }
 
 // SaveBar is the page's one save bar: the form's Save and Discard, and the place where sysform.js
 // lists the tabs with unsaved changes. Without script it is just the two buttons, always in view.
-// WhileDirty asks sysform.js to hide the bar while nothing is changed (#949); the bar is never
-// rendered hidden, so Save stays reachable without script.
+// WhileDirty asks sysform.js to hide the bar while nothing is changed (#949, every page since #990: a
+// sticky bar that stays on screen covers whatever scrolls behind it). The bar is never rendered hidden,
+// so Save stays reachable without script, and a page that shows values that were not saved (a refused
+// save) leaves WhileDirty off so Save stays on screen.
 func SaveBar(d SaveBarData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context

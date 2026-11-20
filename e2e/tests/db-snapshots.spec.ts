@@ -125,6 +125,24 @@ test("schedule: tick the days and a time, a snapshot appears at that time, it ca
   await expect(page.locator("#card-stored .sys-orphan")).toHaveCount(0);
 });
 
+// Why (#990): the save bar is sticky, so on a page with nothing to save it only covers what scrolls behind it.
+// The Snapshots page shows it only while the schedule has unsaved changes, and hides it again when the edit
+// is undone.
+test("the save bar shows only while the snapshot schedule has unsaved changes", async ({ page }) => {
+  await signIn(page);
+  await page.goto(app.url + "/settings/system/snapshots");
+  const bar = page.locator("form#sysform [data-sys-bar]");
+  await expect(bar).toBeHidden();
+  const keep = page.locator("input[name='v.SNAPSHOT_KEEP']");
+  const stored = await keep.inputValue();
+  await keep.fill(String(Number(stored) + 1));
+  await expect(bar).toBeVisible();
+  await expect(bar.locator(".sbar-state")).toHaveText("Unsaved changes:");
+  await expect(page.getByRole("button", { name: "Save settings" })).toBeInViewport();
+  await keep.fill(stored);
+  await expect(bar).toBeHidden();
+});
+
 // Why: a proxy-header admin is not blocked, but the download is never one click: a page with a
 // required checkbox comes first, and only the ticked, CSRF-protected POST sends the file.
 test("header admin: confirm with the checkbox, then the download starts", async ({ page }) => {

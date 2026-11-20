@@ -182,7 +182,11 @@ async function stepup(page: Page): Promise<void> {
   if (!(await page.locator("form#sysform").count())) return stepUp(page); // the users pages (P9)
   await page.evaluate(() => {
     const f = document.querySelector<HTMLInputElement>('input[name="v.OIDC_GROUPS_CLAIM"]');
-    if (f) f.value = "visual-stepup";
+    if (f) {
+      f.value = "visual-stepup";
+      // the save bar shows only for an unsaved change (#990), and a person's edit fires this event
+      f.dispatchEvent(new Event("input", { bubbles: true }));
+    }
   });
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.locator("dialog#stepup[open]").waitFor({ timeout: 3_000 });
