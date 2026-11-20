@@ -71,6 +71,20 @@ async function openDevice(page: Page, name: string, width = 1280) {
   return href;
 }
 
+/**
+ * refreshIdentity clicks Refresh identity and waits for its answer before it looks for the notice (#1041). A device read
+ * over MQTT is checked first with the window that hears every reply on its topic (1.5 s, #682/#804), then read one
+ * command at a time 200 ms apart (about 3 s), and another check on the same topic that is under way delays it by its own
+ * window: the answer takes 3 to 5 s and more on a loaded runner, so a notice awaited inside expect's 5 s fails there. The
+ * notice is still asserted after the answer: an answer the live refresh drops (#1003) fails here.
+ */
+async function refreshIdentity(page: Page) {
+  const answered = page.waitForResponse((r) => r.request().method() === "POST" && /\/devices\/\d+\/probe$/.test(new URL(r.url()).pathname));
+  await page.getByRole("button", { name: "Refresh identity" }).click();
+  expect((await answered).status()).toBe(200);
+  await expect(page.getByText("Identity refreshed.")).toBeVisible();
+}
+
 for (const width of [375, 1280]) {
   for (const scheme of ["light", "dark"] as const) {
     test(`overview renders without overflow at ${width}px ${scheme}`, async ({ page }) => {
@@ -181,8 +195,7 @@ const shapes: { device: string; check: (page: Page) => Promise<void> }[] = [
     device: "ov-ethernet-rack", // mockup 5
     check: async (page) => {
       // Ethernet is a fact the probe reads; a device that was only imported does not know it yet
-      await page.getByRole("button", { name: "Refresh identity" }).click();
-      await expect(page.getByText("Identity refreshed.")).toBeVisible();
+      await refreshIdentity(page);
       await page.reload();
       await expect(page.locator("[data-tile=link]")).toContainText("Ethernet");
       await expect(page.locator("[data-tile=wifi]")).toHaveCount(0);
@@ -226,8 +239,7 @@ for (const shape of shapes) {
 // Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them.
 test("an Ethernet device shows subnet mask and DNS after Refresh identity", async ({ page }) => {
   await openDevice(page, "ov-ethernet-rack");
-  await page.getByRole("button", { name: "Refresh identity" }).click();
-  await expect(page.getByText("Identity refreshed.")).toBeVisible();
+  await refreshIdentity(page);
   await page.reload();
   const conn = page.locator("#devconn");
   await expect(conn.locator("dt", { hasText: "Subnet mask" }).locator("xpath=following-sibling::dd")).not.toHaveText("Unknown");
