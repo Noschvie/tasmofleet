@@ -11,8 +11,9 @@ import (
 // hidden whole rather than shown.
 func TestRedactURL(t *testing.T) {
 	tests := []struct{ in, want string }{
-		{"tcp://user:fake-pw-1@broker.lan:1883", "tcp://%2A%2A%2A@broker.lan:1883"},
-		{"tcp://:fake-pw-1@broker.lan:1883", "tcp://%2A%2A%2A@broker.lan:1883"},
+		// "***" is written as a person reads it, not percent-encoded.
+		{"tcp://user:fake-pw-1@broker.lan:1883", "tcp://***@broker.lan:1883"},
+		{"tcp://:fake-pw-1@broker.lan:1883", "tcp://***@broker.lan:1883"},
 		{"ssl://broker.lan:8883", "ssl://broker.lan:8883"},
 		{"https://idp.example/app/?token=fake-tok-2", "https://idp.example/app/"}, // a query can carry a token
 		{"tcp://broker.lan", "tcp://broker.lan"},
@@ -20,6 +21,15 @@ func TestRedactURL(t *testing.T) {
 		{"", ""},
 		{"tcp://user:fake-pw-1@bro ker:1883", "***"}, // does not parse: cannot prove it is clean
 		{"tcp://user:fake-pw-1@broker:port", "***"},
+		// An unencoded "#" or "/" in the password: url.Parse reads "user:1234"
+		// as host and port and the rest as fragment or path, so u.User is nil
+		// and nothing would be hidden. An "@" outside user information means
+		// the value cannot be proven clean (the URLHost guard).
+		{"mqtt://user:1234#fake-pw-1@broker:1883", "***"},
+		{"mqtt://user:12/fake-pw-1@broker", "***"},
+		// A fragment is never needed to name a broker or an issuer, and it can
+		// carry a token like the query.
+		{"https://idp.example/app/#fake-tok-2", "https://idp.example/app/"},
 	}
 	for _, tc := range tests {
 		got := RedactURL(tc.in)

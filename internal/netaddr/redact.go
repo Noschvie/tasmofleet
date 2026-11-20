@@ -6,24 +6,29 @@ import (
 )
 
 // RedactURL makes a URL-looking value safe to show: the user information
-// becomes "***" and the query is dropped (it can carry a token). A value
-// without "://" is not a URL and passes unchanged. A value that looks like a
-// URL but does not parse becomes "***", because it cannot be proven free of
-// credentials. This is the one redaction for broker URLs and settings values;
-// config.RedactWebhookURL and settings.RedactURLCredentials follow other rules
-// on purpose (see the source test in redact_source_test.go).
+// becomes "***" (written as is, not percent-encoded), and the query and the
+// fragment are dropped (they can carry a token). A value without "://" is not
+// a URL and passes unchanged. A value that looks like a URL but does not
+// parse, or has an "@" outside user information (an unencoded password that
+// url.Parse split at "#" or "/"), becomes "***", because it cannot be proven
+// free of credentials. This is the one redaction for broker URLs and settings
+// values; config.RedactWebhookURL and settings.RedactURLCredentials follow
+// other rules on purpose (see the source test in redact_source_test.go).
 func RedactURL(v string) string {
 	if !strings.Contains(v, "://") {
 		return v
 	}
 	u, err := url.Parse(v)
-	if err != nil {
+	if err != nil || (u.User == nil && strings.Contains(v, "@")) {
 		return "***"
 	}
-	if u.User != nil {
-		u.User = url.User("***")
+	hadUser := u.User != nil
+	u.User = nil
+	u.RawQuery, u.ForceQuery = "", false
+	u.Fragment, u.RawFragment = "", ""
+	if hadUser {
+		return u.Scheme + "://***@" + u.Host + u.EscapedPath()
 	}
-	u.RawQuery = ""
 	return u.String()
 }
 
