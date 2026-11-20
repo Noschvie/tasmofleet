@@ -1148,13 +1148,26 @@ GroupTopic2 to 4 are unread, so MQTT writes and transfers wait until the reader 
   written to the database **before** its actions run (write-ahead).
 - `Step(job, event, now, cfg) -> (job', actions)` is pure and total. The engine runs the
   actions and turns their results into events.
-- Only idempotent commands are retried automatically (`Status N`, `OtaUrl <url>`, `GET /`).
-  `Upgrade 1` is sent at most `MaxAttempts` (2) times per stage, and before a resend the
-  engine always probes whether the first one took effect.
+- No command is resent blindly. `OtaUrl` that fails or times out fails the job; `Upgrade 1` whose reply is lost
+  is probed, never resent (safety rule 3). A pull stage goes back to `set_ota_url` for another attempt only on
+  evidence that the download is over and did not take: the device reported `Failed ...` on `stat/<t>/UPGRADE`, it
+  did not drop off or restart within the accept window, it answered on the old image through the whole reboot
+  window, or it came back on the old image with reboot proof or after the deadline (`upgrade did not take
+  effect`, 9.3); at most `MaxAttempts` (2) attempts per stage. A push upload is
+  never repeated.
 - Every wait has a deadline. Every failure has a reason string in `LastError` and a row in
   `ota_job_events`.
-- HTTP only. MQTT `stat/<t>/UPGRADE` and firmware-server download events are hints that
-  can only speed things up; nothing depends on them.
+- MQTT first (#608). The commands and reads of a job go over the path pinned at Submit (`Job.Transport`, 9.4a),
+  which is MQTT whenever the device is usable there under the strict rule of writes, also while HTTP works. HTTP is
+  used where MQTT is not usable, and for what only HTTP does: the device's own download of the image from
+  TasmoFleet's firmware server, and a push upload while HTTP works. The path never changes during a job. The
+  rules and their evidence are in `docs/security/mqtt-transport.md` ("Updates over MQTT (#608)", T5, T17).
+- The command's own reply is not a hint: `Upgrade 1` is answered by `Version X from <url>` (on
+  `stat/<t>/UPGRADE` on a device with `SetOption4 1`, #648). Later `stat/<t>/UPGRADE` reports are hints that
+  can only speed things up: a `Failed ...` report in `upgrade_issued` triggers the retry rule above at once
+  instead of at the end of the accept window, and `Failed ... connection failed` (the device cannot reach the
+  firmware server) fails a pull stage without a second `Upgrade 1` and records FWReach no. `Successful` changes nothing, and the probes decide. A hint that is dropped costs only time. A
+  firmware-server download only records FWReach yes and is no event of the job.
 
 The same engine, batch and transaction pages also run the other multi-device operations as job
 kinds (`model.JobKind`): `policy` (Make compliant), `command` (bulk Send command and Restart) and
@@ -1430,8 +1443,16 @@ Submit.
 
 - The HTTP poll uses `Status 11` (cheap; uptime, Wi-Fi, power) and falls back to the `Upgrade`
   probe when the reply is Unknown (minimal firmware, shown as "minimal" in the UI).
-- Poll scheduling: HTTP-only devices every `POLL_INTERVAL` (5 min) with ±20 % jitter. MQTT
-  devices only while their telemetry is silent (nothing within `StaleAfter`), and then like an HTTP-only
+- Poll scheduling (#418): a device that is online on MQTT with live telemetry is not polled over HTTP, apart from
+  one snapshot read (`Status 11`) while it has not sent a STATE with its uptime yet: it is on
+  TasmoFleet's broker (an MQTT connection is configured, the device has a topic and either is on our broker or was heard on it),
+  its last will is not `Offline` and a message came within `StaleAfter`. Every other device is polled every
+  `POLL_INTERVAL` (default 5 min) with ±20 % jitter: one that is not on our broker or has no topic (HTTP-only), one
+  whose telemetry is silent (nothing within `StaleAfter`), and one whose last will is `Offline`, because for them
+  HTTP is the only health signal. After `OfflineAfter` (3) failed polls the delay doubles with each further failure,
+  up to 30 min, or `POLL_INTERVAL` when that is longer. The poll stays as it is (the decision of 0.42, #418): the
+  on-demand probe below answers the question "does HTTP work now" for the devices that are not polled. A silent
+  MQTT device is polled like an HTTP-only
   device: an HTTP answer or a refused API keeps such a device online but does not stop its polls (#652),
   and what the background poll reaches (an answer or a refused API, the snapshot read included, never a probe) keeps
   it fresh for `max(StaleAfter, POLL_INTERVAL + 20 %)` plus 35 s (one tick and the poll timeout), until its next poll
@@ -1447,11 +1468,10 @@ Submit.
   same will after a reconnect changes nothing. Any other replayed will (at start, after a reconnect, for a
   device added later) is checked at a random point within one poll interval, so a start does not poll all of
   them on the first tick; when nothing was known of the device before that will, its first background poll is
-  the device's baseline, like a first observation, and writes no history row (#652). Offline devices back off
-  exponentially up to 30 min, or `POLL_INTERVAL` when that is longer. At most 4 polls in flight.
+  the device's baseline, like a first observation, and writes no history row (#652). At most 4 polls in flight.
 - HTTP probe (#456): a device that is fine on MQTT is not polled, so its HTTP fact (`Health.SeenHTTP`)
   only ages. `Service.ProbeHTTP(id)` asks for one deliberate `Status 11` instead, run by the next tick: when
-  the device page is opened, and when the broker re-read (#598) is due for a device whose HTTP fact is not
+  the device page or the device's console is opened (and when a typed `Status 0` finds no route), and when the broker re-read (#598) is due for a device whose HTTP fact is not
   fresh (one device per pass, a given device at most every 30 min). It is limited per device (not within
   5 min of an HTTP answer or of the last probe, 10 min after a failed one) and not asked for while a job, a
   lock or a typed firmware update holds the device. A probe records what HTTP showed (`SeenHTTP`,
@@ -1482,8 +1502,8 @@ Submit.
   `docs/research/tasmota-mqtt-transport.md` section 5, live 2026-10-30). Health does not use a
   reboot to judge the device's state; the OTA engine uses uptime. Since 0.25.0 it does notice restarts
   for the stability history (#325): the device's tele/INFO3 (RestartReason, BootCount), or an uptime
-  that fell by more than 30 s between two readings followed by one `Status 1` over HTTP (never
-  Status 0; three tries, then given up), and once per device the last restart from `Status 1` when
+  that fell by more than 30 s between two readings followed by one `Status 1` read through the router, MQTT first
+  (#839; never Status 0; three tries, then given up), and once per device the last restart from `Status 1` when
   none is stored. It also stores one Wi-Fi sample per device and clock hour. The verdict (Stable,
   Boot loop: 3 restarts in 1 h or 6 in 24 h, Weak Wi-Fi: average below -75 dBm over 24 h or 10
   reconnects since boot) is the pure package `internal/stability`. Every live INFO3 is one restart (it comes
