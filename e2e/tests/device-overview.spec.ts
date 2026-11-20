@@ -332,7 +332,8 @@ test("Refresh identity follows the live refusal both ways, without a reload", { 
   await control("/device/ov-api-flip/api-off");
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
   await expect(refresh).toBeDisabled();
-  await expect(refresh).toHaveAttribute("title", /HTTP API off \(SetOption128 0\)\. Turn the device's HTTP API on/);
+  // #1062: the fix leads with the own address; SetOption128 1 (the Referer check off) comes second, with the web password
+  await expect(refresh).toHaveAttribute("title", /HTTP API off \(SetOption128 0\)\. Add the device by its own IP or hostname;.*SetOption128 1.*web password/);
   // The API coming back is found by the health tracker only minutes later (a refused device is polled slowly), so the
   // way back is driven by the live region itself: what the server renders into it when it no longer says "off".
   const setReason = (reason: string | null) =>

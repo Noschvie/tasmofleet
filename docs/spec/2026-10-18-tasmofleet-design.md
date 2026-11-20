@@ -563,7 +563,7 @@ The one sentence of an update path is `Path.Describe` and names both legs: the t
 
 Both download paths also need FIRMWARE_BASE_URL (the device needs an address to fetch from). A password "not set", "refused since T" or in broker mode without a configured MQTT_PASSWORD removes transfers over MQTT, not commands. A None never advises the
 upload over MQTT (no page offers it, #262 was not shipped). When HTTP fails because the device's HTTP API is off, every None sentence ends with the
-fix ("Turn the device's HTTP API on (SetOption128 1) or add the device by its own IP or hostname."). A command that starts a job (`Upgrade`
+fix ("Add the device by its own IP or hostname; then its HTTP API answers. Or switch off Tasmota's Referer check (SetOption128 1); a web password is advised then.", #1062). A command that starts a job (`Upgrade`
 or `WebGetConfig` with an argument) is never sent over MQTT (`transport.ActJob`), so with HTTP failing it has no path. There is no per-device "force transport" setting.
 
 ---

@@ -623,7 +623,7 @@ func TestButtonsFollowTheTilesRefusalBeforeTheTrackerHasRecordedIt(t *testing.T)
 	}
 	// the other tabs say it the same way: the Console tab names the one reason, not Choose's sentence for the same fact
 	_, other := e.do(t, "GET", "/devices/1/backups", "admin", nil)
-	if tab := sliceBetween(other, `aria-disabled="true" title="`, `>`); !strings.Contains(tab, "HTTP API off (SetOption128 0). Turn") {
+	if tab := sliceBetween(other, `aria-disabled="true" title="`, `>`); !strings.Contains(tab, html.EscapeString(apiOffName+". "+apiOffFix)) {
 		t.Errorf("a tab says something else than the tile: %q", tab)
 	}
 }

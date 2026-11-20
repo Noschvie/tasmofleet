@@ -153,3 +153,21 @@ func TestOnlyStatusCommandsGetTheMainPageFollowUp(t *testing.T) {
 		t.Errorf("Status 2: want a refusal after exactly one GET /, got %v after %d", err, root.Load())
 	}
 }
+
+// Why (#1062): TasmoFleet sends the Referer Tasmota checks, so adding the device by its own IP or hostname always
+// ends the refusal and weakens nothing. SetOption128 1 instead switches off the Referer check, Tasmota's CSRF guard:
+// on a device without a web password any page in a browser on the LAN can then send commands to it. The hint must
+// never offer that first, and never without the web password.
+func TestAPIOffFixLeadsWithTheOwnAddressAndNamesTheTradeOff(t *testing.T) {
+	addr := strings.Index(APIOffFix, "own IP or hostname")
+	so := strings.Index(APIOffFix, "SetOption128 1")
+	if addr < 0 {
+		t.Fatalf("the fix must name adding the device by its own IP or hostname: %q", APIOffFix)
+	}
+	if so >= 0 && so < addr {
+		t.Errorf("the fix offers SetOption128 1 before the own address: %q", APIOffFix)
+	}
+	if so >= 0 && (!strings.Contains(APIOffFix, "Referer check") || !strings.Contains(APIOffFix, "web password")) {
+		t.Errorf("SetOption128 1 must come with its trade-off (Referer check off, web password advised): %q", APIOffFix)
+	}
+}
