@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.44.0 "Montauk Point" (2026-11-20)
+
+### Changed
+
+- The audit log's result, its pager and the About and What's new buttons use the design system's badge and buttons; the result's colour now always agrees with its word (an event with no result or "role changed" is green, a refusal that only the detail names is amber), and table headers no longer fall back to upper case (#1069).
+
+### Fixed
+
+- SetOption19's label and help say what the firmware does: On stops the announcement Home Assistant's Tasmota integration needs (#1063).
+- Setting help texts no longer present one power-loss policy as the fleet policy (#1064).
+
 ## 0.43.0 "Les Eclaireurs" (2026-11-20)
 
 ### Added

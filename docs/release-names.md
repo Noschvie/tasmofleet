@@ -32,7 +32,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 21. **Longstone** (assigned to 0.41): Farne Islands, England. First lit in 1826; Grace Darling and her father rescued survivors of the Forfarshire from here in 1838.
 22. **Cape Otway** (assigned to 0.42): Victoria, Australia. Lit in 1848; the oldest surviving lighthouse on the Australian mainland.
 23. **Les Eclaireurs** (assigned to 0.43): Beagle Channel near Ushuaia, Argentina. In service since 1920; often called the "Lighthouse at the End of the World".
-24. **Montauk Point**: eastern tip of Long Island, New York, USA. Lit in 1797; approved by Congress in 1792.
+24. **Montauk Point** (assigned to 0.44): eastern tip of Long Island, New York, USA. Lit in 1797; approved by Congress in 1792.
 25. **Rubjerg Knude**: North Sea coast of Jutland, Denmark. Lit in 1900; moved 70 m inland in 2019 to escape erosion.
 26. **Cape Agulhas**: Western Cape, South Africa. Lit in 1849; the second oldest lighthouse still operating in South Africa.
 27. **Pigeon Point**: California, USA. Lit in 1872; its 35 m tower ties with Point Arena as the tallest on the US West Coast.
