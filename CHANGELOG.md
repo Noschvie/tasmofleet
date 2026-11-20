@@ -4,6 +4,24 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.43.0 "Les Eclaireurs" (2026-11-20)
+
+### Added
+
+- The shared-topic check before an MQTT write is now visible: a Topic check card under System → Settings → MQTT says whether all device topics are unique, lists every collision with the devices involved (a GroupTopic equal to another device's Topic, two equal Topics, overlapping command topics, a Topic equal to `tasmotas`) and, apart from them, the devices not fully read yet; the Identity card of a device whose MQTT writes are held back names the colliding topic and the other device. A GroupTopic several devices share, such as `tasmotas`, is no collision. Right after a start or an upgrade the card lists devices as not fully read yet until the background reader has asked each one (one device every 2 seconds) (#1047, thanks @Noschvie)
+
+### Changed
+
+- One rule now builds the breadcrumb trail of every page, and it always agrees with the lit tab of the sub-navigation: a page under a tab names that tab (`Devices / List / Bulk action`, `Updates / Transactions / TX-0012`, `System / Settings / Advanced / Reset`), a device hangs directly under Devices (`Devices / kitchen / Edit`, never "Device"), the list and the Transactions page read `Devices / List` and `Updates / Transactions`, and a transaction started from Policy now lives on the Transactions tab. System confirmations start with System. Visible change: a device page (tabs, edit, restore, delete) no longer lights the List tab, because a device belongs to the whole Devices area; its Devices crumb leads back to the list as you left it on every device page (#1000, thanks @Noschvie)
+
+### Fixed
+
+- A refresh of a device on Ethernet no longer queues a background network read that could only repeat the Status 5 the refresh had just stored. Over MQTT that read held the device's topic for the 1.5 second hear-all window and could delay the next refresh. A device that moves from Ethernet to Wi-Fi still gets its Wi-Fi facts, because the decision follows the refresh's fresh Status 5 and not the stored facts (#1015)
+- For a few seconds after TasmoFleet first found out that a device's HTTP API is off, the device page said "HTTP API off" but still offered the relay switches, Restart and Refresh identity, which then failed: the page decided the buttons from the health tracker's record, the Reachability tile from the router's newer finding. The buttons now follow the tile at once (#1043)
+- The test of the Ethernet card (subnet mask and DNS after Refresh identity) could pass although the refresh read nothing, because earlier tests had already stored the same values: the simulated device now reports other values right before the refresh, and the test expects exactly those. No change to the app itself (#1044)
+- The device console, the audit log and the bulk command preview now show the value of `GroupTopic1` to `GroupTopic4` like they show `Topic` (`GroupTopic2 tf-livetest` instead of `GroupTopic2 ***`), so you can see what you are about to send and what was sent; a login pasted into it (`user:pass@`) is still masked, the command stays admin-only, and the console no longer names the transport for it before sending (#1046).
+- When a device refuses the HTTP API, the hint now leads with adding the device by its own IP or hostname, which always ends the refusal and weakens nothing. SetOption128 1 comes second, with what it costs: it switches off Tasmota's Referer check, so a web password is advised (#1062)
+
 ## 0.42.0 "Cape Otway" (2026-11-20)
 
 ### Upgrade notes
