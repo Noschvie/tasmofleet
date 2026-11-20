@@ -1,4 +1,0 @@
----
-section: Fixed
----
-After a firmware update done outside TasmoFleet (for example `OtaUrl` and `Upgrade 1` in the console, which on an ESP8266 goes through the minimal image), the device page shows the new version and OTA URL within a minute of the boot instead of up to an hour later: a restart read that met the minimal image no longer counts as the restart's read, and a live INFO1 or a backup that names another version, or a console write the device accepted of the OTA URL, a group topic, the topic, a name or the hostname, now reads the identity at once (nothing of the message, backup or answer is stored without the identity read's checks). A device in a boot loop on one version is still read about once an hour. The Identity card now refreshes live like the header when what it shows changed (#1003, thanks @Noschvie).
