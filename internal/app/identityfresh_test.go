@@ -610,27 +610,31 @@ func TestAnIdentityReadThatMeetsMinimalFirmwareIsNotReportedAsAnotherDevice(t *t
 // probe, the device lock held for up to 30 s, instead of the one an hour the boot-loop brake (#600, #817) allows. A
 // refused restart read brakes the next one for ten minutes, the bound every other forgeable ask has.
 func TestARefusedRestartReadIsBrakedForTenMinutes(t *testing.T) {
-	g := newRefreshRig(1)
-	far := g.clock.Add(48 * time.Hour)
-	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
-	ident := 0
-	g.r.readIdentity = func(context.Context, model.DeviceID) error {
-		ident++
-		return &RefreshRefusedError{Reported: "aa:bb:cc:dd:ee:ff", Reason: refusedOther}
-	}
-	for range 12 { // a forged restart every five minutes for an hour
-		g.r.restarted(1)
-		g.kicks()
-		for range 10 {
-			g.advance(30 * time.Second)
-			g.r.pass(t.Context())
-		}
-	}
-	if ident > 7 {
-		t.Fatalf("12 restarts in an hour, each refused at the identity check, read the identity %d times, want at most 7 (one per ten minutes, and one more for the end of the hour)", ident)
-	}
-	if ident < 5 {
-		t.Fatalf("12 restarts in an hour read the identity %d times, want about one per ten minutes: a refused read must not brake the next for the hour", ident)
+	for _, ref := range []*RefreshRefusedError{
+		{Reported: "aa:bb:cc:dd:ee:ff", Reason: refusedOther}, // a lease handed on to another device
+		{Reason: refusedUnverified},                           // a device that stays on minimal firmware
+	} {
+		t.Run(ref.Reason, func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+			ident := 0
+			g.r.readIdentity = func(context.Context, model.DeviceID) error { ident++; return ref }
+			for range 12 { // a forged restart every five minutes for an hour
+				g.r.restarted(1)
+				g.kicks()
+				for range 10 {
+					g.advance(30 * time.Second)
+					g.r.pass(t.Context())
+				}
+			}
+			if ident > 8 {
+				t.Fatalf("12 restarts in an hour, each refused at the identity check, read the identity %d times, want at most 8 (one per ten minutes, one more for the end of the hour, and for minimal firmware the boot after the first refusal)", ident)
+			}
+			if ident < 5 {
+				t.Fatalf("12 restarts in an hour read the identity %d times, want about one per ten minutes: a refused read must not brake the next for the hour", ident)
+			}
+		})
 	}
 }
 

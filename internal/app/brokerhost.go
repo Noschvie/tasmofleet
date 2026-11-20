@@ -51,11 +51,11 @@ import (
 // read after every boot, as before #600, and the rest once when the hour is over (a failed read is not
 // retried before), so about once an hour. A restart read that read nothing for the device does not count (#1003): its
 // check found minimal firmware (no MAC to show, the first step of an update on an ESP8266), another device, or a
-// topic it could not vouch for; the boot into the new firmware a minute later is then read in full. An identity read
-// refused because another device answered brakes the next restart's identity and data for brokerHostRetry instead
-// (restartRefusedNext): a restart can be forged by any client on the broker and that refusal can last, so every
-// restart must not cost an identity read. Minimal firmware does not brake (only the device at the address can answer
-// as minimal firmware, and the boot into the new firmware follows within a minute). The policy values
+// topic it could not vouch for; the boot into the new firmware a minute later is then read in full. A refused identity
+// read brakes the next restart's identity and data for brokerHostRetry instead (restartRefusedNext): a restart can be
+// forged by any client on the broker and a refusal can last, so every restart must not cost an identity read. The
+// first refusal by minimal firmware in an hour does not brake (minimalFreeUntil): the boot into the new firmware
+// follows within a minute. The policy values
 // are left out of the data read while the policy live check is paused or its interval is 0, as for the policy poller.
 //
 // Three more things ask for the identity alone, at once and inside the hour (#1003): a live INFO1 or a backup that names
@@ -202,10 +202,12 @@ type brokerHostReader struct {
 	// in pass once it is over or the device is gone.
 	versionReadNext map[model.DeviceID]time.Time
 	// restartRefusedNext: a restart reads the identity and the data of a device no sooner than this, set when an identity
-	// read of it was refused because another device answered (#1003 follow-up; not for minimal firmware). Such a read does not use up the hour (restartRead), and a restart is
-	// untrusted input, so without it every forged restart would cost an identity read while the refusal lasts. Ended in
-	// pass once it is over or the device is gone.
-	restartRefusedNext map[model.DeviceID]time.Time
+	// read of it was refused (#1003 follow-up). Such a read does not use up the hour (restartRead), and a restart is
+	// untrusted input, so without it every forged restart would cost an identity read while the refusal lasts.
+	// minimalFreeUntil: the first refusal by minimal firmware sets no such time, so the boot into the new firmware a
+	// minute later is read in full; until this time a further one does (a device that stays on minimal firmware). Both
+	// are ended in pass once they are over or the device is gone.
+	restartRefusedNext, minimalFreeUntil map[model.DeviceID]time.Time
 	// outcomes: why the last background data refresh of a device failed (#818), read by the device page.
 	outcomes *refreshOutcomes
 }
@@ -246,7 +248,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue), kickIdentity: make(chan identityKick, brokerHostQueue),
-		versionAsked: map[model.DeviceID]string{}, versionReadNext: map[model.DeviceID]time.Time{}, restartRefusedNext: map[model.DeviceID]time.Time{},
+		versionAsked: map[model.DeviceID]string{}, versionReadNext: map[model.DeviceID]time.Time{}, restartRefusedNext: map[model.DeviceID]time.Time{}, minimalFreeUntil: map[model.DeviceID]time.Time{},
 		claims: make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
 		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}, outcomes: newRefreshOutcomes()}
@@ -417,7 +419,7 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			delete(r.versionAsked, id) // deleted: nothing more to ask
 		}
 	}
-	for _, m := range []map[model.DeviceID]time.Time{r.versionReadNext, r.restartRefusedNext} {
+	for _, m := range []map[model.DeviceID]time.Time{r.versionReadNext, r.restartRefusedNext, r.minimalFreeUntil} {
 		for id, at := range m {
 			if _, ok := listed[id]; !ok || !now.Before(at) {
 				delete(m, id) // deleted, or over
@@ -645,7 +647,10 @@ func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.T
 	at, braked := r.restartRefusedNext[id]
 	braked = braked && now.Before(at) // a refused read: the next restart's read waits ten minutes (#1003 follow-up)
 	if last, ok := r.restartRead[id]; ok && now.Sub(last) < restartRefreshEvery {
-		at, braked = last.Add(restartRefreshEvery), true
+		if hour := last.Add(restartRefreshEvery); !braked || hour.After(at) {
+			at = hour // the later of the two
+		}
+		braked = true
 	}
 	if braked {
 		for _, m := range []struct {
@@ -789,13 +794,16 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 			refused = true
 			err = nil                                   // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
 			r.dataNext[id] = r.now().Add(identityEvery) // and nothing is read for this device from that address until the identity matches again
-			why := settings.FailOtherDevice
+			why, brake := settings.FailOtherDevice, true
 			if ref.Reason == refusedUnverified {
 				why = settings.FailNoMAC // minimal firmware, the first step of an update (#1003): not another device
-			} else {
-				// another device at the address: not the restart's read, yet the next restart's waits (#1003 follow-up).
-				// Minimal firmware does not brake: the boot into the new firmware follows within a minute, and only the
-				// device at the address can answer as minimal firmware (it shows no Status 5, so the probe goes there)
+				// the boot into the new firmware follows within a minute: the first such refusal in an hour does not
+				// brake it, a further one does (a device that stays on minimal firmware)
+				if until, ok := r.minimalFreeUntil[id]; !ok || !r.now().Before(until) {
+					r.minimalFreeUntil[id], brake = r.now().Add(restartRefreshEvery), false
+				}
+			}
+			if brake { // not the restart's read, yet the next restart's waits (#1003 follow-up)
 				r.restartRefusedNext[id] = r.now().Add(brokerHostRetry)
 			}
 			r.outcomes.fail(id, r.now(), r.dataNext[id], why)
