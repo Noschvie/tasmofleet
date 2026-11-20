@@ -170,8 +170,10 @@ func TestStatusBarJobWithoutTransactionPagesHasNoLink(t *testing.T) {
 }
 
 // Why: a run that backed up 19 of 27 devices is not a failed run (#406). The bar must say how many
-// devices are safe, use the warning colour for a partly failed run, and keep red and "Backup failed"
-// for a run where nothing was backed up. The phone sheet words it the same way.
+// devices are safe, use the warning colour for a partly failed run, and keep red and "Scheduled backup
+// failed" for a run where nothing was backed up. The bar names the SCHEDULED run on purpose (#992): a
+// "Back up" from the device list is a transaction and never reaches the bar, so a plain "Backup" would
+// contradict the time shown under Updates > Transactions. The phone sheet words it the same way.
 func TestStatusBarBackupRun(t *testing.T) {
 	done := time.Date(2026, 10, 31, 3, 0, 0, 0, time.UTC)
 	run := func(total, failed int) (bar string) {
@@ -195,13 +197,13 @@ func TestStatusBarBackupRun(t *testing.T) {
 		}
 	}
 	check("all ok", run(58, 0),
-		[]string{"<b>Backup</b>", "58 of 58 backed up", "All good"},
+		[]string{"<b>Scheduled backup</b>", "58 backed up", "All good"},
 		[]string{"t-bad", "t-warn", "sb-bad", "sb-warn", "failed"})
 	check("partly failed", run(27, 8),
-		[]string{"<b>Backup</b>", "19 of 27 backed up", "8 failed", "t-warn", "sb-edge sb-warn", "Backup partly failed"},
-		[]string{"Backup failed", "t-bad", "sb-bad"})
+		[]string{"<b>Scheduled backup</b>", "19 backed up", "8 failed", "t-warn", "sb-edge sb-warn", "Backup partly failed"},
+		[]string{"Backup failed", "Scheduled backup failed", "t-bad", "sb-bad"})
 	check("none ok", run(58, 58),
-		[]string{"<b>Backup failed</b>", "0 of 58 backed up", "t-bad", "sb-edge sb-bad", "Last backup failed"},
+		[]string{"<b>Scheduled backup failed</b>", "0 backed up · 58 failed", "t-bad", "sb-edge sb-bad", "Last backup failed"},
 		[]string{"t-warn"})
 	e := setupWith(t, func(d *Deps) {
 		d.ScheduledBackup = func() BackupRunInfo { return BackupRunInfo{Running: true, Done: 12, Total: 58} }

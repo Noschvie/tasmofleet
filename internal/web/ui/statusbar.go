@@ -51,7 +51,7 @@ type StatusJob struct {
 type StatusBackup struct {
 	At     time.Time
 	Failed int
-	Total  int
+	Total  int // devices tried: backed up + failed
 	// Skipped devices were not tried; they are counted apart and never colour the bar.
 	Skipped int
 	// Href is the page that lists the run per device (Devices, Backups); empty without it.
@@ -155,9 +155,11 @@ func (b StatusBackup) none() bool { return b.Total > 0 && b.Failed >= b.Total }
 // partial is a run where some devices were backed up and some were not.
 func (b StatusBackup) partial() bool { return b.Failed > 0 && !b.none() }
 
-// countText is "19 of 27 backed up", with " · 8 failed" and " · 3 skipped" when there were any.
+// countText is "19 backed up", with " · 8 failed" and " · 3 skipped" when there were any: the same three
+// parts as the Last run card, which add up to the devices of the run (#992). Total is the tried devices
+// (backed up + failed), so the backed-up count is Total - Failed and the skipped come on top of it.
 func (b StatusBackup) countText() string {
-	return strconv.Itoa(b.Total-b.Failed) + " of " + strconv.Itoa(b.Total) + " backed up" + b.problemText()
+	return strconv.Itoa(b.Total-b.Failed) + " backed up" + b.problemText()
 }
 
 // shortText is the phone line's rest: "2 failed · 3 skipped" without the backed-up count (the sheet has it).

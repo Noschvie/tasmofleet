@@ -184,7 +184,7 @@ func TestDashboardTransactionsCard(t *testing.T) {
 		}}
 	})
 	_, body := e.do(t, "GET", "/", "operator", nil)
-	card := between(body, `<h2>Update transactions</h2>`, `</section>`)
+	card := between(body, `<h2>Transactions</h2>`, `</section>`)
 	for _, want := range []string{
 		`<a class="txn-card" href="/tf/transactions/5">`, `TX-0005`, "Update to Tasmota 16.1.0", ">Running<", "1 of 4 done · 1 failed · 1 in progress · 1 waiting",
 		`href="/tf/transactions/4"`, ">Completed<",
@@ -202,7 +202,7 @@ func TestDashboardTransactionsCard(t *testing.T) {
 	if strings.Contains(card, `/tf/transactions/1"`) {
 		t.Error("more than three history rows")
 	}
-	if !strings.Contains(between(body, `<h2>Update transactions</h2>`, `</div>`), `href="/tf/transactions"`) {
+	if !strings.Contains(between(body, `<h2>Transactions</h2>`, `</div>`), `href="/tf/transactions"`) {
 		t.Error("History does not lead to the transactions list")
 	}
 }

@@ -83,7 +83,7 @@ func TestDashboardEmptyTransactionsCard(t *testing.T) {
 	e, _, j, _ := setupOTA(t)
 	j.jobs = nil
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	for _, want := range []string{`<h2>Update transactions</h2>`, "No transactions yet.", `href="/tf/updates/new">New update`} {
+	for _, want := range []string{`<h2>Transactions</h2>`, "No transactions yet.", `href="/tf/updates/new">New update`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin: missing %q", want)
 		}

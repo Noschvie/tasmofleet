@@ -424,7 +424,7 @@ test("pages: no backticks in labels, no batch/update-job wording", async ({ page
   const targets = await page.locator(".audittable td[data-label=Target]").allInnerTexts();
   expect(targets.filter((t) => /^(device|batch|transaction):\d+$/.test(t.trim()))).toEqual([]);
   await page.goto(app.url + "/");
-  await expect(page.getByRole("heading", { name: "Update transactions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
 });
 
 // QA v0.9.0: phone row cards must keep what identifies a row. A clipped name, a

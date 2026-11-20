@@ -36,7 +36,7 @@ type BackupRunInfo struct {
 	Done, Total int
 	Finished    time.Time // when the last finished run ended; zero = none since the start
 	Started     time.Time // when that run began, the time the bar, the page and the dashboard tile all show; zero: Finished
-	LastTotal   int       // devices of the last finished run
+	LastTotal   int       // devices the last finished run tried (backed up + failed); skipped ones are not in it
 	LastFailed  int       // of which failed
 	LastSkipped int       // devices the last run left out (offline, never answered, busy); not a failure
 }

@@ -333,7 +333,7 @@ func TestStatusBarBackupLinksToPageAndSaysSkipped(t *testing.T) {
 		return barOf(body)
 	}
 	calm := run(0, 3)
-	for _, want := range []string{`href="/tf/devices/backups"`, "24 of 24 backed up", "3 skipped", "All good"} {
+	for _, want := range []string{`href="/tf/devices/backups"`, "24 backed up", "3 skipped", "All good"} {
 		if !strings.Contains(calm, want) {
 			t.Errorf("skipped only: bar lacks %q: %s", want, calm)
 		}
@@ -344,7 +344,7 @@ func TestStatusBarBackupLinksToPageAndSaysSkipped(t *testing.T) {
 		}
 	}
 	mixed := run(2, 3)
-	for _, want := range []string{"22 of 24 backed up · 2 failed · 3 skipped", "t-warn", "Backup partly failed", "· 2 failed · 3 skipped"} {
+	for _, want := range []string{"22 backed up · 2 failed · 3 skipped", "t-warn", "Backup partly failed", "· 2 failed · 3 skipped"} {
 		if !strings.Contains(mixed, want) {
 			t.Errorf("failures and skipped: bar lacks %q: %s", want, mixed)
 		}

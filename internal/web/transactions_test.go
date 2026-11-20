@@ -396,3 +396,17 @@ func TestAPlainTextDoneDetailStillShowsItsNote(t *testing.T) {
 		t.Errorf("drift done detail reads %q", got)
 	}
 }
+
+// Why (#992): the list holds every bulk transaction (backups, commands, Make compliant, updates), so
+// its heading must not say "Update transactions". The page filtered to one device keeps its own title.
+func TestTransactionsPageIsTitledTransactionsNotUpdateTransactions(t *testing.T) {
+	e, _, _, _ := setupOTA(t)
+	_, body := e.do(t, "GET", "/transactions", "operator", nil)
+	if !strings.Contains(body, "<h1>Transactions</h1>") || strings.Contains(body, "Update transactions") {
+		t.Errorf("the list heading is not exactly Transactions: %s", between(body, "<h1>", "</h1>"))
+	}
+	_, body = e.do(t, "GET", "/transactions?device=1", "operator", nil)
+	if !strings.Contains(body, "<h1>Transactions of ") {
+		t.Errorf("the device-filtered list lost its title: %s", between(body, "<h1>", "</h1>"))
+	}
+}

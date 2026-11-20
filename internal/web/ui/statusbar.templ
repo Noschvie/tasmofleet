@@ -156,15 +156,15 @@ templ sbBackupWide(d ShellData, b StatusBackup) {
 	<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
 	<span class="sb-t">
 		if b.none() {
-			<b>Backup failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+			<b>Scheduled backup failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
 		} else {
-			<b>Backup</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+			<b>Scheduled backup</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
 		}
 	</span>
 }
 
 templ sbBackupSheet(d ShellData, b StatusBackup) {
-	<span class="sb-lab">Backup</span>
+	<span class="sb-lab">Scheduled backup</span>
 	<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
 	<span class="sb-val">
 		if b.none() {

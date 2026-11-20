@@ -102,7 +102,7 @@ func txListTitle(p txListView) string {
 	if p.Device != "" {
 		return "Transactions of " + p.Device
 	}
-	return "Update transactions"
+	return "Transactions"
 }
 
 func txListSub(p txListView) string {

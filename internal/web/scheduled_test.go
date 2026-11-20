@@ -389,7 +389,7 @@ func planFixture() []model.Job {
 
 // planLine is the plan line of the Dashboard card, as text.
 func planLine(body string) string {
-	return plain(between(body, `<h2>Update transactions</h2>`, `</section>`))
+	return plain(between(body, `<h2>Transactions</h2>`, `</section>`))
 }
 
 // Why (#707): someone who never opens Transactions must still see that an update starts tonight. The Dashboard
@@ -410,7 +410,7 @@ func TestDashboardAndStatusBarShowScheduledPlans(t *testing.T) {
 	if !strings.Contains(card, "TX-0013") {
 		t.Errorf("the transaction that began is not a running job on the Dashboard: %s", card)
 	}
-	if !strings.Contains(between(body, `<h2>Update transactions</h2>`, `</section>`), `href="/tf/transactions#scheduled"`) {
+	if !strings.Contains(between(body, `<h2>Transactions</h2>`, `</section>`), `href="/tf/transactions#scheduled"`) {
 		t.Errorf("the Dashboard line does not link to the Scheduled section")
 	}
 	bar := barOf(body)

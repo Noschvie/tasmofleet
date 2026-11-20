@@ -7597,7 +7597,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   font-size: 13px;
   color: var(--color-text-2);
 }
-/* the plans line on top of the "Update transactions" card (#707) */
+/* the plans line on top of the "Transactions" card (#707) */
 .dash-plans {
   margin: 0;
   padding: var(--sp-14);

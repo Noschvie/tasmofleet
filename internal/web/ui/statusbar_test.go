@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -14,14 +15,34 @@ func TestStatusBackupPhoneLineIsShortAndTheBarIsFull(t *testing.T) {
 	if text != "Backup partly failed" || sub != " · 2 failed · 3 skipped" {
 		t.Errorf("phone line = %q %q, want the short form", text, sub)
 	}
-	if got := partly.Backup.countText(); got != "22 of 24 backed up · 2 failed · 3 skipped" {
+	if got := partly.Backup.countText(); got != "22 backed up · 2 failed · 3 skipped" {
 		t.Errorf("full text = %q", got)
 	}
 	calm := StatusBar{Backup: &StatusBackup{At: at, Total: 24, Skipped: 3}}
 	if text, _ := calm.summary(); text != "All good" {
 		t.Errorf("skipped only: %q, want All good", text)
 	}
-	if got := calm.Backup.countText(); got != "24 of 24 backed up · 3 skipped" {
+	if got := calm.Backup.countText(); got != "24 backed up · 3 skipped" {
 		t.Errorf("skipped only text = %q", got)
+	}
+}
+
+// Why (#992): the bar counts like the Last run card, as three separate parts that add up to the devices
+// of the run. Total is the TRIED devices (backed up + failed) and the skipped ones come on top, so
+// "36 of 41 backed up · 5 failed · 3 skipped" read as 41 devices although the run had 44. A run that
+// only skipped devices backed up none, and says "0 backed up", not "0 of 0".
+func TestStatusBackupCountsAddUpToTheDevicesOfTheRun(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		b    StatusBackup
+		want string
+	}{
+		{"issue run: 41 tried, 5 failed, 3 skipped", StatusBackup{Total: 41, Failed: 5, Skipped: 3}, "36 backed up · 5 failed · 3 skipped"},
+		{"skipped only", StatusBackup{Skipped: 2}, "0 backed up · 2 skipped"},
+		{"nothing backed up", StatusBackup{Total: 4, Failed: 4}, "0 backed up · 4 failed"},
+	} {
+		if got := c.b.countText(); got != c.want || strings.Contains(got, " of ") {
+			t.Errorf("%s: countText = %q, want %q", c.name, got, c.want)
+		}
 	}
 }

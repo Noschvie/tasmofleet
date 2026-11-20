@@ -45,7 +45,7 @@ templ dashboardPage(d dashView) {
 				}
 				if d.TxnCard {
 					@ui.CardStack(1) {
-						@ui.ListCard("Update transactions", "History", d.Base+"/transactions") {
+						@ui.ListCard("Transactions", "History", d.Base+"/transactions") {
 							if d.Plans.N > 0 {
 								@ui.PlanLine(d.Plans)
 							}

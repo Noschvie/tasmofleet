@@ -390,7 +390,7 @@ test("while a backup run is in progress the status bar keeps every item inside i
   const bar = async (url: string) => {
     await page.goto(app.url + url);
     await expect(page.locator("#sb-wide .sb-jobs")).toContainText("Backup");
-    await expect(page.locator("#sb-wide a.sb-i[href$='/devices/backups']")).toContainText("Backup"); // the last run's item
+    await expect(page.locator("#sb-wide a.sb-i[href$='/devices/backups']")).toContainText("Scheduled backup"); // the last run's item
     await page.evaluate(() => document.fonts.ready);
   };
   // the widest row is the narrowest wide window: 720 px is where the phone layout takes over
