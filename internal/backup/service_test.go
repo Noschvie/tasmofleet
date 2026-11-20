@@ -219,9 +219,19 @@ func (d devs) GetDevice(_ context.Context, id model.DeviceID) (model.Device, err
 	return d.d, nil
 }
 
-type auditSink struct{ ev []model.AuditEvent }
+// auditSink is locked because Manager.Backup records from the caller's goroutine
+// and concurrent backups (TestConcurrentSameHostnameNeverShareDir) share one
+// sink; tests read ev only after their own goroutines have been joined.
+type auditSink struct {
+	mu sync.Mutex
+	ev []model.AuditEvent
+}
 
-func (a *auditSink) Record(_ context.Context, e model.AuditEvent) { a.ev = append(a.ev, e) }
+func (a *auditSink) Record(_ context.Context, e model.AuditEvent) {
+	a.mu.Lock()
+	a.ev = append(a.ev, e)
+	a.mu.Unlock()
+}
 
 type stepClock struct{ t time.Time }
 
