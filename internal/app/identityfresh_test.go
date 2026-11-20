@@ -602,3 +602,72 @@ func TestAnIdentityReadThatMeetsMinimalFirmwareIsNotReportedAsAnotherDevice(t *t
 		t.Fatalf("the boot into the new firmware read the identity %d and the data %d times, want 1 and 1", len(i), len(d))
 	}
 }
+
+// Why (#1003 follow-up, T20): a restart read refused at the identity check (another device at the address) does not use
+// up the hour, so a real update's next boot is read in full. A restart is untrusted
+// input (INFO3, the uptime drop and the LWT can be published by any client on the broker), and the refusal can last (a
+// lease handed on to another device). Without a brake of its own every forged restart would then cost a whole identity
+// probe, the device lock held for up to 30 s, instead of the one an hour the boot-loop brake (#600, #817) allows. A
+// refused restart read brakes the next one for ten minutes, the bound every other forgeable ask has.
+func TestARefusedRestartReadIsBrakedForTenMinutes(t *testing.T) {
+	g := newRefreshRig(1)
+	far := g.clock.Add(48 * time.Hour)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+	ident := 0
+	g.r.readIdentity = func(context.Context, model.DeviceID) error {
+		ident++
+		return &RefreshRefusedError{Reported: "aa:bb:cc:dd:ee:ff", Reason: refusedOther}
+	}
+	for range 12 { // a forged restart every five minutes for an hour
+		g.r.restarted(1)
+		g.kicks()
+		for range 10 {
+			g.advance(30 * time.Second)
+			g.r.pass(t.Context())
+		}
+	}
+	if ident > 7 {
+		t.Fatalf("12 restarts in an hour, each refused at the identity check, read the identity %d times, want at most 7 (one per ten minutes, and one more for the end of the hour)", ident)
+	}
+	if ident < 5 {
+		t.Fatalf("12 restarts in an hour read the identity %d times, want about one per ten minutes: a refused read must not brake the next for the hour", ident)
+	}
+}
+
+// Why (#1003 follow-up, T20): a restart's read merged with a version's ask is the version's read, so its failure is
+// retried after ten minutes (#817), not at the end of the hour: a real update must not show the old version for that
+// hour. That retry is the ten-minute bound T20 names for a forged INFO1, and a boot loop with a stream of INFO1 in
+// other versions must not read the identity more often than that.
+func TestAFailedRestartReadMergedWithAVersionAskIsRetriedWithinTheTenMinuteBound(t *testing.T) {
+	g := newRefreshRig(1)
+	far := g.clock.Add(48 * time.Hour)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+	ident := 0
+	g.r.readIdentity = func(context.Context, model.DeviceID) error { ident++; return tasmota.ErrTimeout }
+	g.r.restarted(1)
+	g.r.identityChanged(1, "x")
+	g.kicks()
+	g.advance(brokerHostSettle)
+	read := g.clock
+	g.r.pass(t.Context())
+	if ident != 1 {
+		t.Fatalf("the restart with a version's ask read the identity %d times, want 1", ident)
+	}
+	if got := g.r.identityNext[1]; !got.Equal(read.Add(brokerHostRetry)) {
+		t.Fatalf("the failed read is next due at %v, want %v (the version's retry after ten minutes)", got, read.Add(brokerHostRetry))
+	}
+
+	ident = 0
+	for i := range 60 { // a forged restart and INFO1 every minute for an hour, two versions in turn
+		g.r.restarted(1)
+		g.r.identityChanged(1, fmt.Sprintf("16.0.0.%d", 5+i%2))
+		g.kicks()
+		for range 2 {
+			g.advance(30 * time.Second)
+			g.r.pass(t.Context())
+		}
+	}
+	if ident > 7 {
+		t.Fatalf("an hour of restarts and INFO1 in two versions, every read failing, read the identity %d times, want at most 7 (one per ten minutes)", ident)
+	}
+}

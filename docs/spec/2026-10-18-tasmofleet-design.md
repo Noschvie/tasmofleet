@@ -2091,7 +2091,9 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   identity and the data are read once when the hour is over (a failed read is not retried before, except the retry of a
   failed regular refresh, which keeps its 10-minute retry time once, #817), so about once an
   hour. A restart read that read nothing for the device (its check met minimal firmware, another device or a topic it
-  could not vouch for) does not count as the restart's read (#1003). A live INFO1 or a backup that names another
+  could not vouch for) does not count as the restart's read (#1003); when the identity read itself was refused because another
+  device answered, the next restart reads the identity and the data no sooner than 10 minutes later (a restart can be
+  forged, and that refusal can last; minimal firmware does not brake). A live INFO1 or a backup that names another
   firmware version than the stored identity, and a console or bulk write the device accepted of a value the identity
   holds (`cmdpolicy.SetsIdentityValue`), make the identity due at once, inside that hour. A version asks once until an
   identity read succeeds (a boot loop keeps its version) and reads the identity of a device at most once per 10 minutes,
