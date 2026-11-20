@@ -58,14 +58,20 @@ func (h *handler) deviceMessageView(r *http.Request, d model.Device, title strin
 // headOf builds the device header and tabs for the viewer: tabsFor plus what needs the
 // handler (the cached release feed for "Update to", the drift and replace capabilities).
 func (h *handler) headOf(ctx context.Context, v view, d model.Device, hl model.Health, running *model.Job, active string) deviceTabs {
-	_, p, ok := h.transportOf(ctx, d.ID)
-	return h.headWith(v, d, hl, running, active, p, ok)
+	f, p, ok := h.transportOf(ctx, d.ID)
+	return h.headWith(v, d, hl, running, active, f, p, ok)
 }
 
-// headWith is headOf for a caller that has the paths already.
-func (h *handler) headWith(v view, d model.Device, hl model.Health, running *model.Job, active string, p transport.Paths, pathsOK bool) deviceTabs {
+// headWith is headOf for a caller that has the facts and paths already (f is what p was decided from).
+func (h *handler) headWith(v view, d model.Device, hl model.Health, running *model.Job, active string, f transport.Facts, p transport.Paths, pathsOK bool) deviceTabs {
 	t := tabsFor(v, d, hl, running, active)
 	t.APIOff = hl.APIOff()
+	if pathsOK && !t.APIOff {
+		// The router learns of a refusal (its memory) before the tracker records it: the tile already says "HTTP API
+		// off" then (shownHTTP) and the paths already have none, so the buttons must follow the tile's rule over the
+		// same facts that built the paths, not wait for the tracker's next poll (#1043). This only ever adds to hl.APIOff().
+		t.APIOff = reachOf(d, hl, shownHTTP(f.HTTP, hl), h.d.Clock.Now()).APIOff
+	}
 	t.applyPaths(p, pathsOK)
 	// The notice follows the device's backup path, not whether Back up is pressable right now: a running job disables
 	// the button, but the warning must stay (and the header must not change height) until the broker has an ACL.

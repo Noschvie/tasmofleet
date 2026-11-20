@@ -571,7 +571,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	}
 	tf, tp, tpOK := h.transportOf(ctx, d.ID)
 	shown := shownHTTP(tf.HTTP, hl)
-	p.Tabs = h.headWith(v, d, hl, running, "overview", tp, tpOK)
+	p.Tabs = h.headWith(v, d, hl, running, "overview", tf, tp, tpOK)
 	if p.Updating == nil && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero() {
 		p.NotYet = "This device has not answered yet"
 		if !d.CreatedAt.IsZero() {

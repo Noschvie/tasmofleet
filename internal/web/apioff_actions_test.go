@@ -498,7 +498,8 @@ func TestJobCommandsAreRefusedForADeviceOnlyMQTTCanWriteTo(t *testing.T) {
 // identity enabled, and live.js kept a refused button disabled after the API came back. The live region now carries
 // the reason (data-reads-off) while the device cannot be read, and live.js follows it both ways.
 func TestLiveRegionCarriesTheReasonRefreshIdentityIsDisabled(t *testing.T) {
-	e, _ := apiOffActionsEnv(t, nil)
+	var facts fakeFacts
+	e, _ := apiOffActionsEnv(t, func(d *Deps) { facts = d.Transport.(fakeFacts) })
 	_, body := e.do(t, "GET", "/devices/1/live", "admin", nil, "HX-Request", "true")
 	if !strings.Contains(body, `data-reads-off="`+html.EscapeString(apiOffName+". "+apiOffFix)+`"`) {
 		t.Errorf("a device nothing can read has no reason on its live region: %s", sliceBetween(body, `id="devlive"`, ">"))
@@ -507,7 +508,11 @@ func TestLiveRegionCarriesTheReasonRefreshIdentityIsDisabled(t *testing.T) {
 	if strings.Contains(sliceBetween(body, `id="devlive"`, ">"), "data-reads-off") {
 		t.Errorf("a device MQTT can read is marked: %s", sliceBetween(body, `id="devlive"`, ">"))
 	}
+	// The API is back: the tracker has an HTTP answer, and the router's facts follow it (httpState: a remembered
+	// refusal only stands until an HTTP answer comes after it), so both say HTTP works.
 	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now()}
+	facts.f[1] = transport.Facts{Now: time.Now(), FirmwareBaseURL: true, HTTP: transport.HTTPState{State: transport.HTTPOK},
+		Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}}
 	_, body = e.do(t, "GET", "/devices/1/live", "admin", nil, "HX-Request", "true")
 	if strings.Contains(sliceBetween(body, `id="devlive"`, ">"), "data-reads-off") {
 		t.Errorf("the API is back but the region still says it is off: %s", sliceBetween(body, `id="devlive"`, ">"))
@@ -576,5 +581,82 @@ func TestTheSetOptionTextIsKeptTogether(t *testing.T) {
 	}
 	if got := keepParts("plain"); len(got) != 1 || got[0].Keep {
 		t.Errorf("keepParts of plain text: %v", got)
+	}
+}
+
+// refusalWindowEnv is the moment #1043 measured: the router already knows that the device's HTTP API is off (the
+// facts say so, because its memory saw a refused call), and the health tracker does not yet (no refusal in its
+// record; its last HTTP answer is from before the refusal, as httpState needs). Device 1 has no way but HTTP.
+func refusalWindowEnv(t *testing.T) (*env, *fakeCmd) {
+	t.Helper()
+	e, cmd := apiOffActionsEnv(t, nil)
+	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now().Add(-time.Minute),
+		Power: map[string]string{"POWER": "ON"}}
+	return e, cmd
+}
+
+// Why (#1043, #645): nothing on the page may try and fail. The Reachability tile follows the router's finding as soon
+// as it has one, so the buttons must follow the same finding: in the window between the router learning of a refusal
+// and the tracker recording it, the switches, Restart and Refresh identity used to stay enabled for the 5 s until the
+// next live refresh, offering actions the router refuses.
+func TestButtonsFollowTheTilesRefusalBeforeTheTrackerHasRecordedIt(t *testing.T) {
+	e, _ := refusalWindowEnv(t)
+	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
+	tile := sliceBetween(page, `data-tile="reach"`, `</section>`)
+	if !strings.Contains(sliceBetween(tile, `data-tile="reach"`, `data-tile="live"`), "HTTP API off") {
+		t.Fatalf("the setup is not the measured moment: the tile does not say the API is off: %s", tile)
+	}
+	if sw := sliceBetween(page, `class="devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
+		t.Errorf("the relay switch is enabled while the tile says the API is off: %s", sw)
+	}
+	if !strings.Contains(page, `id="dev-relays-why"`) {
+		t.Error("the switches carry no reason")
+	}
+	if i := strings.Index(page, ">Restart</button>"); i < 0 {
+		t.Error("the header has no Restart button")
+	} else if rb := page[strings.LastIndex(page[:i], "<button"):i]; !strings.Contains(rb, "disabled") {
+		t.Errorf("Restart is enabled while the tile says the API is off: %s", rb)
+	}
+	_, body := e.do(t, "GET", "/devices/1/live", "admin", nil, "HX-Request", "true")
+	if !strings.Contains(body, `data-reads-off="`+html.EscapeString(apiOffName+". "+apiOffFix)+`"`) {
+		t.Errorf("the live region does not disable Refresh identity: %s", sliceBetween(body, `id="devlive"`, ">"))
+	}
+	// the other tabs say it the same way: the Console tab names the one reason, not Choose's sentence for the same fact
+	_, other := e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	if tab := sliceBetween(other, `aria-disabled="true" title="`, `>`); !strings.Contains(tab, "HTTP API off (SetOption128 0). Turn") {
+		t.Errorf("a tab says something else than the tile: %q", tab)
+	}
+}
+
+// Why (#1043): the page may only disable more, never less. Each row is a state the router and the tracker can be in
+// at once; the reason shows exactly when the tile says the API is off AND nothing else carries the action.
+func TestRefusalReasonOnTheLiveRegionFollowsTileAndPaths(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		id     string
+		mutate func(e *env)
+		off    bool
+	}{
+		{"the router knows, the tracker does not yet, no other way", "1", func(*env) {}, true},
+		{"the router knows, and reads go over MQTT", "2", func(e *env) {
+			e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now().Add(-time.Minute)}
+		}, false},
+		{"the tracker has recorded it too", "1", func(e *env) { e.health[1] = refusedHealth(1) }, true},
+		{"the credentials are refused and the tracker has a refusal", "1", func(e *env) {
+			h := refusedHealth(1)
+			h.State = model.HealthAuthFailed
+			e.health[1] = h
+		}, true},
+		{"the router remembers a refusal from before the device went offline", "1", func(e *env) {
+			e.health[1] = model.Health{DeviceID: 1, State: model.HealthOffline, Since: time.Now(), LastSeen: time.Now().Add(-time.Hour), SeenHTTP: time.Now().Add(-time.Hour)}
+		}, false},
+	} {
+		e, _ := refusalWindowEnv(t)
+		c.mutate(e)
+		_, body := e.do(t, "GET", "/devices/"+c.id+"/live", "admin", nil, "HX-Request", "true")
+		region := sliceBetween(body, `id="devlive"`, ">")
+		if got := strings.Contains(region, `data-reads-off="`+html.EscapeString(apiOffName+". "+apiOffFix)+`"`); got != c.off {
+			t.Errorf("%s: reads are off %v, want %v: %s", c.name, got, c.off, region)
+		}
 	}
 }

@@ -1502,7 +1502,7 @@ Submit.
   HTTP showed beats an `Offline` state on the page only when it came after the device went offline
   (`Health.Since`); a device kept offline by its last will says in the offline banner what HTTP showed until the
   next background poll, whose answer or refusal makes it online (#619): with MQTT off as well, a device whose
-  API is off is online and has no path. `Health.APIOff()` is the one rule for tile, card, list and gates. A
+  API is off is online and has no path. `Health.APIOff()` is the rule for the list and the up-front refusals of posts (`apiOffBlock`). The device page's tile, card and buttons also take the router's facts (`shownHTTP`): a refusal the router's memory saw before the tracker recorded it already says "HTTP API off" and disables the switches, Restart and Refresh identity (#1043). A post in that window passes the up-front check and is refused by the router (no path). A
   refused poll waits like a failing one (up to 30 min, or `POLL_INTERVAL` when that is longer), except for a device on our
   broker whose last will is not `Offline`: once its telemetry is silent its refusals are what keeps it online, so its next poll is due at the normal interval (#652), after a refused snapshot read too (#669; the snapshot read itself is not repeated before the back-off). For a device whose last will is `Offline`, only its own MQTT
   messages and what the background poll reaches (an answer or a refusal) count as `LastSeen`: a probe contact
