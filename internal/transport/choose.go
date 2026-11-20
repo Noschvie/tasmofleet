@@ -145,7 +145,7 @@ func mqttBlocker(f Facts, strict bool) string {
 	case m.Topic == DefaultGroupTopic:
 		return "the device's topic is the default group topic, which many devices listen on"
 	case !m.TopicExclusive:
-		return "another device listens on this topic (its Topic or GroupTopic)"
+		return "another device listens on this topic (its Topic or GroupTopic), or one of the device's own group topics is this topic"
 	case strict && !m.TopicTakenSince.IsZero(): // #852: a write or a transfer there would reach that device too
 		return topicTakenText(m)
 	case !SameFullTopic(m.FullTopic, m.OurFullTopic):

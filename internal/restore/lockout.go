@@ -71,7 +71,9 @@ type decodedConn struct {
 // from the device only while its HTTP API does not answer (preflight asks then, with lockoutTail); while HTTP answers
 // it is the reason the device is marked after the upload and the wait for the restart also asks HTTP. Names only,
 // never values (the password is one of the fields). The device's values are read over the ctx's path (pinned to
-// MQTT by preflight); one it does not report counts as not comparable, never as equal.
+// MQTT by preflight); one it does not report counts as not comparable, never as equal. The group topics are the
+// exception: they are compared once read (GroupTopic1 known, GroupTopic2 to 4 with a read stamp) and not asked; while
+// unread they hold MQTT writes back anyway, and a restore marks them unread after its upload (#1005).
 func (m *Manager) mqttLockout(ctx context.Context, dev model.Device, b model.Backup) string {
 	const unreadable = "the backup cannot be read, so its MQTT settings cannot be compared with the device's"
 	dec, err := m.decodedOf(ctx, b.ID)

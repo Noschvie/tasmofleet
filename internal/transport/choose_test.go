@@ -499,7 +499,7 @@ func TestTopicExclusivityBlocksEveryAction(t *testing.T) {
 		if path != None {
 			t.Errorf("%s = %s", a, path)
 		}
-		if !strings.Contains(p.Reason(a), "another device listens on this topic (its Topic or GroupTopic)") {
+		if !strings.Contains(p.Reason(a), "another device listens on this topic (its Topic or GroupTopic), or one of the device's own group topics is this topic") {
 			t.Errorf("%s reason %q", a, p.Reason(a))
 		}
 	}

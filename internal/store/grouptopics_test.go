@@ -182,3 +182,32 @@ func TestForgetGroupTopicsMakesGroupTopics2To4UnreadAndKeepsThem(t *testing.T) {
 		t.Fatalf("a device that is gone: %v, want no error", err)
 	}
 }
+
+// Why (#1005, review): a probe whose read began before ForgetGroupTopics holds GroupTopic1 from before TasmoFleet's
+// own change as well; it must not overwrite the stored GroupTopic1 (which INFO1 may have refreshed since) or stamp the
+// list as read. The same probe's other facts are stored as usual.
+func TestAProbeFromBeforeTheMarkStoresNoGroupTopic(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: "plug"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateGroupTopics(ctx, id, g, "plug", "kitchen", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ForgetGroupTopics(ctx, id); err != nil { // the probe began before this (count 0)
+		t.Fatal(err)
+	}
+	r := ProbeResult{Identity: model.Identity{Version: "15.0.1"}, SetGroupTopic: true, GroupTopic: "tasmotas", SetMoreGroupTopics: true, MoreGroupTopics: []string{"old"}}
+	if err := s.UpdateProbe(ctx, id, g, r); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.GroupTopic != "kitchen" || len(d.MoreGroupTopics) != 0 || !d.MoreGroupTopicsReadAt.IsZero() {
+		t.Fatalf("group topics %v read at %v: an answer from before the mark was stored", d.GroupTopics(), d.MoreGroupTopicsReadAt)
+	}
+	if d.Identity.Version != "15.0.1" {
+		t.Fatalf("version %q: the rest of the probe must still be stored", d.Identity.Version)
+	}
+}

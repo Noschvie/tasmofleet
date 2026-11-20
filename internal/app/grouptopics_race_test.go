@@ -77,3 +77,19 @@ func TestAProbeGroupTopicListReadBeforeTheMarkStaysUnread(t *testing.T) {
 		t.Fatalf("a list the probe read before the mark is stored as known (read at %v)", d.MoreGroupTopicsReadAt)
 	}
 }
+
+// Why (#1005, review): the restore reads the list itself before its verifying backup. When the store refuses that
+// read (the list was marked unread while it was in flight), the list stays unread and holds the backup over MQTT back;
+// the read must report that, or the restore says nothing and the backup is held back without a reason in the log.
+func TestTheRestoresReadReportsAListTheStoreRefused(t *testing.T) {
+	st, id := storeWithKnownGroupTopics(t)
+	d, _ := st.GetDevice(t.Context(), id)
+	a := &runtime{svc: &Services{Client: forgetDuringRead{Client: &gtClient{}, st: st, id: id, answer: oldGroupTopics}, Store: st},
+		log: slog.New(slog.DiscardHandler)}
+	if err := a.readGroupTopics(t.Context(), d); err == nil {
+		t.Fatal("the read reports success, but the store kept nothing")
+	}
+	if d, _ = st.GetDevice(t.Context(), id); !groupTopicStale(d) {
+		t.Fatal("a list read before the mark must stay unread")
+	}
+}

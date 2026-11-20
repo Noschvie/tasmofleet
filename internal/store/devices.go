@@ -333,8 +333,8 @@ type ProbeGuard struct {
 	// still have it, since that probe's answers came from whoever listens there. "": not checked (a probe at the
 	// address, and the other writers, which take the topic as their own argument where they need it).
 	Topic string
-	// MoreGroupTopicsGen is the device's model.Device.MoreGroupTopicsGen when the read began (#1005): GroupTopic2 to
-	// GroupTopic4 (and, in UpdateGroupTopics, GroupTopic1 with them) are stored only while it is unchanged, so a list
+	// MoreGroupTopicsGen is the device's model.Device.MoreGroupTopicsGen when the read began (#1005): the group topics
+	// (all four, in UpdateProbe and UpdateGroupTopics) are stored only while it is unchanged, so a list
 	// the device answered before ForgetGroupTopics marked it unread is never stored as known.
 	MoreGroupTopicsGen int64
 }
@@ -429,8 +429,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_dns = CASE WHEN ?=0 THEN net_dns ELSE ? END,
 		ota_url = CASE WHEN ?=0 THEN ota_url ELSE ? END,
 		ota_url_read_at = CASE WHEN ?=0 THEN ota_url_read_at ELSE ? END,
-		group_topic = CASE WHEN ?=0 THEN group_topic ELSE ? END,
-		group_topic_read_at = CASE WHEN ?=0 THEN group_topic_read_at ELSE ? END,
+		group_topic = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN group_topic ELSE ? END,
+		group_topic_read_at = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN group_topic_read_at ELSE ? END,
 		more_group_topics = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN more_group_topics ELSE ? END,
 		more_group_topics_read_at = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN more_group_topics_read_at ELSE ? END,
 		relay_names = CASE WHEN ?='' THEN relay_names ELSE ? END,
@@ -447,7 +447,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
 		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, b2i(r.SetOTAURL), readAt,
-		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), readAt,
+		b2i(r.SetGroupTopic), g.MoreGroupTopicsGen, r.GroupTopic, b2i(r.SetGroupTopic), g.MoreGroupTopicsGen, readAt,
 		b2i(r.SetMoreGroupTopics), g.MoreGroupTopicsGen, relayNamesJSON(r.MoreGroupTopics), b2i(r.SetMoreGroupTopics), g.MoreGroupTopicsGen, readAt, relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,

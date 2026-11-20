@@ -166,7 +166,12 @@ func (r *groupTopicReader) read(ctx context.Context, d model.Device) bool {
 		return false
 	}
 	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC, MoreGroupTopicsGen: d.MoreGroupTopicsGen}
-	if err := r.store.UpdateGroupTopics(ctx, d.ID, g, d.Topic, first, more); err != nil && !errors.Is(err, store.ErrConflict) {
+	if err := r.store.UpdateGroupTopics(ctx, d.ID, g, d.Topic, first, more); errors.Is(err, store.ErrConflict) {
+		// moved, rebound, re-topiced, or the list was marked unread since the read began: nothing stored, so the read
+		// did not work, and the restore's read must say so (the list stays unread)
+		r.log.Debug("group topic reader: the device changed during the read; nothing stored", "device", d.ID)
+		return false
+	} else if err != nil {
 		r.log.Warn("group topic reader: could not store the group topics", "device", d.ID, "err", err)
 		return false
 	}
