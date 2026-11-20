@@ -319,6 +319,47 @@ func TestConsoleMQTTOnlyDeviceAsksBeforeACutOffChange(t *testing.T) {
 	}
 }
 
+// Why (#1046): a group topic is a topic name and no credential, but the console masked it ("GroupTopic2 ***")
+// because only the commands of a short list are shown. A person who sets the group topic of a device could not see
+// what they were about to send, in the cut-off question of an MQTT-only device or in the output afterwards. It is
+// shown like Topic; a login pasted into it stays masked, and an operator still may not send it.
+func TestConsoleShowsTheGroupTopicItSends(t *testing.T) {
+	f := &fakeCmd{reply: `{"GroupTopic2":"tf-livetest"}`}
+	e := setupWith(t, func(d *Deps) {
+		d.DeviceCmd = f
+		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return true }
+	})
+	_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("GroupTopic2 tf-livetest"))
+	if !strings.Contains(body, "reached over MQTT only") || !strings.Contains(body, "GroupTopic2 tf-livetest") ||
+		strings.Contains(body, "GroupTopic2 ***") || len(f.ran()) != 0 {
+		t.Fatalf("the cut-off question must show the value; ran %v: %s", f.ran(), body)
+	}
+	_, body = e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
+	if len(f.ran()) != 1 || !strings.Contains(body, "GroupTopic2 tf-livetest") || strings.Contains(body, "GroupTopic2 ***") {
+		t.Fatalf("the output must show the value; ran %v: %s", f.ran(), body)
+	}
+
+	// A device reached over HTTP: nothing to confirm, one send, the value in the output. The route sentence that
+	// the masked form drew (#826) is gone with the mask, as it is for Topic (T13).
+	g := &fakeCmd{reply: `{"GroupTopic2":"tf-livetest"}`}
+	e2 := cmdEnv(t, g)
+	_, body = e2.do(t, "POST", "/devices/1/console", "admin", consoleForm("GroupTopic2 tf-livetest"))
+	if strings.Contains(body, "Confirm sending") || len(g.ran()) != 1 || !strings.Contains(body, "GroupTopic2 tf-livetest") || strings.Contains(body, "GroupTopic2 ***") {
+		t.Fatalf("ran %v: want one send and the value shown: %s", g.ran(), body)
+	}
+
+	// A pasted login is still masked, and the operator is still refused.
+	h := &fakeCmd{reply: `{}`}
+	e3 := cmdEnv(t, h)
+	_, body = e3.do(t, "POST", "/devices/1/console", "admin", consoleForm("GroupTopic2 alice:s3cret@broker"))
+	if strings.Contains(body, "s3cret") || strings.Contains(body, "alice") {
+		t.Fatalf("a pasted login must stay out of the page: %s", body)
+	}
+	if resp, _ := e3.do(t, "POST", "/devices/1/console", "operator", consoleForm("GroupTopic2 tf-livetest")); resp.StatusCode != 403 {
+		t.Fatalf("operator: %d", resp.StatusCode)
+	}
+}
+
 // Why (#605 review, round 3): the console's question follows the answer on record (MQTTOnly), but the router asks
 // HTTP right before a change of the MQTT connection and refuses it when HTTP has gone silent since (the person's own
 // WebServer 0 a minute ago). A timeout is not remembered as a failure, so a plain error would leave the person at a
@@ -841,6 +882,8 @@ func TestHistoryTextKeepsOnlyCommandsWithoutSecret(t *testing.T) {
 		"Backlog Power ON; MqttPassword x": "",
 		"FriendlyName1 password=x":         "",
 		"MqttHost u:p@h":                   "",
+		"GroupTopic2 tf-livetest":          "GroupTopic2 tf-livetest", // a topic name (#1046)
+		"GroupTopic1 a:b@c":                "",                        // a pasted login is dropped
 		"Power ON; Power OFF":              "",
 		"":                                 "",
 	} {

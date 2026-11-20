@@ -209,6 +209,10 @@ var loggedArgs = func() map[string]bool {
 	for k := range queryNames {
 		m[k] = true
 	}
+	// A group topic is a topic name, no credential: shown like Topic (#1046). It is not a queryName, because
+	// that would make the bare form a read-class command and open it to operators (P5); its arguments still pass
+	// scrubText, so a pasted user:pass@ stays masked.
+	m["grouptopic"] = true
 	// Hosts are where users paste "user:pass@host".
 	delete(m, "mqtthost")
 	delete(m, "ntpserver")

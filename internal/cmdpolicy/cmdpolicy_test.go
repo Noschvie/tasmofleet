@@ -353,7 +353,7 @@ func TestReportsOnly(t *testing.T) {
 
 // Why (#711): the transport routes the names of reportsWhenBare like reads (MQTT first, HTTP may be asked a second
 // time), but how a command is routed must never change who may send it or what reaches a log: each stays an admin
-// command, an operator is refused it, its arguments are hidden in logs, and OtaUrl with a URL still starts or
+// command, an operator is refused it, its arguments are hidden in logs (GroupTopic's are shown, #1046), and OtaUrl with a URL still starts or
 // redirects a firmware update (safety rule 1). Adding one of them to queryNames would break all of that.
 func TestBareReportsRouteLikeReadsButKeepTheirVerdicts(t *testing.T) {
 	for _, cmd := range []string{"OtaUrl", "PowerRetain", "LogHost", "SwitchMode", "SwitchMode1", "MqttUser", "GroupTopic", "GroupTopic2"} {
@@ -370,7 +370,13 @@ func TestBareReportsRouteLikeReadsButKeepTheirVerdicts(t *testing.T) {
 		if _, err := Authorize(cmd, model.RoleAdmin); err != nil {
 			t.Errorf("Authorize(%q, admin) = %v, want nil", cmd, err)
 		}
-		if got, want := Redacted(cmd+" http://u:p@x/y"), cmd+" ***"; got != want {
+		// A group topic is a topic name and shown like Topic (#1046): only the login a person pastes into it is
+		// masked. Every other name here has its arguments hidden.
+		want := cmd + " ***"
+		if strings.HasPrefix(cmd, "GroupTopic") {
+			want = cmd + " http://***@x/y"
+		}
+		if got := Redacted(cmd + " http://u:p@x/y"); got != want {
 			t.Errorf("Redacted = %q, want %q", got, want)
 		}
 	}
@@ -404,6 +410,7 @@ func TestShownInFull(t *testing.T) {
 	for _, c := range []string{
 		"TelePeriod 60", "Power1 ON", "SetOption19 1", "Restart 1", "Status 2", "Power",
 		"Backlog PowerOnState 2; SaveData 1", "Backlog PowerOnState 2;SaveData 1", "  TelePeriod   60  ",
+		"GroupTopic2 x", // #1046: a topic name, kept in the console history like Topic
 	} {
 		if !ShownInFull(c) {
 			t.Errorf("%q: not shown in full (Redacted %q)", c, Redacted(c))
@@ -415,6 +422,7 @@ func TestShownInFull(t *testing.T) {
 		"Sendmail [smtp.example.com:587:alice:hunter2:*:bob:Hi] body", "WebPassword x", "Backlog Power 1; WebPassword x",
 		"OtaUrl http://u:p@h/fw.bin", "PowerDelta 10", "Status ***", "", "Power1\nON", "Backlog Power 1; Status 1 ***",
 		"Backlog Power 1; Po-wer 1", // the audit logs a malformed part as rejected
+		"GroupTopic1 a:b@c",         // a pasted login stays masked (#1046)
 	} {
 		if ShownInFull(c) {
 			t.Errorf("%q: shown in full, but the audit logs %q", c, Redacted(c))
@@ -515,6 +523,13 @@ func TestRedactedForLog(t *testing.T) {
 		{"TelePeriod 60", "TelePeriod 60"},
 		{"SaveData 0", "SaveData 0"},
 		{"Power1 TOGGLE", "Power1 TOGGLE"},
+		// #1046: a group topic is a topic name, shown like Topic; a pasted login in it is still scrubbed, and the
+		// other MQTT settings that may hold a credential stay masked.
+		{"GroupTopic2 tf-livetest", "GroupTopic2 tf-livetest"},
+		{"GroupTopic1 a:b@c", "GroupTopic1 ***@c"},
+		{"MqttUser bob", "MqttUser ***"},
+		{"MqttHost a:b@c", "MqttHost ***"},
+		{"NtpServer1 x", "NtpServer1 ***"},
 		{"", RejectedText},
 	}
 	for _, tc := range tests {
@@ -1149,7 +1164,8 @@ func TestTemplateHasItsOwnLength(t *testing.T) {
 
 // Why (#1005): routing the bare GroupTopic as a read must not loosen a GroupTopic that sets a value. That one stores a
 // new group topic and restarts the device, and on a device TasmoFleet reaches over MQTT only it can cut it off: it stays
-// an admin command, a write for the router, and a cut-off line for an MQTT-only device.
+// an admin command, a write for the router, and a cut-off line for an MQTT-only device. Showing the value in the
+// console and the audit (#1046) must not loosen it either: it is shown, but it is no read-class query.
 func TestGroupTopicWithAValueStaysAnAdminWrite(t *testing.T) {
 	for _, cmd := range []string{"GroupTopic2 kitchen", "GroupTopic kitchen", "GroupTopic4 0"} {
 		if ReportsOnly(cmd) {

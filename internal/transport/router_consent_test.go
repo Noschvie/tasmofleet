@@ -158,6 +158,10 @@ func TestOnlyHiddenTypedWritesNameTheirRoute(t *testing.T) {
 		{"Power1 ON", false},     // shown in full
 		{"Status 2", false},      // a read
 		{"WebPassword", false},   // a read, nothing to hide
+		// #1046: a group topic is a topic name, shown in full like Topic, so it names no route; a login pasted into
+		// it is masked and does
+		{"GroupTopic2 kitchen", false},
+		{"GroupTopic2 a:b@c", true},
 		// never sent (cmdpolicy.ClassForbidden): no transport to name, it is refused at once
 		{"FileUpload x", false},
 		{"Backlog Power 1; FileDownload y", false},
