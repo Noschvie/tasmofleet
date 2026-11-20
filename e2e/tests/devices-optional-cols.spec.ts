@@ -60,7 +60,8 @@ test("OTA URL and Group topic are optional columns, cut off by the cell and sort
   await expect(ota).toBeVisible({ timeout: 40_000 });
   const full = (await ota.getAttribute("title"))!;
   expect(full).toMatch(/^https?:\/\//);
-  await expect(table(page).locator('td[data-label="Group topic"] .dv-trunc[title]').first()).toBeVisible();
+  // the Group topic cell holds all four group topics (#1005): the first, "+N" for the others, and all of them in its title
+  await expect(table(page).locator('td[data-label="Group topic"] .dv-gt[title]').first()).toBeVisible();
   const cut = await ota.evaluate((e) => e.scrollWidth > e.clientWidth);
   expect(cut, `${full} should be longer than its cell`).toBe(true);
   await expectNoOverflow(page, "devices with OTA URL and Group topic");
