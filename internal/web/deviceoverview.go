@@ -569,7 +569,8 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	if p.Updating != nil {
 		running = &p.Updating.Job
 	}
-	tf, tp, tpOK := h.transportOf(ctx, d.ID)
+	pf := h.pageFactsOf(ctx, d)
+	tf, tp, tpOK := pf.Facts, pf.Paths, pf.PathsOK
 	shown := shownHTTP(tf.HTTP, hl)
 	p.Tabs = h.headWith(v, d, hl, running, "overview", tf, tp, tpOK)
 	if p.Updating == nil && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero() {
@@ -598,7 +599,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 		c := stabCardOf(in.Now, res, boots, hl, facts.SSID)
 		p.Stab = &c
 	}
-	p.Ident = h.identityWithHint(ctx, v, d, p.Updating != nil, off, facts)
+	p.Ident = h.identityWithHint(v, d, p.Updating != nil, off, facts, pf.Conflicts)
 	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
 	if tpOK {

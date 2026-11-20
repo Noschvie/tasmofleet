@@ -526,7 +526,8 @@ since the last probe, or a FullTopic that cannot be expanded), each marked wheth
 writes (`othersGroupUnread`'s exemptions), each device's own conflicts, and a Topic equal to `DefaultGroupTopic`, which
 Choose refuses on its own. The UI reads it through `web.TopicCheckSource`: the Topic check card on System > Settings >
 MQTT (status line "All device topics are unique" only with no collision and no unknown device) and a hint on the
-device's Identity card (collisions only). The report is advisory: nothing in Choose or the router reads it, and it sends
+device's Identity card (collisions only). The device page reads the hint's conflicts and its own transport facts from one
+inventory list through `web.DeviceFactsSource` (`webFacts.DeviceFacts`, #1151), the same per-device answer as the card's. The report is advisory: nothing in Choose or the router reads it, and it sends
 nothing to any device.
 
 The group topics are trusted as "known" only when GroupTopic1 is set and both stamps, GroupTopic1's and GroupTopic2 to

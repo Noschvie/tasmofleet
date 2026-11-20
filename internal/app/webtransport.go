@@ -8,7 +8,10 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web"
 )
+
+var _ web.DeviceFactsSource = webFacts{}
 
 // webFacts is what the web UI reads: the router's own transport facts (so the device page shows what
 // the router decides), plus the batch read of the device list.
@@ -76,8 +79,35 @@ func (w webFacts) TopicCheck(ctx context.Context) (transport.TopicCheck, error) 
 	if err != nil {
 		return transport.TopicCheck{}, fmt.Errorf("topic check: %w", err)
 	}
+	return w.topicCheckFrom(all), nil
+}
+
+// topicCheckFrom is TopicCheck over an inventory the caller already listed, so the card and the device page run the
+// same rule (DeviceFacts).
+func (w webFacts) topicCheckFrom(all []model.Device) transport.TopicCheck {
 	ev := w.brokerEvidence(w.Now())
-	return topicCheckOf(all, w.commandPrefix(), func(o model.Device) bool { return holdsWritesBack(o, all, w.Health.Get, ev) }), nil
+	return topicCheckOf(all, w.commandPrefix(), func(o model.Device) bool { return holdsWritesBack(o, all, w.Health.Get, ev) })
+}
+
+// DeviceFacts is the device page's read (web.DeviceFactsSource, #1151): the transport facts of d and the topic conflicts
+// that hold back MQTT writes to it, both from ONE read of the inventory (the page used to list it twice per render, once
+// per interface call). The conflicts are the Topic check card's own (topicCheckFrom(...).Of), so the hint and the card
+// cannot drift. It only reads and sends nothing; the router never calls it (it reads its own list per call, so a page's
+// list never decides a write). An unreadable inventory, or a d that is not in it any more, is an error: nil conflicts
+// without one would read as "no collision".
+func (w webFacts) DeviceFacts(ctx context.Context, d model.Device) (transport.Facts, []transport.TopicConflict, error) {
+	all, err := w.Devices.ListDevices(ctx)
+	if err != nil {
+		return transport.Facts{}, nil, fmt.Errorf("device facts: %w", err)
+	}
+	if !slices.ContainsFunc(all, func(o model.Device) bool { return o.ID == d.ID }) {
+		return transport.Facts{}, nil, fmt.Errorf("device facts: device %d is not in the inventory", d.ID)
+	}
+	f, err := w.factsFor(ctx, d, all)
+	if err != nil {
+		return transport.Facts{}, nil, err
+	}
+	return f, w.topicCheckFrom(all).Of(d.ID), nil
 }
 
 // topicCheckOf runs topicConflicts for every device with a Topic and gathers the fleet's view of it:

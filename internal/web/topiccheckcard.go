@@ -19,6 +19,15 @@ type TopicCheckSource interface {
 	TopicCheck(ctx context.Context) (transport.TopicCheck, error)
 }
 
+// DeviceFactsSource is the device page's read (#1151): the transport facts of the device and the topic conflicts that hold
+// back MQTT writes to it, from ONE read of the inventory (the page used to list it once for Facts and once for TopicCheck).
+// app's webFacts implements it; the conflicts are the Topic check card's own for that device, so the hint cannot drift from
+// the card. Optional: without it the page reads Facts and TopicCheck apart, as before. The router never uses it: it reads
+// its own list per call.
+type DeviceFactsSource interface {
+	DeviceFacts(ctx context.Context, d model.Device) (transport.Facts, []transport.TopicConflict, error)
+}
+
 // topicCheckAnchor is the card on the Settings page; the hint's "+N more" links there (admins only: the page is theirs).
 const topicCheckAnchor = sysPath + "?tab=mqtt#card-topiccheck"
 

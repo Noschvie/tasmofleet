@@ -156,6 +156,42 @@ func (h *handler) transportOf(ctx context.Context, id model.DeviceID) (transport
 	return f, transport.Choose(f), true
 }
 
+// pageFacts is what one render of the device page needs from the transport service: the router's facts of the device,
+// the paths decided from them, and the topic conflicts the Identity card's hint shows.
+type pageFacts struct {
+	Facts     transport.Facts
+	Paths     transport.Paths
+	PathsOK   bool // false: no transport service, or the facts could not be read (see transportOf)
+	Conflicts []transport.TopicConflict
+}
+
+// pageFactsOf reads them for one render (#1151). With a DeviceFactsSource that is one read of the inventory; a failed read
+// costs the Paths card and the hint, as when both reads failed before. Without it (tests) it reads Facts and, for a device
+// with a Topic, TopicCheck apart, which is the old behaviour. A device without a Topic never has a hint.
+func (h *handler) pageFactsOf(ctx context.Context, d model.Device) pageFacts {
+	if src, ok := h.d.Transport.(DeviceFactsSource); ok {
+		f, conflicts, err := src.DeviceFacts(ctx, d)
+		if err != nil {
+			h.log.WarnContext(ctx, "device page: facts", "device", d.ID, "err", err)
+			return pageFacts{}
+		}
+		if d.Topic == "" {
+			conflicts = nil
+		}
+		return pageFacts{Facts: f, Paths: transport.Choose(f), PathsOK: true, Conflicts: conflicts}
+	}
+	var pf pageFacts
+	pf.Facts, pf.Paths, pf.PathsOK = h.transportOf(ctx, d.ID)
+	if src, ok := h.d.Transport.(TopicCheckSource); ok && d.Topic != "" {
+		if c, err := src.TopicCheck(ctx); err != nil {
+			h.log.WarnContext(ctx, "identity: topic check", "device", d.ID, "err", err)
+		} else {
+			pf.Conflicts = c.Of(d.ID)
+		}
+	}
+	return pf
+}
+
 // pathFor is the path an action takes in paths. A job (transport.ActJob) has none: it is never sent over MQTT.
 func pathFor(p transport.Paths, a transport.Action) transport.Path {
 	switch a {

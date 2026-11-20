@@ -363,29 +363,21 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	return c
 }
 
-// identityWithHint is the Identity card with the topic collision hint (#1047), which needs the fleet's topic check.
-func (h *handler) identityWithHint(ctx context.Context, v view, d model.Device, updating, off bool, f snapFacts) identCard {
+// identityWithHint is the Identity card with the topic collision hint (#1047). The conflicts come from the caller's one
+// read per render (pageFactsOf, #1151), so the card never lists the inventory itself.
+func (h *handler) identityWithHint(v view, d model.Device, updating, off bool, f snapFacts, conflicts []transport.TopicConflict) identCard {
 	c := h.identity(v, d, updating, off, f)
-	if c.Topic, c.TopicAt = h.topicHint(ctx, v, d, c.Rows); c.Topic != nil {
+	if c.Topic, c.TopicAt = topicHintFor(v, d, c.Rows, conflicts); c.Topic != nil {
 		c.Sig = identSig(c)
 	}
 	return c
 }
 
-// topicHint is the Identity card's hint for d (#1047) and the row it sits under: the Group topics row, else the MQTT
-// topic row. The check is one inventory read for the fleet; when it cannot be read the card shows no hint (the Paths
-// card still says how writes go).
-func (h *handler) topicHint(ctx context.Context, v view, d model.Device, rows []ui.KVRow) (*topicHint, int) {
-	src, ok := h.d.Transport.(TopicCheckSource)
-	if !ok || d.Topic == "" {
-		return nil, 0
-	}
-	c, err := src.TopicCheck(ctx)
-	if err != nil {
-		h.log.WarnContext(ctx, "identity: topic check", "device", d.ID, "err", err)
-		return nil, 0
-	}
-	hint := topicHintOf(d, c.Of(d.ID), v.Base, v.IsAdmin)
+// topicHintFor is the Identity card's hint for d (#1047) and the row it sits under: the Group topics row, else the MQTT
+// topic row. When the check could not be read, conflicts is empty and the card shows no hint (the Paths card still says
+// how writes go).
+func topicHintFor(v view, d model.Device, rows []ui.KVRow, conflicts []transport.TopicConflict) (*topicHint, int) {
+	hint := topicHintOf(d, conflicts, v.Base, v.IsAdmin)
 	if hint == nil {
 		return nil, 0
 	}
@@ -546,8 +538,9 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	hl, running := h.deviceState(r, d)
-	tabs := h.headOf(r.Context(), v, d, hl, running, "overview")
-	c := h.identityWithHint(r.Context(), v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
+	pf := h.pageFactsOf(r.Context(), d)
+	tabs := h.headWith(v, d, hl, running, "overview", pf.Facts, pf.Paths, pf.PathsOK)
+	c := h.identityWithHint(v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d), pf.Conflicts)
 	c.Why = tabs.readsAPIOff()
 	c.Notice, c.Error = notice, failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
