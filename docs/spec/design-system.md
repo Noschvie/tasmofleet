@@ -4,7 +4,11 @@ Status: binding since the design v2 port. The look is the
 **Claude Design v2 prototype** ("v2"): rounded 7/10/12 px surfaces, hairline borders, Geist and Geist
 Mono, one blue accent (`oklch` hue 250), light and dark as equal themes. The prototype
 (`design/v2/`) is the binding source and is compared pixel by pixel (`make visual`, see
-`design/v2/README.md`); the v1 Modernist system was removed (see the git history before 2026-10-30). Wording follows the prototype
+`design/v2/README.md`); the v1 Modernist system is being removed: its remaining rules are in `app.css`
+between "Base" and "Shell (design v2, WP F3)" and in the "nav-patterns (PORT.md)" block (#1069). A page
+must not use them in new markup (`.button`, `.badge`, `.notice`, `.card`, `.tone-*` outside banners and
+toasts); `css_unused_test.go` lists the selectors that are still used and fails when an unused one comes
+back. Wording follows the prototype
 (plan D14) except for the rows of the wording table below.
 
 This document is the style guide in the repository: tokens, type, spacing, every component with its
@@ -89,11 +93,23 @@ Theme-independent tokens (all on `:root`):
 | Type sizes | `--fs-h1` 22px (weight 600), `--fs-h2-lg` 15px, `--fs-h2` 14px, `--fs-h2-sm` 13px, `--fs-body` 13.5px, `--fs-ui` 13px, `--fs-meta` 12.5px, `--fs-small` 12px, `--fs-badge` 11.5px, `--fs-stat` 28px (the stat tile value, `600 28px/1`, tabular figures; measured in F4) |
 | Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-pill` 999px; dots and avatars use `50%` |
 | Spacing | `--sp-N` is N pixels, for the values the prototype uses: 1-12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40. The prototype is not on a 4px grid, nothing is rounded |
-| Card gap | `--card-gap` (= `--sp-12`): the space between sibling cards, down and across (the device overview, its State changes and Transactions row); `device-layout.spec.ts` fails when two cards come closer |
-| Controls | `--ctl` 34px (40px on phones), `--ctl-sm` 28px, `--ctl-lg` 40px, `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
+| Card gap | `--card-gap`: the space between sibling cards, down and across, on every page: card stacks, the device overview, its tile row. The value is 16 px (`--sp-16`); the token still reads `--sp-12` and the card stacks write 16 px directly until #1101 makes them one. `device-layout.spec.ts` fails when two cards come closer |
+| Controls | `--ctl` 34px (40px on phones), `--ctl-sm` 32px (40px on phones), `--ctl-lg` 40px, `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
 | Inline values made tokens | `--backdrop`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
 | Layers | `--z-sticky` 10, `--z-menu` 20, `--z-header` 30, `--z-header-menu` 40, `--z-dialog` 1000, `--z-toast` 1001 |
+
+More tokens. The ones marked "planned" do not exist in `app.css` yet; #1099 adds them and replaces the
+literals they stand for.
+
+| Group | Tokens |
+| --- | --- |
+| Bars | `--bulkbar-h` 58px, `--sb-line` 32px (status bar row; 44px on phones), `--sb-h` (row + safe area), `--header-h` (sticky header with sub-navigation) |
+| Overlay | `--backdrop` for every `::backdrop`; planned: `--color-scrim: rgb(10 14 18)` mixed 50 % into `--color-bg` for the scrollbar gutter behind a modal |
+| On colours | planned: `--color-on-danger: #fff` (danger-solid text), `--color-knob: #fff` (switch knobs), both themes |
+| Focus | planned: `--focus-ring: 2px solid var(--color-accent)`, `--focus-offset: 2px`; inside a clipping container the offset is `-2px` |
+| Motion | planned: `--dur-fast` 0.12s (hover, press), `--dur-base` 0.15s (switch knob, chevrons), `--dur-slow` 0.6s (progress width), `--pulse` 1.6s (live dot); all stop under `prefers-reduced-motion` |
+| Other | `--lh-tight` 1.15, `--grid-cols` 12, `--busy-ring` (the busy indicator's ring) |
 
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
 width including the scrollbar, which is what the prototype's root measures, and fixed elements
@@ -101,8 +117,13 @@ width including the scrollbar, which is what the prototype's root measures, and 
 
 ## Type
 
-Body is `400 14px/1.45 var(--font-sans)`. Each component writes its exact `font` shorthand from the
-prototype's markup in its CSS block; the recurring sizes:
+Body is `400 14px/1.45 var(--font-sans)`. Font sizes are the `--fs-*` tokens; a component writes
+`font: <weight> var(--fs-x)[/<line-height>] var(--font-sans|--font-mono)`. Weights are 400, 500 and 600
+only. A size that is not in the table below is not used; a new one needs a token and a row here. Most
+declarations in `app.css` still write literal sizes and off-scale weights; #1100 moves them to the tokens,
+adds the planned ones (`--fs-title-sm` 16px: dialog title and a card that is the page's subject;
+`--fs-empty` 17px: empty state heading; `--fs-auth` 20px: sign-in card title; `--fs-error` 26px: error page
+title; `--fs-word` 18px: a word as a tile value) and adds the guard. The recurring sizes:
 
 | Use | Font |
 | --- | --- |
@@ -111,7 +132,7 @@ prototype's markup in its CSS block; the recurring sizes:
 | Sign-in card title | `600 20px/1.2` |
 | Dialog title | `600 16px/1.3` |
 | Empty state heading | `600 17px` |
-| Card and section heading (h2) | `600 14px`; `600 13px` in device overview cards; `600 15px` in release notes |
+| Card and section heading (h2) | `600 14px` (`--fs-h2`); `600 13px` (`--fs-h2-sm`) in device overview cards; `600 15px` (`--fs-h2-lg`) in release notes only |
 | Stat tile value | `600 28px/1` (`--fs-stat`), tabular figures, -0.02em |
 | List rows, inputs | `400 13.5px` |
 | Buttons, tabs | `500 13px` (primary `600 13px`); tabs and top-bar groups `500 13.5px` |
@@ -123,8 +144,9 @@ prototype's markup in its CSS block; the recurring sizes:
 ## Spacing, shape and layout
 
 - Spacing tokens are named by pixel value (`--sp-N`); the prototype is not on a 4 px grid and nothing
-  is rounded. The gaps that recur: 8 between buttons, 10 inside cards, 14 between cards, 16 card
-  padding and below the page header.
+  is rounded. The gaps that recur: 8 between buttons, 10 inside cards, 16 between cards
+  (`--card-gap`), 16 card padding and below the page header. Spacing in `gap`, `padding` and `margin`
+  uses the `--sp-N` tokens, never a px literal (#1101 replaces the about 420 literals left).
 - Radii: controls 7, cards 10, dialogs and the auth card 12, banners and toasts 9, code 8, menu items
   6, badges 5, pills 999, dots and avatars 50 %.
 - Heights: controls 34 px (40 px on phones), small buttons 32, top bar 52, sub-navigation 40, phone
@@ -132,7 +154,9 @@ prototype's markup in its CSS block; the recurring sizes:
 - `main` is at most 1640 px wide with `clamp(12px, 2.4cqw, 32px)` gutters and no bottom padding
   of its own: the room below the content is the body's (the status bar's height plus `--sp-16`,
   #773).
-- Shadows: `--shadow-lg` for menus, dialogs and toasts only; `--shadow-knob` for switches.
+- Shadows: `--shadow-lg` for menus, dialogs, toasts and the phone status sheet; `--shadow-bar` for every bar
+  fixed to the bottom edge (status bar, bulk bar, save bar, phone action bar); `--shadow-knob` for switch
+  knobs. No other shadow is written (three bars still write theirs as a literal until #1099).
 
 ## Components
 
@@ -146,7 +170,7 @@ commit the images after changing a component.
 
 ### Inline banners
 
-A dot, a bold lead, the text and at most one action, in the tones ok, accent (information), warn and danger. Above the page content, under the page header; a banner stays until its cause is gone. A failure the user has to act on is `role=alert`, everything else `role=status`. The shell's flash, the setup notice and the connection banners are banners too. `ui.ErrorSummary` is the danger banner of a rejected form ("Fix 1 field: ... Nothing was saved yet.").
+A dot, a bold lead, the text and at most one action, in the tones ok, accent (information), warn, danger and neutral (a state that is neither good nor bad, e.g. a deactivated user). A banner is at most 820 px wide (`.banner { max-width: 820px }`), also above a full-width table. Above the page content, under the page header (never above the crumbs and the title); a banner stays until its cause is gone. A failure the user has to act on is `role=alert`, everything else `role=status`. The shell's flash, the setup notice and the connection banners are banners too. Pages render banners only through `ui.Banner` and `ui.ErrorSummary` (about 25 hand-written banners and the second action on three pages go with #1091). `ui.ErrorSummary` is the danger banner of a rejected form and reads "Fix N field(s). Nothing was saved yet."; it shows only when two or more fields fail (#1098).
 
 Component: `ui.Banner(BannerData{Tone, Title, Text, Action, Alert})`.
 
@@ -166,7 +190,7 @@ Also: [desktop, dark](../design/styleguide/toasts-desktop-dark.png) · [phone, l
 
 ### Live connection indicator
 
-Top bar, right of the navigation, only on pages that hold the event stream (S6). Live pulses green, Reconnecting... pulses amber faster and shows the warn banner with the attempt and the next try, Offline is red and shows the danger banner with Retry now. The pulse stops under reduced motion.
+In the status bar at the bottom (the Live pill), only on pages that hold the event stream (S6). Live pulses green, Reconnecting... pulses amber faster and shows the warn banner with the attempt and the next try, Offline is red and shows the danger banner with Retry now. The pulse stops under reduced motion.
 
 Component: shell (`live.js`), `ui.LivePill` (style guide).
 
@@ -180,6 +204,15 @@ Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, paddi
 
 Component: `ui.Button(Btn{Label, Kind, Href, Type, Name, Value, Small, Icon, Aria, Disabled, Dialog})`. `Name` and `Value` make a submit button that sends a value (the console's quick commands); `Aria` is the accessible name of an icon button.
 
+Sizes: default (`--ctl`), small (`--ctl-sm`) and tall (`--ctl-lg`: the sign-in button and the update
+preview's start button). A danger link is text in danger-fg for a row's Delete when the row has no other
+button. A button that opens a dialog asking for more input ends with "…" ("Import…", "Make compliant…"); a
+button that only asks for confirmation does not ("Restart", "Delete"). The tall size and the danger link
+are not `Btn` options yet: #1092 adds them (`Size: Tall`, `Kind: DangerLink`) and their style guide samples.
+The trigger of a destructive action is a default button (or the danger link in a row); its confirming
+button is danger-solid and repeats the verb with the object ("Power off 6 devices"); a destructive dialog
+opens with the focus on Cancel (#1093).
+
 ![Buttons, desktop, light](../design/styleguide/buttons-desktop-light.png)
 
 Also: [desktop, dark](../design/styleguide/buttons-desktop-dark.png) · [phone, light](../design/styleguide/buttons-phone-light.png) · [phone, dark](../design/styleguide/buttons-phone-dark.png)
@@ -187,6 +220,11 @@ Also: [desktop, dark](../design/styleguide/buttons-desktop-dark.png) · [phone, 
 ### Badges, status dots and avatars
 
 Badges are 20 px tinted labels (`500 11.5px`, radius 5) for states, results and counters. A status is a dot with its word (Online / Offline / Unknown), never the colour alone. Tones: ok, warn, danger, neutral, accent (`.t-*` classes); an unknown tone renders neutral. The avatar shows the initials; its colour follows the username, so a user keeps one colour everywhere.
+
+Badge labels are sentence case ("Update", "Failed"). A device's connection status is a badge with the dot
+before the word, `ui.StatusBadge`, wherever it is shown (device list, device header, dashboard attention
+list); the bare `ui.StatusDot` marks a tone where no status word is needed (stat tiles). `ui.StatusBadge`
+is added by #1097.
 
 Component: `ui.Badge(tone, label)`, `ui.StatusDot(tone, label)`, `ui.Avatar(name, username)`.
 
@@ -243,6 +281,11 @@ Also: [desktop, dark](../design/styleguide/controls-desktop-dark.png) · [phone,
 ### Stat tiles and fleet health
 
 A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The device overview and Policy header tiles (`.dev-tile-v`) follow this; `shell-css.spec.ts` guards it.
+
+An info tile (Policy header, device overview) is not a link: label, value, hint and optionally a bar or up
+to two small buttons. A number uses `--fs-stat`; a word ("Running", "MQTT · HTTP") uses `600 18px`
+(`--fs-word`). Values in a tone use the tone's `-fg` token. Today it is the `.dev-tile` markup;
+#1097 makes it the component `ui.InfoTile`.
 
 Component: `ui.StatTile(StatTileData{...})`, `ui.HealthBar(ok, off, unk)`; `ui.ComplianceBar(match, deviate, unknown)` draws a policy rule's compliance the same way.
 
@@ -350,6 +393,73 @@ Component: `ui.Notes(blocks)`.
 
 Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, light](../design/styleguide/notes-phone-light.png) · [phone, dark](../design/styleguide/notes-phone-dark.png)
 
+### Patterns without a style guide section yet
+
+The sections below describe patterns the app uses every day that `/styleguide` does not show yet. Each gets
+its style guide section, its screenshots and, where named, its component with the issue in brackets; until
+then the rule here is the reference for new markup.
+
+### Data tables
+
+A table sits in a card frame edge to edge (no inner padding), with a hairline under the header and between
+rows. Header cells are `500 12px` text-2, sentence case, no background band; a sortable header carries the
+sort icon (3:1 against the header) and `aria-sort`. Rows are at least 44 px tall, cells `400 13.5px`, values
+that are addresses, MACs, versions and ids in mono; an empty cell reads "-". At most two row actions, more go
+into the row menu (⋯). Pinned columns, column widths and the Columns chooser come from `tableprefs.go`. Below
+45rem a table either scrolls sideways (`.dense` tables with few columns) or turns into phone cards, one block
+per row with label before value. A table without rows shows `ui.Empty` instead of a header.
+
+Under the table: the pager: Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small
+buttons; the current page size uses the selected state.
+
+Component: `ui.Table`, `ui.Pager`, `ui.DeviceCards` (#1094).
+
+### Chips and tags
+
+A chip is a filter you can toggle: a pill (`--r-pill`), 28 px high (40 px on phones), `500 12.5px`, the
+control border; a count after the label in text-2; checked uses the selected state. It is a
+`label > input[type=checkbox|radio]`, so it works without JavaScript. A tag is a read-only outlined label
+(`--color-border-strong`, radius 5, `500 11.5px`) for a kind or a source (Proxy, System, CLI, a device tag).
+A tag never carries a state; a state is a badge.
+
+Component: `ui.Chip(ChipData{Label, Count, Name, Value, Checked})`, `ui.Tag(label)` (#1095). They replace
+`label.chip`, `.ucheck.chip`, `.dv-chip`, `.add-chip`, `.pol-pill` and `.tag`.
+
+### Folds
+
+`details.fold` holds something secondary: the summary is a `600 13.5px` line with a chevron on the right and
+a 40 px target; closed at every width unless it has `open`. Inside a card the fold takes the card's width
+and ends it. A card that is only a fold has the summary as its title.
+
+### Bars fixed to the bottom
+
+The status bar (`ui.StatusBar`, #307) is one `--sb-line` row at the bottom of every signed-in page: broker,
+running jobs, backups, the Live pill and the version, each a 32 px item with a tone; on a phone one line that
+opens a sheet. The bulk bar (device list), the backups selection bar and the save bar (settings, device
+settings) sit one gap above it, are surface bars (never inverted), use `--shadow-bar` and never clip their
+last button at 375 px. The save bar shows the unsaved dot inside the content edge to its left.
+
+### Info button, copy button, file drop
+
+The info button (ⓘ) sits after a label and opens a popover with one or two sentences; its hit box is 24 px
+even where the drawing is 16 px. It is never the only place a rule is stated, and it never repeats the
+field's help line: a field has a help line or an info button. The copy button is a small default button
+"Copy" after the value, hidden without JavaScript; it confirms with a toast. A file drop zone is a dashed
+`--color-border-strong` frame, radius 10, with "Drop a … here, or choose a file"; the file input is the link.
+
+### Steps and progress
+
+A multi-step flow (setup, new update) numbers its steps ("5 · When") in reading order; the current step is
+accent, done steps carry ✓. Progress is `ui.SegBar` (done, failed, running; the segments differ by more than
+hue and reach 3:1 against the track) or a native `<progress>` (flat, full width, accent fill, radius 2). The
+stability sparkline is an SVG with sizes as attributes.
+
+### Busy
+
+A control that waits for a device (`aria-busy`, set by `form.js`) draws a ring (`--busy-ring`) after its
+text; room for it is always kept, so nothing moves. A link to a page that reads a device first shows the
+same ring until the page arrives.
+
 ## Usage rules (must not regress)
 
 - **Theme.** `ui.Shell` renders `<html data-theme-auto>` unless the user chose Light or Dark (stored
@@ -362,10 +472,28 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
   (`e2e/tests/design-port.spec.ts`, `deviceconfirm_test.go`).
 - **Fixed bars stay inside the viewport.** The bulk bar never clips its last button at 375 px;
   layout guard (a) checks every fixed or sticky element.
-- **Phone breakpoint is 45rem (720 px)**: phone layout up to `max-width: 44.99rem`, desktop from
-  `min-width: 45rem`, the prototype's switch (`S.w < 720`); the Columns chooser and `tables.js` use
-  the same 45rem. Other breakpoints remain: 60rem (the bulk bar folds into one Actions menu) and
-  72rem (the audit table layout, the two-column settings grid).
+- **Breakpoints** are rem, never px: phone up to `44.99rem` (720 px, the prototype's `S.w < 720`; the
+  Columns chooser and `tables.js` use the same 45rem), tablet `45rem`-`74.99rem` (two balanced card
+  columns), desktop from `75rem` (card stacks side by side). Component breakpoints: `60rem` (the bulk bar
+  folds into one Actions menu), `72rem` (audit table layout, two-column settings grid). Any other width
+  needs a line here with its reason. The app still has about 20 other queries and two in px;
+  #1102 folds them into this list and makes `shell-css.spec.ts` fail on a px media query.
+- **Tones.** There are five: ok, warn, danger, neutral, accent. The classes are `.t-ok` ... `.t-accent`;
+  each sets `--t` (fill: dots, bars), `--t-bg` and `--t-fg` (text). Badges, dots, avatars, banners, toasts,
+  notes and the status bar read these three variables. The names "bad", "info", "success" and "error" are
+  not used (the parallel `.tone-*` classes go with #1102).
+- **Selected.** A selected item that is not a tab (a toggled filter chip, the current page of a pager, the
+  chosen release, a checked radio card) uses the accent tint: `--color-accent-bg` background,
+  `--color-accent` border, `--color-accent-fg` text. A segmented control's checked segment is
+  `--color-surface-3`. Tabs use the underline. Nothing is drawn inverted (text colour as fill)
+  (#1096).
+- **No opacity on content.** Stale, not judged, disabled rules and switched-off settings keep their text
+  colours (AA in both themes) and say their state in words; only a control that cannot act takes the
+  disabled look (#1071).
+- **Components only through `ui`.** A page renders a button, badge, banner or card with its `ui.*`
+  component, not with the component's classes. `ui_markup_test.go` (#1092) fails on `class="btn`,
+  `"bdg`, `"banner` or `"ucard` outside `internal/web/ui`; its exemption list is in blocks per page group
+  and only shrinks, like the card-widths list.
 - **Folds.** `details.fold` holds something secondary and is closed at every width unless it has
   `open` (account and user editing, a rule's Unjudged devices).
   The system container settings are no fold any more (#350). The phone-only `details.m-fold` of the
@@ -394,8 +522,8 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
   `geist-OFL.txt`). Kerning is the browser default, as in the prototype; the space after a capital
   keeps its width (`shell-css.spec.ts`).
 - **Tokens are the prototype's.** Colours, shadows and the font stacks are copied value for value
-  (`design/v2/prototype-tokens.css`); `tokens_test.go` fails when `app.css`, that file or the table
-  below differ. v1 names (`--color-success*`, `--color-divider`, `--space-*`, the generated ramps) do
+  (`design/v2/prototype-tokens.css`); `tokens_test.go` fails when `app.css`, that file or the token
+  table above differ. v1 names (`--color-success*`, `--color-divider`, `--space-*`, the generated ramps) do
   not exist and get no alias.
 
 - **Navigation is the same for every role** (F4, S7). Every role sees all groups and pages; each page
@@ -417,6 +545,20 @@ The prototype's wording is the default (D14); the product name is "TasmoFleet" i
 | Warn (policy severity) | Advisory | Our `warn` is the stronger level; reusing the word would invert its meaning. |
 | `Status 0` (console quick command and placeholder) | `Status 5` | Safety rule 2: `Status 0` bursts corrupt ESP8266 heap and replies (D9). |
 | "tasmofleet" (product name in text) | TasmoFleet | D15. Identifiers stay lower case. |
+
+Results, ids and dates (one word per thing; #1105 and #1104 bring the app in line):
+
+| Thing | Write | Never |
+| --- | --- | --- |
+| A finished success | Succeeded | ok, OK, Done, Completed, Success |
+| A failure | Failed | failed, error, bad |
+| Not done on purpose | Skipped / Cancelled | Canceled |
+| In progress | Running; waiting: Waiting | in progress (as a badge) |
+| A step of a job that is over | Done | |
+| A transaction's id | `TX-0143` (mono) | Transaction #143, transaction #1 |
+| A date | through `<time data-ts>` and `time.js` (the browser's locale); keys `date`, `date-time`, `month-day`, `relative` | a Go layout in visible text |
+| Times and dates | sans | mono |
+| A file size | KiB, MiB | KB, MB |
 
 ## Deviations from the prototype
 
