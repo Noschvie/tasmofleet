@@ -228,7 +228,8 @@ func (s *TransportFacts) commandPrefix() string {
 
 // topicExclusive reports whether no device in the inventory listens on d's command stem: not as its
 // Topic, not as any of its group topics GroupTopic1 to GroupTopic4 (fresh or stale, d's own included, #1005). Stems
-// are compared the way Tasmota subscribes (stem + "/#"): equal or one a level prefix of the other. d's own FullTopic must
+// are compared the way Tasmota subscribes (stem + "/#"): equal or one a level prefix of the other; a group topic also
+// under SetOption75's stem, which ignores the FullTopic. d's own FullTopic must
 // expand (contain %topic%, no other placeholder). Another device whose stem cannot be known (a
 // FullTopic without %topic%, or with %hostname%, %id%, ...) makes the answer false: unknown is not
 // exclusive. A device with neither Topic nor FullTopic is HTTP only and listens on nothing.
@@ -259,6 +260,12 @@ func topicExclusive(d model.Device, all []model.Device, prefix string) bool {
 			}
 			x, ok := transport.CommandTopic(o.FullTopic, g, prefix)
 			if !ok || transport.StemsOverlap(x, mine) {
+				return false
+			}
+			// With SetOption75 1 Tasmota subscribes a group topic as <prefix>/<group>/#, whatever the FullTopic says
+			// (GetGroupTopic_P). SetOption75 is not read, so that stem counts too, with our prefix and Tasmota's
+			// default "cmnd" (it only adds refusals).
+			if transport.StemsOverlap(prefix+"/"+g, mine) || transport.StemsOverlap("cmnd/"+g, mine) {
 				return false
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -27,15 +28,16 @@ type ConfigUploader interface {
 // check and the upload cannot end up on different devices (a topic or broker change, or another
 // device taking over the topic, between the two).
 type UploadBinding struct {
-	Name                         string // for the error text
-	Topic, FullTopic, GroupTopic string
-	MQTT                         model.MQTTCapability
-	MACs                         []string // the stored MAC and MAC set; Status 5 must report one of them
+	Name             string // for the error text
+	Topic, FullTopic string
+	GroupTopics      []string // all four, model.Device.GroupTopics (#1005)
+	MQTT             model.MQTTCapability
+	MACs             []string // the stored MAC and MAC set; Status 5 must report one of them
 }
 
 // BindingOf takes the binding from a device snapshot.
 func BindingOf(d model.Device) UploadBinding {
-	return UploadBinding{Name: d.Name, Topic: d.Topic, FullTopic: d.FullTopic, GroupTopic: d.GroupTopic, MQTT: d.MQTT,
+	return UploadBinding{Name: d.Name, Topic: d.Topic, FullTopic: d.FullTopic, GroupTopics: d.GroupTopics(), MQTT: d.MQTT,
 		MACs: append([]string{d.MAC}, d.MACs...)}
 }
 
@@ -68,7 +70,7 @@ func (r *Router) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte
 	if err != nil {
 		return err
 	}
-	if d.Topic != bind.Topic || d.FullTopic != bind.FullTopic || d.GroupTopic != bind.GroupTopic || d.MQTT != bind.MQTT || !macAmong(d.MAC, bind.MACs) {
+	if d.Topic != bind.Topic || d.FullTopic != bind.FullTopic || !slices.Equal(d.GroupTopics(), bind.GroupTopics) || d.MQTT != bind.MQTT || !macAmong(d.MAC, bind.MACs) {
 		noteTrace(ctx, None)
 		return fmt.Errorf("%w: the MQTT settings or the MAC of %s changed since it was checked; nothing was sent", ErrIdentityChanged, bind.Name)
 	}

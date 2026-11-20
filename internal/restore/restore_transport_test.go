@@ -329,9 +329,14 @@ func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
 	}
 	tlsFP := `,"flag4":{"mqtt_tls":1},"flag5":{"tls_use_fingerprint":1}`
 	cases := map[string]tc{
-		"topic":           {extra: `,"mqtt_topic":"some-other-topic"`, name: "Topic"},
-		"fulltopic":       {extra: `,"mqtt_fulltopic":"%topic%/%prefix%/"`, name: "FullTopic"},
-		"grouptopic":      {extra: `,"mqtt_grptopic":"others"`, name: "GroupTopic", dev: func(d *model.Device) { d.GroupTopic = "tasmotas" }},
+		"topic":      {extra: `,"mqtt_topic":"some-other-topic"`, name: "Topic"},
+		"fulltopic":  {extra: `,"mqtt_fulltopic":"%topic%/%prefix%/"`, name: "FullTopic"},
+		"grouptopic": {extra: `,"mqtt_grptopic":"others"`, name: "GroupTopic", dev: func(d *model.Device) { d.GroupTopic = "tasmotas" }},
+		// GroupTopic2 to GroupTopic4 sit in their own array (#1005): a backup that changes only GroupTopic2 changes the
+		// topics the device listens on just as much, and the router's last check compares all four.
+		"grouptopic2": {extra: `,"mqtt_grptopic":"tasmotas","mqtt_grptopic2":["kitchen","",""]`, name: "GroupTopic2 to GroupTopic4", dev: func(d *model.Device) {
+			d.GroupTopic, d.MoreGroupTopics, d.MoreGroupTopicsReadAt = "tasmotas", nil, time.Now()
+		}},
 		"mqtthost":        {extra: `,"mqtt_host":"elsewhere.invalid"`, name: "MqttHost", dev: func(d *model.Device) { d.MQTTHost = "broker.invalid" }},
 		"mqttport":        {extra: `,"mqtt_port":8883`, name: "MqttPort", dev: func(d *model.Device) { d.MQTTPort = 1883 }},
 		"mqttuser":        {extra: `,"mqtt_user":"someone-else"`, name: "MqttUser"},
@@ -362,6 +367,10 @@ func TestEachMQTTConnectionSettingOfABackupIsCompared(t *testing.T) {
 			sim: []string{"SetOption103 1", "SetOption132 1"}},
 		// The broker not on record but the device's own: equal (host names without regard to case), nothing to ask.
 		"the device's broker, not on record": {extra: `,"mqtt_host":"Broker.invalid","mqtt_port":1883`, boot: map[string]string{"mqtthost": "broker.invalid"}},
+		// the backup's array holds empty slots; the device's list only the topics that are set, in order
+		"the device's GroupTopic2 to 4": {extra: `,"mqtt_grptopic":"tasmotas","mqtt_grptopic2":["","kitchen",""]`, dev: func(d *model.Device) {
+			d.GroupTopic, d.MoreGroupTopics, d.MoreGroupTopicsReadAt = "tasmotas", []string{"kitchen"}, time.Now()
+		}},
 	}
 	lockout := func(t *testing.T, c tc) string {
 		e := newFlowSpec(t, "15.6.0", connDecoder{extra: c.extra}, simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M, Settings: c.boot})

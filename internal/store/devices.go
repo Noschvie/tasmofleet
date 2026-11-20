@@ -18,7 +18,8 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
 	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at,
 	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts, build_memory,
-	mqtt_password_source, mqtt_password_set_at, mqtt_password_ok_at, more_group_topics, more_group_topics_read_at`
+	mqtt_password_source, mqtt_password_set_at, mqtt_password_ok_at, more_group_topics, more_group_topics_read_at,
+	more_group_topics_gen`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -50,7 +51,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
 		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt,
 		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr, &buildMemory,
-		&pwSource, &pwSetAt, &pwOKAt, &moreGroups, &moreGroupsAt)
+		&pwSource, &pwSetAt, &pwOKAt, &moreGroups, &moreGroupsAt, &d.MoreGroupTopicsGen)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -332,6 +333,10 @@ type ProbeGuard struct {
 	// still have it, since that probe's answers came from whoever listens there. "": not checked (a probe at the
 	// address, and the other writers, which take the topic as their own argument where they need it).
 	Topic string
+	// MoreGroupTopicsGen is the device's model.Device.MoreGroupTopicsGen when the read began (#1005): GroupTopic2 to
+	// GroupTopic4 (and, in UpdateGroupTopics, GroupTopic1 with them) are stored only while it is unchanged, so a list
+	// the device answered before ForgetGroupTopics marked it unread is never stored as known.
+	MoreGroupTopicsGen int64
 }
 
 // ProbeResult holds the fields a probe owns. SetMQTT is false when the probe
@@ -426,8 +431,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		ota_url_read_at = CASE WHEN ?=0 THEN ota_url_read_at ELSE ? END,
 		group_topic = CASE WHEN ?=0 THEN group_topic ELSE ? END,
 		group_topic_read_at = CASE WHEN ?=0 THEN group_topic_read_at ELSE ? END,
-		more_group_topics = CASE WHEN ?=0 THEN more_group_topics ELSE ? END,
-		more_group_topics_read_at = CASE WHEN ?=0 THEN more_group_topics_read_at ELSE ? END,
+		more_group_topics = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN more_group_topics ELSE ? END,
+		more_group_topics_read_at = CASE WHEN ?=0 OR more_group_topics_gen<>? THEN more_group_topics_read_at ELSE ? END,
 		relay_names = CASE WHEN ?='' THEN relay_names ELSE ? END,
 		`+followNameSQL+`
 		topic = CASE WHEN ?='' OR topic=? THEN topic
@@ -443,7 +448,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
 		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, b2i(r.SetOTAURL), readAt,
 		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), readAt,
-		b2i(r.SetMoreGroupTopics), relayNamesJSON(r.MoreGroupTopics), b2i(r.SetMoreGroupTopics), readAt, relayNames, relayNames,
+		b2i(r.SetMoreGroupTopics), g.MoreGroupTopicsGen, relayNamesJSON(r.MoreGroupTopics), b2i(r.SetMoreGroupTopics), g.MoreGroupTopicsGen, readAt, relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), g.Topic, g.Topic)
@@ -601,12 +606,13 @@ func (s *SQLite) UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID
 // UpdateGroupTopics stores all four group topics of one bare GroupTopic read (#1005): GroupTopic1 and the non-empty
 // ones of GroupTopic2 to GroupTopic4 (more, nil for none), with one read stamp for both, and nothing else. Guarded like
 // UpdateGroupTopicFromMQTT: a device deleted, moved, rebound or given another topic since the read began is left
-// alone (ErrConflict, nothing written).
+// alone (ErrConflict, nothing written), and so is one whose list was marked unread since then (g.MoreGroupTopicsGen):
+// the answer may predate TasmoFleet's own change, and stamping it now would make an old list look fresh.
 func (s *SQLite) UpdateGroupTopics(ctx context.Context, id model.DeviceID, g ProbeGuard, topic, first string, more []string) error {
 	at := toMS(s.now())
 	res, err := s.db.ExecContext(ctx, `UPDATE devices SET group_topic=?, group_topic_read_at=?, more_group_topics=?, more_group_topics_read_at=?
-		WHERE id=? AND address=? AND port=? AND mac=? AND topic=?`,
-		first, at, relayNamesJSON(more), at, id, g.Address, g.Port, strings.ToLower(g.MAC), topic)
+		WHERE id=? AND address=? AND port=? AND mac=? AND topic=? AND more_group_topics_gen=?`,
+		first, at, relayNamesJSON(more), at, id, g.Address, g.Port, strings.ToLower(g.MAC), topic, g.MoreGroupTopicsGen)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -621,9 +627,12 @@ func (s *SQLite) UpdateGroupTopics(ctx context.Context, id model.DeviceID, g Pro
 // ForgetGroupTopics marks GroupTopic2 to GroupTopic4 of a device unread and keeps their values (#1005): TasmoFleet sent
 // the device a GroupTopic<n> with a value or restored its configuration, which may have changed them, and INFO1 and
 // Status 1 never refresh them. The GroupTopic reader then asks the device again, and until it has, the device holds
-// back the other devices' MQTT writes like any device with unread group topics. A device that is gone is no error.
+// back the other devices' MQTT writes like any device with unread group topics. It also counts up
+// more_group_topics_gen, so a read that began before the mark stores nothing (ProbeGuard.MoreGroupTopicsGen). A
+// device that is gone is no error.
 func (s *SQLite) ForgetGroupTopics(ctx context.Context, id model.DeviceID) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE devices SET more_group_topics_read_at=NULL WHERE id=?`, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE devices SET more_group_topics_read_at=NULL, more_group_topics_gen=more_group_topics_gen+1
+		WHERE id=?`, id)
 	return mapErr(err)
 }
 

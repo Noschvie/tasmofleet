@@ -91,6 +91,10 @@ type Device struct {
 	// and the GroupTopic reader only. GroupTopics and GroupTopicsReadAt are the one view of all four.
 	MoreGroupTopics       []string
 	MoreGroupTopicsReadAt time.Time
+	// MoreGroupTopicsGen counts the times TasmoFleet marked GroupTopic2 to GroupTopic4 unread after its own change
+	// (a GroupTopic<n> write, a restore). A read passes the value it saw when it began back to the store, which keeps
+	// the answer only while the count is unchanged. Written by the store only.
+	MoreGroupTopicsGen int64
 	// RelayNames are the FriendlyNames of the device (plain Status), one per relay, as reported
 	// (Tasmota's defaults "Tasmota", "Tasmota2" included). Nil when never read. Written by the
 	// prober only.

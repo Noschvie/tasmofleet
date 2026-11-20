@@ -1248,7 +1248,7 @@ func (p *Prober) refresh(ctx context.Context, id model.DeviceID, actor string, f
 	// the one that was probed (a slow probe must not undo an admin edit or
 	// land on a device that was moved, rebound or deleted meanwhile). A probe over MQTT also needs the topic it asked:
 	// its answers came from whoever listens there.
-	err = p.Devices.UpdateProbe(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC, Topic: pr.checkedTopic}, res)
+	err = p.Devices.UpdateProbe(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC, Topic: pr.checkedTopic, MoreGroupTopicsGen: d.MoreGroupTopicsGen}, res)
 	var topicKept error
 	if err == nil && res.DeviceTopic != "" {
 		topicKept = p.auditTopic(ctx, d, res.DeviceTopic, actor)

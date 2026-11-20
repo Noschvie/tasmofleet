@@ -384,7 +384,11 @@ data directory (TasmoAdmin lesson A4).
   INFO1 and `Status 1` keep writing alone; they never touch the list or its stamp. `Device.GroupTopics()` (GroupTopic1
   first, then the list) and `Device.GroupTopicsReadAt()` (the older of the two stamps, zero when either is unread) are
   the one view of all four. A probe stores the list with the stamp of its `Status 1`, and one whose `GroupTopic` read
-  failed leaves the list older than the probe, so it counts as unread. The device list's Group topic column shows the
+  failed leaves the list older than the probe, so it counts as unread. When TasmoFleet itself may have changed the list
+  (a `GroupTopic<n>` write, a restore upload), `ForgetGroupTopics` clears its stamp and counts up
+  `more_group_topics_gen` (`model.Device.MoreGroupTopicsGen`); the probe and the reader pass the count they saw when
+  their read began (`store.ProbeGuard.MoreGroupTopicsGen`) and the store keeps their answer only while it is unchanged,
+  so an answer older than the change never looks fresh. The device list's Group topic column shows the
   first with "+N" for the others and all of them in the title, the list filter finds a device by any of them, and the
   Identity card lists them all.
   _MAC first:_ the probe sends `Status 5` first, without credentials, and compares the MAC

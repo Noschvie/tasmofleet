@@ -165,7 +165,7 @@ func (r *groupTopicReader) read(ctx context.Context, d model.Device) bool {
 		r.log.Debug("group topic reader: the GroupTopic answer does not hold all four usable group topics", "device", d.ID)
 		return false
 	}
-	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}
+	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC, MoreGroupTopicsGen: d.MoreGroupTopicsGen}
 	if err := r.store.UpdateGroupTopics(ctx, d.ID, g, d.Topic, first, more); err != nil && !errors.Is(err, store.ErrConflict) {
 		r.log.Warn("group topic reader: could not store the group topics", "device", d.ID, "err", err)
 		return false
@@ -188,6 +188,13 @@ func (a *runtime) forgetGroupTopics(id model.DeviceID) {
 // router, stored only when all four keys came back), right after a restore has made the list unread, so the
 // verifying backup over MQTT is not held back until the reader's next tick (#1005).
 func (a *runtime) readGroupTopics(ctx context.Context, d model.Device) error {
+	// d is the device as the restore began; the upload has marked its list unread since (ForgetGroupTopics), and the
+	// store keeps a read only with the mark count it began with.
+	cur, err := a.svc.Store.GetDevice(ctx, d.ID)
+	if err != nil {
+		return err
+	}
+	d.MoreGroupTopicsGen = cur.MoreGroupTopicsGen
 	r := groupTopicReader{client: a.svc.Client, store: a.svc.Store, log: a.log}
 	if !r.read(ctx, d) {
 		return errors.New("the device's group topics could not be read")

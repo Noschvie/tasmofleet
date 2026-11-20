@@ -5,5 +5,8 @@
 -- more_group_topics_read_at: unix ms of the bare GroupTopic read that stored the list; NULL never read. No backfill:
 -- every device starts unread, so the shared-topic rule holds back MQTT writes until the reader has asked each device
 -- once (fail closed). Written by the prober and the GroupTopic reader only.
+-- more_group_topics_gen: counts the times TasmoFleet marked the list unread (ForgetGroupTopics); a read stores its
+-- list only while the count is the one it saw when it began, so an answer older than the mark never looks fresh.
 ALTER TABLE devices ADD COLUMN more_group_topics TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN more_group_topics_read_at INTEGER;
+ALTER TABLE devices ADD COLUMN more_group_topics_gen INTEGER NOT NULL DEFAULT 0;

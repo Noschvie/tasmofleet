@@ -46,6 +46,7 @@ func TestTheRestoreMakesTheStoredGroupTopicsUnreadAndReadsThemAgain(t *testing.T
 	if forget == nil {
 		t.Fatal("the restore has no way to mark the group topics unread")
 	}
+	before, _ := st.GetDevice(t.Context(), id) // the device as the restore began, which is what it passes to the read
 	forget(id)
 	d, _ := st.GetDevice(t.Context(), id)
 	if !groupTopicStale(d) {
@@ -55,7 +56,7 @@ func TestTheRestoreMakesTheStoredGroupTopicsUnreadAndReadsThemAgain(t *testing.T
 	if read == nil {
 		t.Fatal("the restore has no way to read the group topics again")
 	}
-	if err := read(t.Context(), d); err != nil {
+	if err := read(t.Context(), before); err != nil {
 		t.Fatal(err)
 	}
 	if d, _ = st.GetDevice(t.Context(), id); groupTopicStale(d) || !slices.Equal(d.GroupTopics(), []string{"tasmotas", "cellar"}) {

@@ -3,6 +3,7 @@ package restore
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -22,7 +23,7 @@ const lockoutTail = "; the device's HTTP API does not answer, so TasmoFleet reac
 var connCutOffs = map[string]string{ //nolint:gosec // G101: names of settings and decoded fields, no credential
 	"topic":           "mqtt_topic",
 	"fulltopic":       "mqtt_fulltopic",
-	"grouptopic":      "mqtt_grptopic",
+	"grouptopic":      "mqtt_grptopic, mqtt_grptopic2",
 	"mqtthost":        "mqtt_host",
 	"mqttport":        "mqtt_port",
 	"mqttuser":        "mqtt_user",
@@ -44,6 +45,7 @@ type decodedConn struct {
 	Hostname  *string         `json:"hostname"`
 	FullTopic *string         `json:"mqtt_fulltopic"`
 	GrpTopic  *string         `json:"mqtt_grptopic"`
+	GrpTopic2 *[]string       `json:"mqtt_grptopic2"` // GroupTopic2 to GroupTopic4, empty slots included (#1005)
 	Host      *string         `json:"mqtt_host"`
 	Port      *int            `json:"mqtt_port"`
 	User      *string         `json:"mqtt_user"`
@@ -88,6 +90,10 @@ func (m *Manager) mqttLockout(ctx context.Context, dev model.Device, b model.Bac
 	}
 	c.add("FullTopic", d.FullTopic != nil && fullTopic(*d.FullTopic) != fullTopic(dev.FullTopic))
 	c.add("GroupTopic", d.GrpTopic != nil && dev.GroupTopic != "" && *d.GrpTopic != dev.GroupTopic)
+	// GroupTopic2 to GroupTopic4 (#1005) are compared like GroupTopic1, once read: the device's list holds the non-empty
+	// ones in order, the backup every slot.
+	c.add("GroupTopic2 to GroupTopic4", d.GrpTopic2 != nil && !dev.MoreGroupTopicsReadAt.IsZero() &&
+		!slices.Equal(slices.DeleteFunc(slices.Clone(*d.GrpTopic2), func(g string) bool { return g == "" }), dev.MoreGroupTopics))
 	// The broker comes from the inventory (Status 6); a device known only from the broker (app.onMQTTSeen) may have none
 	// on record, and then the device is asked.
 	if d.Host != nil {

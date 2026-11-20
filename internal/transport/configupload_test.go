@@ -194,6 +194,7 @@ func TestUploadConfigIsBoundToTheCheckedDevice(t *testing.T) {
 		"topic changed":                    func(g *upRig) { g.devs.d.Topic = "other-plug" },
 		"full topic changed":               func(g *upRig) { g.devs.d.FullTopic = "%topic%/%prefix%/" },
 		"group topic changed":              func(g *upRig) { g.devs.d.GroupTopic = "elsewhere" },
+		"GroupTopic2 changed (#1005)":      func(g *upRig) { g.devs.d.MoreGroupTopics = []string{"kitchen"} },
 		"broker capability":                func(g *upRig) { g.devs.d.MQTT = model.MQTTNone },
 		"stored MAC changed":               func(g *upRig) { g.devs.d.MAC = "aa:bb:cc:dd:ee:99" },
 		"another device answers":           func(g *upRig) { g.up.mac = "11:22:33:44:55:66" },

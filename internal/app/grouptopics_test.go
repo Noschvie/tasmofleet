@@ -226,3 +226,25 @@ func TestTasmoFleetsOwnGroupTopicWriteMakesTheListUnread(t *testing.T) {
 		})
 	}
 }
+
+// Why (#1005, security check): with SetOption75 1 Tasmota subscribes a group topic as cmnd/<group>/#, whatever its
+// FullTopic says (GetGroupTopic_P). TasmoFleet does not read SetOption75, so under a FullTopic like
+// %prefix%/tasmota/%topic%/ a device whose group topic is "tasmota" may receive every command to cmnd/tasmota/plug/...
+// The topic counts as exclusive only when neither stem of each group topic overlaps the device's own.
+func TestAGroupTopicUnderSetOption75CountsAgainstTheTopic(t *testing.T) {
+	const ft = "%prefix%/tasmota/%topic%/"
+	d := model.Device{ID: 1, Topic: "plug", FullTopic: ft}
+	for _, o := range []model.Device{
+		{ID: 2, Topic: "other", FullTopic: ft, GroupTopic: "tasmotas", MoreGroupTopics: []string{"tasmota"}},
+		{ID: 2, Topic: "other", FullTopic: ft, GroupTopic: "tasmota"},
+	} {
+		if topicExclusive(d, []model.Device{d, o}, "cmnd") {
+			t.Errorf("group topics %v: plug's topic counts as exclusive, but with SetOption75 1 the other device listens on cmnd/tasmota/#", o.GroupTopics())
+		}
+	}
+	// the default FullTopic gives the same stem either way, and an unrelated group topic stays harmless
+	o := model.Device{ID: 2, Topic: "other", FullTopic: ft, GroupTopic: "tasmotas", MoreGroupTopics: []string{"kitchen"}}
+	if !topicExclusive(d, []model.Device{d, o}, "cmnd") {
+		t.Error("group topics tasmotas and kitchen do not reach plug's topic under either stem")
+	}
+}
