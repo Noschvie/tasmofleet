@@ -121,3 +121,72 @@ func TestJoinMQTTURL(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1055): ParseBrokerURL is the one reader of a broker URL's scheme, host
+// and port; the broker matcher, the stored password's binding and the
+// validation all read through it. Each of them must see the same broker for
+// the same URL: tcp and mqtt are one transport, ssl, tls and mqtts the other.
+func TestParseBrokerURL(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want Broker
+	}{
+		{"tcp://h:1883", Broker{Host: "h", Port: 1883}},
+		{"mqtt://h", Broker{Host: "h", Port: 1883}},
+		{"ssl://h", Broker{Host: "h", Port: 8883, TLS: true}},
+		{"tls://h:9000", Broker{Host: "h", Port: 9000, TLS: true}},
+		{"mqtts://h", Broker{Host: "h", Port: 8883, TLS: true}},
+		{"tcp://[fd00::1]", Broker{Host: "fd00::1", Port: 1883}},
+		// The environment may carry user information; it is not part of the broker (#597).
+		{"tcp://user:pw@h:1883", Broker{Host: "h", Port: 1883}},
+		{"mqtts://user:pw@h", Broker{Host: "h", Port: 8883, TLS: true}},
+		{"tcp://h:1883/path?a=b", Broker{Host: "h", Port: 1883}},
+		{"tcp://h:0", Broker{Host: "h", Port: 0}}, // not range-checked: the form's view does that
+	}
+	for _, c := range cases {
+		got, err := ParseBrokerURL(c.raw)
+		if err != nil || got != c.want {
+			t.Errorf("ParseBrokerURL(%q) = %+v, %v; want %+v", c.raw, got, err, c.want)
+		}
+	}
+	// Schemes the MQTT client cannot use (its address filter does not apply to
+	// websockets), no host, no URL, and a port that is no number.
+	for _, raw := range []string{
+		"", "tcps://h", "ws://h:80", "wss://h:443", "ftp://h", "http://h", "h:1883", "tcp://", "tcp://:1883",
+		"tcp://user:pw@:1883", "%zz", "tcp://h:99999999999999999999",
+	} {
+		if b, err := ParseBrokerURL(raw); err == nil {
+			t.Errorf("ParseBrokerURL(%q) = %+v, want an error", raw, b)
+		}
+	}
+}
+
+// Why (#1055): MQTT_URL from the environment and from the form go through one
+// validation. This pins which URLs it accepts, so that reading them through
+// ParseBrokerURL cannot silently widen or narrow what an operator may set.
+func TestValidateOperationalMQTTURL(t *testing.T) {
+	ok := []string{
+		"", "tcp://h", "tcp://h:1883", "mqtt://h:1883", "ssl://h:8883", "tls://h", "mqtts://h",
+		"tcp://user:pw@h:1883", "tcp://[fd00::1]:1883", "tcp://h:1883/path", "tcp://h:0",
+	}
+	refused := []string{
+		"tcps://h", "ws://h:80", "wss://h:443", "ftp://h", "tcp://", "tcp://:1883", "h:1883", "tcp://h:abc",
+		"tcp://h:99999999999999999999", // a port no connection can use (the matcher already refused it)
+	}
+	check := func(raw string) bool {
+		c := Config{MQTTURL: raw, LogLevel: "info"}
+		refusedURL := false
+		c.validateOperational(func(k, _ string) { refusedURL = refusedURL || k == "MQTT_URL" })
+		return !refusedURL
+	}
+	for _, raw := range ok {
+		if !check(raw) {
+			t.Errorf("MQTT_URL %q is refused, want accepted", raw)
+		}
+	}
+	for _, raw := range refused {
+		if check(raw) {
+			t.Errorf("MQTT_URL %q is accepted, want refused", raw)
+		}
+	}
+}

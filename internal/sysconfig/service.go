@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/audit"
 	"github.com/hellwand/tasmofleet/internal/config"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 	"github.com/hellwand/tasmofleet/internal/store"
 )
 
@@ -202,7 +204,7 @@ func orNone(s string) string {
 // secretTargets names, for each stored secret, the target it belongs to: the
 // broker for the MQTT password, the identity provider for the OIDC client secret.
 var secretTargets = map[string]func(config.Config) string{
-	"MQTT_PASSWORD":      func(c config.Config) string { return hostPort(c.MQTTURL) },
+	"MQTT_PASSWORD":      func(c config.Config) string { return brokerTarget(c.MQTTURL) },
 	"OIDC_CLIENT_SECRET": func(c config.Config) string { return hostPort(c.OIDCIssuer) },
 	// The notification secrets go only where they were entered (#249): to the webhook address as
 	// stored (any change of scheme, host, port, path or query drops the secret), to the mail
@@ -250,7 +252,7 @@ func (s *Service) bindSecrets(c config.Config) config.Config {
 		switch {
 		case !ok || row.Unreadable:
 			setSecret(&c, key, "")
-		case row.Target != target(c):
+		case boundTarget(key, row.Target) != target(c):
 			setSecret(&c, key, "")
 			s.mismatch[key] = row.Target
 		default:
@@ -258,6 +260,20 @@ func (s *Service) bindSecrets(c config.Config) config.Config {
 		}
 	}
 	return c
+}
+
+// boundTarget is the target a stored secret is compared with. A broker row
+// written before brokerTarget existed (the environment import kept the URL's
+// own spelling: mqtt://, tls://, mqtts://) is read as the broker it names, so it
+// stays bound without a migration. A target that is no broker URL is compared as
+// it is, never as "" (which would match a configuration with no broker).
+func boundTarget(key, target string) string {
+	if key == "MQTT_PASSWORD" {
+		if t := brokerTarget(target); t != "" {
+			return t
+		}
+	}
+	return target
 }
 
 // effective is the configuration the running process uses: a feature whose
@@ -329,7 +345,7 @@ func (s *Service) State() []FieldState {
 	out := make([]FieldState, 0, len(fields))
 	for _, f := range fields {
 		val, _ := config.Format(s.cur, f.Key)
-		st := FieldState{Field: f, Value: redactURL(val), HasValue: val != "", Source: SourceDefault}
+		st := FieldState{Field: f, Value: netaddr.RedactURL(val), HasValue: val != "", Source: SourceDefault}
 		if f.Key == "NOTIFY_WEBHOOK_URL" {
 			st.Value = val // the admin edits the address as stored: a token in the query must survive a save (it holds no user info: validation refuses that)
 		}
@@ -377,7 +393,7 @@ func (s *Service) ReadOnly() []Row {
 				v = "***"
 			}
 		} else {
-			v = redactURL(v)
+			v = netaddr.RedactURL(v)
 		}
 		out = append(out, Row{Key: k.Key, Value: v, Secret: k.Secret})
 	}
@@ -573,7 +589,7 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 			}
 			writes = append(writes, w)
 		}
-		shownOld, shownNew := redactURL(oldV), redactURL(newV)
+		shownOld, shownNew := netaddr.RedactURL(oldV), netaddr.RedactURL(newV)
 		if k == "NOTIFY_WEBHOOK_URL" {
 			shownOld, shownNew = config.RedactWebhookURL(oldV), config.RedactWebhookURL(newV) // the path can be a secret (a Home Assistant webhook id)
 		}
@@ -678,22 +694,6 @@ func maskSecret(v string) string {
 	return "***"
 }
 
-// redactURL drops the user information of a URL-looking value.
-func redactURL(v string) string {
-	if !strings.Contains(v, "://") {
-		return v
-	}
-	u, err := url.Parse(v)
-	if err != nil {
-		return "***"
-	}
-	if u.User != nil {
-		u.User = url.User("***")
-	}
-	u.RawQuery = ""
-	return u.String()
-}
-
 // MQTTParams are the broker settings a connection test uses.
 type MQTTParams struct{ URL, User, Password, FullTopic string }
 
@@ -771,7 +771,7 @@ func (s *Service) TestMQTT(ctx context.Context, req TestRequest) (string, error)
 		}
 		msg, result = "failed: "+text, "failed"
 	}
-	d, _ := json.Marshal(withVia(map[string]any{"url": redactURL(p.URL), "host": hostPort(p.URL), "user": p.User, "stored_password": password != "" && req.Password == ""}, req.Via))
+	d, _ := json.Marshal(withVia(map[string]any{"url": netaddr.RedactURL(p.URL), "host": brokerTarget(p.URL), "user": p.User, "stored_password": password != "" && req.Password == ""}, req.Via))
 	s.rec(req.Audit).Record(ctx, model.AuditEvent{Actor: req.Actor, Action: "sysconfig.mqtt_test", Target: "settings:system", Detail: string(d), Result: result})
 	return msg, nil
 }
@@ -784,10 +784,9 @@ func withVia(m map[string]any, via string) map[string]any {
 	return m
 }
 
-var defaultPorts = map[string]string{"tcp": "1883", "mqtt": "1883", "ssl": "8883", "tls": "8883", "mqtts": "8883", "ws": "80", "wss": "443", "http": "80", "https": "443"}
-
 // hostPort returns scheme://host:port in lower case, with the scheme's
-// default port filled in; "" if the URL does not parse.
+// default port filled in; "" if the URL does not parse. It binds the OIDC
+// client secret to its issuer; a broker URL goes through brokerTarget.
 func hostPort(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" {
@@ -795,15 +794,32 @@ func hostPort(raw string) string {
 	}
 	port := u.Port()
 	if port == "" {
-		port = defaultPorts[u.Scheme]
+		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
 	}
 	return strings.ToLower(u.Scheme + "://" + u.Hostname() + ":" + port)
 }
 
-// sameBroker reports whether two broker URLs name the same scheme, host and port.
+// brokerTarget is the target the MQTT password is bound to: the broker's
+// transport, host and port, as tcp://host:port (plain) or ssl://host:port
+// (TLS), host in lower case and IPv6 without brackets. The scheme rule lives in
+// config.ParseBrokerURL, so tcp:// and mqtt:// are one broker, and ssl://,
+// tls:// and mqtts:// are another. "" if the URL is not a usable broker URL.
+func brokerTarget(raw string) string {
+	b, err := config.ParseBrokerURL(raw)
+	if err != nil {
+		return ""
+	}
+	scheme := "tcp"
+	if b.TLS {
+		scheme = "ssl"
+	}
+	return scheme + "://" + strings.ToLower(b.Host) + ":" + strconv.Itoa(b.Port)
+}
+
+// sameBroker reports whether two broker URLs name the same transport, host and port.
 func sameBroker(a, b string) bool {
-	x := hostPort(a)
-	return x != "" && x == hostPort(b)
+	x := brokerTarget(a)
+	return x != "" && x == brokerTarget(b)
 }
 
 // importLegacy moves operational settings that are still set in the environment
@@ -866,7 +882,7 @@ func importLegacy(ctx context.Context, o *Options, rows map[string]store.SystemS
 		if t, bound := secretTargets[k]; f.Secret && bound {
 			ch.Target = t(next)
 		} else if f.Secret {
-			ch.Target = hostPort(next.MQTTURL)
+			ch.Target = brokerTarget(next.MQTTURL)
 		} else if formatted, err := config.Format(next, k); err == nil {
 			ch.Value = formatted
 		}
@@ -948,7 +964,7 @@ func (s *Service) TestSSO(ctx context.Context, req TestRequest) (string, error) 
 	if err != nil {
 		msg, result = "failed: "+err.Error(), "failed"
 	}
-	d, _ := json.Marshal(withVia(map[string]any{"issuer": redactURL(issuer)}, req.Via))
+	d, _ := json.Marshal(withVia(map[string]any{"issuer": netaddr.RedactURL(issuer)}, req.Via))
 	s.rec(req.Audit).Record(ctx, model.AuditEvent{Actor: req.Actor, Action: "sysconfig.sso_test", Target: "settings:system", Detail: string(d), Result: result})
 	return msg, nil
 }

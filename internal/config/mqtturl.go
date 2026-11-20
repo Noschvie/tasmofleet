@@ -23,16 +23,36 @@ const (
 	MQTTTLSPort = 8883
 )
 
-// SplitMQTTURL parses a broker URL into its parts. An empty URL is MQTT off
-// (the zero Broker). tcp:// and mqtt:// are plain, ssl://, tls:// and mqtts://
-// are TLS; a missing port is the scheme's default and is returned explicitly.
-// A URL with user information, a path or a query cannot be shown as the three
-// parts and is an error (the page then shows the URL itself).
+// ParseBrokerURL is the one reader of a broker URL's scheme, host and port.
+// tcp:// and mqtt:// are plain, ssl://, tls:// and mqtts:// are TLS; any other
+// scheme is refused: ws and wss because the client's address filter cannot be
+// applied to them, every other one (tcps, http, ...) because config has never
+// accepted it. A host is required; a missing port is the
+// scheme's default and is returned explicitly. User information, a path and a
+// query are ignored: the environment may carry tcp://user:password@host:1883,
+// and the broker matcher and the stored password's binding must read that URL
+// too. The port is not range-checked (SplitMQTTURL does that for the form); a
+// port that is not a number is refused.
+func ParseBrokerURL(raw string) (Broker, error) {
+	return parseBrokerURL(raw, false)
+}
+
+// SplitMQTTURL parses a broker URL into its parts as the settings page shows
+// them. An empty URL is MQTT off (the zero Broker). It reads the URL through
+// ParseBrokerURL and adds the view's own rules: a URL with user information, a
+// path or a query cannot be shown as the three parts and is an error (the page
+// then shows the URL itself), and the port is 1-65535.
 func SplitMQTTURL(raw string) (Broker, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return Broker{}, nil
 	}
+	return parseBrokerURL(raw, true)
+}
+
+// parseBrokerURL holds the rule once; display adds the settings page's checks
+// at the places where SplitMQTTURL has always reported them.
+func parseBrokerURL(raw string, display bool) (Broker, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return Broker{}, errors.New("not a URL")
@@ -45,7 +65,7 @@ func SplitMQTTURL(raw string) (Broker, error) {
 	default:
 		return Broker{}, errors.New("unknown scheme " + strconv.Quote(u.Scheme))
 	}
-	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+	if display && (u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "") {
 		return Broker{}, errors.New("has more than scheme, host and port")
 	}
 	b.Host = u.Hostname()
@@ -55,7 +75,7 @@ func SplitMQTTURL(raw string) (Broker, error) {
 	b.Port = defaultMQTTPort(b.TLS)
 	if p := u.Port(); p != "" {
 		n, err := strconv.Atoi(p)
-		if err != nil || n < 1 || n > 65535 {
+		if err != nil || display && (n < 1 || n > 65535) {
 			return Broker{}, errors.New("port must be 1-65535")
 		}
 		b.Port = n

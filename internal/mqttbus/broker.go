@@ -4,11 +4,12 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // LookupFunc resolves a host name to addresses. The production one is
@@ -24,7 +25,6 @@ const (
 	lookupTimeout = 2 * time.Second
 	lookupTTL     = 5 * time.Minute
 	defaultPort   = 1883
-	defaultTLS    = 8883
 )
 
 // BrokerMatcher answers "is this device configured for the broker tasmofleet
@@ -46,29 +46,18 @@ type lookupEntry struct {
 	at    time.Time
 }
 
-// NewBrokerMatcher parses the broker URL (tcp://, mqtt://, ssl://, mqtts://).
-// An empty or unparsable URL yields nil: no broker, nothing matches.
+// NewBrokerMatcher reads the broker URL through config.ParseBrokerURL, the one
+// reader of a broker URL (tcp://, mqtt://, ssl://, tls://, mqtts://). An empty
+// or unusable URL yields nil: no broker, nothing matches.
 func NewBrokerMatcher(brokerURL string, lookup LookupFunc) *BrokerMatcher {
-	u, err := url.Parse(brokerURL)
-	if err != nil || u.Hostname() == "" {
+	b, err := config.ParseBrokerURL(brokerURL)
+	if err != nil {
 		return nil
 	}
 	if lookup == nil {
 		lookup = NetLookup
 	}
-	port := defaultPort
-	switch u.Scheme {
-	case "ssl", "tls", "mqtts", "tcps":
-		port = defaultTLS
-	}
-	if p := u.Port(); p != "" {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return nil
-		}
-		port = n
-	}
-	return &BrokerMatcher{host: normHost(u.Hostname()), port: port, lookup: lookup, now: time.Now, cache: map[string]lookupEntry{}}
+	return &BrokerMatcher{host: normHost(b.Host), port: b.Port, lookup: lookup, now: time.Now, cache: map[string]lookupEntry{}}
 }
 
 func normHost(h string) string { return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".") }

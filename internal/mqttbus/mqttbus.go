@@ -32,6 +32,8 @@ import (
 	"time"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 )
 
 // ErrNotImplemented marks skeleton code.
@@ -115,7 +117,7 @@ type Options struct {
 func Connect(ctx context.Context, o Options) (Bus, error) {
 	u, err := url.Parse(o.BrokerURL)
 	if err != nil || u.Host == "" {
-		return nil, fmt.Errorf("mqttbus: invalid broker URL %q", redactURL(o.BrokerURL))
+		return nil, fmt.Errorf("mqttbus: invalid broker URL %q", netaddr.URLHost(o.BrokerURL))
 	}
 	if err := refuseWebsocket(u); err != nil {
 		return nil, err
@@ -166,7 +168,7 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 		}
 		b.subscribedAt.Store(time.Now().UnixNano()) // before subscribed: a reader that sees it set reads this time or a later one
 		b.subscribed.Store(true)                    // after the attempts, so a refused filter (logged above) does not keep the bus "down" for good
-		slog.Info("mqtt connected", "broker", redactURL(o.BrokerURL))
+		slog.Info("mqtt connected", "broker", netaddr.URLHost(o.BrokerURL))
 	})
 	po.SetReconnectingHandler(func(paho.Client, *paho.ClientOptions) {
 		b.subscribed.Store(false) // before the new connection's OnConnect runs, whatever the lost handler did
@@ -191,14 +193,6 @@ func refuseWebsocket(u *url.URL) error {
 		return errors.New("mqttbus: websocket brokers are not supported (the address filter cannot be applied); use tcp:// or ssl://")
 	}
 	return nil
-}
-
-func redactURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return "<unparsable>"
-	}
-	return u.Scheme + "://" + u.Host
 }
 
 type sub struct {

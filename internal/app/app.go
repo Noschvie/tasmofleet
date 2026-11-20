@@ -39,6 +39,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttbus"
 	"github.com/hellwand/tasmofleet/internal/mqttcmd"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 	"github.com/hellwand/tasmofleet/internal/notify"
 	"github.com/hellwand/tasmofleet/internal/ota"
 	"github.com/hellwand/tasmofleet/internal/policy"
@@ -411,14 +412,7 @@ func (a *runtime) connectMQTT(ctx context.Context, cfg config.Config) {
 	}
 	a.sw.Replace(bus, cancel)
 	a.broker.SetHost(cfg.MQTTURL)
-	a.log.Info("MQTT connection configured", "broker", redactURLHost(cfg.MQTTURL))
-}
-
-func redactURLHost(raw string) string {
-	if u, err := url.Parse(raw); err == nil && u.Host != "" {
-		return u.Scheme + "://" + u.Host
-	}
-	return "?"
+	a.log.Info("MQTT connection configured", "broker", netaddr.URLHost(cfg.MQTTURL))
 }
 
 // mqttSeenTries bounds how often onMQTTSeen re-reads a record that an edit changed under it.

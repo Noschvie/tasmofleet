@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +17,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/inventory"
 	"github.com/hellwand/tasmofleet/internal/metrics"
 	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
@@ -212,30 +212,13 @@ func describeConfig(cfg config.Config) []web.KV {
 				v = "***"
 			}
 		}
-		shown := redactURLs(strings.TrimSpace(v))
+		shown := netaddr.RedactURL(strings.TrimSpace(v))
 		if f.key == "NOTIFY_WEBHOOK_URL" {
 			shown = config.RedactWebhookURL(v) // its path or query can be the credential (a Home Assistant webhook id)
 		}
 		out = append(out, web.KV{Key: config.Prefix + f.key, Value: shown})
 	}
 	return out
-}
-
-// redactURLs drops the userinfo of every URL-looking value (MQTT_URL may be
-// tcp://user:password@host:1883) and any other secret-bearing URL part.
-func redactURLs(v string) string {
-	if !strings.Contains(v, "://") {
-		return v
-	}
-	u, err := url.Parse(v)
-	if err != nil {
-		return "***" // cannot prove it is free of credentials
-	}
-	if u.User != nil {
-		u.User = url.User("***")
-	}
-	u.RawQuery = ""
-	return u.String()
 }
 
 // liveBroker is the broker matcher of the current MQTT_URL.

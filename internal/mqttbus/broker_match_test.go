@@ -50,6 +50,12 @@ func TestBrokerMatcher(t *testing.T) {
 		{"credentials in URL are ignored", "tcp://u:p@mqtt.example.internal:1883", "mqtt.example.internal", 1883, true, true},
 		{"no broker configured", "", "mqtt.example.internal", 1883, false, false},
 		{"garbage URL", "::::", "mqtt.example.internal", 1883, false, false},
+		// One reader of the broker URL (#1055): what config accepts is a broker here, what it refuses is not.
+		{"mqtt scheme is plain", "mqtt://mqtt.example.internal", "mqtt.example.internal", 1883, true, true},
+		{"tls scheme default port is 8883", "tls://mqtt.example.internal", "mqtt.example.internal", 8883, true, true},
+		{"credentials with TLS", "mqtts://u:p@mqtt.example.internal", "mqtt.example.internal", 8883, true, true},
+		{"websocket is no broker for the client", "ws://mqtt.example.internal:80", "mqtt.example.internal", 80, false, false},
+		{"tcps is not a scheme config accepts", "tcps://mqtt.example.internal", "mqtt.example.internal", 8883, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

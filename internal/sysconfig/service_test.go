@@ -467,11 +467,17 @@ func TestMQTTTestNeverLeaksThePassword(t *testing.T) {
 
 func mqttTestSvc(t *testing.T, stored map[string]string, env []string, seen *MQTTParams) *Service {
 	t.Helper()
+	return mqttTestSvcBoundTo(t, stored, env, seen, brokerTarget(stored["MQTT_URL"])) // entered for the broker stored with it
+}
+
+// mqttTestSvcBoundTo is mqttTestSvc with the stored password bound to the given target.
+func mqttTestSvcBoundTo(t *testing.T, stored map[string]string, env []string, seen *MQTTParams, target string) *Service {
+	t.Helper()
 	st := newMem()
 	for k, v := range stored {
 		row := store.SystemSetting{Key: k, Value: v, Secret: k == "MQTT_PASSWORD"}
 		if row.Secret {
-			row.Target = hostPort(stored["MQTT_URL"]) // entered for the broker stored with it
+			row.Target = target
 		}
 		st.rows[k] = row
 	}
@@ -523,6 +529,103 @@ func TestMQTTTestNeverSendsTheStoredPasswordToAnotherTarget(t *testing.T) {
 	}
 	if seen.Password != "fake-secret-Zk3" {
 		t.Fatalf("seen %+v", seen)
+	}
+}
+
+// Why (#1055): tcp:// and mqtt:// name one plain transport, ssl://, tls:// and
+// mqtts:// one TLS transport, as the MQTT client and the broker matcher read
+// them. The password entered for the broker must follow the broker, not the
+// spelling of its URL: another spelling of the same broker must not make the
+// stored password silently unused, while another transport, host or port still
+// must not receive it.
+func TestStoredMQTTPasswordFollowsTheBrokerNotTheSpelling(t *testing.T) {
+	for _, tc := range []struct{ stored, test string }{
+		{"tcp://broker.lan:1883", "mqtt://broker.lan:1883"},
+		{"mqtt://broker.lan", "tcp://broker.lan:1883"},
+		{"ssl://broker.lan:8883", "mqtts://broker.lan"},
+		{"tls://broker.lan", "ssl://broker.lan:8883"},
+	} {
+		var seen MQTTParams
+		s := mqttTestSvc(t, map[string]string{"MQTT_URL": tc.stored, "MQTT_PASSWORD": "fake-secret-Zk3"}, nil, &seen)
+		if _, err := s.TestMQTT(context.Background(), TestRequest{Actor: "a", StepUp: stepped, Values: map[string]string{"MQTT_URL": tc.test}}); err != nil {
+			t.Fatalf("%s -> %s: %v", tc.stored, tc.test, err)
+		}
+		if seen.Password != "fake-secret-Zk3" {
+			t.Errorf("stored for %s, tested as %s: the same broker must get the stored password, got %+v", tc.stored, tc.test, seen)
+		}
+	}
+	// Plain and TLS stay two brokers, also on one host and port.
+	for _, tc := range []struct{ stored, test string }{
+		{"tcp://broker.lan:8883", "ssl://broker.lan:8883"},
+		{"ssl://broker.lan:1883", "mqtt://broker.lan:1883"},
+	} {
+		var seen MQTTParams
+		s := mqttTestSvc(t, map[string]string{"MQTT_URL": tc.stored, "MQTT_PASSWORD": "fake-secret-Zk3"}, nil, &seen)
+		if _, err := s.TestMQTT(context.Background(), TestRequest{Actor: "a", StepUp: stepped, Values: map[string]string{"MQTT_URL": tc.test}}); err != nil {
+			t.Fatalf("%s -> %s: %v", tc.stored, tc.test, err)
+		}
+		if seen.URL == "" || seen.Password != "" {
+			t.Errorf("stored for %s, tested as %s: a password for the plain transport must not reach TLS or the other way round: %+v", tc.stored, tc.test, seen)
+		}
+	}
+}
+
+// Why (#1055): the environment import used to store the URL's own spelling as
+// the password's target (mqtt://, tls://, mqtts://). Such a row was entered for
+// the broker the URL names; reading it as another spelling of that broker keeps
+// the password bound across the upgrade without rewriting the database. A row
+// whose target is no broker URL stays unbound: it must not match "no broker".
+func TestLegacyMQTTPasswordTargetStaysBoundToItsBroker(t *testing.T) {
+	for _, tc := range []struct{ url, target string }{
+		{"tcp://broker.lan:1883", "mqtt://broker.lan:1883"},
+		{"ssl://broker.lan:8883", "mqtts://broker.lan:8883"},
+		{"ssl://broker.lan:8883", "tls://BROKER.lan:8883"},
+	} {
+		var seen MQTTParams
+		s := mqttTestSvcBoundTo(t, map[string]string{"MQTT_URL": tc.url, "MQTT_PASSWORD": "fake-secret-Zk3"}, nil, &seen, tc.target)
+		if got := s.Snapshot().MQTTPassword; got != "fake-secret-Zk3" {
+			t.Errorf("row bound to %s, MQTT_URL %s: the password is not used", tc.target, tc.url)
+		}
+	}
+	for _, tc := range []struct{ url, target string }{
+		{"tcp://broker.lan:1883", "tcp://other.lan:1883"},
+		{"tcp://broker.lan:1883", "ssl://broker.lan:1883"},
+		{"tcp://broker.lan:1883", "ws://broker.lan:80"}, // no broker URL: never the same as the configured one
+		{"", "ws://broker.lan:80"},                      // and not the same as "no broker" either
+		{"", "garbage"},
+	} {
+		var seen MQTTParams
+		stored := map[string]string{"MQTT_PASSWORD": "fake-secret-Zk3"}
+		if tc.url != "" {
+			stored["MQTT_URL"] = tc.url
+		}
+		s := mqttTestSvcBoundTo(t, stored, nil, &seen, tc.target)
+		if got := s.Snapshot().MQTTPassword; got != "" {
+			t.Errorf("row bound to %q, MQTT_URL %q: the password must stay unused", tc.target, tc.url)
+		}
+	}
+}
+
+// Why (#1055): the target is written to the database and compared after every
+// upgrade, so its format is a contract: lower-case host, the port always
+// written, IPv6 without brackets (as the form's own URLs produced it).
+func TestBrokerTargetFormat(t *testing.T) {
+	for raw, want := range map[string]string{
+		"tcp://Broker.LAN:1883":     "tcp://broker.lan:1883",
+		"tcp://broker.lan":          "tcp://broker.lan:1883",
+		"mqtt://broker.lan":         "tcp://broker.lan:1883",
+		"ssl://broker.lan":          "ssl://broker.lan:8883",
+		"tls://broker.lan:9000":     "ssl://broker.lan:9000",
+		"mqtts://broker.lan":        "ssl://broker.lan:8883",
+		"tcp://[fd00::1]:1883":      "tcp://fd00::1:1883",
+		"tcp://u:fake-pw@host:1884": "tcp://host:1884", // the password is no part of the target
+		"ws://broker.lan:80":        "",
+		"":                          "",
+		"garbage":                   "",
+	} {
+		if got := brokerTarget(raw); got != want {
+			t.Errorf("brokerTarget(%q) = %q, want %q", raw, got, want)
+		}
 	}
 }
 

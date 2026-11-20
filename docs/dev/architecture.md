@@ -34,7 +34,7 @@ internal/settings         curated device settings (one validated command per fie
 internal/sysconfig        System settings in the database, policy rule versions
 internal/importer         web import of TasmoAdmin data
 internal/changelog        CHANGELOG.md parser for the What's new page
-internal/netaddr          the one place that formats network addresses
+internal/netaddr          the one place that formats network addresses and redacts URLs (RedactURL, URLHost)
 internal/audit            audit recorder
 internal/auth             OIDC, trusted headers, local break-glass, sessions, roles
 internal/httpx            proxy/base-path/public-URL handling, security headers, CSRF

@@ -378,10 +378,6 @@ func KnownFirmwareSources() []string { return slices.Clone(knownFirmwareSources)
 // LogLevels are the valid LOG_LEVEL values (any letter case from the environment).
 func LogLevels() []string { return []string{"debug", "info", "warn", "error"} }
 
-// mqttSchemes are the broker URL schemes the MQTT client accepts. ws/wss are
-// left out on purpose: the client's address filter cannot be applied to them.
-var mqttSchemes = []string{"tcp", "ssl", "tls", "mqtt", "mqtts"}
-
 // validateOperational checks the settings the web UI may edit. They are
 // validated here, once, so the environment and the UI cannot disagree.
 func (c Config) validateOperational(bad func(key, msg string)) {
@@ -394,7 +390,7 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 		bad("LOG_LEVEL", "must be one of "+strings.Join(LogLevels(), ", "))
 	}
 	if c.MQTTURL != "" {
-		if u, err := url.Parse(c.MQTTURL); err != nil || !slices.Contains(mqttSchemes, u.Scheme) || u.Hostname() == "" {
+		if _, err := ParseBrokerURL(c.MQTTURL); err != nil {
 			bad("MQTT_URL", "must be a broker URL such as tcp://host:1883 or ssl://host:8883")
 		}
 	}
