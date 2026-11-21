@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.46.0 "Cape Agulhas" (2026-11-21)
+
+### Changed
+
+- Admins can end all sessions of a local user (#1162)
+
+### Fixed
+
+- An offline or never-answered device says so once and shows no stale Stable or 2 / 2 (#1082).
+- A form left open past a sign-in change and an SSO account without access end on a styled page with a way forward (#1084).
+
 ## 0.45.2 "Rubjerg Knude" (2026-11-21)
 
 ### Fixed
