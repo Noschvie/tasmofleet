@@ -131,7 +131,7 @@ test("device pages: one header with the tabs on every tab; Back up returns to it
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "lamp-1m", exact: true }).click();
   const deviceURL = page.url();
-  for (const [sub, tab] of [["", "Overview"], ["/settings", "Settings"], ["/console", "Console"], ["/backups", "Backups"], ["/drift", "Drift"]] as const) {
+  for (const [sub, tab] of [["", "Overview"], ["/settings", "Settings"], ["/console", "Console"], ["/backups", "Backups"], ["/drift", "Changes"]] as const) {
     await page.goto(deviceURL + sub);
     await expect(page.locator("nav.utabs a[aria-current=page]"), sub).toHaveText(tab);
     await expect(page.locator("nav.crumbs [aria-current=page]"), sub).toHaveText("lamp-1m");

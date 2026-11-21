@@ -8768,26 +8768,9 @@ tr.is-saved > td {
 .devdrift-sp {
   flex: 1;
 }
+/* "Show all N settings": a plain link at the end of the lead line (it navigates, so it is no checkbox) */
 .devdrift-all {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  min-height: var(--ctl);
-  font-size: 13px;
-  color: var(--color-text);
-  text-decoration: none;
-}
-.devdrift-box {
-  width: 16px;
-  height: 16px;
-  border: var(--hair-w) solid var(--color-border-strong);
-  border-radius: 3px;
-  background: var(--color-surface);
-}
-.devdrift-all[aria-checked="true"] .devdrift-box {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  box-shadow: inset 0 0 0 3px var(--color-surface);
+  white-space: nowrap;
 }
 .devdrift-tbl {
   overflow: hidden;

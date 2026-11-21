@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -102,7 +103,8 @@ type driftView struct {
 	StoredAt      time.Time
 	StoredBy      string // what started that backup ("Automatic, before update to 14.3.0"), "" when unknown
 	Changed       int
-	Total         int // settings compared
+	Total         int    // settings compared
+	Unread        string // the sections one side could not read ("Status 9"), "" when every section was read
 	All           bool
 	AllHref       string // the same page with "Show all" toggled
 	Rows          []driftRow
@@ -124,15 +126,31 @@ func (p driftView) storedBy() string {
 	return " · " + p.StoredBy
 }
 
-// countText is the line above the table.
-func (p driftView) countText() string {
-	if p.Changed == 0 {
-		return "No setting changed since the last backup"
+// headline is the sentence above the table: what differs from the last backup, and when that backup is from.
+func (p driftView) headline() string {
+	switch {
+	case p.Changed == 0 && p.Unread != "":
+		return "No difference in the settings that could be compared"
+	case p.Changed == 0:
+		return "Everything matches the last backup"
 	}
 	if p.Changed == 1 {
-		return "1 setting changed since the last backup"
+		return "1 setting differs from the last backup"
 	}
-	return strconv.Itoa(p.Changed) + " settings changed since the last backup"
+	return strconv.Itoa(p.Changed) + " settings differ from the last backup"
+}
+
+// allText is the link that toggles the unchanged settings.
+func (p driftView) allText() string {
+	if p.All {
+		return "Show changed only"
+	}
+	return "Show all " + plural(p.Total, "setting")
+}
+
+// unreadText is the banner for sections that one side could not read.
+func (p driftView) unreadText() string {
+	return "Part of the device could not be read (" + p.Unread + "). Those settings are not compared."
 }
 
 // driftValue is a compared value as text: a JSON string without its quotes, the redacted kinds
@@ -153,6 +171,79 @@ func driftValue(c backup.Change, v string, other string) string {
 		return s
 	}
 	return v
+}
+
+// readErrorKey is the key under which a snapshot records a section it could not read ({"_error": "..."}, written
+// by package backup).
+const readErrorKey = "._error"
+
+// comparedSettings is what a snapshot comparison may show: the changes of the sections both sides read.
+type comparedSettings struct {
+	Changes  []backup.Change
+	Unread   []string // sections one side could not read and the other could, as the page names them ("Status 9")
+	NoneRead bool     // the live read answered no section at all
+}
+
+// readableSections drops every section that one side could not read from a snapshot comparison. Such a section
+// is no setting that changed: its failure marker (_error) and the settings of the other side would show as
+// "changed" or "absent". It decides by structure, never by the error text, which differs by transport. A
+// section both sides could not read is dropped without a word: the device never answers it (Status 9 on a
+// device without energy monitoring), so nothing is missing. A section one side could not read is dropped and
+// named, so the page does not claim a comparison it did not make.
+func readableSections(cs []backup.Change) comparedSettings {
+	type sides struct{ stored, live bool }
+	unread := map[string]sides{}
+	for _, c := range cs {
+		sec, ok := strings.CutSuffix(c.Path, readErrorKey)
+		if !ok || strings.ContainsAny(sec, ".[") {
+			continue
+		}
+		s := unread[sec]
+		switch {
+		case c.Same:
+			s = sides{true, true}
+		case c.Secret: // a marker the redaction rule took for a credential says no side: report it as one-sided
+			s.stored = true
+		default:
+			s.stored = s.stored || c.Old != ""
+			s.live = s.live || c.New != ""
+		}
+		unread[sec] = s
+	}
+	var out comparedSettings
+	for _, c := range cs { // a section is dropped whole: its marker, and the settings the other side holds
+		dropped := false
+		for sec := range unread {
+			if c.Path == sec || strings.HasPrefix(c.Path, sec+".") || strings.HasPrefix(c.Path, sec+"[") {
+				dropped = true
+				break
+			}
+		}
+		if !dropped {
+			out.Changes = append(out.Changes, c)
+		}
+	}
+	liveUnread := false
+	for sec, s := range unread {
+		liveUnread = liveUnread || s.live
+		if s.stored != s.live {
+			out.Unread = append(out.Unread, sec)
+		}
+	}
+	sort.Slice(out.Unread, func(i, j int) bool { // Status5 before Status10
+		a, b := out.Unread[i], out.Unread[j]
+		return len(a) < len(b) || (len(a) == len(b) && a < b)
+	})
+	out.NoneRead = len(out.Changes) == 0 && liveUnread
+	return out
+}
+
+// sectionName is how the page names a snapshot section: "Status9" is "Status 9".
+func sectionName(sec string) string {
+	if n, ok := strings.CutPrefix(sec, "Status"); ok && n != "" && strings.Trim(n, "0123456789") == "" {
+		return "Status " + n
+	}
+	return sec
 }
 
 func driftRows(cs []backup.Change) (rows []driftRow, changed int) {
@@ -240,22 +331,38 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			p.Error = "The device could not be read: " + errText(err)
+			h.logReadFailure(r, d.ID, err)
+			p.Error = readErrorText(err) // the class sentence: the Go error chain never reaches the page
 			p.Retry = true
 			show(http.StatusBadGateway)
 			return
 		}
 		read = driftRead{at: now, doc: cur}
-		keepDrift(key, read)
 	}
 	changes, err := backup.SnapshotCompare(old, read.doc)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
+	cmp := readableSections(changes)
+	if fresh && !cmp.NoneRead { // a read that answered nothing is a failed read: the reloads of the interval do not show it
+		keepDrift(key, read)
+	}
+	if cmp.NoneRead {
+		p.Error = "The device could not be read."
+		p.Retry = true
+		show(http.StatusBadGateway)
+		return
+	}
+	changes = cmp.Changes
 	if !v.IsAdmin {
 		changes = backup.HideBodies(changes)
 	}
+	names := make([]string, len(cmp.Unread))
+	for i, sec := range cmp.Unread {
+		names[i] = sectionName(sec)
+	}
+	p.Unread = strings.Join(names, ", ")
 	p.Compared, p.Total, p.ReadAgo = true, len(changes), agoWords(now, read.at)
 	rows, changed := driftRows(changes)
 	p.Changed = changed

@@ -119,7 +119,7 @@ func (t deviceTabs) headTabs() []ui.Tab {
 	}
 	tabs = append(tabs, ui.Tab{Label: "Backups", Href: p("/backups"), Current: t.Active == "backups"})
 	if t.Drift {
-		tabs = append(tabs, ui.Tab{Label: "Drift", Href: p("/drift"), Current: t.Active == "drift"})
+		tabs = append(tabs, ui.Tab{Label: "Changes", Href: p("/drift"), Current: t.Active == "drift"})
 	}
 	if t.CanReplace {
 		tabs = append(tabs, ui.Tab{Label: "Replace device", Href: p("/replace"), Current: t.Active == "replace"})

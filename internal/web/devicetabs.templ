@@ -1,7 +1,6 @@
 package web
 
 import (
-	"strconv"
 
 	"github.com/hellwand/tasmofleet/internal/settings"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
@@ -273,26 +272,28 @@ templ driftPage(p driftView) {
 			</div>
 		}
 		if p.Compared {
-			<p class="devdrift-lead">Live settings read <span data-visual-mask>{ p.ReadAgo }</span>, compared with the last backup (<time { ui.StampAttrs(p.StoredAt, ui.StampShort)... }>{ ui.StampText(p.StoredAt, ui.StampShort) }</time>{ p.storedBy() }).</p>
+			if p.Unread != "" {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.unreadText()})
+			}
 			<div class="devdrift-bar">
-				<b>{ p.countText() }</b>
+				<b>{ p.headline() } (<time { ui.StampAttrs(p.StoredAt, ui.StampShort)... }>{ ui.StampText(p.StoredAt, ui.StampShort) }</time>{ p.storedBy() })</b>
 				<span class="devdrift-sp"></span>
-				<a class="devdrift-all" href={ templ.SafeURL(p.AllHref) } role="checkbox" aria-checked={ ariaBool(p.All) }><span class="devdrift-box" aria-hidden="true"></span>Show all { strconv.Itoa(p.Total) }</a>
 				if p.CanBackup {
 					<form method="post" action={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "/backup")) }>
 						<input type="hidden" name="csrf" value={ p.CSRF }/>
 						<input type="hidden" name="back" value="/drift"/>
-						<button type="submit" class="btn">Back up live state</button>
+						@ui.Button(ui.Btn{Label: "Back up now", Type: "submit"})
 					</form>
 				}
 				if p.RestoreHref != "" {
-					if p.Changed > 0 {
-						@ui.Button(ui.Btn{Label: "Restore backup…", Kind: "primary", Href: p.RestoreHref})
-					} else {
-						@ui.Button(ui.Btn{Label: "Restore backup…", Href: p.RestoreHref}) // nothing changed: not the page's main action
-					}
+					@ui.Button(ui.Btn{Label: "Restore from backup…", Href: p.RestoreHref})
 				}
 			</div>
+			<p class="devdrift-lead">Read from the device <span data-visual-mask>{ p.ReadAgo }</span>. Nothing is changed on the device.
+				if p.Total > p.Changed || p.All {
+					<a class="devdrift-all" href={ templ.SafeURL(p.AllHref) }>{ p.allText() }</a>
+				}
+			</p>
 			if p.Hiding {
 				<p class="devnote">Rules are shown to admins only.</p>
 			}
@@ -312,7 +313,6 @@ templ driftPage(p driftView) {
 					</div>
 				</section>
 			}
-			<p class="devnote">Drift is read from the device when you open this tab. Nothing is changed on the device.</p>
 		}
 	</div>
 }

@@ -495,7 +495,7 @@ test("a link to a page that reads a device is busy until the page arrives", asyn
 
 // Why: the drift comparison takes a live snapshot when the cached read is stale, so it blocks on the
 // device like the replace page; a tab that stays unmarked leaves the person clicking again.
-test("the Drift tab link is busy until the page arrives", async ({ page }) => {
+test("the Changes tab link is busy until the page arrives", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   const href = await devicePath(page);
   await page.route("**" + href + "/drift", async (route) => {
@@ -503,7 +503,7 @@ test("the Drift tab link is busy until the page arrives", async ({ page }) => {
     await route.continue();
   });
   await page.goto(app.url + href);
-  const link = page.getByRole("link", { name: "Drift" });
+  const link = page.getByRole("link", { name: "Changes", exact: true });
   await page.evaluate(() => {
     window.addEventListener("pagehide", () => sessionStorage.setItem("probe", document.querySelector('a[href$="/drift"]')?.getAttribute("aria-busy") ?? "none"));
   });

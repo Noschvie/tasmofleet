@@ -299,19 +299,24 @@ func TestDriftShowAllListsTheUnchangedSettings(t *testing.T) {
 	clear(driftLast)
 	driftMu.Unlock()
 	_, body := e.do(t, "GET", "/devices/1/drift", "admin", nil)
-	if !strings.Contains(body, "1 setting changed since the last backup") || strings.Contains(body, "SerialLog") || !strings.Contains(body, `href="/tf/devices/1/drift?all=1" role="checkbox" aria-checked="false"`) {
+	if !strings.Contains(body, "1 setting differs from the last backup") || strings.Contains(body, "SerialLog") || !strings.Contains(body, `<a class="devdrift-all" href="/tf/devices/1/drift?all=1">Show all 2 settings</a>`) {
 		t.Fatalf("drift:\n%s", body)
+	}
+	// Why: "Show all" navigates to another URL, so it is a link and no checkbox (design system: links only
+	// navigate); the reassurance reads under the headline, before the table, not after it.
+	if strings.Contains(body, `role="checkbox"`) || strings.Index(body, "Nothing is changed on the device") > strings.Index(body, "devdrift-tbl") || !strings.Contains(body, ">Back up now</button>") {
+		t.Errorf("Show all is a plain link, the reassurance comes first, the backup button says Back up now:\n%s", body)
 	}
 	changed := strings.Count(body, `class="devdrift-row is-changed"`)
 	_, all := e.do(t, "GET", "/devices/1/drift?all=1", "admin", nil)
 	if rows := strings.Count(all, `class="devdrift-row"`); rows != 1 || !strings.Contains(all, "SerialLog") || strings.Count(all, `class="devdrift-row is-changed"`) != changed {
 		t.Errorf("Show all adds the unchanged rows (%d) and keeps the changed ones (%d):\n%s", rows, changed, all)
 	}
-	if !strings.Contains(all, `aria-checked="true"`) || !strings.Contains(all, "Show all 2</a>") || !strings.Contains(all, "/restore\">Restore backup…</a>") {
-		t.Errorf("show all checked, restore offered to the admin:\n%s", all)
+	if !strings.Contains(all, `<a class="devdrift-all" href="/tf/devices/1/drift">Show changed only</a>`) || !strings.Contains(all, `<a class="btn" href="/tf/backups/4/restore">Restore from backup…</a>`) {
+		t.Errorf("show all offers the way back, restore (the default button: it is danger inside its dialog only) offered to the admin:\n%s", all)
 	}
 	_, op := e.do(t, "GET", "/devices/1/drift", "operator", nil)
-	if strings.Contains(op, "Restore backup") {
+	if strings.Contains(op, "Restore from backup") {
 		t.Error("an operator cannot restore")
 	}
 }
