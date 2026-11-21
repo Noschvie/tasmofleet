@@ -237,7 +237,7 @@ templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum
 	@wantCheck(t.WantWarn, true)
 	@rulePageTitle(t.Name, t.Required, t.Draft, t.Disabled, true)
 	@ui.CrumbsOOB(t.Crumbs, t.Base)
-	@ui.PhoneTitleOOB(t.Name)
+	@ui.PhoneTitleOOB("policy")
 	if t.Source != "" {
 		@ruleSource(t.Source, true)
 	}

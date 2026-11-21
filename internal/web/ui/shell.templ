@@ -274,12 +274,12 @@ func ariaBool(b bool) string {
 	return "false"
 }
 
-// phoneHeader is the top bar below 45rem: menu button, page title, avatar. Both
+// phoneHeader is the top bar below 45rem: menu button, the area's name (AreaLabel, not the page title), avatar. Both
 // buttons are links to /nav, the drawer as a page; dialog.js opens the drawer instead.
 templ phoneHeader(d ShellData) {
 	<div class="ph">
 		<a class="ph-btn ph-menu" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Open navigation"><span class="burger" aria-hidden="true"><span></span><span></span><span></span></span></a>
-		<span class="ph-title" id="ph-title">{ d.Title }</span>
+		<span class="ph-title" id="ph-title">{ AreaLabel(d.Nav) }</span>
 		<a class="ph-btn ph-me" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Account and theme">
 			@avatar(d.UserName, d.News)
 		</a>
@@ -350,9 +350,10 @@ templ CrumbsOOB(trail []Crumb, base string) {
 	@crumbsNav(trail, base, templ.Attributes{"hx-swap-oob": "true"})
 }
 
-// PhoneTitleOOB is the phone top bar's title as an out-of-band swap, next to CrumbsOOB.
-templ PhoneTitleOOB(title string) {
-	<span class="ph-title" id="ph-title" hx-swap-oob="true">{ title }</span>
+// PhoneTitleOOB is the phone top bar's title as an out-of-band swap, next to CrumbsOOB. It takes the nav key of the
+// page, not a text: the phone title is the area (AreaLabel), so a caller cannot hand it the page's name (#1079).
+templ PhoneTitleOOB(nav string) {
+	<span class="ph-title" id="ph-title" hx-swap-oob="true">{ AreaLabel(nav) }</span>
 }
 
 templ crumbsNav(trail []Crumb, base string, attrs templ.Attributes) {

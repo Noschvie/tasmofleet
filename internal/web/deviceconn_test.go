@@ -230,7 +230,9 @@ func TestUpdateButtonIgnoresThePullPath(t *testing.T) {
 }
 
 // Why (review M2): the live refresh must not close a fold the person opened, so it swaps the
-// summaries and the lists by id and carries no <details>.
+// summaries and the lists by id and carries no <details>. The one exception is the header's "⋯" menu (#1079): it
+// travels with the header, wrapped in hx-preserve, so htmx keeps the node that is on the page (open or not) and drops
+// the copy that arrives. It is the only <details> in the answer and it is never swapped in.
 func TestLiveRefreshSwapsPartsNotFolds(t *testing.T) {
 	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
 	e := setupWith(t, withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: f}}))
@@ -240,7 +242,7 @@ func TestLiveRefreshSwapsPartsNotFolds(t *testing.T) {
 			t.Fatalf("live answer lacks %s", id)
 		}
 	}
-	if strings.Contains(body, "<details") {
+	if strings.Contains(deviceMoreMenu.ReplaceAllString(body, ""), "<details") {
 		t.Fatal("the live answer must not replace the folds")
 	}
 }

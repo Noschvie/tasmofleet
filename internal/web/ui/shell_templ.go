@@ -1325,7 +1325,7 @@ func ariaBool(b bool) string {
 	return "false"
 }
 
-// phoneHeader is the top bar below 45rem: menu button, page title, avatar. Both
+// phoneHeader is the top bar below 45rem: menu button, the area's name (AreaLabel, not the page title), avatar. Both
 // buttons are links to /nav, the drawer as a page; dialog.js opens the drawer instead.
 func phoneHeader(d ShellData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -1362,9 +1362,9 @@ func phoneHeader(d ShellData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var64 string
-		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(d.Title)
+		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(AreaLabel(d.Nav))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 282, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 282, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 		if templ_7745c5c3_Err != nil {
@@ -1699,8 +1699,9 @@ func CrumbsOOB(trail []Crumb, base string) templ.Component {
 	})
 }
 
-// PhoneTitleOOB is the phone top bar's title as an out-of-band swap, next to CrumbsOOB.
-func PhoneTitleOOB(title string) templ.Component {
+// PhoneTitleOOB is the phone top bar's title as an out-of-band swap, next to CrumbsOOB. It takes the nav key of the
+// page, not a text: the phone title is the area (AreaLabel), so a caller cannot hand it the page's name (#1079).
+func PhoneTitleOOB(nav string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -1722,9 +1723,9 @@ func PhoneTitleOOB(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var80 string
-		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(title)
+		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(AreaLabel(nav))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 355, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 356, Col: 73}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 		if templ_7745c5c3_Err != nil {
@@ -1868,7 +1869,7 @@ func crumbSteps(trail []Crumb, base string) templ.Component {
 				var templ_7745c5c3_Var84 string
 				templ_7745c5c3_Var84, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(base + c.Path)).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 382, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 383, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var84)
 				if templ_7745c5c3_Err != nil {
@@ -1891,7 +1892,7 @@ func crumbSteps(trail []Crumb, base string) templ.Component {
 				var templ_7745c5c3_Var85 string
 				templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 382, Col: 86}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 383, Col: 86}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 				if templ_7745c5c3_Err != nil {
@@ -1909,7 +1910,7 @@ func crumbSteps(trail []Crumb, base string) templ.Component {
 				var templ_7745c5c3_Var86 string
 				templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 384, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 385, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 				if templ_7745c5c3_Err != nil {
@@ -1927,7 +1928,7 @@ func crumbSteps(trail []Crumb, base string) templ.Component {
 				var templ_7745c5c3_Var87 string
 				templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.JoinStringErrs(c.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 386, Col: 37}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 387, Col: 37}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var87))
 				if templ_7745c5c3_Err != nil {
@@ -1997,7 +1998,7 @@ func navBadge(n int) templ.Component {
 			var templ_7745c5c3_Var90 string
 			templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(n))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 411, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 412, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 			if templ_7745c5c3_Err != nil {

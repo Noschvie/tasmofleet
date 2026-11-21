@@ -20,6 +20,44 @@ test.afterAll(async () => {
   await env?.stop();
 });
 
+// #1079 (A7-020): the three step labels sat in three flex items of a 335 px card with nowrap and an ellipsis, so a
+// phone read "Setup ...", "Admin ..." and "Basic se...". At 375 px the row keeps the three numbers and shows only the
+// current step's label, under the row and never cut; the other labels stay readable to a screen reader. A person who
+// cannot see the colour of the current number still reads which step it is. On the first page (no token) and on the
+// password page (step 2), where the link in the container log opens it.
+test("phone: the step indicator shows the current step's label whole, the others only to a screen reader", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(app.url + "/setup/account");
+  const label = async () =>
+    page.locator(".setup-steps .setup-label").evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect();
+        const li = e.closest("li")!;
+        return {
+          text: e.textContent!.trim(),
+          current: li.classList.contains("is-current"),
+          shown: r.width > 2 && r.height > 2 && getComputedStyle(e).visibility !== "hidden",
+          cut: e.scrollWidth > e.clientWidth + 1 || getComputedStyle(e).textOverflow === "ellipsis",
+        };
+      }),
+    );
+  let got = await label();
+  expect(got.map((l) => l.text)).toEqual(["Setup token", "Admin account", "Basic settings"]);
+  expect(got.filter((l) => l.shown).map((l) => l.text), "exactly the current step's label is shown").toEqual(["Setup token"]);
+  expect(got.filter((l) => l.shown && l.cut), "no shown label is cut with an ellipsis").toEqual([]);
+  // the page itself does not scroll sideways
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  // step 2, through the setup link
+  const link = new URL(app.setupLink(), app.url);
+  await page.goto(app.url + link.pathname + link.search);
+  got = await label();
+  expect(got.filter((l) => l.shown).map((l) => l.text)).toEqual(["Admin account"]);
+  expect(got.filter((l) => l.shown && l.cut)).toEqual([]);
+  expect(await page.locator(".setup-steps .is-current .setup-label").evaluate((e) => e.getBoundingClientRect().bottom <= e.closest("ol")!.getBoundingClientRect().bottom + 1)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect((await label()).filter((l) => l.shown).length, "a wide screen shows all three labels").toBe(3);
+});
+
 test("zero configuration: setup link, first admin, setup, live networks, scan, device list", { tag: "@core" }, async ({ page }) => {
   // Why (N12): only the person who can read the container log may set the first password. Without
   // the link the page says where it is and offers no form; a wrong token is refused.

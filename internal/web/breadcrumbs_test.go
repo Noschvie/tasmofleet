@@ -88,8 +88,16 @@ func checkTrail(t *testing.T, e *env, p trailPage) {
 	if p.want != "" && got != p.want {
 		t.Errorf("%s %s: trail %q, want %q", p.method, p.path, got, p.want)
 	}
+	// The phone header names the area, the first crumb: never the page, whose h1 is the page's name (#1079).
+	pt := phoneTitle.FindStringSubmatch(body)
+	if pt != nil && html.UnescapeString(pt[1]) != trail[0] {
+		t.Errorf("%s %s: the phone title is %q, the area is %q", p.method, p.path, html.UnescapeString(pt[1]), trail[0])
+	}
 	if p.fragment {
 		return
+	}
+	if pt == nil {
+		t.Errorf("%s %s: no phone title", p.method, p.path)
 	}
 	group := trailBarGroup.FindStringSubmatch(body)
 	if group == nil {

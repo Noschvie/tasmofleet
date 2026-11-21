@@ -43,7 +43,7 @@ templ deviceHeadSwap(t deviceTabs, crumbs []ui.Crumb) {
 		@restartDialog(t, true)
 	}
 	@ui.CrumbsOOB(crumbs, t.Base)
-	@ui.PhoneTitleOOB(t.Name)
+	@ui.PhoneTitleOOB("device")
 	<title>{ t.Name } - TasmoFleet</title>
 }
 
@@ -112,8 +112,17 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				}
 			</form>
 			if t.IsAdmin {
-				@ui.Button(ui.Btn{Label: "Edit", Href: t.Base + devPath(t.ID, "/edit")})
-				@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: t.Base + devPath(t.ID, "/delete")})
+				// Edit and Delete are buttons on a wide screen and entries of one "⋯" menu on a phone (#1079): the
+				// wrapper lays out as if it were not there, and CSS shows one of the two sets, never both.
+				<div class="devhd-wide">
+					@ui.Button(ui.Btn{Label: "Edit", Href: t.Base + devPath(t.ID, "/edit")})
+					@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: t.Base + devPath(t.ID, "/delete")})
+				</div>
+				// hx-preserve: the header comes back out of band on every live refresh, and a menu the person has
+				// just opened must stay open. Its entries depend on the role only, which a refresh does not change.
+				<div class="devhd-more" id={ "devhd-more-" + devID(t.ID) } hx-preserve>
+					@ui.RowMenu("More actions", t.moreItems(), false)
+				</div>
 			}
 		</div>
 		if t.ACL {

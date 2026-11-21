@@ -111,6 +111,28 @@ test.describe("phone, long device name", () => {
     expect(h1!.width, "the title stays inside the screen").toBeLessThanOrEqual(375);
   });
 
+  // #1079 (A2-011): the meta line (address, hostname, chip, firmware) is a row of items that wrap; a hostname with no
+  // break opportunity (people name devices like "AtticHeaterPlug...", and a device reports its hostname as typed) ran
+  // past the right edge. The simulator reports a short hostname, so the longest unbreakable value the line can hold
+  // is put into the Hostname item, and every item must stay inside the line.
+  test("the header's meta line wraps a hostname that has no break", async ({ page }) => {
+    await page.goto(deviceURL);
+    await page.evaluate((long) => {
+      const item = document.querySelector(".devhd-meta > span");
+      if (!item) throw new Error("no meta item");
+      item.textContent = long;
+    }, LONG + LONG);
+    const out = await page.evaluate(() => {
+      const box = document.querySelector(".devhd-meta")!.getBoundingClientRect();
+      return [...document.querySelectorAll(".devhd-meta > span")]
+        .map((e) => ({ t: e.textContent!.slice(0, 24), r: e.getBoundingClientRect() }))
+        .filter(({ r }) => r.right > box.right + 0.5 || r.left < box.left - 0.5)
+        .map(({ t, r }) => `${t} [${Math.round(r.left)}..${Math.round(r.right)}] in a line of [${Math.round(box.left)}..${Math.round(box.right)}]`);
+    });
+    expect(out, "a meta item sticks out of its line").toEqual([]);
+    await expectNoOverflow(page, "device header with a long hostname");
+  });
+
   test("lists, bulk pages and the retry form do not scroll sideways", async ({ page }) => {
     await page.goto(app.url + "/devices");
     await expectNoOverflow(page, "devices");

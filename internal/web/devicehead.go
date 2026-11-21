@@ -127,6 +127,17 @@ func (t deviceTabs) headTabs() []ui.Tab {
 	return tabs
 }
 
+// moreItems are the entries of the header's "⋯" menu, which a phone shows in place of the Edit and Delete buttons: the
+// rare actions of an admin, Delete last and after a rule so it never sits beside the others (#1079). Each is a link to
+// the page that does the work and checks the role itself.
+func (t deviceTabs) moreItems() []ui.MenuItem {
+	items := []ui.MenuItem{{Label: "Edit", Href: t.Base + devPath(t.ID, "/edit")}}
+	if t.CanReplace {
+		items = append(items, ui.MenuItem{Label: "Replace device", Href: t.Base + devPath(t.ID, "/replace")})
+	}
+	return append(items, ui.MenuItem{Label: "Delete", Href: t.Base + devPath(t.ID, "/delete"), Danger: true, Sep: true})
+}
+
 // stateLabel and stateTone are the header's status pill: "Updating" while an operation holds
 // the device (it is silent on purpose), else the health state.
 func (t deviceTabs) stateLabel() string {

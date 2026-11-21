@@ -5439,6 +5439,24 @@ a.att-row:hover {
   margin-bottom: var(--sp-16);
   overflow-x: auto;
 }
+/* A strip that scrolls sideways (the tab rows, the filter chips) fades the edge that has more: tabs.js sets
+   data-more-end while there is more to the right and data-more-start while there is more to the left (#1079).
+   A colour mask, so it follows both themes; a strip that fits, or that wraps, carries neither attribute. */
+.utabs[data-more-end],
+.dv-chips[data-more-end] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--sp-32)), transparent);
+}
+.utabs[data-more-start],
+.dv-chips[data-more-start] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - var(--sp-32)), transparent);
+}
+.utabs[data-more-start][data-more-end],
+.dv-chips[data-more-start][data-more-end] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--sp-32), #000 calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--sp-32), #000 calc(100% - var(--sp-32)), transparent);
+}
 .utab {
   display: inline-flex;
   align-items: center;
@@ -8120,6 +8138,11 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   font: 400 12.5px var(--font-mono);
   color: var(--color-text-2);
 }
+/* a long hostname has no break opportunity: it breaks anywhere instead of running past the edge (#1079) */
+.devhd-meta > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .devhd-meta form,
 .devhd-acts form,
 .devdrift-bar form {
@@ -8141,6 +8164,26 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   display: flex;
   gap: var(--sp-6);
   flex-wrap: wrap;
+}
+/* Edit and Delete are buttons here and entries of the "⋯" menu on a phone (#1079): the wrapper lays out as if it
+   were not there, and exactly one of the two sets is displayed at each width (never both: the other is display:none). */
+.devhd-wide {
+  display: contents;
+}
+.devhd-more {
+  display: none;
+}
+@media (max-width: 44.99rem) {
+  .devhd-acts {
+    flex: 1 1 100%;
+  }
+  .devhd-wide {
+    display: none;
+  }
+  .devhd-more {
+    display: block;
+    margin-left: auto; /* the menu opens from the right edge, where its panel has room */
+  }
 }
 /* the switch of the header and of a relay: a track with a white knob, the accent when on */
 .devsw {
@@ -12651,6 +12694,32 @@ main.bare {
 }
 .setup-steps .is-current .setup-label {
   color: var(--color-text);
+}
+/* On a phone three labels do not fit the card (they were cut to "Setup ...", #1079): the numbers stay in the row and
+   only the current step's label is shown, under the row, wrapping instead of cutting. The other labels stay
+   readable to a screen reader (visually hidden, not display:none). */
+@media (max-width: 44.99rem) {
+  .setup-steps {
+    position: relative;
+    padding-bottom: var(--sp-24);
+  }
+  .setup-steps li:not(.is-current) .setup-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .setup-steps .is-current .setup-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 .setup-bar {
   flex: 1;

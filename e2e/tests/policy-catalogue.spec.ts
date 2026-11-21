@@ -244,7 +244,7 @@ test("the title, the trail and the notice follow the draft's name and command", 
   await page.locator("#rule-command").dispatchEvent("change");
   await expect(page.locator("#rule-title")).toContainText("Power lock");
   await expect(page.locator(".crumb-here")).toHaveText("Power lock");
-  await expect(page.locator("#ph-title")).toHaveText("Power lock");
+  await expect(page.locator("#ph-title")).toHaveText("Devices"); // the area, not the rule (#1079)
   await expect(page.locator("#rule-source")).toContainText("A new rule for PowerLock.");
 });
 

@@ -1120,7 +1120,7 @@ func rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum 
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = ui.PhoneTitleOOB(t.Name).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.PhoneTitleOOB("policy").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

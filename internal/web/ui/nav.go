@@ -48,6 +48,16 @@ func NavGroup(nav string) string {
 	return "dashboard"
 }
 
+// groupLabels are the names of the groups, spelled once: the top bar, the drawer and the trail read them
+// through Groups, and the phone header reads them through AreaLabel.
+var groupLabels = map[string]string{"dashboard": "Dashboard", "devices": "Devices", "updates": "Updates", "system": "System"}
+
+// AreaLabel is the name of the area a page belongs to: the label of its top-bar group. The phone header shows it
+// and never the page's own title (#1079): the header is one line that cannot break at a word, so a title such as
+// "<device name> backups" was cut mid-word and "Users" stood above the h1 "Users". The h1 below carries the name.
+// A page outside the menu belongs to Dashboard, as in NavGroup.
+func AreaLabel(nav string) string { return groupLabels[NavGroup(nav)] }
+
 // navItemKey is the sub-navigation entry a page lights up.
 func navItemKey(nav string) string {
 	switch nav {
@@ -96,21 +106,21 @@ func (d ShellData) Groups() []NavGroupData {
 		return g
 	}
 	out := []NavGroupData{
-		build("dashboard", "Dashboard", []entry{{"dashboard", "Overview", "/", true, false}}),
-		build("devices", "Devices", []entry{
+		build("dashboard", groupLabels["dashboard"], []entry{{"dashboard", "Overview", "/", true, false}}),
+		build("devices", groupLabels["devices"], []entry{
 			{"devices", "List", "/devices", true, false},
 			{"policy", "Policy", "/policy", d.Policy, false},
 			{"backups", "Backups", "/devices/backups", d.Backups, false},
 			{"add", "Add", "/devices/new", true, true},
 		}),
 	}
-	if g := build("updates", "Updates", []entry{
+	if g := build("updates", groupLabels["updates"], []entry{
 		{"transactions", "Transactions", "/transactions", d.Transactions, false},
 		{"firmware", "Firmware", "/firmware", d.Firmware, false},
 	}); len(g.Items) > 0 {
 		out = append(out, g)
 	}
-	out = append(out, build("system", "System", []entry{
+	out = append(out, build("system", groupLabels["system"], []entry{
 		{"settings", "Settings", "/settings/system", d.SysConfig, true},
 		{"snapshots", "Snapshots", "/settings/system/snapshots", d.Snapshots, true},
 		{"audit", "Audit log", "/audit", true, true},

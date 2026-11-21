@@ -153,6 +153,103 @@ test("phone: the current tab of every tab row is fully in view", async ({ page }
   expect(bad).toEqual([]);
 });
 
+// #1079 (A5-007, A2-011, A3-030): a tab row or chip row that scrolls sideways showed nothing of what it hid:
+// "History" on Policy and "Replace device" on a device page could only be found by guessing to swipe. tabs.js
+// marks the strip with data-more-start / data-more-end on the side that has more, and app.css fades that edge.
+// The marker must say exactly what the strip does: set on the side that has more, gone when there is none, and
+// absent at 1280 where the strips fit. The current tab is in view on load (QA M1, also above).
+test("phone: a strip that scrolls sideways fades the side that has more, and the current tab is in view", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: SCREEN });
+  await page.goto(app.url + "/devices");
+  const lamp = (await page.getByRole("link", { name: "lamp-1m", exact: true }).getAttribute("href"))!.replace(app.url, "").replace(/\/?$/, "");
+  const state = (strip: import("@playwright/test").Locator) =>
+    strip.evaluate((n) => {
+      const max = n.scrollWidth - n.clientWidth;
+      const cur = n.querySelector('[aria-current]:not([aria-current="false"])');
+      const s = n.getBoundingClientRect();
+      const c = cur?.getBoundingClientRect();
+      const mask = getComputedStyle(n).maskImage;
+      return {
+        label: (n.getAttribute("aria-label") ?? n.className) as string,
+        max,
+        left: n.scrollLeft,
+        start: n.hasAttribute("data-more-start"),
+        end: n.hasAttribute("data-more-end"),
+        fades: mask !== "none" && mask !== "",
+        cut: c ? c.left < s.left - 0.5 || c.right > s.right + 0.5 : false,
+      };
+    });
+  const bad: string[] = [];
+  let scrolling = 0;
+  for (const path of ["/policy", "/policy/deviations", lamp, `${lamp}/backups`]) {
+    await page.goto(app.url + path);
+    await page.evaluate(() => document.fonts.ready);
+    for (const strip of await page.locator("nav.utabs:visible, .dv-chips:visible").all()) {
+      const a = await state(strip);
+      const where = `${path} "${a.label}"`;
+      if (a.max <= 1) {
+        if (a.start || a.end || a.fades) bad.push(`${where} fits but carries the fade`);
+        continue;
+      }
+      scrolling++;
+      if (a.cut) bad.push(`${where}: the current tab is cut off`);
+      if (a.end !== a.left < a.max - 1 || a.start !== a.left > 1) bad.push(`${where}: markers start=${a.start} end=${a.end} at scrollLeft ${a.left} of ${a.max}`);
+      if (!a.fades) bad.push(`${where}: has more but no edge fades`);
+      // at the far end the fade moves to the other side
+      await strip.evaluate((n) => { n.scrollLeft = n.scrollWidth; });
+      await expect(strip).toHaveAttribute("data-more-start", "");
+      await expect(strip).not.toHaveAttribute("data-more-end", "");
+    }
+  }
+  expect(scrolling, "at 375 px at least the Policy tabs and the device tabs scroll, else this guards nothing").toBeGreaterThanOrEqual(3);
+  expect(bad).toEqual([]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const path of ["/policy", lamp]) {
+    await page.goto(app.url + path);
+    await page.evaluate(() => document.fonts.ready);
+    for (const strip of await page.locator("nav.utabs:visible, .dv-chips:visible").all()) {
+      const a = await state(strip);
+      expect(a.max <= 1 && !a.start && !a.end && !a.fades, `${path} "${a.label}" at 1280: ${JSON.stringify(a)}`).toBe(true);
+    }
+  }
+});
+
+// #1079 (A2-012): a phone shows Restart and Back up and one "..." menu; Edit and Delete are not buttons next to
+// them. At 1280 the row is the old one: all four buttons and no menu. The open menu survives the live refresh,
+// which swaps the header out of band every few seconds (hx-preserve).
+test("phone: the device header keeps Restart and Back up and moves Edit, Replace and Delete into a menu", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: SCREEN });
+  await page.goto(app.url + "/devices");
+  const lamp = (await page.getByRole("link", { name: "lamp-1m", exact: true }).getAttribute("href"))!.replace(app.url, "").replace(/\/?$/, "");
+  await page.goto(app.url + lamp);
+  const acts = page.locator(".devhd-acts");
+  await expect(acts.getByRole("button", { name: "Back up" })).toBeVisible();
+  await expect(acts.getByRole("link", { name: "Restart" }).or(acts.getByRole("button", { name: "Restart" }))).toBeVisible();
+  await expect(acts.getByRole("link", { name: "Delete" })).toHaveCount(0); // not visible: no accessible Delete link beside Restart
+  await expect(acts.getByRole("link", { name: "Edit", exact: true })).toHaveCount(0);
+  const menu = acts.locator("details.rowmenu");
+  await menu.locator("summary").click();
+  const items = await menu.locator(".menu-item").allTextContents();
+  expect(items.map((t) => t.trim())).toEqual(["Edit", "Replace device", "Delete"]);
+  await expect(menu.locator("hr")).toHaveCount(1);
+  await expect(menu.locator("hr + .menu-item")).toHaveText("Delete"); // Delete after the rule, last
+  const box = (await menu.locator(".rowmenu-body").boundingBox())!;
+  expect(box.x, "the open menu stays on the screen").toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  // a live refresh swaps #devhd out of band; the menu the person opened stays open
+  await page.evaluate(() => (window as unknown as { htmx: { trigger(s: string, n: string): void } }).htmx.trigger("#devlive", "sse:resync"));
+  await page.waitForResponse((r) => /\/live\b/.test(r.url()));
+  await page.waitForTimeout(300);
+  await expect(menu).toHaveAttribute("open", "");
+  // desktop: the old row, no menu
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(acts.getByRole("link", { name: "Delete" })).toBeVisible();
+  await expect(acts.getByRole("link", { name: "Edit", exact: true })).toBeVisible();
+  await expect(menu).toBeHidden();
+});
+
 // UX review #33: on a phone the whole transaction row opens the transaction.
 test("phone: a tap anywhere on a transaction row opens it", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);

@@ -248,7 +248,7 @@ func TestPreviewKeepsTitleTrailAndNoticeInStepWithTheDraft(t *testing.T) {
 	if r.StatusCode != 200 {
 		t.Fatalf("%d", r.StatusCode)
 	}
-	for _, w := range []string{`<h1 id="rule-title" hx-swap-oob="true">`, "Power lock", `<span class="crumb-here" aria-current="page">Power lock</span>`, `id="ph-title" hx-swap-oob="true">Power lock`, "A new rule for PowerLock."} {
+	for _, w := range []string{`<h1 id="rule-title" hx-swap-oob="true">`, "Power lock", `<span class="crumb-here" aria-current="page">Power lock</span>`, `id="ph-title" hx-swap-oob="true">Devices</span>`, "A new rule for PowerLock."} {
 		if !strings.Contains(body, w) {
 			t.Errorf("preview answer lacks %q", w)
 		}

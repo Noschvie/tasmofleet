@@ -37,7 +37,8 @@ test("a refreshed name shows in the header, breadcrumb, title and list without a
   const NEW = reported;
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(NEW);
   await expect(page.locator(".crumbs .crumb-here")).toHaveText(NEW);
-  await expect(page.locator("#ph-title")).toHaveText(NEW); // the phone top bar (hidden on desktop)
+  // the phone top bar (hidden on desktop) names the area, not the page, so a rename leaves it alone (#1079)
+  await expect(page.locator("#ph-title")).toHaveText("Devices");
   await expect(page).toHaveTitle(NEW + " - TasmoFleet");
   await expect(page.locator(".devhd")).toHaveCount(1);
   // #110: the Restart confirmation names the device too
