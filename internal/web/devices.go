@@ -57,9 +57,10 @@ type deviceRow struct {
 	// list and the dashboard only (N7); elsewhere they stay zero.
 	// ViaMQTT: commands to the device go over MQTT now (Paths.Commands is MQTT), the "MQTT" marker.
 	ViaMQTT    bool
-	Outdated   bool // a newer stable release is in the cached feed
-	Deviations int  // policy values that differ from a rule
-	NoBackup   bool // no backup run (set by annotateBackups on the device list only)
+	Outdated   bool   // a newer stable release is in the cached feed
+	UpdateTo   string // that release, "Update 16.2.0" in the list (set with Outdated)
+	Deviations int    // policy values that differ from a rule
+	NoBackup   bool   // no backup run (set by annotateBackups on the device list only)
 	// Stab is the stability verdict of an online device (annotateStability); nil = not judged.
 	Stab *stability.Result
 }

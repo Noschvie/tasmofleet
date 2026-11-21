@@ -449,6 +449,46 @@ func txnSegments(t TxnData) []barSeg {
 	return out
 }
 
+// segCell is the pitch of a pattern in the SegBar's 1000-unit width: a stripe and a gap are each this wide. Drawn
+// at its narrowest (the dashboard card on a 375 px phone, about 300 px wide) a cell is still 3 px, so an
+// antialiased edge never blends a stripe into the track.
+const segCell = 10
+
+// segRect is one rectangle of a SegBar part, in the bar's 1000 x 6 space.
+type segRect struct{ X, Y, W, H int }
+
+// segRects draws a part. Colour alone told done, running and failed apart (about 1.1:1 between done and failed in
+// dark), so each state has a shape: a succeeded or other part is one solid bar, a running part is vertical stripes
+// with gaps, a failed part is a checker over two rows. Every rect stays inside the part; the sliver a part's end
+// would leave (under 3 units, under 1 px) is not drawn.
+func segRects(s barSeg) []segRect {
+	if s.Tone != ToneAccent && s.Tone != ToneDanger {
+		return []segRect{{X: s.X, Y: 0, W: s.W, H: 6}}
+	}
+	step, h := 2*segCell, 6 // running: a stripe, then a gap
+	if s.Tone == ToneDanger {
+		step, h = segCell, 3 // failed: cells side by side, alternately in the top and the bottom row
+	}
+	var out []segRect
+	for i, x := 0, s.X; x < s.X+s.W; i, x = i+1, x+step {
+		w := min(segCell, s.X+s.W-x)
+		if len(out) > 0 && w < 3 {
+			break
+		}
+		y := 0
+		if s.Tone == ToneDanger {
+			y = 3 * (i % 2)
+		}
+		out = append(out, segRect{X: x, Y: y, W: w, H: h})
+	}
+	return out
+}
+
+// OffPolicy is the visible words of a device's policy deviations: "1 off policy", "3 off policy". Short on purpose:
+// "Online" and this badge share the 170 px Status column of the list on one line (a longer text wraps the badge under
+// Online, and the bubble of Online then lies over the row above).
+func OffPolicy(n int) string { return itoa(n) + " off policy" }
+
 // toneRest marks the undrawn rest of a bar.
 const toneRest Tone = "rest"
 

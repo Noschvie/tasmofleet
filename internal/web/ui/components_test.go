@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -275,6 +277,70 @@ func TestTxnBarLeavesTheWaitingDevicesEmpty(t *testing.T) {
 	end := segs[2].X + segs[2].W
 	if end < 740 || end > 760 { // 9 of 12 = 750 units of 1000
 		t.Errorf("the drawn parts end at %d, want about 750: %+v", end, segs)
+	}
+}
+
+// Why (#1073): a badge that says "Reject" in a tone is a word plus colour; the mark is a second cue that colour-blind
+// users and screen-magnifier users still see, while a screen reader reads the word only (the glyph is decoration).
+func TestBadgeMarkIsAGlyphBesideTheWord(t *testing.T) {
+	got := comp(t, BadgeMark(ToneWarn, "–", "Reject"))
+	if !strings.Contains(got, `class="bdg t-warn"`) || !strings.Contains(got, `<span class="bdg-mark" aria-hidden="true">–</span>`) || !strings.HasSuffix(got, "Reject</span>") {
+		t.Errorf("badge with mark: %s", got)
+	}
+	if got := comp(t, BadgeMark(ToneOK, "", "Create")); strings.Contains(got, "bdg-mark") {
+		t.Errorf("an empty mark draws no glyph: %s", got)
+	}
+}
+
+// Why (#1073): the count of a segment is meant to be read; "off policy" is the visible text the device list says, short enough for one line beside "Online" in the Status column.
+func TestOffPolicyIsTheVisibleDeviationText(t *testing.T) {
+	for n, want := range map[int]string{1: "1 off policy", 2: "2 off policy", 12: "12 off policy"} {
+		if got := OffPolicy(n); got != want {
+			t.Errorf("OffPolicy(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// Why (#1073): a transaction bar told done, running and failed apart by hue only (about 1.1:1 between done and
+// failed in dark), so a user who cannot tell green, blue and red apart could not read the progress. Each state
+// has its own shape as well: done is one solid bar, running is stripes with gaps, failed is a two-row checker.
+// Today every state is one rect, so this fails on a change back to colour alone.
+func TestSegBarDoneRunningFailedDifferByShape(t *testing.T) {
+	got := comp(t, SegBar(TxnData{OK: 5, Failed: 3, Active: 3, Total: 12}))
+	rectRe := regexp.MustCompile(`<rect class="bar-seg (t-[a-z]+)" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"`)
+	type rect struct{ x, y, w, h int }
+	by := map[string][]rect{}
+	for _, m := range rectRe.FindAllStringSubmatch(got, -1) {
+		n := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
+		by[m[1]] = append(by[m[1]], rect{n(2), n(3), n(4), n(5)})
+	}
+	if len(by["t-ok"]) != 1 {
+		t.Errorf("done is one solid rect, got %+v", by["t-ok"])
+	}
+	run := by["t-accent"]
+	if len(run) < 3 {
+		t.Fatalf("running is stripes, got %+v", run)
+	}
+	for i := 1; i < len(run); i++ {
+		if run[i].x <= run[i-1].x+run[i-1].w {
+			t.Errorf("running stripes %d and %d touch: no gap, so no stripe: %+v", i-1, i, run)
+		}
+	}
+	rows := map[int]bool{}
+	for _, r := range by["t-danger"] {
+		rows[r.y] = true
+	}
+	if len(by["t-danger"]) < 3 || len(rows) != 2 {
+		t.Errorf("failed is a checker over two rows, got %+v", by["t-danger"])
+	}
+	// the stripes of a part stay inside the part: the bar keeps its proportions and never overflows
+	segs := txnSegments(TxnData{OK: 5, Failed: 3, Active: 3, Total: 12})
+	for _, s := range segs {
+		for _, r := range by[s.Tone.class()] {
+			if r.x < s.X || r.x+r.w > s.X+s.W {
+				t.Errorf("%s rect %+v leaves its part %+v", s.Tone.class(), r, s)
+			}
+		}
 	}
 }
 

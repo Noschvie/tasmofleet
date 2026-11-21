@@ -22,11 +22,11 @@ func TestStaleHintNamesConfiguredThreshold(t *testing.T) {
 
 // Why (#516): dead copy is not reviewed, and it is where wording the design system retired
 // ("Warn", "Enforce") survives. hints may hold exactly the words a call site can pass to h.hint:
-// the health state (cells.templ), the job state (updates.go) and "no-ota" (cells.templ). "stale"
+// the health state and "mqtt-down" (cells.templ), the job state (updates.go) and "no-ota" (cells.templ). "stale"
 // is the exception: hintText builds it from the configured threshold. A new state without an
 // entry, or an entry nobody can look up, fails here.
 func TestHintsAreExactlyTheWordsACallSiteCanPass(t *testing.T) {
-	want := map[string]bool{"no-ota": true}
+	want := map[string]bool{"no-ota": true, "mqtt-down": true}
 	for _, s := range []model.HealthState{model.HealthUnknown, model.HealthOnline, model.HealthStale, model.HealthOffline, model.HealthAuthFailed} {
 		if s != model.HealthStale {
 			want[string(s)] = true
@@ -45,12 +45,12 @@ func TestHintsAreExactlyTheWordsACallSiteCanPass(t *testing.T) {
 		}
 	}
 	for k := range want {
-		if hints[k] == "" {
+		if hints[k].Title == "" {
 			t.Errorf("%q can be passed to h.hint but has no hint", k)
 		}
 	}
 	// "stale" is not in the table; hintText must still answer for it.
-	if hints["stale"] != "" {
+	if hints["stale"].Title != "" {
 		t.Error(`hints["stale"] would be shadowed: hintText builds the Stale text from the configured threshold`)
 	}
 	if hintText("stale", nil) == "" {
@@ -77,7 +77,7 @@ func TestDeviceListStaleBadgeTitle(t *testing.T) {
 		d.Health = fakeHealth{1: {DeviceID: 1, State: model.HealthStale, LastSeen: time.Now()}}
 	})
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
-	if !strings.Contains(body, "no message for 42m") {
+	if !strings.Contains(body, "no message for over 42m") {
 		t.Fatalf("stale badge title missing the configured threshold")
 	}
 }

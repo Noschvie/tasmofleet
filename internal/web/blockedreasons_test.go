@@ -96,8 +96,15 @@ func TestOfflineButtonsNameTheBannerNotASecondLine(t *testing.T) {
 	if strings.Contains(page, `id="devhd-why"`) {
 		t.Error("a second line repeats what the banner says")
 	}
-	if !strings.Contains(elementText(page, "devhd-off", "</div>"), "Restart, Back up and Refresh identity are disabled") {
-		t.Error("the banner no longer names the buttons that point at it")
+	// #1183: since #1072 the buttons are blocked with a visible reason, not disabled; the banner says what the person
+	// sees, names only the buttons that point at it (Switching and Refresh identity have reason lines of their own),
+	// and does not call anything disabled.
+	banner := elementText(page, "devhd-off", "</div>")
+	if !strings.Contains(banner, "Restart and Back up wait until the device answers again") {
+		t.Errorf("the banner no longer names the buttons that point at it: %s", banner)
+	}
+	if strings.Contains(banner, "disabled") || strings.Contains(banner, "Refresh identity") || strings.Contains(banner, "Switching") {
+		t.Errorf("the banner repeats what the buttons' own reason lines say, or calls them disabled: %s", banner)
 	}
 }
 

@@ -167,7 +167,7 @@ func TestImportNeedsNoStepUp(t *testing.T) {
 		e, inv := importEnv(t)
 		hdr := map[string]string{"X-Test-Method": m}
 		c, body := e.uploadAs(t, "admin", hdr, part{"devices_csv", "devices.csv", "text/csv", importCSV})
-		if c != 200 || !strings.Contains(body, ">2 create</span>") {
+		if c != 200 || !strings.Contains(body, "</span> 2 create</span>") {
 			t.Fatalf("%s: upload %d %s", m, c, body)
 		}
 		r, _ := e.do(t, "POST", "/import/tasmoadmin/apply", "admin", map[string][]string{"plan": {planToken(t, body)}}, "X-Test-Method", m)
@@ -190,7 +190,7 @@ func TestImportNeedsNoStepUp(t *testing.T) {
 func TestImportPlanThenApply(t *testing.T) {
 	e, inv := importEnv(t)
 	c, body := e.upload(t, "admin", part{"devices_csv", "devices.csv", "text/csv", importCSV})
-	if c != 200 || !strings.Contains(body, ">2 create</span>") || len(inv.upserts) != 0 {
+	if c != 200 || !strings.Contains(body, "</span> 2 create</span>") || len(inv.upserts) != 0 {
 		t.Fatalf("plan: %d %s (writes=%d)", c, body, len(inv.upserts))
 	}
 	i := strings.Index(body, `name="plan" value="`)

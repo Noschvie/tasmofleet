@@ -330,7 +330,7 @@ func TestFirmwareFetchFailureStaysOnItsRow(t *testing.T) {
 	if strings.Contains(body, `role="alert"`) {
 		t.Error("the failure is the row's; no banner repeats it")
 	}
-	if r.StatusCode != 502 || !strings.Contains(card, "Tasmota 16.0.0") || !strings.Contains(card, `title="firmware: SHA-256 differs between sources">Download failed</span>`) || !strings.Contains(card, `aria-label="Retry tasmota.bin.gz"`) {
+	if r.StatusCode != 502 || !strings.Contains(card, "Tasmota 16.0.0") || !strings.Contains(visibleText(card), "Download failed") || !strings.Contains(visibleText(card), "firmware: SHA-256 differs between sources") || !strings.Contains(card, `aria-label="Retry tasmota.bin.gz"`) {
 		t.Errorf("failed fetch = %d:\n%s", r.StatusCode, card)
 	}
 	fw.failFile = ""

@@ -132,6 +132,21 @@ templ Badge(tone Tone, label string) {
 	<span class={ "bdg", tone.class() }>{ label }</span>
 }
 
+// BadgeMark is a Badge with a glyph before its word (Create +, Merge ⇄, Reject –): a second cue besides the colour. The
+// glyph is decoration (aria-hidden), the word is what a screen reader reads; an empty mark draws none.
+templ BadgeMark(tone Tone, mark, label string) {
+	<span class={ "bdg", tone.class() }>
+		@badgeText(mark, label)
+	</span>
+}
+
+templ badgeText(mark, label string) {
+	if mark != "" {
+		<span class="bdg-mark" aria-hidden="true">{ mark }</span>
+	}
+	{ label }
+}
+
 // StatusDot is a coloured dot with its word (Online, Offline, Unknown): the colour is never the
 // only signal.
 templ StatusDot(tone Tone, label string) {
@@ -512,11 +527,14 @@ templ attHidden(csrf, version string) {
 	}
 }
 
-// SegBar is the transaction progress: succeeded, failed, running.
+// SegBar is the transaction progress: succeeded, failed, running. The states differ by shape as well as by hue
+// (#1073): done is one solid bar, running is stripes, failed is a checker (segRects).
 templ SegBar(t TxnData) {
 	<svg class="seg-bar" viewBox="0 0 1000 6" preserveAspectRatio="none" role="img" aria-label={ itoa(t.OK) + " done, " + itoa(t.Failed) + " failed, " + itoa(t.Active) + " running of " + itoa(t.Total) }>
 		for _, s := range txnSegments(t) {
-			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="6"></rect>
+			for _, r := range segRects(s) {
+				<rect class={ "bar-seg", s.Tone.class() } x={ itoa(r.X) } y={ itoa(r.Y) } width={ itoa(r.W) } height={ itoa(r.H) }></rect>
+			}
 		}
 	</svg>
 }

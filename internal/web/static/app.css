@@ -4827,6 +4827,9 @@ button.btn[aria-disabled="true"]:focus-visible {
   background: var(--t-bg);
   color: var(--t-fg);
 }
+.bdg-mark {
+  margin-right: 4px;
+}
 .sdot {
   display: inline-flex;
   align-items: center;
@@ -5303,12 +5306,14 @@ button.btn[aria-disabled="true"]:focus-visible {
   border-radius: 4px;
   background: var(--color-surface-2);
 }
-.health-bar .bar-seg,
-.seg-bar .bar-seg {
+.health-bar .bar-seg {
   fill: var(--t);
 }
-.seg-bar .bar-seg.t-accent {
-  opacity: 0.55;
+/* The transaction bar fills with --t-fg, not --t (#1073): --t on the track measures 2.2 to 2.7:1, --t-fg 5.6:1 and
+   better in both themes, which is above the 3:1 a graphic needs. No opacity: a dimmed segment was the one that
+   failed most. Done, running and failed also differ by shape (segRects in ui/components.go). */
+.seg-bar .bar-seg {
+  fill: var(--t-fg);
 }
 
 /* "Needs attention" rows, transaction card and history rows */
@@ -7887,6 +7892,14 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 .dv-mdown {
   display: none;
 }
+/* The short reason of a state (#1073): under the badge in the table's Status cell, on the card's badge row. The
+   MQTT-down reason sits inside its badge, so it is hidden with it where the table's own column says it. */
+.dv-why {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--color-text-2);
+}
 /* OTA URL and group topic: one line cut off by the cell (the title holds the whole value), the
    time it was read under it. */
 .dv-trunc {
@@ -7917,6 +7930,10 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 }
 td[data-label="Firmware"] .dv-mono {
   color: var(--color-text);
+}
+/* "Update 14.3.0" is words now (#1073): in a narrow column the badge wraps under the version instead of being cut off. */
+table.devtable > tbody > tr > td[data-label="Firmware"] {
+  white-space: normal;
 }
 .dv-upd {
   height: 18px;
@@ -8073,6 +8090,9 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .dcard .dv-mdown {
   display: inline-flex;
   order: 9;
+}
+.dcard .dv-why {
+  margin: 0;
 }
 .dcard-last .dv-wbar,
 .dcard-last .dl-last,
@@ -10271,6 +10291,15 @@ html:has(dialog#dlg-txn:modal) body {
 .fw-file-nc {
   font-size: 12.5px;
   color: var(--color-text-3);
+}
+/* Why a download failed (#1073): its own line under the file, the width of the row. */
+.fw-file-why {
+  display: block;
+  flex: 0 0 100%;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-danger-fg);
+  overflow-wrap: anywhere;
 }
 .fw-fetch {
   margin: 0;
@@ -14661,6 +14690,10 @@ button.pol-chip-x {
   font-size: 11.5px;
   color: var(--color-text-2);
 }
+.rel-file-t .fw-file-why {
+  flex: none;
+  margin-top: var(--sp-4);
+}
 .rel-orow {
   display: flex;
   justify-content: space-between;
@@ -14840,6 +14873,9 @@ button.pol-chip-x {
 }
 .pol-dev-bad {
   color: var(--color-warn-fg);
+}
+.pol-dev-mark {
+  margin-right: 4px;
 }
 tr.pol-grp td {
   background: var(--color-surface-2);

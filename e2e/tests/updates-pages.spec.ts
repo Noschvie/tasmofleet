@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { contrast } from "../support/contrast";
 import { menuFloatProblem } from "../support/layout";
 import { hitBox } from "../support/target";
 import { pickForUpdate, txnState } from "../support/updates";
@@ -200,3 +201,36 @@ test("the update preview keeps What happens at two parts of the width", async ({
   await expect(what).toBeVisible();
   expect(await what.evaluate((e) => getComputedStyle(e).flexGrow)).toBe("2");
 });
+
+// Why (#1073): the progress bar drew each state in a tint of its hue, the running part at 55 % opacity: 2.2 to 2.7:1
+// against the track (3:1 is the least a graphic needs), and done and running differed by hue alone, so a user who
+// cannot tell green and blue apart could not read the progress. Every part now reaches 3:1 in both themes, and the
+// states differ by shape: done is one solid bar, running is stripes with gaps, failed is a checker over two rows.
+// The styleguide's transaction card has all three.
+for (const scheme of ["light", "dark"] as const) {
+  test(`the transaction bar's parts reach 3:1 against the track and differ by shape (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setExtraHTTPHeaders(admin);
+    await page.goto(app.url + "/styleguide");
+    const bar = page.locator(".txn-card .seg-bar").first();
+    await expect(bar).toBeVisible();
+    const track = await bar.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const parts = await bar.locator("rect").evaluateAll((rs) =>
+      rs.map((r) => {
+        const cs = getComputedStyle(r);
+        return { tone: [...r.classList].find((c) => c.startsWith("t-")) ?? "", fill: cs.fill, opacity: cs.opacity, y: r.getAttribute("y"), x: Number(r.getAttribute("x")), w: Number(r.getAttribute("width")) };
+      }),
+    );
+    expect(parts.length).toBeGreaterThan(3);
+    for (const p of parts) {
+      expect(p.opacity, `${p.tone}: a dimmed part loses contrast`).toBe("1");
+      expect(await contrast(page, p.fill, track), `${scheme}: ${p.tone} ${p.fill} on the track ${track}`).toBeGreaterThanOrEqual(3);
+    }
+    const of = (tone: string) => parts.filter((p) => p.tone === tone);
+    expect(of("t-ok"), "done is one solid bar").toHaveLength(1);
+    const run = of("t-accent");
+    expect(run.length, "running is stripes").toBeGreaterThan(2);
+    for (let i = 1; i < run.length; i++) expect(run[i].x, "a gap between two stripes").toBeGreaterThan(run[i - 1].x + run[i - 1].w);
+    expect(new Set(of("t-danger").map((p) => p.y)).size, "failed is a checker over two rows").toBe(2);
+  });
+}

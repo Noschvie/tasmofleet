@@ -361,7 +361,8 @@ means nothing stops you: you have to know it. The full working rules are in
   The Devices list name cell had the same title and the same placement.
 - **Rule:** a title that only repeats the element's text shows only while that text is cut off, and the
   bubble of anything inside a table cell sits beside it, never below it (`static/tooltip.js`). A new table
-  needs no special case for this.
+  needs no special case for this. The bubble is measured from the left edge (a fixed box left where the last
+  bubble stood is only as wide as the room right of it, so it would be measured too tall and centred too high).
 - **Enforced:** `e2e/tests/scan-table.spec.ts` for the scan table (the markup it loads is
   `testdata/scan/*.html`, kept equal to the templates by `TestScanResultFixtures`; regenerate with
   `-update-scan-fixtures`) and `e2e/tests/pinned-overlap.spec.ts` for the Devices list (every titled

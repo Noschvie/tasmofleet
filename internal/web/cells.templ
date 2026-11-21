@@ -15,11 +15,16 @@ import (
 // like the one the page was served with. They were html/template partials until Z1.
 
 // statusCell is the health badge of a device, with "MQTT down" when the device answers over
-// HTTP only.
+// HTTP only. Every state but Online shows its short reason as text beside the badge (#1073: the
+// title is only an addition); the reason comes from the hints entry the title comes from, and
+// this one render serves the page and the event stream.
 templ (h *handler) statusCell(hl model.Health) {
 	<span class={ "bdg", "dv-st", uiToneClass(hl.State) } data-state={ string(hl.State) } title={ h.hint(hl.State) }><span class="dv-dot" aria-hidden="true"></span>{ label(hl.State) }</span>
+	if why := h.why(hl.State); why != "" {
+		<span class="dv-why">{ why }</span>
+	}
 	if h.mqttDown(hl) {
-		<span class="bdg t-warn dv-mdown" title="The device answers over HTTP, but nothing arrives over MQTT">MQTT down</span>
+		<span class="bdg t-warn dv-mdown" title={ h.hint("mqtt-down") }>MQTT down<span class="dv-mdown-why">{ " · " + h.why("mqtt-down") }</span></span>
 	}
 }
 
@@ -166,18 +171,18 @@ templ (h *handler) deviceRows(d rowsData) {
 				@stabBadge(row.Stab)
 				if row.Deviations > 0 {
 					{ " " }
-					<span class="bdg t-warn dv-devs" title="Settings of this device that differ from the policy">{ plural(row.Deviations, "deviation") }</span>
+					<span class="bdg t-warn dv-devs" title="Settings of this device that differ from the policy">{ ui.OffPolicy(row.Deviations) }</span>
 				}
 			</td>
 			<td data-label="MQTT · HTTP" class="nowrap s m-hide" sse-swap={ "reach-" + devID(row.Device.ID) }>
 				@h.reachCell(row.Health)
 			</td>
-			<td data-label="Firmware" class="nowrap s m-hide">
+			<td data-label="Firmware" class="s m-hide">
 				if v := row.Device.Identity.Version; v != "" {
 					<span class="dv-mono" title={ firmwareTitle(row.Device.Identity) }>{ v }</span>
 					if row.Outdated {
 						{ " " }
-						<span class="bdg t-accent dv-upd" title="A newer stable release is available">update</span>
+						<span class="bdg t-accent dv-upd" title="A newer stable release is available">{ "Update " + row.UpdateTo }</span>
 					}
 				} else {
 					<span class="muted">Unknown</span>

@@ -150,6 +150,9 @@ func (h *handler) fleetFacts(ctx context.Context, actor string) fleetFacts {
 func (f fleetFacts) annotate(rows []deviceRow) {
 	for i := range rows {
 		rows[i].Outdated = firmware.UpdateAvailable(f.Latest, rows[i].Device.Identity)
+		if rows[i].Outdated {
+			rows[i].UpdateTo = f.Latest
+		}
 		rows[i].Deviations = f.Deviations[rows[i].Device.ID]
 	}
 }

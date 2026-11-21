@@ -911,9 +911,9 @@ templ importBodyPart(b importBody) {
 				<div class="add-plan-head">
 					<h2 id="imp-plan-h">Import plan</h2>
 					<span class="add-plan-counts">
-						@ui.Badge(ui.ToneOK, strconv.Itoa(b.Plan.Create)+" create")
-						@ui.Badge(ui.ToneAccent, strconv.Itoa(b.Plan.Merge)+" merge")
-						@ui.Badge(ui.ToneDanger, strconv.Itoa(b.Plan.Reject)+" reject")
+						@ui.BadgeMark(ui.ToneOK, markCreate, strconv.Itoa(b.Plan.Create)+" create")
+						@ui.BadgeMark(ui.ToneAccent, markMerge, strconv.Itoa(b.Plan.Merge)+" merge")
+						@ui.BadgeMark(ui.ToneWarn, markReject, strconv.Itoa(b.Plan.Reject)+" reject")
 					</span>
 				</div>
 				for _, r := range b.Plan.Rows {
@@ -963,7 +963,7 @@ templ importBodyPart(b importBody) {
 templ importRowView(r importRow, badgeClass string) {
 	<div class="add-improw">
 		<span class={ badgeClass }>
-			@ui.Badge(r.Tone, r.Label)
+			@ui.BadgeMark(r.Tone, r.Mark, r.Label)
 		</span>
 		<span class="add-improw-dev">
 			<span class="add-improw-name">{ r.Name }</span>

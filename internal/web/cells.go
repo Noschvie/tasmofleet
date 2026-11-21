@@ -36,8 +36,9 @@ func (h *handler) mqttDown(hl model.Health) bool {
 	return hl.State == model.HealthOnline && h.channels(hl)[0].Tone == "bad"
 }
 
-// hint is the tooltip of a state or tag.
+// hint is the tooltip of a state or tag, why the short reason shown as text beside the state (#1073).
 func (h *handler) hint(v any) string { return hintText(v, h.d.StaleAfter) }
+func (h *handler) why(v any) string  { return hintWhy(v, h.d.StaleAfter) }
 
 // ago is the compact relative time of t.
 func (h *handler) ago(t time.Time) string { return ago(h.d.Clock.Now(), t) }

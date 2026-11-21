@@ -162,10 +162,12 @@ templ relFiles(v view, p releasePage) {
 			}
 		</div>
 		for _, f := range p.Rel.Files {
+			{{ why := failedWhy(p.Failed, p.Fetching, p.Version+"/"+f.Name, f) }}
 			<div class="rel-file">
 				<span class="rel-file-t">
 					<span class="rel-file-n">@ui.Soft(f.Name)</span>
 					<span class="rel-file-m" title={ devNames(f.UsedBy, tooltipMax) }>{ fileMeta(f) }</span>
+					@downloadWhy(why)
 				</span>
 				switch {
 					case f.Missing:
@@ -174,9 +176,9 @@ templ relFiles(v view, p releasePage) {
 						@ui.Badge(ui.ToneOK, "Cached")
 					case p.Fetching[p.Version+"/"+f.Name]:
 						<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
-					case p.Failed[p.Version+"/"+f.Name] != "":
+					case why != "":
 						<span class="fw-file-fail">
-							<span class="bdg t-danger" title={ p.Failed[p.Version+"/"+f.Name] }>Download failed</span>
+							<span class="bdg t-danger">Download failed</span>
 							if v.IsAdmin {
 								@relFetchButton(v, p.Version, f.Name, "Retry")
 							}

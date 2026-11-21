@@ -232,7 +232,16 @@ before the word, `ui.StatusBadge`, wherever it is shown (device list, device hea
 list); the bare `ui.StatusDot` marks a tone where no status word is needed (stat tiles). `ui.StatusBadge`
 is added by #1097.
 
-Component: `ui.Badge(tone, label)`, `ui.StatusDot(tone, label)`, `ui.Avatar(name, username)`.
+A badge that stands for an outcome the user may want to tell apart without the colour carries a glyph before its
+word: Create `+`, Merge `⇄`, Reject `–` in the import plan, `ui.BadgeMark(tone, mark, label)`. The glyph is
+decoration (`aria-hidden`), the word is the label. A rejected row of an import is a warning, not a failure: it is the
+input, and the rest of the plan goes on. A badge that needs a reason says it as text, not in a `title`: the Status
+cell of the device list shows the short reason of every state but Online under its badge ("no message for over 11m",
+"no answer", "login refused") and "MQTT down · HTTP only" in the badge itself; both come from the one entry of
+`hints` (`internal/web/hints.go`) that also holds the tooltip. "Update 14.3.0" and "1 off policy" say which
+update and what differs; the title repeats them as an extra.
+
+Component: `ui.Badge(tone, label)`, `ui.BadgeMark(tone, mark, label)`, `ui.StatusDot(tone, label)`, `ui.Avatar(name, username)`.
 
 ![Badges, status dots and avatars, desktop, light](../design/styleguide/badges-desktop-light.png)
 
@@ -303,7 +312,7 @@ Also: [desktop, dark](../design/styleguide/tiles-desktop-dark.png) · [phone, li
 
 ### Attention list and transactions
 
-"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with a dot, the reason and ›. The transaction card shows id, title, state badge, the three-colour progress (done, failed, running) and a summary; history rows show id, title, result badge and age. A row's progress is a mini bar with the percentage.
+"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with a dot, the reason and ›. The transaction card shows id, title, state badge, the progress (done, failed, running; each state has its own shape, see Steps and progress) and a summary; history rows show id, title, result badge and age. A row's progress is a mini bar with the percentage.
 
 Component: `ui.AttentionList`, `ui.TxnCard`, `ui.TxnRow`, `ui.SegBar`, `ui.MiniBar`.
 
@@ -461,7 +470,11 @@ field's help line: a field has a help line or an info button. The copy button is
 
 A multi-step flow (setup, new update) numbers its steps ("5 · When") in reading order; the current step is
 accent, done steps carry ✓. Progress is `ui.SegBar` (done, failed, running; the segments differ by more than
-hue and reach 3:1 against the track) or a native `<progress>` (flat, full width, accent fill, radius 2). The
+hue and reach 3:1 against the track) or a native `<progress>` (flat, full width, accent fill, radius 2). In a
+`ui.SegBar` done is one solid bar, running is vertical stripes with gaps and failed is a checker over two rows
+(`segRects` in `ui/components.go`; each cell is 10 of the bar's 1000 units, 3 px at the narrowest), filled with the
+tone's text colour (`--t-fg`), never dimmed. The fleet health bar and a rule's compliance bar still fill with `--t`
+(2.2 to 2.7:1 on their track) and differ by hue only: open follow-up. The
 stability sparkline is an SVG with sizes as attributes.
 
 ### Busy
@@ -491,7 +504,13 @@ same ring until the page arrives.
 - **Tones.** There are five: ok, warn, danger, neutral, accent. The classes are `.t-ok` ... `.t-accent`;
   each sets `--t` (fill: dots, bars), `--t-bg` and `--t-fg` (text). Badges, dots, avatars, banners, toasts,
   notes and the status bar read these three variables. The names "bad", "info", "success" and "error" are
-  not used (the parallel `.tone-*` classes go with #1102).
+  not used (the parallel `.tone-*` classes go with #1102). One exception: the transaction bar (`ui.SegBar`)
+  fills with `--t-fg`, because `--t` on its track measures 2.2 to 2.7:1 and a graphic needs 3:1 (#1073).
+- **A title is an addition, colour is never the whole message.** A `title` attribute may repeat visible text,
+  never be the only place that says something: a phone has no hover, a keyboard and most screen readers
+  never show it. A state, a count's meaning or a failure's reason is text on the page (a word, a short
+  line under the element); a state that is told only by a colour or a tint also carries a word, a glyph or a
+  shape (#1073; `e2e/tests/title-only.spec.ts` checks the elements the issue names, not every title).
 - **Selected.** A selected item that is not a tab (a toggled filter chip, the current page of a pager, the
   chosen release, a checked radio card) uses the accent tint: `--color-accent-bg` background,
   `--color-accent` border, `--color-accent-fg` text. A segmented control's checked segment is

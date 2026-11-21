@@ -90,8 +90,9 @@ type DeviceCardData struct {
 	Meta []string
 	// Select: the card has a selection box (the bulk actions exist).
 	Select bool
-	// Outdated adds the "Update available" badge, Deviations the policy badge ("1 deviation").
-	Outdated   bool
+	// UpdateTo adds the "Update 16.2.0" badge (the stable release the device can take; "" = none), Deviations the policy
+	// badge ("1 off policy"): the words are on screen, not in a title (#1073).
+	UpdateTo   string
 	Deviations int
 	// Status (badges), Uptime and Wifi (last line), Power (the relay buttons) and Menu (row actions).
 	Status, Uptime, Wifi, Power, Menu templ.Component
@@ -143,13 +144,11 @@ templ DeviceCard(c DeviceCardData) {
 					@slot(c.Status)
 				</span>
 				@slot(c.Stability)
-				if c.Outdated {
-					<span class="bdg t-accent">Update available</span>
+				if c.UpdateTo != "" {
+					<span class="bdg t-accent">{ "Update " + c.UpdateTo }</span>
 				}
-				if c.Deviations == 1 {
-					<span class="bdg t-warn">1 deviation</span>
-				} else if c.Deviations > 1 {
-					<span class="bdg t-warn">{ strconv.Itoa(c.Deviations) } deviations</span>
+				if c.Deviations > 0 {
+					<span class="bdg t-warn">{ OffPolicy(c.Deviations) }</span>
 				}
 			</span>
 			// the prototype's last line: "Up 19d 1h · -60 dBm", "Last seen 3h ago" (the uptime part

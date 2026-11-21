@@ -178,9 +178,19 @@ type importPlanView struct {
 // then says so instead of offering to apply it.
 func (v importPlanView) CanApply() bool { return v.Create+v.Merge > 0 }
 
+// The glyphs of the plan's and the result's badges: a second cue besides the colour (#1073). A rejected row is a
+// warning, not a failure: it is the input (an address outside the device networks), and the rest of the plan goes on.
+const (
+	markCreate = "+"
+	markMerge  = "\u21c4" // ⇄
+	markReject = "\u2013" // –
+	markFailed = "\u2715" // ✕
+)
+
 // importRow is one line of the plan or the result: a badge, the device and why.
 type importRow struct {
 	Label   string
+	Mark    string // the glyph beside Label (ui.BadgeMark): colour is never the only cue
 	Tone    ui.Tone
 	Name    string
 	Address string
@@ -204,13 +214,13 @@ func planView(plan importer.Plan) *importPlanView {
 		switch row.Action {
 		case importer.ActionCreate:
 			v.Create++
-			r.Label, r.Tone = "Create", ui.ToneOK
+			r.Label, r.Mark, r.Tone = "Create", markCreate, ui.ToneOK
 		case importer.ActionMerge:
 			v.Merge++
-			r.Label, r.Tone = "Merge", ui.ToneAccent
+			r.Label, r.Mark, r.Tone = "Merge", markMerge, ui.ToneAccent
 		default:
 			v.Reject++
-			r.Label, r.Tone = "Reject", ui.ToneDanger
+			r.Label, r.Mark, r.Tone = "Reject", markReject, ui.ToneWarn
 		}
 		if r.Why == "" {
 			r.Why = "New device"
@@ -221,11 +231,11 @@ func planView(plan importer.Plan) *importPlanView {
 		v.Rows = append(v.Rows, r)
 	}
 	for _, e := range plan.Errors {
-		v.Rows = append(v.Rows, importRow{Label: "Reject", Tone: ui.ToneDanger, Name: fmt.Sprintf("devices.csv line %d", e.Line), Why: capitalize(strings.TrimPrefix(e.Err.Error(), "tasmoadmin: "))})
+		v.Rows = append(v.Rows, importRow{Label: "Reject", Mark: markReject, Tone: ui.ToneWarn, Name: fmt.Sprintf("devices.csv line %d", e.Line), Why: capitalize(strings.TrimPrefix(e.Err.Error(), "tasmoadmin: "))})
 	}
 	v.Reject += plan.Rejected
 	if plan.ErrorsOmitted > 0 {
-		v.Rows = append(v.Rows, importRow{Label: "Reject", Tone: ui.ToneDanger, Name: plural(plan.ErrorsOmitted, "more line") + " with errors", Why: "Not listed one by one."})
+		v.Rows = append(v.Rows, importRow{Label: "Reject", Mark: markReject, Tone: ui.ToneWarn, Name: plural(plan.ErrorsOmitted, "more line") + " with errors", Why: "Not listed one by one."})
 	}
 	return v
 }
@@ -254,15 +264,15 @@ func reportView(rep importer.Report) *importReportView {
 		r := importRow{Name: l.Name, Address: netaddr.Display(l.Address, l.Port, "http"), Why: l.Detail}
 		switch l.Status {
 		case "created":
-			r.Label, r.Tone = "Created", ui.ToneOK
+			r.Label, r.Mark, r.Tone = "Created", markCreate, ui.ToneOK
 			r.Why = withDefault(r.Why, "Added to Devices")
 		case "updated":
-			r.Label, r.Tone = "Merged", ui.ToneAccent
+			r.Label, r.Mark, r.Tone = "Merged", markMerge, ui.ToneAccent
 			r.Why = withDefault(r.Why, "Merged into the existing device")
 		case "failed":
-			r.Label, r.Tone = "Failed", ui.ToneDanger
+			r.Label, r.Mark, r.Tone = "Failed", markFailed, ui.ToneDanger
 		default:
-			r.Label, r.Tone = "Rejected", ui.ToneDanger
+			r.Label, r.Mark, r.Tone = "Rejected", markReject, ui.ToneWarn
 		}
 		v.Rows = append(v.Rows, r)
 	}

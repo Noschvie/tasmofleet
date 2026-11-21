@@ -187,6 +187,10 @@
       "is-wide",
       !!target.closest("td, th") && reveal(target, text),
     );
+    // measured from the left edge: where the previous bubble stood, a fixed box is as wide as the room right of its
+    // old left, so a bubble that wrapped there is measured taller than it ends up and is centred too high
+    t.style.left = "0px";
+    t.style.top = "0px";
     t.hidden = false;
     place(target);
   }

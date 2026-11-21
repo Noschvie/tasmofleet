@@ -63,7 +63,7 @@ func TestKnownTooltipsAreShort(t *testing.T) {
 		}
 	}
 	for k, v := range hints {
-		check("hint", k, v)
+		check("hint", k, v.Title)
 	}
 	for k, v := range colTips {
 		check("column tip", k, v)

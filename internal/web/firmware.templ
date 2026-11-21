@@ -357,6 +357,7 @@ templ fwRelLinks(v view, p firmwarePage, r releaseView) {
 
 // fwFileRow is one file of the selected release: name, chip, devices, size and its state.
 templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
+	{{ why := failedWhy(p.Failed, p.Fetching, r.Version+"/"+f.Name, f) }}
 	<div class="fw-file">
 		<span class="fw-file-n">@ui.Soft(f.Name)</span>
 		<span class="fw-file-c">{ f.Chip }</span>
@@ -373,9 +374,9 @@ templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
 				@ui.Badge(ui.ToneOK, "Cached")
 			case p.Fetching[r.Version+"/"+f.Name]:
 				<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
-			case p.Failed[r.Version+"/"+f.Name] != "":
+			case why != "":
 				<span class="fw-file-fail">
-					<span class="bdg t-danger" title={ p.Failed[r.Version+"/"+f.Name] }>Download failed</span>
+					<span class="bdg t-danger">Download failed</span>
 					if v.IsAdmin {
 						@fwFetchButton(v, r.Version, f.Name, "Retry")
 					}
@@ -385,7 +386,26 @@ templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
 			default:
 				<span class="fw-file-nc">Not cached</span>
 		}
+		@downloadWhy(why)
 	</div>
+}
+
+// failedWhy is the reason a file's download failed, "" when the file shows another state (not offered upstream, cached,
+// being fetched) or did not fail. The Firmware page and the release page ask this one function, so a file has the same
+// state on both.
+func failedWhy(failed map[string]string, fetching map[string]bool, key string, f fileView) string {
+	if f.Missing || f.Cached || fetching[key] {
+		return ""
+	}
+	return failed[key]
+}
+
+// downloadWhy is the line under a file whose download failed (#1073): the reason was only a title, which a phone and a
+// keyboard never show.
+templ downloadWhy(why string) {
+	if why != "" {
+		<span class="fw-file-why">{ why }</span>
+	}
 }
 
 // tooltipMax is the longest a title may be; tests/columns.spec.ts checks the rendered pages.

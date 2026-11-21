@@ -132,6 +132,11 @@ templ styleguidePage(v sgView) {
 				@ui.Badge(ui.ToneWarn, passwordChangeDue)
 			</div>
 			<div class="sg-row">
+				@ui.BadgeMark(ui.ToneOK, markCreate, "Create")
+				@ui.BadgeMark(ui.ToneAccent, markMerge, "Merge")
+				@ui.BadgeMark(ui.ToneWarn, markReject, "Reject")
+			</div>
+			<div class="sg-row">
 				@ui.StatusDot(ui.ToneOK, "Online")
 				@ui.StatusDot(ui.ToneDanger, "Offline")
 				@ui.StatusDot(ui.ToneNeutral, "Unknown")

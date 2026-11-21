@@ -4850,15 +4850,15 @@ func importBodyPart(b importBody) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Badge(ui.ToneOK, strconv.Itoa(b.Plan.Create)+" create").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.BadgeMark(ui.ToneOK, markCreate, strconv.Itoa(b.Plan.Create)+" create").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Badge(ui.ToneAccent, strconv.Itoa(b.Plan.Merge)+" merge").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.BadgeMark(ui.ToneAccent, markMerge, strconv.Itoa(b.Plan.Merge)+" merge").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Badge(ui.ToneDanger, strconv.Itoa(b.Plan.Reject)+" reject").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.BadgeMark(ui.ToneWarn, markReject, strconv.Itoa(b.Plan.Reject)+" reject").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -5097,7 +5097,7 @@ func importRowView(r importRow, badgeClass string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = ui.Badge(r.Tone, r.Label).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.BadgeMark(r.Tone, r.Mark, r.Label).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -283,7 +283,7 @@ func TestImportPlanSkipsRefusedRowsAndCountsRejectedLines(t *testing.T) {
 	if c != 200 {
 		t.Fatalf("status %d: %s", c, body)
 	}
-	for _, want := range []string{">1 create</span>", ">0 merge</span>", ">2 reject</span>"} {
+	for _, want := range []string{"</span> 1 create</span>", "</span> 0 merge</span>", "</span> 2 reject</span>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("summary lacks %q: %s", want, body)
 		}
@@ -304,7 +304,7 @@ func TestImportPlanCountsOnlyRejectedLinesAsSkipped(t *testing.T) {
 	e, _ := checkingImportEnv(t)
 	csv := `1,"lamp",10.0.0.9,,,bulb_1,1,1,0,0,1,99999,"lamp",0,lamp,0` + "\n"
 	_, body := e.upload(t, "admin", part{"devices_csv", "devices.csv", "text/csv", csv})
-	if !strings.Contains(body, ">1 create</span>") || !strings.Contains(body, ">0 reject</span>") {
+	if !strings.Contains(body, "</span> 1 create</span>") || !strings.Contains(body, "</span> 0 reject</span>") {
 		t.Errorf("a warning on a planned row is not a rejected row: %s", body)
 	}
 	if !strings.Contains(body, "Unusable port") {
@@ -324,7 +324,7 @@ func TestImportPlanCountsLinesAndNotesProblemsOnTheKeptRows(t *testing.T) {
 		fmt.Fprintf(&csv, "%d,\"d%d\",10.%d.%d.1,admin,%s,bulb_1,1,1,0,0,1,99999,\"d%d\",0,t%d,0\n", i, i, i/250, i%250, enc, i, i)
 	}
 	c, body := e.upload(t, "admin", part{"devices_csv", "devices.csv", "text/csv", csv.String()})
-	if c != 200 || !strings.Contains(body, ">1000 create</span>") || !strings.Contains(body, ">0 reject</span>") {
+	if c != 200 || !strings.Contains(body, "</span> 1000 create</span>") || !strings.Contains(body, "</span> 0 reject</span>") {
 		t.Fatalf("%d: counts: %.1500s", c, body)
 	}
 	if strings.Contains(body, "more lines with errors") || strings.Contains(body, ">Reject<") {
@@ -347,7 +347,7 @@ func TestImportResultFailedBadgeHasNoUpdateHint(t *testing.T) {
 	token := planToken(t, plan)
 	inv.failUpsert = fmt.Errorf("boom")
 	_, out := e.do(t, "POST", "/import/tasmoadmin/apply", "admin", url.Values{"plan": {token}})
-	if !strings.Contains(out, `<span class="bdg t-danger">Failed</span>`) || strings.Contains(out, "the update did not finish") {
+	if !strings.Contains(out, `<span class="bdg t-danger"><span class="bdg-mark" aria-hidden="true">✕</span> Failed</span>`) || strings.Contains(out, "the update did not finish") {
 		t.Errorf("failed badge: %s", out)
 	}
 }
@@ -381,7 +381,7 @@ func TestImportResultUsesBadgesPortsAndSentences(t *testing.T) {
 	token := planToken(t, plan)
 	inv.failUpsert = fmt.Errorf("inventory: invalid device: %w: %w: 10.0.0.9", inventory.ErrInvalid, inventory.ErrOutsideNetwork)
 	_, out := e.do(t, "POST", "/import/tasmoadmin/apply", "admin", url.Values{"plan": {token}})
-	if !strings.Contains(out, `<span class="bdg t-danger">Failed</span>`) {
+	if !strings.Contains(out, `<span class="bdg t-danger"><span class="bdg-mark" aria-hidden="true">✕</span> Failed</span>`) {
 		t.Errorf("a failed row needs the danger badge: %s", out)
 	}
 	if !strings.Contains(out, "10.0.0.9") || !strings.Contains(out, ":8080") {
@@ -409,7 +409,7 @@ func TestImportChooserSortsFilesByName(t *testing.T) {
 	}
 	csv := `1,"lamp",10.0.0.9,,,bulb_1,1,1,0,0,1,80,"lamp",0,lamp,0` + "\n"
 	c, body := e.upload(t, "admin", part{"files", "devices.csv", "text/csv", csv})
-	if c != 200 || !strings.Contains(body, ">1 create</span>") || !strings.Contains(body, "<b>devices.csv</b> uploaded from TasmoAdmin") {
+	if c != 200 || !strings.Contains(body, "</span> 1 create</span>") || !strings.Contains(body, "<b>devices.csv</b> uploaded from TasmoAdmin") {
 		t.Errorf("a chosen devices.csv is not used: %d %s", c, body)
 	}
 	if c, _ := e.upload(t, "admin", part{"files", "a.csv", "text/csv", csv}, part{"files", "b.csv", "text/csv", csv}); c != 400 {
