@@ -74,7 +74,11 @@
       grace = window.setTimeout(show, GRACE_MS);
     }
     var state = root.getAttribute("data-live");
-    if (attempts >= SHOW_AFTER || state === "reconnecting" || state === "offline") {
+    if (
+      attempts >= SHOW_AFTER ||
+      state === "reconnecting" ||
+      state === "offline"
+    ) {
       show();
     }
   });
@@ -186,10 +190,15 @@
         if (b.classList.contains("htmx-request")) {
           return;
         }
+        // hx-disable as the page renders it: htmx sends nothing for a blocked button whatever the event, and
+        // process binds the probe again once the device is back (the card is not swapped for that)
         if (refused || off) {
           b.setAttribute("aria-disabled", "true");
-        } else {
+          b.setAttribute("hx-disable", "");
+        } else if (b.hasAttribute("aria-disabled")) {
           b.removeAttribute("aria-disabled");
+          b.removeAttribute("hx-disable");
+          htmx.process(b);
         }
       });
     if (why) {
@@ -231,7 +240,10 @@
     var current = d.target.querySelector("#identsig");
     // A Refresh identity (or a name answer) still on its way swaps in its own card, the newest, with its answer: the
     // card it targets must still be on the page then.
-    if (d.target.querySelector(".htmx-request") || (incoming && current && incoming.value === current.value)) {
+    if (
+      d.target.querySelector(".htmx-request") ||
+      (incoming && current && incoming.value === current.value)
+    ) {
       d.shouldSwap = false;
       return;
     }
@@ -247,7 +259,10 @@
   document.addEventListener(
     "close",
     function (e) {
-      if (e.target instanceof HTMLDialogElement && document.getElementById("devlive")) {
+      if (
+        e.target instanceof HTMLDialogElement &&
+        document.getElementById("devlive")
+      ) {
         htmx.trigger("#devlive", "sse:resync");
       }
     },

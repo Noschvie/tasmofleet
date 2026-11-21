@@ -197,7 +197,7 @@ func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
 		`role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`,
-		`id="devlive" class="devlive" data-off`, `data-needs-device aria-disabled="true" aria-describedby="ident-why">Refresh identity`,
+		`id="devlive" class="devlive" data-off`, `data-needs-device aria-disabled="true" hx-disable aria-describedby="ident-why">Refresh identity`,
 		`id="identity" class="devcard r2" aria-labelledby="dc-ident"`, `id="devconn" class="devcard r3" aria-labelledby="dc-conn"`,
 		`<button type="button" class="btn" aria-disabled="true" aria-describedby="devhd-off">Restart</button>`} {
 		if !strings.Contains(body, want) {

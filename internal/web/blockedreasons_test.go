@@ -1,6 +1,7 @@
 package web
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -102,13 +103,16 @@ func TestOfflineButtonsNameTheBannerNotASecondLine(t *testing.T) {
 
 // Why (#1072): Refresh identity stays a probe button (hx-post, data-needs-device) that cannot act while the device
 // is offline or its HTTP API is off; the card says why as text and the live region carries the words for the
-// next refresh, because the card itself is not swapped for a state change.
+// next refresh, because the card itself is not swapped for a state change. A card rendered blocked carries
+// hx-disable: htmx never binds the probe to it, so the markup alone sends nothing on a click, Enter or Space,
+// whether or not the click guard of select.js runs first; live.js lifts it when the device comes back.
 func TestRefreshIdentityIsBlockedWithItsReasonAsText(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{} })
 	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now()}
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
 	btn := sliceBetween(page, `hx-post="/tf/devices/1/probe"`, ">Refresh identity<")
-	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || !strings.Contains(btn, "data-needs-device") {
+	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || !strings.Contains(btn, "data-needs-device") ||
+		!slices.Contains(strings.Fields(btn), "hx-disable") {
 		t.Errorf("offline: %s", btn)
 	}
 	if line := elementText(page, "ident-why", "</p>"); line != reasonOffline {
@@ -117,7 +121,7 @@ func TestRefreshIdentityIsBlockedWithItsReasonAsText(t *testing.T) {
 	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now()}
 	_, page = e.do(t, "GET", "/devices/1", "admin", nil)
 	btn = sliceBetween(page, `hx-post="/tf/devices/1/probe"`, ">Refresh identity<")
-	if strings.Contains(btn, "aria-disabled") || strings.Contains(btn, " disabled") {
+	if strings.Contains(btn, "aria-disabled") || strings.Contains(btn, " disabled") || slices.Contains(strings.Fields(btn), "hx-disable") {
 		t.Errorf("online: %s", btn)
 	}
 	if line := elementText(page, "ident-why", "</p>"); line != "" || !strings.Contains(page, `id="ident-why" data-off-why="The device is offline." hidden`) {

@@ -492,7 +492,10 @@ templ identityCard(c identCard) {
 					hx-disabled-elt="this"
 					data-needs-device
 					if c.whyText() != "" {
+						// hx-disable: htmx never binds the probe, so this markup sends nothing by click, Enter or Space,
+						// not only while the click guard of select.js runs first; live.js lifts it when the device is back
 						aria-disabled="true"
+						hx-disable
 					}
 					aria-describedby="ident-why"
 				>Refresh identity</button>

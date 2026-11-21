@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -119,8 +120,8 @@ func TestRefreshIdentityRefusesADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
 	btn := sliceBetween(page, "hx-post=\"/tf/devices/1/probe\"", ">Refresh identity<")
 	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || strings.Contains(btn, "title=") ||
-		!strings.Contains(btn, `aria-describedby="ident-why"`) || !strings.Contains(btn, "data-needs-device") {
-		t.Errorf("Refresh identity is not blocked (focusable, reason as text, still the probe): %s", btn)
+		!strings.Contains(btn, `aria-describedby="ident-why"`) || !strings.Contains(btn, "data-needs-device") || !slices.Contains(strings.Fields(btn), "hx-disable") {
+		t.Errorf("Refresh identity is not blocked (focusable, reason as text, still the probe, never bound by htmx): %s", btn)
 	}
 	if line := elementText(page, "ident-why", "</p>"); !strings.Contains(line, "HTTP API off") {
 		t.Errorf("the identity card does not say why as text: %q", line)

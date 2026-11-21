@@ -391,6 +391,10 @@ test("Refresh identity follows the live refusal both ways, without a reload", { 
 // region both ways without the card being swapped: it is aria-disabled (never disabled), Tab and the screen reader reach
 // it, the reason is text on the card, a click, Enter and Space send nothing, and when the device is back it works again.
 test("Refresh identity is blocked, not disabled, while the device is offline and works again after (#1072)", async ({ page }) => {
+  // The simulated device stays online: a live refresh (opening the page asks for one, the device's power and uptime more)
+  // would swap in the true #devlive and unblock the button between the faked "offline" and the presses. Its answers are
+  // left empty (204: htmx swaps nothing), so the live region says only what the test makes it say.
+  await page.route(/\/devices\/\d+\/live(\?|$)/, (r) => r.fulfill({ status: 204 }));
   await openDevice(page, "plug-4m");
   await page.evaluate(() => ((window as unknown as { __kept: number }).__kept = 1));
   const probes: string[] = [];
