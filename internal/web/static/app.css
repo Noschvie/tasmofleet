@@ -8246,31 +8246,10 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 [aria-pressed="true"] > .devsw::after {
   left: 14px;
 }
-.devhd-off {
-  display: flex;
-  gap: var(--sp-10);
-  align-items: center;
-  flex-wrap: wrap;
-  padding: var(--sp-10) 14px;
-  margin-bottom: var(--sp-12);
-  border-radius: 9px;
-  border: var(--hair-w) solid var(--color-warn);
-  background: var(--color-warn-bg);
-  color: var(--color-warn-fg);
-  font-size: 13px;
-}
-.devhd-off > div {
-  flex: 1;
-  min-width: 220px;
-}
-.devhd-off b {
-  font-weight: 600;
-}
-.devhd-offdot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-warn);
+/* why a button cannot act where no banner says it (#1082): its own full row under the name and the buttons, like the ACL notice */
+.devhd-why {
+  flex: 1 1 100%;
+  min-width: 0;
 }
 .devhd ~ .banner {
   margin: 0 0 var(--sp-12);
@@ -15240,6 +15219,13 @@ details.devcard > summary {
 }
 .stab-head h2 {
   margin: 0;
+}
+/* an offline device's card adds "Last reported" to the head: on a phone the head wraps instead of squeezing the title (#1082) */
+.stab-card .stab-head {
+  flex-wrap: wrap;
+}
+.stab-card .stab-head h2 {
+  white-space: nowrap;
 }
 .stab-meta {
   margin-left: auto;

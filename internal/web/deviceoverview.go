@@ -295,7 +295,8 @@ func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time
 
 // policyTile is "n / m" rules matched: green when all match, amber naming the first failing
 // setting. Nothing without a policy (or a fleet without rules); a device that no rule applies to
-// says so instead of showing a count.
+// says so instead of showing a count. A rule whose value was not read has not matched: it is left out of n, and a device
+// none of whose rules was read says "Not read" instead of a count that reads as "all compliant" (#1082).
 func policyTile(c *policyCard, off bool) *tile {
 	if c == nil {
 		return nil
@@ -303,7 +304,10 @@ func policyTile(c *policyCard, off bool) *tile {
 	if c.Rules == 0 {
 		return &tile{Key: "policy", Label: "Policy", Value: "None", Tone: ui.ToneNeutral, Sub: "No rules apply to this device"}
 	}
-	tl := tile{Key: "policy", Label: "Policy", Value: fmt.Sprintf("%d / %d", max(c.Rules-len(c.Deviations), 0), c.Rules), Tone: ui.ToneOK}
+	tl := tile{Key: "policy", Label: "Policy", Value: fmt.Sprintf("%d / %d", max(c.Rules-len(c.Deviations)-c.Unknown, 0), c.Rules), Tone: ui.ToneOK}
+	if c.Unknown >= c.Rules {
+		tl.Value = "Not read"
+	}
 	switch {
 	case len(c.Deviations) > 0:
 		d := c.Deviations[0]
@@ -569,34 +573,32 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	if p.Updating != nil {
 		running = &p.Updating.Job
 	}
+	hl = pageHealth(d, hl, running) // a device that never answered is Unknown here, not Offline (tabsFor maps it the same way)
 	pf := h.pageFactsOf(ctx, d)
 	tf, tp, tpOK := pf.Facts, pf.Paths, pf.PathsOK
 	shown := shownHTTP(tf.HTTP, hl)
 	p.Tabs = h.headWith(v, d, hl, running, "overview", tf, tp, tpOK)
-	if p.Updating == nil && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero() {
-		p.NotYet = "This device has not answered yet"
-		if !d.CreatedAt.IsZero() {
-			p.NotYet += " (added " + sinceText(d.CreatedAt) + ")"
-		}
-		p.NotYet += ". Check that it is powered and that its address (" + d.Address + ") is right."
-	}
 	facts := h.factsOf(ctx, d)
 	tele := h.telemetryOf(d.ID)
 	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, HTTP: shown, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
 	brokerRow, otherBroker := h.otherBrokerRow(d, hl, tf.HTTP.State == transport.HTTPOK, in.Now)
 	in.OtherBroker = otherBroker
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
-	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
-		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil && p.Tabs.writesAPIOff() == "")}
+	never := neverAnswered(d, hl)
+	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in)}
+	// The relay and sensor boxes show what the device reported: until its first answer there is nothing to show (#1082).
+	if !never {
+		p.Live.Box = relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil && p.Tabs.writesAPIOff() == "")
+		if p.Live.Box == nil {
+			p.Live.Sensors = sensorBoxOf(in)
+		}
+	}
 	p.Live.ReadsOff = p.Tabs.readsAPIOff()
 	if p.Live.Box != nil {
 		p.Live.Box.Why = p.Tabs.writesAPIOff()
 	}
-	if p.Live.Box == nil {
-		p.Live.Sensors = sensorBoxOf(in)
-	}
 	if res, boots, ok := h.stabilityOf(ctx, d.ID, hl); ok {
-		c := stabCardOf(in.Now, res, boots, hl, facts.SSID)
+		c := stabCardOf(in.Now, res, boots, hl, facts.SSID, stabState{NoData: never, Stale: off})
 		p.Stab = &c
 	}
 	p.Ident = h.identityWithHint(v, d, p.Updating != nil, off, facts, pf.Conflicts)

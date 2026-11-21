@@ -181,6 +181,28 @@ type stabCard struct {
 	Note  []noteSeg
 	Rows  []stabRow
 	Boots []stabBoot
+	// NoData: the device never answered, so there is no verdict to give (a neutral "No data", counts as a dash).
+	// Stale: the device is offline, so the numbers are what it reported before ("Last reported", #1071).
+	NoData, Stale bool
+}
+
+// stabState is what the page knows about the device that changes how the card reads.
+type stabState struct{ NoData, Stale bool }
+
+// badgeLabel and badgeTone are the verdict's badge: the level, or "No data" for a device that never answered (neutral,
+// not a green "Stable").
+func (c stabCard) badgeLabel() string {
+	if c.NoData {
+		return "No data"
+	}
+	return c.Level.Label()
+}
+
+func (c stabCard) badgeTone() string {
+	if c.NoData {
+		return "t-neutral"
+	}
+	return stabTone(c.Level)
 }
 
 // signalWord: how good a reading is. The edges are the ones of the Wi-Fi tile's bar.
@@ -256,8 +278,8 @@ func loopAdvice(r stability.Reason) string {
 }
 
 // stabCardOf words the verdict. boots are the stored restarts, newest first.
-func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl model.Health, ssid string) stabCard {
-	c := stabCard{Level: r.Level, Tone: stabTone(r.Level), Meta: "last 24 hours"}
+func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl model.Health, ssid string, st stabState) stabCard {
+	c := stabCard{Level: r.Level, Tone: stabTone(r.Level), Meta: "last 24 hours", NoData: st.NoData, Stale: st.Stale}
 	if r.Level == stability.Stable {
 		c.Meta = "last 7 days"
 	}
@@ -324,6 +346,9 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 	}
 	if r.Level == stability.BootLoop {
 		rs.Sub = "counted from BootCount: includes restarts TasmoFleet did not see"
+	}
+	if st.NoData {
+		rs.Main, rs.Rest, rs.Class = "—", "", "" // nothing was seen, so "0 in 24 h" would claim a quiet device
 	}
 	c.Rows = append(c.Rows, rs)
 	if r.Level == stability.BootLoop {

@@ -126,15 +126,39 @@ test("a health cell that turns offline switches its row menu and the bulk bar of
   for (const b of await bar.locator("[data-needs-device]").all()) await expect(b).toBeDisabled();
 });
 
+// #1082: a device that never answered is Unknown, not "Offline since <the time TasmoFleet started>": the badge, the one
+// banner and Reachability say so, there is no stale Stable verdict, and Restart is blocked with the banner as its reason.
+// The device is in that state when the page loads (its address answers nothing), so nothing here waits on a live change.
+test("a device that never answered says Unknown once (#1082)", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices");
+  await page.getByRole("link", { name: dead, exact: true }).first().click();
+  await expect(page.locator(".devhd-state")).toHaveText("Unknown");
+  await expect(page.locator("#devhd-notyet")).toContainText("has not answered yet");
+  await expect(page.locator("#devhd-off")).toHaveCount(0);
+  await expect(page.locator("[data-tile=reach]")).toContainText("Unknown");
+  await expect(page.locator("#stability .bdg")).toHaveText("No data");
+  await expect(page.locator("#dc-relays, #dc-sensors")).toHaveCount(0);
+  const restart = page.getByRole("button", { name: "Restart", exact: true });
+  await expect(restart).toHaveAttribute("aria-disabled", "true");
+  await expect(restart).toHaveAttribute("aria-describedby", "devhd-notyet");
+  await shot(page, "never-answered-375");
+});
+
 // #1072: Restart of an offline device was a bare <button disabled>: Tab skipped it and nothing said why. It is now
 // blocked, not disabled: Tab reaches it, and the offline banner it names is on screen. Last in the file, because the
 // plug of the device is pulled for good.
 test("an offline device's Restart is reached by Tab and its reason is on screen at 375 px (#1072)", async ({ page }) => {
-  const victim = Object.keys(env.devices).filter((n) => n !== online).at(-1)!;
-  const r = await fetch(env.vars.DEVENV_CONTROL_URL + `/device/${victim}/off`, { method: "POST" });
-  expect(r.status).toBe(204);
+  // a device that answered before its plug is pulled: one that never answered (the locked plug asks for a password nobody
+  // gave) is Unknown, not offline (#1082)
+  const victim = Object.keys(env.devices).filter((n) => n !== online && n !== dead && n !== "locked-plug").at(-1)!;
   await page.setViewportSize({ width: 375, height: 900 });
   await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices");
+  await expect(deviceEntry(page, victim).getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 40_000 });
+  const r = await fetch(env.vars.DEVENV_CONTROL_URL + `/device/${victim}/off`, { method: "POST" });
+  expect(r.status).toBe(204);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: victim, exact: true }).first().click();
   const banner = page.locator("#devhd-off");
@@ -144,7 +168,10 @@ test("an offline device's Restart is reached by Tab and its reason is on screen 
   await expect(restart).not.toHaveAttribute("disabled", /.*/);
   await expect(restart).toHaveAttribute("aria-describedby", "devhd-off");
   await expect(banner, "the reason is visible text, not a tooltip").toBeVisible();
-  await expect(banner).toContainText("Restart");
+  // #1082: one banner, a lead and one sentence; no second paragraph in the header and no list of the buttons
+  await expect(banner).toContainText("Controls are off until it is back.");
+  await expect(banner).not.toContainText("Restart");
+  await expect(page.locator("#devhd-why")).toHaveCount(0);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   for (let i = 0; i < 80; i++) {
     await page.keyboard.press("Tab");

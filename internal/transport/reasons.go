@@ -45,6 +45,9 @@ type Reason struct {
 	Action Action
 	Path   Path
 	Text   string
+	// Short is the cause that can be removed, in a few plain words and without a timestamp, for a one-line note beside
+	// a button ("refresh the identity of A and B first"); "" where Text is all there is. It only ever restates Text.
+	Short string
 }
 
 // Describe is the base sentence of a path. For an update path it is the one sentence every screen and log line uses

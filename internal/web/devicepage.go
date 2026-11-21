@@ -31,7 +31,6 @@ type deviceOverview struct {
 	Base     string
 	CSRF     string
 	Updating *jobView // an operation holds the device: it is silent on purpose
-	NotYet   string   // the device never answered: what to check
 	Live     liveView
 	Stab     *stabCard // nil without the stability store
 	Ident    identCard

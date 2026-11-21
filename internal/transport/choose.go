@@ -36,6 +36,16 @@ func (p Paths) Reason(a Action) string {
 	return ""
 }
 
+// ShortReason returns the short wording of the reason for an action (Reason.Short), "" when there is none.
+func (p Paths) ShortReason(a Action) string {
+	for _, r := range p.Reasons {
+		if r.Action == a {
+			return r.Short
+		}
+	}
+	return ""
+}
+
 // Choose decides, from facts alone, how each action reaches the device. It is pure: no clock, no
 // I/O (Facts.Now is the clock). The order is fixed (spec §5.x):
 //
@@ -60,15 +70,16 @@ func Choose(f Facts) Paths {
 	var p Paths
 	var t string
 	p.Commands, t = chooseCommands(f)
-	p.Reasons = append(p.Reasons, Reason{ActCommands, p.Commands, t})
+	p.Reasons = append(p.Reasons, Reason{ActCommands, p.Commands, t, ""})
 	p.Writes, t = chooseWrites(f)
-	p.Reasons = append(p.Reasons, Reason{ActWrites, p.Writes, t})
-	p.Backup, t = chooseBackup(f)
-	p.Reasons = append(p.Reasons, Reason{ActBackup, p.Backup, t})
+	p.Reasons = append(p.Reasons, Reason{ActWrites, p.Writes, t, ""})
+	var short string
+	p.Backup, t, short = chooseBackup(f)
+	p.Reasons = append(p.Reasons, Reason{ActBackup, p.Backup, t, short})
 	p.Restore, t = chooseRestore(f)
-	p.Reasons = append(p.Reasons, Reason{ActRestore, p.Restore, t})
+	p.Reasons = append(p.Reasons, Reason{ActRestore, p.Restore, t, ""})
 	p.Update, t = chooseUpdate(f)
-	p.Reasons = append(p.Reasons, Reason{ActUpdate, p.Update, t})
+	p.Reasons = append(p.Reasons, Reason{ActUpdate, p.Update, t, ""})
 	if httpFailing(f) && f.HTTP.Kind == HTTPFailAPIRefused {
 		// An action that has no way left because the device's HTTP API is off says how to get it back.
 		for i, r := range p.Reasons {
@@ -132,34 +143,41 @@ func groupTopicKnown(m MQTTFacts) bool {
 // requirement that the GroupTopic is known: anything but a plain command must not go to a topic
 // that might be shared, a transfer or an upgrade there would reach the wrong devices.
 func mqttBlocker(f Facts, strict bool) string {
+	why, _ := mqttBlock(f, strict)
+	return why
+}
+
+// mqttBlock is mqttBlocker with the plain wording of the cause for a one-line note beside a button (Reason.Short): the
+// thing the person does, without a timestamp or the reasoning. short is "" where the sentence is already that plain.
+func mqttBlock(f Facts, strict bool) (why, short string) {
 	m := f.MQTT
 	switch {
 	case !m.BusConnected:
-		return "TasmoFleet is not connected to its MQTT broker"
+		return "TasmoFleet is not connected to its MQTT broker", ""
 	case !m.Ours:
-		return "the device does not use TasmoFleet's MQTT broker"
+		return "the device does not use TasmoFleet's MQTT broker", ""
 	case m.Topic == "":
-		return "the device has no MQTT topic"
+		return "the device has no MQTT topic", ""
 	case !TopicShapeOK(m.Topic):
-		return "the device's MQTT topic contains characters that are not allowed"
+		return "the device's MQTT topic contains characters that are not allowed", ""
 	case m.Topic == DefaultGroupTopic:
-		return "the device's topic is the default group topic, which many devices listen on"
+		return "the device's topic is the default group topic, which many devices listen on", ""
 	case !m.TopicExclusive:
-		return "another device listens on this topic (its Topic or GroupTopic), or one of the device's own group topics is this topic"
+		return "another device listens on this topic (its Topic or GroupTopic), or one of the device's own group topics is this topic", ""
 	case strict && !m.TopicTakenSince.IsZero(): // #852: a write or a transfer there would reach that device too
-		return topicTakenText(m)
+		return topicTakenText(m), "another device answers on the device's MQTT topic"
 	case !SameFullTopic(m.FullTopic, m.OurFullTopic):
-		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC"
+		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC", ""
 	case m.GroupTopic != "" && m.GroupTopic == m.Topic: // even a stale value: it only ever adds a refusal
-		return "the device's topic is also its GroupTopic, so a message would reach other devices"
+		return "the device's topic is also its GroupTopic, so a message would reach other devices", ""
 	case strict && len(m.OthersGroupUnread) > 0:
-		return othersUnreadText(m.OthersGroupUnread)
+		return othersUnreadText(m.OthersGroupUnread), othersUnreadShort(m.OthersGroupUnread)
 	case strict && !groupTopicKnown(m):
-		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it"
+		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it", ""
 	case !m.LWTOnline:
-		return "the device is not online on MQTT"
+		return "the device is not online on MQTT", ""
 	}
-	return ""
+	return "", ""
 }
 
 // passwordBlocker says why a transfer over MQTT cannot carry the device's MqttPassword. Which modes give a
@@ -203,10 +221,16 @@ func PasswordTestBlocker(f Facts) string {
 
 // transferBlocker combines the MQTT and password requirements of a transfer.
 func transferBlocker(f Facts, what string) string {
-	if s := mqttBlocker(f, true); s != "" {
-		return s
+	why, _ := transferBlock(f, what)
+	return why
+}
+
+// transferBlock is transferBlocker with the short wording of the MQTT cause (mqttBlock).
+func transferBlock(f Facts, what string) (why, short string) {
+	if s, sh := mqttBlock(f, true); s != "" {
+		return s, sh
 	}
-	return passwordBlocker(f, what)
+	return passwordBlocker(f, what), ""
 }
 
 // BackupPasswordBlocker says why a backup cannot go over MQTT when the device is usable there for a transfer in every
@@ -288,24 +312,29 @@ func chooseWrites(f Facts) (Path, string) {
 // exceptions of writes: MQTT commands of the device just went unanswered, or its MQTT connection was just changed,
 // and HTTP works. Otherwise HTTP (/dl), and when HTTP is failing too there is no path. The files archive follows the
 // dump over MQTT only where the firmware sends files (FileDownload Type 8, #924; the backup decides, not this rule),
-// else it needs HTTP; the router sends the dump over HTTP only when MQTT published nothing.
-func chooseBackup(f Facts) (Path, string) {
-	why := transferBlocker(f, "back up")
+// else it needs HTTP; the router sends the dump over HTTP only when MQTT published nothing. The third result is, for
+// None, the plain wording of the cause that can be removed (the MQTT side; the HTTP failure is the device's), for a one-line
+// note beside the button (Reason.Short); "" otherwise.
+func chooseBackup(f Facts) (Path, string, string) {
+	why, short := transferBlock(f, "back up")
 	switch {
 	case why == "" && httpFailing(f):
-		return MQTT, "over MQTT (FileDownload), because " + httpFailText(f.HTTP)
+		return MQTT, "over MQTT (FileDownload), because " + httpFailText(f.HTTP), ""
 	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
-		return HTTP, "over the device's HTTP API (/dl), because " + connChangedText(f.MQTT)
+		return HTTP, "over the device's HTTP API (/dl), because " + connChangedText(f.MQTT), ""
 	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
-		return HTTP, "over the device's HTTP API (/dl), because " + unansweredText(f.MQTT)
+		return HTTP, "over the device's HTTP API (/dl), because " + unansweredText(f.MQTT), ""
 	case why == "":
 		return MQTT, "over MQTT first (FileDownload; the device is online on TasmoFleet's broker and its topic is its own), " +
 			"the files archive over MQTT too where the firmware sends files (FileDownload Type 8, USE_UFILESYS_MQTT), " +
-			"else over HTTP when HTTP answers; over HTTP if nothing could be published"
+			"else over HTTP when HTTP answers; over HTTP if nothing could be published", ""
 	case !httpFailing(f):
-		return HTTP, "over the device's HTTP API (/dl), because a backup over MQTT is not possible: " + why
+		return HTTP, "over the device's HTTP API (/dl), because a backup over MQTT is not possible: " + why, ""
 	}
-	return None, noPath(httpFailText(f.HTTP), "a backup over MQTT is not possible: "+why)
+	if short == "" {
+		short = why
+	}
+	return None, noPath(httpFailText(f.HTTP), "a backup over MQTT is not possible: "+why), short
 }
 
 // chooseRestore is the backup's rule (#607): the dump goes over MQTT first (FileUpload Type 2) when the device is
@@ -444,6 +473,19 @@ func othersUnreadText(names []string) string {
 	if len(names) == 1 {
 		return "the group topic of " + names[0] + " has not been read yet, so a message to this device's topic could reach it; refresh its identity"
 	}
+	return "the group topics of " + othersList(names) + " have not been read yet, so a message to this device's topic could reach them; refresh their identity"
+}
+
+// othersUnreadShort is othersUnreadText for a note beside a button: what to do, not why.
+func othersUnreadShort(names []string) string {
+	return "refresh the identity of " + othersList(names) + " first"
+}
+
+// othersList names the devices, at most othersUnreadNamed of them and the count of the rest.
+func othersList(names []string) string {
+	if len(names) == 1 {
+		return names[0]
+	}
 	shown := names
 	more := ""
 	if len(names) > othersUnreadNamed {
@@ -457,7 +499,7 @@ func othersUnreadText(names []string) string {
 	if more != "" {
 		list = strings.Join(shown, ", ") + more
 	}
-	return "the group topics of " + list + " have not been read yet, so a message to this device's topic could reach them; refresh their identity"
+	return list
 }
 
 // MQTTBlocker is mqttBlocker for the router: why the device is not usable over MQTT right now ("" when

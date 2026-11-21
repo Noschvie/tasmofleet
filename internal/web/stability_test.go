@@ -201,7 +201,7 @@ func TestRecentRestartsCarryTheDateWhenNotToday(t *testing.T) {
 		{DeviceID: 1, At: now.Add(-2 * time.Hour), Reason: "Software/System restart"},
 		{DeviceID: 1, At: time.Date(2026, 10, 19, 12, 31, 0, 0, time.UTC), Reason: "Power On"},
 	}
-	c := stabCardOf(now, stability.Result{Level: stability.Stable}, boots, model.Health{}, "")
+	c := stabCardOf(now, stability.Result{Level: stability.Stable}, boots, model.Health{}, "", stabState{})
 	if len(c.Boots) != 2 {
 		t.Fatalf("boots: %d", len(c.Boots))
 	}

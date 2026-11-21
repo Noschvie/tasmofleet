@@ -162,7 +162,7 @@ func (f fleetFacts) annotate(rows []deviceRow) {
 // Unknown ("never answered", "Has not answered since it was added"). A device answered once if
 // this run saw it (LastSeen) or an earlier one detected its identity (DetectedAt is stored).
 func shownState(r deviceRow) model.HealthState {
-	if r.Health.State == model.HealthOffline && r.Health.LastSeen.IsZero() && r.Device.Identity.DetectedAt.IsZero() {
+	if r.Health.State == model.HealthOffline && neverAnswered(r.Device, r.Health) {
 		return model.HealthUnknown
 	}
 	return r.Health.State

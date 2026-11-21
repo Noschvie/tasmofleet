@@ -277,7 +277,9 @@ templ Banner(b BannerData) {
 	>
 		<span class="banner-dot"></span>
 		<div class="banner-text">
-			if b.Title != "" {
+			if !b.TitleAt.IsZero() {
+				<b>{ b.Title }<time data-visual-mask { StampAttrs(b.TitleAt, StampDay)... }>{ b.TitleAtText }</time>{ b.TitleAfter }</b>
+			} else if b.Title != "" {
 				<b>{ b.Title }</b>
 			}
 			{ b.Text }

@@ -311,6 +311,9 @@ type deviceTabs struct {
 	// The reason per action, "" = usable. Without a transport service they all equal Reason; with
 	// one, the path TasmoFleet would take decides (deviceconn.go).
 	SettingsWhy, ConsoleWhy, BackupWhy, RestoreWhy, UpdateWhy string
+	// BackupShort is BackupWhy in a few plain words (transport.Reason.Short) for the one-line note beside Back up; ""
+	// when BackupWhy has no shorter wording.
+	BackupShort string
 
 	// The device header (devicehead.templ) is the same on every tab.
 	Name       string
@@ -319,14 +322,17 @@ type deviceTabs struct {
 	CanReplace bool // the Replace device tab
 	Drift      bool // the Drift tab (live snapshots can be read)
 
-	CSRF         string
-	IsAdmin      bool
-	Address      string    // host[:port], as the device list shows it
-	Hostname     string    // what the device calls itself on the network (Status 5), "" when never read
-	Chip         string    // chip family, "" when unknown
-	Version      string    // firmware version, "" when unknown
-	UpdateTo     string    // a newer stable release from the cached feed; "" when current or unknown
-	CanRestart   bool      // admin and the command service
+	CSRF       string
+	IsAdmin    bool
+	Address    string // host[:port], as the device list shows it
+	Hostname   string // what the device calls itself on the network (Status 5), "" when never read
+	Chip       string // chip family, "" when unknown
+	Version    string // firmware version, "" when unknown
+	UpdateTo   string // a newer stable release from the cached feed; "" when current or unknown
+	CanRestart bool   // admin and the command service
+	// NotYet is the text of the "has not answered yet" banner: set for a device that never answered while no operation
+	// holds it (neverAnswered). It takes the slot of the offline banner, so no tab says "Offline" about such a device.
+	NotYet       string
 	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
 	// OfflineSinceText is its fallback text (StampDay) for a page without JavaScript
 	OfflineSinceText string
@@ -344,7 +350,7 @@ type deviceTabs struct {
 func tabsFor(v view, d model.Device, hl model.Health, running *model.Job, active string) deviceTabs {
 	t := deviceTabs{Base: v.Base, ID: d.ID, Active: active,
 		Settings: v.IsAdmin && v.Features.Settings, Console: v.Features.DeviceCmd,
-		Name: d.Name, Health: hl.State, Updating: running != nil,
+		Name: d.Name, Health: pageHealth(d, hl, running).State, Updating: running != nil,
 		CSRF: v.CSRF, IsAdmin: v.IsAdmin, Address: d.Address, Hostname: d.Net.Hostname, Chip: chipText(d.Identity.Family), Version: d.Identity.Version,
 		CanRestart: v.IsAdmin && v.Features.DeviceCmd}
 	if t.Health == "" {
@@ -354,8 +360,39 @@ func tabsFor(v view, d model.Device, hl model.Health, running *model.Job, active
 		t.Address += ":" + strconv.Itoa(d.Port)
 	}
 	t.Reason = blockReason(d, hl, running)
+	if running == nil && neverAnswered(d, hl) {
+		t.NotYet = notYetText(d)
+	}
 	t.applyPaths(transport.Paths{}, false)
 	return t
+}
+
+// neverAnswered says the device has never answered: this run saw no contact (LastSeen) and no earlier run read its
+// identity (DetectedAt is stored). A device that refused the stored password answered (#409): its badge says "Auth failed"
+// and its tiles say "Login refused", so the banner must not say it never answered. It is the one definition: the header, the banner, the tiles, the stability card,
+// the buttons' reasons and the dashboard's counts all read it, so they cannot disagree about such a device.
+func neverAnswered(d model.Device, hl model.Health) bool {
+	return hl.State != model.HealthAuthFailed && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero()
+}
+
+// pageHealth is the health the device page shows. The tracker calls a device Offline once its polls fail, also when it
+// never answered at all; the list and the dashboard call that Unknown (shownState), and so does the page: "Offline since"
+// is about a device that went away, and a device that was never there did not. An operation that holds the device keeps
+// the tracker's state: its own banner and "Updating" badge say more, and the buttons' reasons key on it.
+func pageHealth(d model.Device, hl model.Health, running *model.Job) model.Health {
+	if hl.State == model.HealthOffline && running == nil && neverAnswered(d, hl) {
+		hl.State = model.HealthUnknown
+	}
+	return hl
+}
+
+// notYetText is what the "has not answered yet" banner says: when the device was added and what to check.
+func notYetText(d model.Device) string {
+	s := "This device has not answered yet"
+	if !d.CreatedAt.IsZero() {
+		s += " (added " + sinceText(d.CreatedAt) + ")"
+	}
+	return s + ". Check that it is powered and that its address (" + d.Address + ") is right."
 }
 
 // blockReason says why nothing that needs the device (Settings, Console, Back up
@@ -366,7 +403,7 @@ func blockReason(d model.Device, hl model.Health, running *model.Job) string {
 	switch {
 	case running != nil:
 		return "Unavailable while " + runningPhrase(*running) + "."
-	case hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero():
+	case neverAnswered(d, hl):
 		return reasonNotAnswered
 	case hl.State == model.HealthOffline:
 		return reasonOffline

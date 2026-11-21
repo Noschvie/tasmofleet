@@ -296,8 +296,11 @@ func actionWhy(general string, p transport.Path, reason string) string {
 // paths every action shows the general reason, as before.
 func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 	t.SettingsWhy, t.ConsoleWhy, t.BackupWhy = t.Reason, t.Reason, t.Reason
-	if t.Health == model.HealthOffline {
+	switch {
+	case t.Health == model.HealthOffline:
 		t.UpdateWhy = reasonOffline
+	case t.NotYet != "":
+		t.UpdateWhy = t.Reason // the page maps a never-answered Offline to Unknown; the card still says "Not available"
 	}
 	if !ok {
 		return
@@ -310,6 +313,9 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 	t.SettingsWhy = actionWhy(general, p.Writes, p.Reason(transport.ActWrites))
 	t.ConsoleWhy = actionWhy(general, p.Commands, p.Reason(transport.ActCommands))
 	t.BackupWhy = actionWhy(general, p.Backup, p.Reason(transport.ActBackup))
+	if p.Backup == transport.None {
+		t.BackupShort = sentence(p.ShortReason(transport.ActBackup))
+	}
 	t.RestoreWhy = actionWhy(general, p.Restore, p.Reason(transport.ActRestore))
 	t.UpdateWhy = actionWhy(general, p.Update, p.Reason(transport.ActUpdate))
 	if t.APIOff {
@@ -322,6 +328,9 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 				*a.why = reasonAPIOff
 			}
 		}
+		if t.BackupWhy == reasonAPIOff {
+			t.BackupShort = "" // the one sentence for the cause stands, not the router's
+		}
 	}
 }
 
@@ -329,7 +338,7 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 // delivery (and so the path) is chosen on the update page, so the card's pull-only Update path
 // must not decide here.
 func (t deviceTabs) updateBtnWhy() string {
-	if t.Updating || t.Health == model.HealthOffline {
+	if t.Updating || t.Health == model.HealthOffline || t.NotYet != "" {
 		return t.Reason
 	}
 	return ""
@@ -351,66 +360,59 @@ func (t deviceTabs) readsAPIOff() string {
 	return ""
 }
 
-// backupNote is the visible line next to the actions for a Back up that has no path; the offline
-// case has its banner already (described by it).
-func (t deviceTabs) backupNote() string {
-	if t.BackupWhy == "" || t.BackupWhy == reasonOffline {
-		return ""
-	}
-	return t.BackupWhy
-}
-
 // restartWhy is why the header's Restart cannot act now, "" when it can: the device does not answer (whatever the
-// transport, Restart is not tried then), or its HTTP API is off and nothing else carries a change (#645).
+// transport, Restart is not tried then) or never did, or its HTTP API is off and nothing else carries a change (#645).
 func (t deviceTabs) restartWhy() string {
 	switch {
 	case t.Health == model.HealthOffline && t.Updating:
 		return t.Reason // the operation that holds the device, named by the same sentence as Back up
+	case t.NotYet != "":
+		return reasonNotAnswered
 	case t.Health == model.HealthOffline:
 		return reasonOffline
 	}
 	return t.writesAPIOff()
 }
 
-// restartNote is the line under the actions for a Restart that cannot act; the offline banner says it itself.
-func (t deviceTabs) restartNote() string {
-	if t.offline() {
-		return ""
+// slotBannerID is the id of the banner the header's slot shows (deviceOffSlot), "" when it shows none: the offline
+// banner, or the "has not answered yet" one. The buttons that cannot act name it as their reason, so a sentence is said
+// once; without a banner their reason is the line #devhd-why.
+func (t deviceTabs) slotBannerID() string {
+	switch {
+	case t.NotYet != "":
+		return notYetBannerID
+	case t.offline():
+		return offBannerID
 	}
-	return t.restartWhy()
+	return ""
 }
 
-// restartDescribedBy names the element that says why Restart cannot act: the banner when it is shown, else the line.
-func (t deviceTabs) restartDescribedBy() string {
-	if t.offline() {
-		return "devhd-off"
+// describedBy names the element that says why a header button cannot act: the slot's banner when it is shown, else the line.
+func (t deviceTabs) describedBy() string {
+	if id := t.slotBannerID(); id != "" {
+		return id
 	}
 	return "devhd-why"
 }
 
-// headReasons are the lines of #devhd-why: why Restart and Back up cannot act, where no banner says it already.
+// headReasons are the lines of #devhd-why: why Restart and Back up cannot act, where no banner says it already. A device
+// that is offline or never answered has its banner (controls are off until it is back), so these lines are for an
+// operation that holds the device, a HTTP API that is off, and a Back up that has no path although the device is online.
 func (t deviceTabs) headReasons() []reasonGroup {
-	as := []blockedAction{{"Back up", t.backupNote()}}
+	if t.slotBannerID() != "" {
+		return nil
+	}
+	// The note beside Back up is the plain wording of the cause the person can remove (Reason.Short); the card and the
+	// tooltips keep the router's full sentence.
+	backup := t.BackupWhy
+	if t.BackupShort != "" && t.BackupWhy != "" {
+		backup = t.BackupShort
+	}
+	as := []blockedAction{{"Back up", backup}}
 	if t.CanRestart {
-		as = append([]blockedAction{{"Restart", t.restartNote()}}, as...)
+		as = append([]blockedAction{{"Restart", t.restartWhy()}}, as...)
 	}
 	return groupReasons(as)
-}
-
-// updateDescribedBy names the element that says why "Update to" is disabled.
-func (t deviceTabs) updateDescribedBy() string {
-	if t.Updating {
-		return "devhd-why"
-	}
-	return "devhd-off"
-}
-
-// backupDescribedBy names the element that says why Back up is disabled.
-func (t deviceTabs) backupDescribedBy() string {
-	if t.backupNote() != "" {
-		return "devhd-why"
-	}
-	return "devhd-off"
 }
 
 // pathCardOf builds the card for the viewer.
@@ -448,6 +450,9 @@ func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t 
 			if a.why != "" {
 				row.Sub = a.why
 			}
+		}
+		if a.why == reasonOffline || a.why == reasonNotAnswered {
+			row.Sub = "" // the banner under the tabs says it already (#1082)
 		}
 		if taken != "" {
 			row.Sub = strings.ReplaceAll(row.Sub, taken, topicTakenShort)

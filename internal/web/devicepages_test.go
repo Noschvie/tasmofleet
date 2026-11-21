@@ -67,13 +67,14 @@ func TestDeviceHeaderIsTheSameOnEveryTab(t *testing.T) {
 
 // Why: design item #50. A device that never answered (or is held by a running
 // operation) cannot back up; the button says so and the page gives the reason
-// next to it instead of offering something that cannot work. The Transactions
-// card is always there so the page has the same shape for every device.
+// instead of offering something that cannot work. For a device that never answered the reason
+// is its banner, said once (#1082). The Transactions card is always there so the page has the
+// same shape for every device.
 func TestNeverAnsweredDeviceDisablesBackupAndExplains(t *testing.T) {
 	e, _, _ := subPageEnv(t)
 	_, body := e.do(t, "GET", "/devices/2", "admin", nil) // attic: no health, never probed
-	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || describedBy(bt) != "devhd-why" {
-		t.Errorf("Back up is not blocked with its reason as text: %s", bt)
+	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || describedBy(bt) != "devhd-notyet" {
+		t.Errorf("Back up is not blocked with the not-answered banner as its reason: %s", bt)
 	}
 	for _, want := range []string{
 		"This device has not answered yet",
@@ -84,8 +85,8 @@ func TestNeverAnsweredDeviceDisablesBackupAndExplains(t *testing.T) {
 			t.Errorf("missing %q:\n%s", want, body)
 		}
 	}
-	if line := elementText(body, "devhd-why", "</p>"); line != "Back up: The device has not answered yet." {
-		t.Errorf("the line Back up names: %q", line)
+	if strings.Contains(body, `id="devhd-why"`) {
+		t.Error("the banner says it: a second line would say it twice")
 	}
 	_, ok := e.do(t, "GET", "/devices/1", "admin", nil)
 	if strings.Contains(ok, `aria-disabled="true"`) || strings.Contains(ok, "has not answered yet") {

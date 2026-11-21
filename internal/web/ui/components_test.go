@@ -434,6 +434,20 @@ func TestBannerIDIsTheTargetOfADescribedBy(t *testing.T) {
 	}
 }
 
+// Why (#1082): the offline banner's lead holds a time ("Offline since 2:17 PM."), and a time shown in the server's zone
+// is wrong for a viewer in another. The lead takes the instant as a <time> stamp the browser rewrites, with the
+// fallback text for a page without JavaScript, inside the bold lead.
+func TestBannerLeadCanCarryATimeStamp(t *testing.T) {
+	at := time.Date(2026, 11, 21, 14, 17, 0, 0, time.UTC)
+	got := comp(t, Banner(BannerData{Tone: ToneWarn, Title: "Offline since ", TitleAt: at, TitleAtText: "Today 14:17", TitleAfter: ".", Text: "Controls are off."}))
+	if !strings.Contains(got, `<b>Offline since <time data-visual-mask`) || !strings.Contains(got, `>Today 14:17</time>.</b>`) || !strings.Contains(got, "Controls are off.") {
+		t.Errorf("the lead lost its time: %s", got)
+	}
+	if got := comp(t, Banner(BannerData{Tone: ToneWarn, Title: "Lead.", Text: "Text."})); strings.Contains(got, "<time") {
+		t.Errorf("a lead without an instant renders a time: %s", got)
+	}
+}
+
 // Why (#1072): a button that cannot act now must still be reachable by Tab and say why as text, so it is
 // aria-disabled (never the disabled attribute, which no key reaches and no touch explains) and names the line that
 // holds the reason; and it must not be able to do anything with JavaScript off, so it carries no address, dialog,

@@ -69,14 +69,17 @@ func TestCardAndDisabledButtonsCarryTheChooserSentence(t *testing.T) {
 	if !strings.Contains(body, "How TasmoFleet reaches this device") {
 		t.Fatal("no connection card on the overview")
 	}
-	if n := strings.Count(body, html.EscapeString(want)); n < 2 {
-		t.Fatalf("the Back up sentence must appear in the card and on the disabled button (%d times):\n%s", n, want)
+	// #1082: the card keeps the full sentence; the note the disabled button points at says what to do, in the short
+	// wording of the cause, so the full sentence is on the page once.
+	if n := strings.Count(body, html.EscapeString(want)); n != 1 {
+		t.Fatalf("the Back up sentence must appear in the card (%d times):\n%s", n, want)
 	}
+	shortWant := "Back up: " + sentence(transport.Choose(f).ShortReason(transport.ActBackup))
 	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || strings.Contains(bt, "title=") {
 		t.Fatalf("Back up must be a blocked button that reaches Tab, not a tooltip: %s", bt)
 	}
-	if line := elementText(body, "devhd-why", "</p>"); line != "Back up: "+want {
-		t.Fatalf("the line Back up names must say the chooser's sentence: %q", line)
+	if line := elementText(body, "devhd-why", "</p>"); line != shortWant || strings.Contains(line, "UTC") {
+		t.Fatalf("the line Back up names must say the short wording %q, got %q", shortWant, line)
 	}
 	// Commands go over MQTT: the card says so and the Console tab is not disabled.
 	if !strings.Contains(body, sentence(transport.Choose(f).Reason(transport.ActCommands))[:20]) {

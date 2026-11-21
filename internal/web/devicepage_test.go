@@ -192,10 +192,11 @@ func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
 		h := d.Health.(fakeHealth)
 		h[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-5 * time.Hour), Since: time.Now().Add(-5 * time.Hour), Power: map[string]string{"POWER": "OFF"}}
+		h[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
 		d.DeviceCmd = &fakeCmd{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
+	for _, want := range []string{`<div class="banner tone-warn" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
 		`role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`,
 		`id="devlive" class="devlive" data-off`, `data-needs-device aria-disabled="true" hx-disable aria-describedby="ident-why">Refresh identity`,
 		`id="identity" class="devcard r2" aria-labelledby="dc-ident"`, `id="devconn" class="devcard r3" aria-labelledby="dc-conn"`,
@@ -214,7 +215,7 @@ func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 	}
 	_, online := e.do(t, "GET", "/devices/2", "admin", nil)
 	if strings.Contains(online, `id="devhd-off"`) {
-		t.Error("a device that never answered is not offline: it gets the not-answered notice, not the banner")
+		t.Error("an online device has no offline banner")
 	}
 	if !strings.Contains(online, `<div id="devhd-slot"></div>`) {
 		t.Error("the banner slot must always be on the page, so a live refresh can fill it")

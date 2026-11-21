@@ -133,6 +133,8 @@ test("a pulled plug shows the offline banner and Last reported, disables, and ad
   const rows = await page.locator("#devact .dev-act li").count();
   await control("/device/esp32c3-sensor/off");
   await expect(page.locator("#devhd-off")).toContainText("Offline since", { timeout: 60_000 });
+  await expect(page.locator("#devhd-off")).toContainText("Controls are off until it is back."); // #1082: one lead, one sentence
+  await expect(page.locator("#devhd-why")).toHaveCount(0);
   await expect(page.locator("#devlive")).toHaveAttribute("data-off", "");
   expect(faded(await textRuns(page, "#devlive, #identity, #devconn")), "no text of an offline device is drawn at half opacity").toEqual([]);
   await expect(page.locator("#identity [data-stale]")).toBeVisible();

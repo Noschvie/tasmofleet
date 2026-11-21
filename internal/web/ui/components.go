@@ -165,6 +165,11 @@ func (b Btn) buttonType() string {
 type BannerData struct {
 	Tone        Tone
 	Title, Text string
+	// TitleAt, when set, puts a time into the lead: Title, then the instant (TitleAtText is its fallback text, time.js
+	// shows it in the browser's zone like a day stamp), then TitleAfter.
+	TitleAt     time.Time
+	TitleAtText string
+	TitleAfter  string
 	Action      *Btn
 	Alert       bool   // role=alert (a failure the user has to act on) instead of role=status
 	ID          string // the banner's id, for a control that aria-describedby points at it (#1072)

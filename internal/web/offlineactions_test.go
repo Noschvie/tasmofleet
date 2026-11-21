@@ -71,7 +71,7 @@ func TestOfflineDeviceHeaderDisablesRestartAndUpdate(t *testing.T) {
 		t.Errorf("the restart dialog can still be opened")
 	}
 	// the offline banner is the visible reason
-	if !strings.Contains(body, "Edit and Delete still work") {
+	if !strings.Contains(elementText(body, "devhd-off", "</div>"), "Controls are off until it is back.") {
 		t.Errorf("no visible reason on the page")
 	}
 }

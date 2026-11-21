@@ -76,28 +76,17 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 							if t.updateBtnWhy() != "" {
 								title={ t.updateBtnWhy() }
 								aria-disabled="true"
-								aria-describedby={ t.updateDescribedBy() }
+								aria-describedby={ t.describedBy() }
 							}
 						>Update to { t.UpdateTo }</button>
 					</form>
 				}
 			</div>
-			if lines := t.headReasons(); len(lines) > 0 {
-				<p class="devcard-note" id="devhd-why">
-					for i, g := range lines {
-						if i > 0 {
-							<br/>
-						}
-						{ g.Lead() + ": " }
-						@keepTogether(g.Why)
-					}
-				</p>
-			}
 		</div>
 		<div class="devhd-acts">
 			if t.CanRestart {
 				if t.restartWhy() != "" {
-					@ui.Button(ui.Btn{Label: "Restart", DisabledReason: t.restartWhy(), ReasonID: t.restartDescribedBy(), ReasonShared: true})
+					@ui.Button(ui.Btn{Label: "Restart", DisabledReason: t.restartWhy(), ReasonID: t.describedBy(), ReasonShared: true})
 				} else {
 					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
 				}
@@ -106,7 +95,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				<input type="hidden" name="csrf" value={ t.CSRF }/>
 				<input type="hidden" name="back" value={ t.backPath() }/>
 				if t.BackupWhy != "" {
-					@ui.Button(ui.Btn{Label: "Back up", DisabledReason: t.BackupWhy, ReasonID: t.backupDescribedBy(), ReasonShared: true})
+					@ui.Button(ui.Btn{Label: "Back up", DisabledReason: t.BackupWhy, ReasonID: t.describedBy(), ReasonShared: true})
 				} else {
 					<button type="submit" class="btn">Back up</button>
 				}
@@ -125,6 +114,19 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				</div>
 			}
 		</div>
+		if lines := t.headReasons(); len(lines) > 0 {
+			// Why a button cannot act, in a row of its own under the buttons (the broker notice's place, #853), only where the
+			// slot's banner does not say it: a held device, an API that is off, a Back up without a path on an online device.
+			<p class="devcard-note devhd-why" id="devhd-why">
+				for i, g := range lines {
+					if i > 0 {
+						<br/>
+					}
+					{ g.Lead() + ": " }
+					@keepTogether(g.Why)
+				}
+			</p>
+		}
 		if t.ACL {
 			<div class="devhd-acl">
 				@ui.BrokerACLNotice()
@@ -142,32 +144,23 @@ templ deviceHeadRest(t deviceTabs) {
 	}
 }
 
-// deviceOffSlot holds the offline banner. The slot is always on the page, so a live refresh can
-// put the banner in when the device goes offline and take it out when it is back (#126).
+// deviceOffSlot holds the one banner that says why the device cannot be used: the offline banner, or for a device that
+// never answered the "has not answered yet" one (never both, #1082). The slot is always on the page, so a live refresh
+// can put the banner in when the device goes offline and take it out when it is back (#126).
 templ deviceOffSlot(t deviceTabs, attrs templ.Attributes) {
 	<div id="devhd-slot" { attrs... }>
-		if t.offline() {
+		if t.NotYet != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, ID: notYetBannerID, Text: t.NotYet})
+		} else if t.offline() {
 			@deviceOffBanner(t)
 		}
 	</div>
 }
 
-// deviceOffBanner says the device is offline and since when; its id lets a refresh swap it (#110).
+// deviceOffBanner says the device is offline and since when, and that its controls wait for it: one lead, one
+// sentence. The buttons that cannot act point at it (aria-describedby="devhd-off", #1072); its id lets a refresh swap it (#110).
 templ deviceOffBanner(t deviceTabs) {
-	<div class="devhd-off" id="devhd-off" role="status">
-		<span class="devhd-offdot" aria-hidden="true"></span>
-		<div>
-			if !t.OfflineSince.IsZero() {
-				<b>Offline since <time data-visual-mask { ui.StampAttrs(t.OfflineSince, ui.StampDay)... }>{ t.OfflineSinceText }</time>.</b>
-			} else {
-				<b>Offline.</b> The device has not answered since TasmoFleet started.
-			}
-			if t.OfflineHTTP != "" {
-				{ t.OfflineHTTP }
-			}
-			Everything below is the last reported state. Restart and Back up wait until the device answers again; Edit and Delete still work.
-		</div>
-	</div>
+	@ui.Banner(t.offlineBanner())
 }
 
 // restartDialog is the Restart confirmation, named after the device. oob: sent by a refresh that
@@ -184,9 +177,6 @@ templ deviceOverviewPage(p deviceOverview) {
 	@deviceHeader(p.Tabs)
 	if u := p.Updating; u != nil {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the transaction", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}})
-	}
-	if p.NotYet != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Text: p.NotYet})
 	}
 	@liveRegion(p.Live)
 	@ui.CardStacks(2) {
@@ -619,8 +609,13 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 	<section id="stability" class={ "devcard", "stab-card", ui.StackRank(1) } aria-labelledby="dc-stab" { attrs... }>
 		<div class="stab-head">
 			<h2 id="dc-stab">Stability</h2>
-			<span class={ "bdg", stabTone(c.Level) }>{ c.Level.Label() }</span>
-			<span class="stab-meta">{ c.Meta }</span>
+			<span class={ "bdg", c.badgeTone() }>{ c.badgeLabel() }</span>
+			if c.Stale {
+				@staleLabel(false)
+			}
+			if !c.NoData {
+				<span class="stab-meta">{ c.Meta }</span>
+			}
 		</div>
 		if len(c.Note) > 0 {
 			<div class={ "stab-note", stabTone(c.Level) }>

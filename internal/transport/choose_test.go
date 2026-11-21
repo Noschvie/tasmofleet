@@ -687,3 +687,35 @@ func TestTheUnreadGroupTopicReasonNamesTheDevicesThatHoldTheWriteBack(t *testing
 		}
 	}
 }
+
+// Why (#1082, A2-002): a note beside the Back up button must say what the person does, in plain words and without a
+// timestamp; the full sentence stays for the card. The short wording is made where the cause is, so it cannot drift
+// from it: it names the same devices the full one does.
+func TestBackupWithNoPathHasAShortReasonThatNamesTheDevicesToRefresh(t *testing.T) {
+	f := base()
+	f.HTTP = HTTPState{State: HTTPFailing, Kind: HTTPFailUnreachable, Since: f.Now.Add(-time.Hour)}
+	f.MQTT.OthersGroupUnread = []string{"garage", "shed"}
+	p := Choose(f)
+	if p.Backup != None {
+		t.Fatalf("backup %s, want none", p.Backup)
+	}
+	if got, want := p.ShortReason(ActBackup), "refresh the identity of garage and shed first"; got != want {
+		t.Errorf("short reason %q, want %q", got, want)
+	}
+	if long := p.Reason(ActBackup); !strings.Contains(long, "UTC") || !strings.Contains(long, "garage and shed") {
+		t.Errorf("the full sentence keeps the facts: %q", long)
+	}
+	f.MQTT.OthersGroupUnread = nil
+	f.MQTT.BusConnected = false
+	if got := Choose(f).ShortReason(ActBackup); got != "TasmoFleet is not connected to its MQTT broker" {
+		t.Errorf("a cause that is already plain is its own short wording: %q", got)
+	}
+	f.MQTT.BusConnected = true
+	f.HTTP = HTTPState{}
+	if got := Choose(f).ShortReason(ActBackup); got != "" {
+		t.Errorf("an action that has a path needs no note: %q", got)
+	}
+	if got := (Paths{}).ShortReason(ActBackup); got != "" {
+		t.Errorf("paths that were not chosen have no note: %q", got)
+	}
+}
