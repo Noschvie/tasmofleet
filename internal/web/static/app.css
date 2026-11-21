@@ -4468,6 +4468,7 @@ nav.crumbs a {
   flex-wrap: wrap;
   padding: var(--sp-10) var(--sp-14);
   margin: 0 0 var(--sp-14);
+  max-width: 820px; /* the reading width, also above a full-width table or stack (design-system.md, Inline banners) */
   border-radius: var(--r-banner);
   border: var(--hair-w) solid var(--banner-line);
   background: var(--banner-bg);

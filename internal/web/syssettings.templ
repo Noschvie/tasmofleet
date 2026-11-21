@@ -544,7 +544,7 @@ templ sysBroker(p sysPage, row sysRow) {
 // aclHelp is the plain help line about the broker ACL where the notice itself does not stand (#1078): the setup's
 // broker fields and the device's MQTT password source. Sentence says what the place risks; the link is the guide.
 templ aclHelp(sentence string) {
-	<span class="ufield-help acl-help">{ sentence } <a href={ templ.SafeURL(ui.BrokerACLDocURL) } target="_blank" rel="noopener noreferrer">{ ui.BrokerACLAction }<span class="sr-only">{ " (opens in a new tab)" }</span></a></span>
+	<small class="ufield-help acl-help">{ sentence } <a href={ templ.SafeURL(ui.BrokerACLDocURL) } target="_blank" rel="noopener noreferrer">{ ui.BrokerACLAction }<span class="sr-only">{ " (opens in a new tab)" }</span></a></small>
 }
 
 // sysACLHide is the admin's switch that hides the broker ACL warning (#880, #962), drawn like the keep-password

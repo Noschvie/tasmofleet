@@ -125,7 +125,7 @@ func TestBrokerACLNoticeLeftSetupEditFormAndRestore(t *testing.T) {
 	if mode < 0 || line < mode || strings.Count(edit, aclHelpLink) != 1 {
 		t.Errorf("the Edit form has no single help line with the guide under the MQTT password source (source %d, line %d)", mode, line)
 	}
-	if !strings.Contains(edit, `<span class="ufield-help acl-help">Without a broker ACL, any client on the broker can read this password and the backups.`) {
+	if !strings.Contains(edit, `<small class="ufield-help acl-help">Without a broker ACL, any client on the broker can read this password and the backups.`) {
 		t.Error("the Edit form's help line does not say what the broker exposes")
 	}
 
