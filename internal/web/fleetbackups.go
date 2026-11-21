@@ -1,8 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -181,6 +184,9 @@ type fleetView struct {
 	// viewer who may not open it).
 	PWNeeded int
 	PWHref   string
+	// Sig is the signature of the page as rendered with Sig empty (fleetLiveSig, #1153): the Devices card hands it
+	// back with every live refresh, and a refresh that would draw the same page is answered 204.
+	Sig string
 }
 
 // pwNoteMin is from how many devices the Backups page notes the devices that need their MQTT password; one device is
@@ -316,7 +322,35 @@ func (h *handler) backupsRender(w http.ResponseWriter, r *http.Request, status i
 		}
 	}
 	p.Fleet = fv
+	// #1153: sse:device comes for every inventory change of every device, and the card's refresh used to redraw
+	// everything each time. The refresh sends the signature of the page it shows; when this render has the same
+	// one, nothing is to be drawn. The answer is 204, not a 200 with HX-Reswap: none, because htmx 2 never swaps
+	// a 204, so the out-of-band cards are left alone too, and no page is built for the answer. (The device page
+	// answers 200 and flags the part, deviceoverview.go: its answer holds several parts that may each change.)
+	// A signature that cannot be computed is empty and never matches, so the page is drawn as before.
+	sig := h.fleetLiveSig(r, p)
+	if status == http.StatusOK && r.Method == http.MethodGet && r.Header.Get("HX-Request") == "true" && sig != "" && sig == r.URL.Query().Get("sig") {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	p.Fleet.Sig = sig
 	h.show(w, r, status, "backups", v, fleetBackupsPage(p))
+}
+
+// fleetLiveSig is the signature of what the Backups page shows (#1153): a hash of the page's own render, the
+// Devices card and the four cards swapped out of band included, with the signature input left empty. Hashing
+// the render, not a list of fields, means it cannot miss something a template shows or drift from the
+// templates. It holds nothing secret (the viewer receives this HTML) and is never reflected: the server
+// computes its own and compares. The hash keeps 8 bytes like activitySig. "" when the render fails.
+func (h *handler) fleetLiveSig(r *http.Request, p sysPage) string {
+	p.Fleet.Sig = ""
+	var buf bytes.Buffer
+	if err := fleetBackupsPage(p).Render(r.Context(), &buf); err != nil {
+		h.log.WarnContext(r.Context(), "backups: the page signature could not be computed", "err", err)
+		return ""
+	}
+	sum := sha256.Sum256(buf.Bytes())
+	return hex.EncodeToString(sum[:8])
 }
 
 func (h *handler) fleetBackupsPage(w http.ResponseWriter, r *http.Request) {
@@ -752,7 +786,7 @@ func (v fleetView) AriaSort(col string) string {
 
 // FootNote is the line under the table.
 func (v fleetView) FootNote() string {
-	return fmt.Sprintf("%d of %d devices. Files: counted from the newest backup · Settings only (no file system on the device) · Needs HTTP (MQTT could not carry the files and HTTP did not; the device's Backups tab says why).", len(v.Rows), v.Total)
+	return fmt.Sprintf("%d of %d devices. Device files: counted from the newest backup · Settings only (no file system on the device) · Needs HTTP (MQTT could not carry the files and HTTP did not; the device's Backups tab says why).", len(v.Rows), v.Total)
 }
 
 // AllTitle explains what "Back up all now" leaves out.

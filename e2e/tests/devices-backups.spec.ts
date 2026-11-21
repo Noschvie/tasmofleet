@@ -268,7 +268,7 @@ async function backUpElsewhere(page: Page, id: string) {
   const took = await page.request.post(`${app.url}/devices/${id}/backup`, { headers: admin, form: { csrf }, maxRedirects: 0 });
   expect(took.status(), "backup taken").toBe(303);
 }
-const runsOf = (row: Locator) => row.locator("td[data-label=Runs]");
+const runsOf = (row: Locator) => row.locator("td[data-label='Backups']");
 const storageBackups = (page: Page) => page.locator("#card-storage .sys-sum", { has: page.locator(".sys-sum-label", { hasText: /^Backups$/ }) }).locator(".sys-sum-value");
 const liveReload = (page: Page) => page.waitForResponse((r) => r.url().includes("/devices/backups") && r.request().method() === "GET" && r.request().headers()["hx-request"] === "true");
 // A mark inside the Devices card: a swap of the card's insides takes it away, whatever the new content is.
@@ -356,6 +356,47 @@ test("an open Storage fold holds the live update the same way (#950)", async ({ 
 
   await fold.locator("summary").click();
   await expect(page.locator("#swap-mark")).toHaveCount(0);
+});
+
+// Why (#1153): the event stream says "a device changed" for every inventory change of every device, whatever
+// it changed. The Devices card used to redraw itself on each one, so a reader who had focus on a row control (or
+// an open fold, a scroll position) lost it whenever anything about any device was edited. The refresh now says
+// what the card shows, and an unchanged page is answered 204, which htmx does not swap. The backups are aged
+// to hours first: a row says "Nm ago" for the first hour, which is a change in what the card shows once a
+// minute and would make the card legitimately swap at a minute boundary.
+test("the Devices card is not redrawn when another device's notes change (#1153)", async ({ page, context }) => {
+  test.setTimeout(90_000);
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    db.prepare("UPDATE backups SET taken_at = ?").run(Date.now() - 5 * 3600_000);
+  } finally {
+    db.close();
+  }
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/backups");
+  const answers: number[] = [];
+  page.on("response", (r) => r.url().includes("/devices/backups") && r.request().method() === "GET" && r.request().headers()["hx-request"] === "true" && answers.push(r.status()));
+  const box = page.locator(".bk-table tbody tr").first().locator("input[name=id]");
+  await box.focus();
+  await expect(box).toBeFocused();
+  await markCard(page);
+
+  const edit = await context.newPage();
+  await edit.setExtraHTTPHeaders(admin);
+  await edit.goto(app.url + "/devices/" + (await page.locator(".bk-table tbody tr").nth(2).locator("input[name=id]").inputValue()) + "/edit");
+  const seen = answers.length;
+  await edit.locator("textarea[name=notes]").fill("edited while the Backups page is open");
+  await edit.getByRole("button", { name: "Save changes" }).click();
+  await expect(edit).toHaveURL(/ok=saved/);
+  await edit.close();
+
+  await expect.poll(() => answers.length, { message: "the open page asked for a refresh after the edit" }).toBeGreaterThan(seen);
+  await page.waitForTimeout(500); // a swap would follow its answer at once
+  expect(answers.slice(seen), "an unchanged page is answered without a swap").toEqual(answers.slice(seen).map(() => 204));
+  await expect(page.locator("#swap-mark"), "the card's insides were not swapped").toHaveCount(1);
+  await expect(box, "focus stayed on the control").toBeFocused();
 });
 
 // Why (#934): the status bar is one nowrap row on every page. While a backup run is in progress it

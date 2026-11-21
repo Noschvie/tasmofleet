@@ -41,6 +41,8 @@ templ fleetBackupsPage(p sysPage) {
 			</div>
 		}
 	</div>
+	// bk-sig belongs to this empty form, so the schedule's save (sysform refuses a field it does not know) never posts it.
+	<form id="bk-live"></form>
 	if p.Fleet.Admin {
 		<form id="picker" method="post" action={ templ.SafeURL(p.Base + "/devices/bulk/backup") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
@@ -213,12 +215,14 @@ templ fleetDevices(p sysPage, c sysCard) {
 		data-select-scope
 		data-live-region
 		hx-get={ v.LiveHref() }
+		hx-include="#bk-sig"
 		hx-trigger="sse:backup, sse:device, sse:resync"
 		hx-sync="this:queue last"
 		hx-select={ "#card-" + c.ID + " > *" }
 		hx-select-oob={ v.LiveOOB() }
 		hx-swap="innerHTML"
 	>
+		<input type="hidden" id="bk-sig" name="sig" form="bk-live" value={ v.Sig }/>
 		<div class="sch">
 			<div>
 				<h2>{ c.Title }</h2>
@@ -266,8 +270,8 @@ templ fleetDevices(p sysPage, c sysCard) {
 							}
 							@fleetSortTh(*v, "device", "Device")
 							@fleetSortTh(*v, "newest", "Newest backup")
-							<th title="Backups stored for the device">Runs</th>
-							<th title="Whether the files on the device are in the backup too">Files</th>
+							<th title="Backups stored for the device">Backups</th>
+							<th title="Whether the files on the device are in the backup too">Device files</th>
 							@fleetSortTh(*v, "result", "Last result")
 							<th><span class="sr-only">Actions</span></th>
 						</tr>
@@ -302,14 +306,14 @@ templ fleetRowView(v fleetView, r fleetRow) {
 				<span class="muted">{ " · " + r.Ago }</span>
 			}
 		</td>
-		<td data-label="Runs" class="nowrap s" title={ r.RunsTitle }>
+		<td data-label="Backups" class="nowrap s" title={ r.RunsTitle }>
 			if r.Runs == 0 {
 				<span class="muted">-</span>
 			} else {
 				<span class="mono">{ strconv.Itoa(r.Runs) }</span><span class="bk-u">{ " " + noun(r.Runs, "backup", "backups") }</span>
 			}
 		</td>
-		<td data-label="Files" class="nowrap s">
+		<td data-label="Device files" class="nowrap s">
 			switch {
 				case r.Files != "":
 					<span class="bk-files-ok" title="The files of the device are stored with the backup">{ r.Files }</span>

@@ -1089,3 +1089,160 @@ func TestBackupTransactionRowLinksThePasswordForm(t *testing.T) {
 		})
 	}
 }
+
+// liveSigOf is the signature the page hands to the Devices card's refresh requests: the value of the hidden
+// input bk-sig, which hx-include of the card sends back as ?sig=.
+func liveSigOf(t *testing.T, body string) string {
+	t.Helper()
+	tag := regexp.MustCompile(`<input[^>]*id="bk-sig"[^>]*>`).FindString(body)
+	if tag == "" {
+		t.Fatal("the page carries no bk-sig input: the card's refresh cannot say what it shows")
+	}
+	if attrOf(tag, "name") != "sig" || attrOf(tag, "type") != "hidden" {
+		t.Fatalf("bk-sig is no hidden input named sig: %s", tag)
+	}
+	return attrOf(tag, "value")
+}
+
+// refresh is the Devices card's own reload (the htmx request of the hx-get address) with the signature it was
+// given, the way htmx sends it.
+func refresh(t *testing.T, e *env, role, query, sig string) (*result, string) {
+	t.Helper()
+	q, err := url.ParseQuery(query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.Set("sig", sig)
+	return e.do(t, "GET", "/devices/backups?"+q.Encode(), role, nil, "HX-Request", "true")
+}
+
+// Why (#1153): sse:device is sent for every inventory change of every device, whatever it changed. Each such
+// event used to redraw the whole Devices card and the cards beside it, so focus, scroll and open folds inside
+// it were lost and a screen reader read the card again. The refresh now carries the signature of what the
+// page shows; when the answer would be the same page, the server answers 204, which htmx never swaps. A
+// backup that changes anything the page shows (a row, the last run, the storage totals) still swaps, and
+// without the signature or without htmx the page is always whole.
+func TestBackupsLiveRefreshWithTheShownSignatureSwapsNothing(t *testing.T) {
+	now := time.Now()
+	fleet := fleetFixture(now)
+	e := fleetEnv(t, fleet)
+	const q = "sort=newest&dir=desc"
+	_, page := e.do(t, "GET", "/devices/backups?"+q, "admin", nil)
+	sig := liveSigOf(t, page)
+	if len(sig) != 16 {
+		t.Fatalf("sig = %q, want 16 hex characters (the activity signature's format)", sig)
+	}
+
+	// the same render again: the signature is stable, or every refresh would swap (nothing would fail)
+	_, again := e.do(t, "GET", "/devices/backups?"+q, "admin", nil)
+	if got := liveSigOf(t, again); got != sig {
+		t.Fatalf("two renders of the same data differ in their signature: %q, %q (a per-request value is in the page)", sig, got)
+	}
+
+	r, body := refresh(t, e, "admin", q, sig)
+	if r.StatusCode != 204 || body != "" {
+		t.Fatalf("a refresh with the signature of what is shown: status %d, body %d bytes, want 204 and no body", r.StatusCode, len(body))
+	}
+
+	// a backup stored: the row changes, so the card is swapped
+	fleet.rows[0].Runs++
+	r, body = refresh(t, e, "admin", q, sig)
+	if r.StatusCode != 200 || !strings.Contains(body, `id="card-devices"`) {
+		t.Fatalf("after a backup the refresh answers %d, want the page", r.StatusCode)
+	}
+	newSig := liveSigOf(t, body)
+	if newSig == sig {
+		t.Fatal("a stored backup did not change the signature")
+	}
+	if r, _ = refresh(t, e, "admin", q, newSig); r.StatusCode != 204 {
+		t.Fatalf("the new signature is not accepted: %d", r.StatusCode)
+	}
+
+	// only a card that is swapped out of band changes: the signature covers those too
+	fleet.run.OK++
+	if r, _ = refresh(t, e, "admin", q, newSig); r.StatusCode != 200 {
+		t.Fatalf("a change of the Last run card alone answers %d, want 200: it would stay stale", r.StatusCode)
+	}
+
+	// no signature, an empty one (the render for it failed) or no htmx: always the whole page
+	for name, req := range map[string]func() (*result, string){
+		"an empty signature": func() (*result, string) { return refresh(t, e, "admin", q, "") },
+		"no signature": func() (*result, string) {
+			return e.do(t, "GET", "/devices/backups?"+q, "admin", nil, "HX-Request", "true")
+		},
+		"no HX-Request": func() (*result, string) { return e.do(t, "GET", "/devices/backups?"+q+"&sig="+newSig, "admin", nil) },
+	} {
+		if r, b := req(); r.StatusCode != 200 || !strings.Contains(b, `id="card-devices"`) {
+			t.Errorf("%s: status %d, want the whole page", name, r.StatusCode)
+		}
+	}
+
+	// the page differs by role, so does its signature: an operator never gets a 204 for an admin's page
+	_, opPage := e.do(t, "GET", "/devices/backups?"+q, "operator", nil)
+	if liveSigOf(t, opPage) == newSig {
+		t.Error("an operator's page has the signature of an admin's")
+	}
+	if r, _ := refresh(t, e, "operator", q, newSig); r.StatusCode != 200 {
+		t.Errorf("an operator with an admin's signature gets %d, want 200", r.StatusCode)
+	}
+}
+
+// Why (#1153): the signature input sits in the Devices card, which the schedule form's page also holds. A
+// field inside sysform is posted with the schedule, and the form refuses a field it does not know (400), so the
+// input belongs to an empty form of its own; hx-include sends it with the refresh.
+func TestBackupsLiveSignatureIsNotPostedWithTheSchedule(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	for _, role := range []string{"admin", "operator"} {
+		_, body := e.do(t, "GET", "/devices/backups", role, nil)
+		tag := regexp.MustCompile(`<input[^>]*id="bk-sig"[^>]*>`).FindString(body)
+		if tag == "" {
+			t.Fatalf("%s: no bk-sig input", role)
+		}
+		form := attrOf(tag, "form")
+		if form != "bk-live" {
+			t.Errorf("%s: bk-sig form = %q, want bk-live (an input inside sysform is posted with the schedule)", role, form)
+		}
+		sec := regexp.MustCompile(`<section[^>]*id="card-devices"[^>]*>`).FindString(body)
+		if attrOf(sec, "hx-include") != "#bk-sig" {
+			t.Errorf("%s: the card does not send the signature: %s", role, sec)
+		}
+		i := strings.Index(body, `id="bk-live"`)
+		if i < 0 {
+			t.Fatalf("%s: no form bk-live", role)
+		}
+		if sf := strings.Index(body, `id="sysform"`); sf >= 0 {
+			end := sf + strings.Index(body[sf:], "</form>")
+			if i > sf && i < end {
+				t.Errorf("%s: bk-live is inside sysform", role)
+			}
+			if bi := strings.Index(body, `id="bk-sig"`); bi > sf && bi < end && !strings.Contains(tag, `form="bk-live"`) {
+				t.Errorf("bk-sig inside sysform without form=bk-live")
+			}
+		}
+	}
+}
+
+// Why (#1073, A3-048): "Runs" and "Files" said what they count only in a tooltip, which a phone, a keyboard
+// and a screen reader do not get. The header says it in its own text; the title may repeat it.
+func TestBackupsRunsAndFilesHeadersSayTheirMeaningInText(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	devs := cardOf(t, body, "devices")
+	for _, want := range []string{">Backups</th>", ">Device files</th>", `data-label="Backups"`, `data-label="Device files"`} {
+		if !strings.Contains(devs, want) {
+			t.Errorf("the Devices card lacks %q", want)
+		}
+	}
+	for _, old := range []string{">Runs</th>", ">Files</th>"} {
+		if strings.Contains(devs, old) {
+			t.Errorf("the header still says only %q: its meaning is in a tooltip", old)
+		}
+	}
+	// The legend under the table names the column; it must not drift from the header.
+	if !strings.Contains(devs, "Device files: counted") {
+		t.Error("the legend under the table does not name the column \"Device files\"")
+	}
+	if strings.Contains(devs, ". Files: counted") {
+		t.Error("the legend still points to a column \"Files\" that no longer exists")
+	}
+}
