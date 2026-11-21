@@ -25,6 +25,7 @@ test.beforeAll(async ({ browser }) => {
     env: {
       TASMOFLEET_AUTH_MODE: "header",
       TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
+      TASMOFLEET_OPERATOR_GROUPS: "ops",
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
       TASMOFLEET_POLL_INTERVAL: "5s",
