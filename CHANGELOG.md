@@ -4,6 +4,14 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.46.1 "Cape Agulhas" (2026-11-21)
+
+### Fixed
+
+- The Changes tab (was Drift) no longer shows read errors as changed settings, and says in plain words what differs from the last backup (#1083).
+- The Policy page shows its fleet counts as one summary line with the live check on Rules and Deviating devices only, so the rule list starts higher on a phone, and History and GPIO templates no longer show rule counts above content they do not describe; the templates page says "Can’t be compared" instead of "Not judged", and a rule's page counts its devices one way ("applies to 56 of 60 devices", "In scope 59") (#1086).
+- The policy rules file uses the words of the page: the export says `"level": "required"` or `"advisory"` and `"expected"` instead of `severity` (`warn` / `info`) and `want`, and the import and `TASMOFLEET_POLICY_RULES` read both spellings, so files written before keep working (a file that gives both with different values is refused). Import / export is now a tab of the Policy page instead of a page of its own; the import preview lists every rule as New, Changed, Unchanged or Removed (removed rules by name), says in a warning above the button that the file replaces all current rules, and the button reads "Replace rules with these 5". A file exported by this version cannot be imported by 0.46.0 or older, and the same goes for the policy rules inside a settings file written by `tasmofleet settings export` (#1088).
+
 ## 0.46.0 "Cape Agulhas" (2026-11-21)
 
 ### Changed
