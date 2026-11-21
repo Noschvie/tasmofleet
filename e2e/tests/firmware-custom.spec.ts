@@ -54,7 +54,7 @@ const uploads = (page: import("@playwright/test").Page) => page.locator(".fw-cro
 
 async function upload(page: import("@playwright/test").Page, v: string, name: string, buffer: Buffer) {
   await page.goto(app.url + "/firmware");
-  await page.getByRole("link", { name: "Upload custom firmware" }).click();
+  await page.getByRole("link", { name: "choose a file" }).click();
   await expect(page.locator("dialog[open]")).toBeVisible();
   await page.getByLabel("Label").fill("e2e build");
   await page.getByLabel("Version").fill(v);
@@ -66,7 +66,7 @@ test("operators see no upload form", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/firmware");
   await expect(page.locator('input[name="image"]')).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Upload custom firmware" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "choose a file" })).toHaveCount(0);
 });
 
 // Why: the drop zone says "Drop a .bin or .bin.gz here"; a dropped file must land in the upload

@@ -72,6 +72,9 @@ templ releaseContent(v view, p releasePage) {
 					}
 					@relUpdateButton(v, *p.Rel, "Update "+plural(p.Rel.Updatable, "device")+"…")
 				</div>
+				if v.Features.Updates && p.Rel.Updatable == 0 {
+					<p class="pghead-why" id={ relUpdateWhyID }>{ noUpdateWhy }</p>
+				}
 			}
 		</div>
 		if p.Error != "" {
@@ -116,9 +119,9 @@ func releaseTabs(v view, p releasePage) []ui.Tab {
 templ relUpdateButton(v view, r releaseView, label string) {
 	if v.Features.Updates {
 		if r.Updatable > 0 {
-			<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>{ label }</a>
+			@ui.Button(ui.Btn{Label: label, Kind: "primary", Href: v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)})
 		} else {
-			<a class="btn btn-primary" aria-disabled="true" title="No device can be updated to this release" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>{ label }</a>
+			@ui.Button(ui.Btn{Label: label, DisabledReason: noUpdateWhy, ReasonID: relUpdateWhyID, ReasonShared: true})
 		}
 	}
 }

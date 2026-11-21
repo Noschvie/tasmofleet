@@ -19,6 +19,9 @@ type firmwarePage struct {
 	Artifacts []artifactView
 	Error     string
 	Notice    string
+	// CheckFailed is set by a failed "Check for new releases now" for this one answer: a forced refresh can fail before
+	// the cache records anything (a cancelled request), and the page still has to say the check failed. Never stored.
+	CheckFailed bool
 	// Index is set when the cache reports its refresh status.
 	Index *firmware.IndexStatus
 	Now   time.Time
@@ -82,6 +85,8 @@ func (p firmwarePage) Selected() *releaseView {
 // check failed), ok, or "" when the cache does not report it.
 func (p firmwarePage) checkState() string {
 	switch {
+	case p.CheckFailed:
+		return "failed"
 	case p.Index == nil:
 		return ""
 	case p.Index.LastError != "":
@@ -90,6 +95,23 @@ func (p firmwarePage) checkState() string {
 		return "checking"
 	}
 	return "ok"
+}
+
+// noUpdateWhy is the reason of the blocked "Update 0 devices…" button on the firmware page and the release page.
+const (
+	noUpdateWhy    = "No device can be updated to this release."
+	relUpdateWhyID = "rel-update-why"
+)
+
+// fwCheckProblem is the banner of a failed release check: a lead and one sentence about what still works. The
+// error itself (a status code, a source URL, a Go chain) is for the log, never for the page; the failed state alone
+// is what the page reads from the index status (as deviceProblem does for a device).
+func fwCheckProblem(p firmwarePage) (lead, text string) {
+	lead = "Could not check for new releases."
+	if p.Index != nil && p.Index.Loaded {
+		return lead, "Cached files and the last list still work."
+	}
+	return lead, "Cached files still work; the release list appears after the first successful check."
 }
 
 // credURL matches the user information of a URL ("https://user:secret@host"): it is cut from
@@ -241,7 +263,8 @@ func (h *handler) firmwareData(r *http.Request) firmwarePage {
 	if loaded {
 		var err error
 		if rels, err = h.d.Firmware.Releases(r.Context()); err != nil {
-			p.Error = "The upstream index could not be loaded: " + safeErr(err.Error())
+			h.log.WarnContext(r.Context(), "firmware: release list could not be read", "err", safeErr(err.Error()))
+			p.Error = "The release list could not be read. The server log has the details."
 		}
 	}
 	if len(rels) > maxReleasesShown {
@@ -556,7 +579,9 @@ func (h *handler) firmwareRefresh(w http.ResponseWriter, r *http.Request) {
 	p := h.firmwareData(r)
 	status := http.StatusOK
 	if err != nil {
-		p.Error, status = "Check failed: "+safeErr(err.Error()), http.StatusBadGateway
+		// the chain (status codes, source URLs) is for the log; the page says only that the check failed
+		h.log.WarnContext(r.Context(), "firmware: manual index check failed", "err", safeErr(err.Error()))
+		p.CheckFailed, status = true, http.StatusBadGateway
 	} else {
 		p.Notice = checkNotice(before, p.Latest)
 	}

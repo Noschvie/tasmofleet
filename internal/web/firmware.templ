@@ -139,54 +139,46 @@ func sourceLine(src string) string {
 	return "Source: " + src
 }
 
-// fwCheckLine is the state of the release index and "Check for new releases now" (admins),
-// then "Upload custom firmware".
+// fwCheckLine is the state of the release index and, for admins, "Check for new releases now". A failed check has
+// no button here: its one "Try again" is in the banner under the header (fwDownBanner).
 templ fwCheckLine(v view, p firmwarePage) {
 	switch p.checkState() {
 		case "checking":
 			<span class="fw-check t-accent" role="status" data-fw-check-state><span class="fw-check-dot pulse" aria-hidden="true"></span>Checking { p.Feed }…</span>
 		case "failed":
-			<span class="fw-check t-danger" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last check failed&nbsp;<time title={ stamp(p.Index.LastAttempt) } { ui.StampAttrs(p.Index.LastAttempt, ui.StampTitle)... }>{ checkedAgo(p.Now, p.Index.LastAttempt) }</time></span>
+			<span class="fw-check t-warn" role="status" data-fw-check-state>
+				<span class="fw-check-dot" aria-hidden="true"></span>Last check failed
+				if p.Index != nil && !p.Index.LastAttempt.IsZero() {
+					<time title={ stamp(p.Index.LastAttempt) } { ui.StampAttrs(p.Index.LastAttempt, ui.StampTitle)... }>{ checkedAgo(p.Now, p.Index.LastAttempt) }</time>
+				}
+			</span>
 		case "ok":
 			<span class="fw-check t-ok" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last checked&nbsp;<time title={ stamp(p.Index.LastSuccess) } { ui.StampAttrs(p.Index.LastSuccess, ui.StampTitle)... }>{ checkedAgo(p.Now, p.Index.LastSuccess) }</time></span>
 	}
-	if v.IsAdmin && p.CanRefresh {
+	if v.IsAdmin && p.CanRefresh && p.checkState() != "failed" {
 		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/refresh") } class="fw-check-form" data-fw-check data-checking={ "Checking " + p.Feed + "…" }>
 			<input type="hidden" name="csrf" value={ v.CSRF }/>
-			switch p.checkState() {
-				case "checking":
-					<button type="submit" class="btn" disabled>Checking…</button>
-				case "failed":
-					<button type="submit" class="btn">Try again</button>
-				default:
-					<button type="submit" class="btn">Check for new releases now</button>
+			if p.checkState() == "checking" {
+				<button type="submit" class="btn" disabled>Checking…</button>
+			} else {
+				<button type="submit" class="btn">Check for new releases now</button>
 			}
 		</form>
 	}
-	if v.IsAdmin && p.CanUpload {
-		<a class="btn" href={ templ.SafeURL(fwURL(v.Base, "upload", "1") + "#upload") } data-dialog="dlg-upload">Upload custom firmware</a>
-	}
 }
 
-// fwDownBanner says the last check failed and what still works.
+// fwDownBanner says the last check failed and what still works: one warn banner, nothing the person has to fix, with
+// the one "Try again" for admins. The error behind it is in the server log (fwCheckProblem).
 templ fwDownBanner(v view, p firmwarePage) {
+	{{ lead, text := fwCheckProblem(p) }}
 	if downAction(v, p) != nil {
 		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/refresh") } class="fw-down" data-fw-check data-checking={ "Checking " + p.Feed + "…" }>
 			<input type="hidden" name="csrf" value={ v.CSRF }/>
-			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Title: upperFirst(p.Feed) + " not reachable.", Text: downText(p), Action: downAction(v, p)})
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: lead, Text: text, Action: downAction(v, p)})
 		</form>
 	} else {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Title: upperFirst(p.Feed) + " not reachable.", Text: downText(p)})
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: lead, Text: text})
 	}
-}
-
-// downText explains a failed check: the error, and that the page and the cache still work.
-func downText(p firmwarePage) string {
-	s := strings.TrimSuffix(p.Index.LastError, ".") + ". "
-	if p.Index.Loaded {
-		return s + "Showing releases from the last successful check (" + agoWords(p.Now, p.Index.LastSuccess) + "); cached firmware files still work for updates."
-	}
-	return s + "No release list yet; cached firmware files still work for updates."
 }
 
 // downAction is the banner's "Try again" for admins.
@@ -291,13 +283,16 @@ templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
 				<a class="btn" href={ templ.SafeURL(fwURL(v.Base, "release", r.Version, "older", one(p.ShowOlder), "notes", "1") + "#release-notes") } data-dialog="dlg-notes">Release notes</a>
 				if v.Features.Updates {
 					if r.Updatable > 0 {
-						<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>Update { plural(r.Updatable, "device") }…</a>
+						@ui.Button(ui.Btn{Label: "Update " + plural(r.Updatable, "device") + "…", Kind: "primary", Href: v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)})
 					} else {
-						<a class="btn btn-primary" aria-disabled="true" title="No device can be updated to this release" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>Update 0 devices…</a>
+						@ui.Button(ui.Btn{Label: "Update 0 devices…", DisabledReason: noUpdateWhy, ReasonID: "fw-update-why", ReasonShared: true})
 					}
 				}
 			</div>
 		</div>
+		if v.Features.Updates && r.Updatable == 0 {
+			<p class="btn-why" id="fw-update-why">{ noUpdateWhy }</p>
+		}
 		if p.ShowNotes {
 			<div id="release-notes" class="fw-fullnotes">
 				@fwReleaseDetail(r)

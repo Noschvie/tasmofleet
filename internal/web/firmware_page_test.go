@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
@@ -229,7 +230,7 @@ func TestFirmwareCachedFiles(t *testing.T) {
 }
 
 // Why: the status line answers "how fresh is this list" without logs, and a failed check says
-// what still works. Error texts can carry a source URL; credentials in it never reach the page.
+// what still works. Error texts can carry a source URL; neither it nor any credential in it reaches the page.
 func TestFirmwareCheckStatusLine(t *testing.T) {
 	now := time.Now()
 	for _, c := range []struct {
@@ -242,10 +243,10 @@ func TestFirmwareCheckStatusLine(t *testing.T) {
 		{"fresh", firmware.IndexStatus{Loaded: true, LastSuccess: now.Add(-5 * time.Minute), LastAttempt: now.Add(-5 * time.Minute)},
 			[]string{"Last checked", "5m ago", "Check for new releases now", "16.1.0"}, []string{"not reachable", "Checking GitHub…</span>"}},
 		{"failed with a list", firmware.IndexStatus{Loaded: true, LastSuccess: now.Add(-3 * time.Hour), LastAttempt: now.Add(-time.Minute), LastError: "source github: GET https://bot:hunter2@api.example/releases: answered 503"},
-			[]string{"Last check failed", "GitHub not reachable.", "answered 503", "Showing releases from the last successful check (3h ago); cached firmware files still work for updates.", ">Try again</button>", "https://api.example/releases"},
-			[]string{"hunter2", "bot:"}},
+			[]string{"Last check failed", "Could not check for new releases.", "Cached files and the last list still work.", ">Try again</button>"},
+			[]string{"hunter2", "bot:", "answered 503", "api.example", "not reachable"}},
 		{"failed before any list", firmware.IndexStatus{LastAttempt: now, LastError: "source github: dial tcp: refused"},
-			[]string{"GitHub not reachable.", "refused", "No release list yet"}, []string{"Index loading"}},
+			[]string{"Could not check for new releases.", "Cached files still work; the release list appears after the first successful check."}, []string{"Index loading", "refused", "not reachable"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fw := &checkFW{fakeMgrFW: &fakeMgrFW{releases: baseRelease()}, st: c.st}
@@ -302,7 +303,7 @@ func TestFirmwareCheckNow(t *testing.T) {
 	}
 	fw.err = errors.New("source github: answered 503")
 	r, body = e.do(t, "POST", "/firmware/refresh", "admin", nil)
-	if r.StatusCode != 502 || !strings.Contains(body, "GitHub not reachable.") || !strings.Contains(body, "Tasmota 16.2.0") {
+	if r.StatusCode != 502 || !strings.Contains(body, "Could not check for new releases.") || strings.Contains(body, "answered 503") || !strings.Contains(body, "Tasmota 16.2.0") {
 		t.Errorf("failed check = %d:\n%s", r.StatusCode, body)
 	}
 }
@@ -400,5 +401,217 @@ func TestFirmwareHelpers(t *testing.T) {
 	}
 	if ex := excerpt(firmware.ParseNotesWith("Just a paragraph.", nil)); len(ex) != 1 || ex[0][0].Text != "Just a paragraph." {
 		t.Errorf("excerpt without a list = %+v", ex)
+	}
+}
+
+// ctxFailFW is a cache whose forced refresh fails before it records anything (a cancelled request): the index status
+// keeps its old, error-free state, yet the check did fail.
+type ctxFailFW struct{ *checkFW }
+
+func (c *ctxFailFW) Refresh(context.Context) error { return context.Canceled }
+
+// pageBanners is the inline banners of the firmware page: they are what the person reads about the check.
+func pageBanners(t *testing.T, body string) []string {
+	t.Helper()
+	i := strings.Index(body, `class="page-firmware"`)
+	if i < 0 {
+		t.Fatalf("no firmware page in:\n%s", body)
+	}
+	return regexp.MustCompile(`(?s)<div class="banner tone-[a-z]+".*?</div>(?:\s*<button[^>]*>[^<]*</button>)?`).FindAllString(body[i:], -1)
+}
+
+// Why (#1090): one failed check was drawn three times (a header status with its own Try again, a danger banner
+// "GitHub not reachable." with a second one, and for a manual check a third banner "Check failed: ..."), and the banner
+// printed the Go chain ("source ...: 127.0.0.1:46693 answered 503") that only the log should hold. A person needs one
+// calm sentence, what still works and one button; nothing here is theirs to fix, so it is a warning, not an alert.
+func TestFirmwareFailedCheckIsOneWarnBanner(t *testing.T) {
+	const chain = "firmware: source override: 127.0.0.1:46693 answered 503 Service Unavailable"
+	now := time.Now()
+	failed := func(loaded bool) firmware.IndexStatus {
+		st := firmware.IndexStatus{LastAttempt: now.Add(-2 * time.Minute), LastError: chain}
+		if loaded {
+			st.Loaded, st.LastSuccess = true, now.Add(-3*time.Hour)
+		}
+		return st
+	}
+	for _, c := range []struct {
+		name   string
+		fw     func() (*checkFW, firmware.Cache)
+		method string
+		path   string
+		status int
+		text   string
+	}{
+		{"page, list loaded", func() (*checkFW, firmware.Cache) {
+			f := &checkFW{fakeMgrFW: &fakeMgrFW{releases: baseRelease()}, st: failed(true)}
+			return f, f
+		}, "GET", "/firmware", 200, "Cached files and the last list still work."},
+		{"page, no list yet", func() (*checkFW, firmware.Cache) {
+			f := &checkFW{fakeMgrFW: &fakeMgrFW{}, st: failed(false)}
+			return f, f
+		}, "GET", "/firmware", 200, "the release list appears after the first successful check"},
+		{"manual check fails", func() (*checkFW, firmware.Cache) {
+			f := &checkFW{fakeMgrFW: &fakeMgrFW{releases: baseRelease()}, st: firmware.IndexStatus{Loaded: true, LastSuccess: now, LastAttempt: now}, err: errors.New(chain)}
+			return f, f
+		}, "POST", "/firmware/refresh", 502, "Cached files and the last list still work."},
+		{"manual check cancelled before the cache records it", func() (*checkFW, firmware.Cache) {
+			f := &checkFW{fakeMgrFW: &fakeMgrFW{releases: baseRelease()}, st: firmware.IndexStatus{Loaded: true, LastSuccess: now, LastAttempt: now}}
+			return f, &ctxFailFW{f}
+		}, "POST", "/firmware/refresh", 502, "Cached files and the last list still work."},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			inner, fw := c.fw()
+			e := setupWith(t, func(d *Deps) {
+				d.Firmware, d.Artifacts = fw, inner
+				d.Inventory = newInv(mixedFleet()...)
+				d.Jobs = &fakeJobs{}
+				d.FirmwareSource, d.FirmwareFeed = "GitHub releases (arendst/Tasmota)", "GitHub"
+			})
+			res, body := e.do(t, c.method, c.path, "admin", nil)
+			if res.StatusCode != c.status {
+				t.Fatalf("status %d, want %d", res.StatusCode, c.status)
+			}
+			banners := pageBanners(t, body)
+			if len(banners) != 1 {
+				t.Fatalf("%d banners, want exactly 1:\n%s", len(banners), strings.Join(banners, "\n---\n"))
+			}
+			b := banners[0]
+			if !strings.Contains(b, "tone-warn") || strings.Contains(b, `role="alert"`) || !strings.Contains(b, "Could not check for new releases.") || !strings.Contains(b, c.text) {
+				t.Errorf("the banner is not the warn banner with its lead and %q:\n%s", c.text, b)
+			}
+			page := body[strings.Index(body, `class="page-firmware"`):]
+			if n := strings.Count(page, ">Try again<"); n != 1 {
+				t.Errorf("%d Try again buttons, want 1", n)
+			}
+			if strings.Contains(page, "tone-danger") || strings.Contains(page, "t-danger") {
+				t.Error("a failed check is drawn as danger")
+			}
+			for _, leak := range []string{"answered 503", "127.0.0.1", "source override", "Service Unavailable", "context canceled", "Check failed"} {
+				if strings.Contains(body, leak) {
+					t.Errorf("the page prints %q from the error chain", leak)
+				}
+			}
+			// the header status says it too, and has no button of its own
+			head := regexp.MustCompile(`(?s)class="pghead-acts">(.*?)</div></div>`).FindStringSubmatch(page)
+			if head == nil || !strings.Contains(head[1], "Last check failed") || strings.Contains(head[1], "<form") || strings.Contains(head[1], "Try again") {
+				t.Errorf("the header must say 'Last check failed' and carry no form:\n%v", head)
+			}
+			// operators read the state; only admins can start a check
+			if c.method == "GET" { // a failed POST shows its answer to the admin only: the flag ends with that response
+				_, op := e.do(t, "GET", "/firmware", "operator", nil)
+				if ob := pageBanners(t, op); len(ob) != 1 || strings.Contains(op, ">Try again<") {
+					t.Errorf("operator: %d banners, Try again present: %v", len(ob), strings.Contains(op, ">Try again<"))
+				}
+			}
+		})
+	}
+}
+
+// Why (#1090): the operator and the log are different readers. The chain of a failed manual check (a status code, the
+// source URL) goes to the server log once, so an admin can find the cause, and the credentials of a source URL are cut
+// before it is written (the page and the log are both places a secret must not reach).
+func TestFirmwareManualCheckFailureIsLoggedOnce(t *testing.T) {
+	var logs strings.Builder
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(old)
+	fw := &checkFW{fakeMgrFW: &fakeMgrFW{releases: baseRelease()}, st: firmware.IndexStatus{Loaded: true, LastSuccess: time.Now(), LastAttempt: time.Now()},
+		err: errors.New("source github: GET https://bot:hunter2@api.example/releases: answered 503")}
+	e := checkEnv(t, fw, "GitHub")
+	e.do(t, "POST", "/firmware/refresh", "admin", nil)
+	out := logs.String()
+	if n := strings.Count(out, "answered 503"); n != 1 {
+		t.Errorf("the chain is in the log %d times, want 1:\n%s", n, out)
+	}
+	if strings.Contains(out, "hunter2") || strings.Contains(out, "bot:") {
+		t.Errorf("credentials of the source URL reached the log:\n%s", out)
+	}
+}
+
+// Why (#1090): "Update 0 devices…" was an <a> with aria-disabled that kept its href, so a click, a middle click and
+// Enter still opened the update form for a release no device can take, and a title alone said why. At 0 it is a
+// blocked button: no link, no action, and the reason is visible text that aria-describedby names. With devices it
+// stays a link.
+func TestUpdateZeroDevicesIsNoLink(t *testing.T) {
+	updatesLink := regexp.MustCompile(`<a [^>]*href="/tf/updates/new[^"]*"[^>]*>`)
+	blocked := func(t *testing.T, scope, label string) {
+		t.Helper()
+		if links := updatesLink.FindAllString(scope, -1); len(links) != 0 {
+			t.Errorf("a link to the update form at 0 devices: %v", links)
+		}
+		// Why: the #1072 focus rule (button.btn[aria-disabled="true"]:focus-visible) draws a focused blocked button in
+		// the text-3 grey at full strength; on the accent fill of a primary that is a 1.04:1 label, so Tab onto the
+		// button would make its text vanish. A button that cannot act is no primary action anyway: it is the plain look.
+		if strings.Contains(scope, `class="btn btn-primary" aria-disabled="true"`) {
+			t.Error("the blocked button is btn-primary: keyboard focus draws a grey label on the accent")
+		}
+		m := regexp.MustCompile(`<button type="button" class="btn" aria-disabled="true" aria-describedby="([^"]+)">` + regexp.QuoteMeta(label) + `</button>`).FindStringSubmatch(scope)
+		if m == nil {
+			t.Fatalf("no blocked %q button:\n%s", label, scope)
+		}
+		i := strings.Index(scope, `id="`+m[1]+`"`)
+		if i < 0 || !strings.Contains(visibleText(scope[i:min(len(scope), i+200)]), "No device can be updated to this release.") {
+			t.Errorf("aria-describedby=%q names no visible reason", m[1])
+		}
+	}
+	t.Run("firmware page", func(t *testing.T) {
+		e := fwEnvWithUpdates(t, &fakeMgrFW{releases: baseRelease()}, mixedFleet())
+		_, none := e.do(t, "GET", "/firmware?release=16.0.0", "operator", nil)
+		blocked(t, fwSection(t, none, "release"), "Update 0 devices…")
+		_, some := e.do(t, "GET", "/firmware", "operator", nil)
+		if !updatesLink.MatchString(fwSection(t, some, "release")) {
+			t.Error("with a device that can take the release, Update is a link")
+		}
+	})
+	t.Run("release page", func(t *testing.T) {
+		fw := newFeed(feedReleases())
+		e := setupWith(t, func(d *Deps) {
+			d.Firmware, d.Artifacts = fw, fw
+			d.Inventory = newInv(relFleet()...)
+			d.Jobs, d.OTA = &fakeJobs{}, &fakeOTA{items: map[model.DeviceID]ota.PreviewItem{}}
+			d.FirmwareSource = "GitHub releases"
+		})
+		_, none := e.do(t, "GET", "/firmware/releases/15.0.0", "admin", nil) // nothing is older than the oldest device
+		blocked(t, none[strings.Index(none, `<main id="main">`):], "Update 0 devices…")
+		_, some := e.do(t, "GET", "/firmware/releases/16.2.0", "admin", nil)
+		if !updatesLink.MatchString(some) {
+			t.Error("with devices behind the release, Update is a link")
+		}
+	})
+}
+
+// Why (#1090): the header link and the drop zone's "choose a file" opened the same upload, two ways to one thing. The
+// drop zone with its link is the one entry (the design system's file drop); operators have none.
+func TestFirmwareUploadHasOneEntry(t *testing.T) {
+	e, _, _ := customEnv(t)
+	for _, path := range []string{"/firmware", "/firmware?release=16.0.0"} {
+		_, body := e.do(t, "GET", path, "admin", nil)
+		page := body[strings.Index(body, `class="page-firmware"`):]
+		entries := regexp.MustCompile(`<a [^>]*(?:data-dialog="dlg-upload"|href="[^"]*upload=1[^"]*")[^>]*>[^<]*</a>`).FindAllString(page, -1)
+		if len(entries) != 1 || !strings.Contains(entries[0], ">choose a file<") {
+			t.Errorf("%s: %d ways into the upload, want the one \"choose a file\": %v", path, len(entries), entries)
+		}
+	}
+}
+
+// relErrFW is a cache whose release list cannot be read although its index status says it is loaded.
+type relErrFW struct{ *checkFW }
+
+func (relErrFW) Releases(context.Context) ([]firmware.Release, error) {
+	return nil, errors.New("firmware: source override: 127.0.0.1:46693 answered 500")
+}
+
+// Why (#1090): the same rule for the list read on every page view: the Go chain (a source address, a status) is for the
+// log, the page gets one plain sentence that says where the details are.
+func TestFirmwareListReadErrorKeepsTheChainOffThePage(t *testing.T) {
+	fw := relErrFW{&checkFW{fakeMgrFW: &fakeMgrFW{}, st: firmware.IndexStatus{Loaded: true, LastSuccess: time.Now(), LastAttempt: time.Now()}}}
+	e := setupWith(t, func(d *Deps) {
+		d.Firmware, d.Artifacts = fw, fw
+		d.Inventory = newInv(mixedFleet()...)
+		d.Jobs = &fakeJobs{}
+	})
+	_, body := e.do(t, "GET", "/firmware", "admin", nil)
+	if !strings.Contains(body, "The release list could not be read. The server log has the details.") || strings.Contains(body, "127.0.0.1") || strings.Contains(body, "answered 500") {
+		t.Errorf("the page does not map the list error to a sentence:\n%s", body)
 	}
 }

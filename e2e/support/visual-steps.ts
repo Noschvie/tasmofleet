@@ -83,7 +83,7 @@ async function feed(page: Page, vars: StepVars, state: "down" | "dl-down" | "slo
  */
 async function freshIndex(page: Page, vars: StepVars): Promise<void> {
   await feed(page, vars, "up"); // a switch an aborted step left on
-  if ((await page.getByRole("alert").filter({ hasText: "not reachable" }).count()) === 0) return;
+  if ((await page.getByText("Could not check for new releases").count()) === 0) return;
   await page.evaluate(async () => {
     const f = document.querySelector<HTMLFormElement>("form[data-fw-check]");
     if (f) await fetch(f.action, { method: "POST", body: new URLSearchParams(new FormData(f) as unknown as Record<string, string>) });
@@ -399,9 +399,9 @@ const customSteps: Record<string, (page: Page, vars: StepVars) => Promise<void>>
   "github-down": async (page, vars) => {
     await feed(page, vars, "down");
     try {
-      // "Check for new releases now", or "Try again" after an earlier mode left the check failed
-      await page.locator("form.fw-check-form button[type=submit]").click({ timeout: 10_000 });
-      await page.getByRole("alert").filter({ hasText: "not reachable" }).waitFor({ timeout: 30_000 });
+      // "Check for new releases now" in the header, or "Try again" in the banner after an earlier mode left the check failed
+      await page.locator("form[data-fw-check] button[type=submit]").click({ timeout: 10_000 });
+      await page.getByText("Could not check for new releases").waitFor({ timeout: 30_000 });
     } finally {
       await feed(page, vars, "up");
     }

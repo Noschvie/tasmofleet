@@ -10051,8 +10051,8 @@ html:has(dialog#dlg-txn:modal) body {
   white-space: nowrap;
   align-self: center;
 }
-.fw-check.t-danger {
-  color: var(--color-danger-fg);
+.fw-check.t-warn {
+  color: var(--color-warn-fg);
 }
 .fw-check-dot {
   width: 7px;
