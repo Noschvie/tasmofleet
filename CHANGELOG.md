@@ -4,6 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.46.2 "Cape Agulhas" (2026-11-22)
+
+### Fixed
+
+- A refused, missing or switched-off page keeps its place and offers a next step. A person who signs in without any role now gets a card with Sign out and no navigation (the shell used to offer links that all answered 403 again): "You can sign in, but your account has no access to TasmoFleet yet. Ask an admin to give you a role." An operator who opens an admin page by a bookmark stays in its group (a device's page inside the device's header with its tabs, Add on Devices, the policy pages on Policy, the settings pages on System), the first button leads back to what they can open there and the second to the dashboard, and the text says "Only admins can do this" and what to do instead of listing admin areas. A switched-off feature tells an operator "This feature is switched off. An admin can turn it on." and shows an admin the setting's name. Error pages are a card centred on the page, the 404 reads "This page doesn’t exist" with "Check the address, or go back to the dashboard." instead of guessing a cause, and the browser tab's title is the heading (#1085).
+- The Sign-in settings tell the truth about the active mode: behind a proxy the mode reads "Sign-in is handled by your proxy (header)" instead of the raw value, the Identity provider card says "Only used when sign-in mode is Single sign-on." and is inactive unless that mode is on (also when the environment fixes the mode, and without JavaScript), the Roles and claims card is inactive only with local accounts, and a mode card with nothing to change no longer says "Asks you to confirm" (#1087)
+- The connection banners no longer float over the page: "Reconnecting…" and "Connection to the server lost" sit under the breadcrumbs and push the page down by their height once, so they never cover the title or the first rows, and Offline does not move the page again. The Reconnecting banner no longer counts attempts, and the Offline countdown is no longer read out by screen readers every second. The Dashboard's subtitle no longer claims that state streams in live while the stream is down: it says "12 devices", and "12 devices · Values from 14:20" while there is no connection (#1089).
+- A failed release check on the Firmware page is one warning banner, "Could not check for new releases.", that says what still works and has one Try again, instead of the same error three times in red with two Try again buttons and the raw error text (a source address and status code); the details are in the server log. The header only says "Last check failed", "Upload custom firmware" has one entry (the drop zone's "choose a file") instead of two, and "Update 0 devices…" on the Firmware and release pages is a blocked button with its reason as text instead of a link that still opened the update form (#1090).
+- The device Changes tab's browser title reads "<name> changes" instead of "<name> drift"; the address stays /drift (#1211)
+
 ## 0.46.1 "Cape Agulhas" (2026-11-21)
 
 ### Fixed
