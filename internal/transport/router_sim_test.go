@@ -304,10 +304,10 @@ func TestSimWritesGoOverMQTTFirstWhileHTTPWorks(t *testing.T) {
 // command channel provably cannot: commands that run other commands (Json, WebSend, If, a rule text: the channel
 // refuses them so that none can run a Status 0 on TasmoFleet's behalf, claim T1) and Backlog2/Backlog3, which publish
 // no results to match. The real channel decides here, against a simulated device; the trace names the transport
-// that carried each command.
+// that carried each command. Each command gets its own device: MqttPassword, MqttHost and Topic queue the device's
+// restart (restart_flag 2, about 2 s, 40 ms at the rig's time scale), and a later command on the same device found it
+// rebooting whenever the commands before took longer than that (#1177).
 func TestSimOnlyWhatMQTTCannotCarryGoesOverHTTPWhileHTTPWorks(t *testing.T) {
-	g := newSimRig(t)
-	g.f.httpOK = true // HTTP answered lately
 	for _, tc := range []struct {
 		cmd, via, why string
 	}{
@@ -322,17 +322,21 @@ func TestSimOnlyWhatMQTTCannotCarryGoesOverHTTPWhileHTTPWorks(t *testing.T) {
 		{"Backlog2 Power1 ON", "http", "publishes no results, so nothing could be matched"},
 		{`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Power1 ON"}`, "http", "a Template with CMND runs other commands: the channel refuses it (T1)"},
 	} {
-		before := len(g.dev.Commands())
-		ctx, tr := WithTrace(WithConsole(t.Context()))
-		_, err := g.r.Command(ctx, g.target(), tc.cmd)
-		if tc.via == "mqtt" && err != nil {
-			t.Errorf("%q: %v", tc.cmd, err)
-		}
-		if got := tr.Via(); got != tc.via {
-			t.Errorf("%q went over %s, want %s (%s)", tc.cmd, got, tc.via, tc.why)
-		}
-		if n := len(g.dev.Commands()) - before; n < 1 {
-			t.Errorf("%q never reached the device", tc.cmd)
-		}
+		t.Run(tc.cmd, func(t *testing.T) {
+			g := newSimRig(t)
+			g.f.httpOK = true // HTTP answered lately
+			before := len(g.dev.Commands())
+			ctx, tr := WithTrace(WithConsole(t.Context()))
+			_, err := g.r.Command(ctx, g.target(), tc.cmd)
+			if tc.via == "mqtt" && err != nil {
+				t.Errorf("%q: %v", tc.cmd, err)
+			}
+			if got := tr.Via(); got != tc.via {
+				t.Errorf("%q went over %s, want %s (%s)", tc.cmd, got, tc.via, tc.why)
+			}
+			if n := len(g.dev.Commands()) - before; n < 1 {
+				t.Errorf("%q never reached the device", tc.cmd)
+			}
+		})
 	}
 }
