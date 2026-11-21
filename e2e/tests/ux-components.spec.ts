@@ -228,15 +228,15 @@ test("users: no Deactivate, Delete or role change on your own row", async ({ pag
   const own = page.locator(".urow", { hasText: "breakglass" });
   const other = page.locator(".urow", { hasText: "amy" });
   // one menu is open at a time: the own row first, then the other
-  await own.getByLabel("User actions").click();
+  await own.getByLabel(/^Actions for /).click();
   for (const name of ["Deactivate", /^Delete/, /^Make (admin|operator)/]) {
-    await expect(own.getByRole("menuitem", { name })).toHaveAttribute("aria-disabled", "true");
+    await expect(own.getByRole("button", { name })).toHaveAttribute("aria-disabled", "true");
   }
   await expect(own.getByText("You cannot delete your own account")).toBeVisible();
   await page.keyboard.press("Escape"); // the open menu lies over the next row
-  await other.getByLabel("User actions").click();
+  await other.getByLabel(/^Actions for /).click();
   for (const name of ["Deactivate", "Delete…", "Make admin"]) {
-    await expect(other.getByRole("menuitem", { name, exact: true })).not.toHaveAttribute("aria-disabled", "true");
+    await expect(other.getByRole("link", { name, exact: true })).not.toHaveAttribute("aria-disabled", "true");
   }
 });
 

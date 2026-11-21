@@ -285,22 +285,22 @@ templ ruleValue(vc valueControl) {
 			</span>
 		case "number":
 			if vc.HasRange {
-				<input id="want" name="want" type="number" step={ numberStep(vc.Decimal) } class="mono" required min={ itoa(vc.Min) } max={ itoa(vc.Max) } value={ vc.Want } if vc.Invalid {
+				<input id="want" name="want" autocomplete="off" type="number" step={ numberStep(vc.Decimal) } class="mono" required min={ itoa(vc.Min) } max={ itoa(vc.Max) } value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
 	aria-describedby="err-want"
 	autofocus
 }/>
 			} else {
-				<input id="want" name="want" type="number" step={ numberStep(vc.Decimal) } class="mono" required value={ vc.Want } if vc.Invalid {
+				<input id="want" name="want" autocomplete="off" type="number" step={ numberStep(vc.Decimal) } class="mono" required value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
 	aria-describedby="err-want"
 	autofocus
 }/>
 			}
 		case "none":
-			<input id="want" name="want" type="text" class="mono" disabled placeholder="Pick a command first"/>
+			<input id="want" name="want" autocomplete="off" type="text" class="mono" disabled placeholder="Pick a command first"/>
 		default:
-			<input id="want" name="want" type="text" class="mono" maxlength="64" required value={ vc.Want } if vc.Invalid {
+			<input id="want" name="want" autocomplete="off" type="text" class="mono" maxlength="64" required value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
 	aria-describedby="err-want"
 	autofocus

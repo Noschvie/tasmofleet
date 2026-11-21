@@ -158,11 +158,11 @@ test("toggling a relay does not move the device table", async ({ page }) => {
     return { x: r.x, y: r.y, w: r.width, h: r.height, cells };
   });
   const row = page.getByRole("row").filter({ hasText: "esp32s3-http" });
-  const button = row.getByRole("button", { name: /Toggle relay 1/ });
+  const button = row.getByRole("switch", { name: /relay 1$/ });
   const before = await box();
-  const pressed = (await button.getAttribute("aria-pressed"))!;
+  const pressed = (await button.getAttribute("aria-checked"))!;
   await button.click();
-  await expect(row.getByRole("button", { name: /Toggle relay 1/ })).not.toHaveAttribute("aria-pressed", pressed);
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).not.toHaveAttribute("aria-checked", pressed);
   const after = await box();
   expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);

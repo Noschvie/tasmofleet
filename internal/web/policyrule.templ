@@ -277,7 +277,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			}
 			<label class="ufield">
 				<span class="ufield-label">Name</span>
-				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule"/>
+				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule" autocomplete="off"/>
 			</label>
 			<div class="pol-two">
 				@commandField(p.Base, e.Cmd, e.ErrField == "command", e.Err, false)
@@ -299,7 +299,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			<div class="pol-sec">
 				<label class="ufield">
 					<span class="ufield-label">Note</span>
-					<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists">{ e.Spec.Note }</textarea>
+					<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists" autocomplete="off">{ e.Spec.Note }</textarea>
 				</label>
 			<label class="pol-enabled">
 				<input type="hidden" name="state" value="disabled"/>
@@ -309,12 +309,11 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			</div>
 			<div class="pol-ed-foot">
 			<label class="ufield">
-					<span class="sr-only">Change note</span>
+					<span class="ufield-label">Note for History (optional)</span>
 				<input
 					name="change_note"
-					aria-label="Change note"
 					maxlength="200"
-					placeholder="Optional, shown in History"
+					autocomplete="off"
 					if e.ErrField == "change_note" {
 						aria-invalid="true"
 						aria-describedby="err-change_note"

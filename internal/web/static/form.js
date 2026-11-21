@@ -578,9 +578,22 @@
     }
   });
 
-  // The name of a control for a message: what it says, else what it is labelled. "Toggle relay 1,
-  // currently ON" is cut at the comma.
+  // The name of a control for a message: what it says, else what it is labelled. A list switch is named
+  // by the texts its aria-labelledby points at ("Attic Dimmer relay 1": the device and the relay, #1074); those
+  // are whole words and are not cut. Any other name is cut at its first comma ("Save, and close").
   function nameOf(el) {
+    var by = (el instanceof HTMLButtonElement ? el.getAttribute("aria-labelledby") || "" : "")
+      .split(/\s+/)
+      .map(function (id) {
+        var t = id && document.getElementById(id);
+        return t ? t.textContent : "";
+      })
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (by) {
+      return by.length <= 40 ? by : "The request";
+    }
     var src = el instanceof HTMLFormElement ? submitButtons(el)[0] : null;
     var s =
       el.getAttribute("data-busy-label") ||

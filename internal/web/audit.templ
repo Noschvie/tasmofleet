@@ -48,7 +48,7 @@ templ auditView(base string, p auditPage) {
 				<colgroup><col class="c-time"/><col class="c-actor"/><col class="c-action"/><col class="c-target"/><col/><col class="c-res"/><col class="c-det"/></colgroup>
 				<thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Summary</th><th>Result</th><th>Details</th></tr></thead>
 				<tbody>
-					for _, ev := range p.Events {
+					for i, ev := range p.Events {
 						<tr>
 							<td data-label="When" class="nowrap s"><time title={ stamp(ev.At) } { ui.StampAttrs(ev.At, ui.StampDateTimeSec)... }>{ ui.StampText(ev.At, ui.StampDateTimeSec) }</time></td>
 							<td data-label="User" class="nowrap s">@auditWho(ev.Who)</td>
@@ -62,9 +62,9 @@ templ auditView(base string, p auditPage) {
 							</td>
 							<td data-label="Summary" class="nowrap s grow m-hide" title={ tip(ev.SummaryAll) }>{ ev.Summary }</td>
 							<td data-label="Result" class="res p2">@ui.Badge(auditBadge(ev.Status))</td>
-							<td data-label="Details" class="detail s"><details><summary class="btn btn-sm">Details</summary></details></td>
+							<td data-label="Details" class="detail s"><details><summary class="btn btn-sm" aria-controls={ "audit-detail-" + strconv.Itoa(i) }>Details<span class="sr-only">{ " of " + auditEventName(ev) + " at " }<time { ui.StampAttrs(ev.At, ui.StampDateTimeSec)... }>{ ui.StampText(ev.At, ui.StampDateTimeSec) }</time></span></summary></details></td>
 						</tr>
-						<tr class="detail-row">
+						<tr class="detail-row" id={ "audit-detail-" + strconv.Itoa(i) }>
 							<td colspan="7">
 								<p><strong>Result</strong> { ev.Result }</p>
 								if ev.Detail != "" {

@@ -59,8 +59,8 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   await expect(page.locator('form[action$="/users/sessions"]')).toHaveCount(0);
 
   // an action asks for the IdP re-authentication first
-  await olivia.getByLabel("User actions").click();
-  await olivia.getByRole("menuitem", { name: "End all sessions" }).click();
+  await olivia.getByLabel(/^Actions for /).click();
+  await olivia.getByRole("link", { name: "End all sessions" }).click();
   const stepUp = page.locator("dialog#users-stepup");
   await expect(stepUp).toBeVisible();
   await loginAs("admin"); // the IdP's answer to the second authentication
@@ -80,8 +80,8 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   await expect(lena).toContainText("Local");
   await expect(lena).toContainText("Password change due");
   // Why (v0.10.1): the opened menu must stay usable: its items are on top, not hidden by the row.
-  await lena.getByLabel("User actions").click();
-  const reset = lena.getByRole("menuitem", { name: "Reset password" });
+  await lena.getByLabel(/^Actions for /).click();
+  const reset = lena.getByRole("link", { name: "Reset password" });
   expect(
     await reset.evaluate((e) => {
       const b = e.getBoundingClientRect(),
@@ -130,8 +130,8 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   // End sessions signs olivia out and only her
   await page.goto(app.url + "/users");
   const oliviaAgain = page.locator(".urow", { hasText: "olivia" });
-  await oliviaAgain.getByLabel("User actions").click();
-  await oliviaAgain.getByRole("menuitem", { name: "End all sessions" }).click();
+  await oliviaAgain.getByLabel(/^Actions for /).click();
+  await oliviaAgain.getByRole("link", { name: "End all sessions" }).click();
   await page.locator("dialog[open]").getByRole("button", { name: "End sessions" }).click();
   await expect(page.getByText("Signed out 1 session")).toBeVisible();
   await op.goto(app.url + "/devices");

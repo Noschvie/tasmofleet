@@ -5229,12 +5229,6 @@ button.btn[aria-disabled="true"]:focus-visible {
 .pwr[aria-checked="true"] .sw::after {
   left: 18px;
 }
-.pwr[aria-pressed="true"],
-.pwr[aria-pressed="true"]:hover {
-  border: 0;
-  background: none;
-  color: inherit;
-}
 .pwr:disabled {
   opacity: 0.45;
   cursor: default;
@@ -7943,7 +7937,7 @@ td[data-label="Firmware"] .dv-mono {
 }
 /* the power switch of a row: 32 x 18 inside a 44 x 32 target; a card's is 34 x 20 in 48 x 44 */
 td.pcell .pwr,
-td.pcell .pwr[aria-pressed="true"] {
+td.pcell .pwr[aria-checked="true"] {
   width: 44px;
   height: 32px;
   border: 0;
@@ -7955,13 +7949,13 @@ td.pcell .pwr .sw {
   height: 18px;
   border-radius: 9px;
 }
-.pcell .pwr[aria-pressed="true"] .sw {
+.pcell .pwr[aria-checked="true"] .sw {
   background: var(--color-accent);
 }
-td.pcell .pwr[aria-pressed="true"] .sw::after {
+td.pcell .pwr[aria-checked="true"] .sw::after {
   left: 16px;
 }
-.dcard-side .pwr[aria-pressed="true"] {
+.dcard-side .pwr[aria-checked="true"] {
   border: 0;
   background: none;
 }
@@ -7980,7 +7974,7 @@ td.pcell .pwr[aria-pressed="true"] .sw::after {
 .dcard-side .pwr .sw::after {
   top: 3px;
 }
-.dcard-side .pwr[aria-pressed="true"] .sw::after {
+.dcard-side .pwr[aria-checked="true"] .sw::after {
   left: 18px;
 }
 /* the row menu trigger "⋯" and its panel */
@@ -13844,6 +13838,7 @@ button.pol-chip-x {
 .pol-ed-foot {
   display: flex;
   justify-content: flex-end;
+  align-items: flex-end; /* the buttons sit level with the note input, not with its label above (#1074) */
   gap: var(--sp-8);
   padding-top: var(--sp-12);
   border-top: var(--hair-w) solid var(--color-border);

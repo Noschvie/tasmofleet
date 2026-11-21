@@ -61,9 +61,9 @@ templ loginPage(f authFrame, d auth.LoginData) {
 				<input type="hidden" name="csrf" value={ d.CSRFToken }/>
 				<input type="hidden" name="next" value={ d.Next }/>
 				@loginHead(d)
-				@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", Autofocus: d.SSO == "" && d.Username == ""})
+				@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", NoAutocapitalize: true, NoSpellcheck: true, Autofocus: d.SSO == "" && d.Username == ""})
 				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "current-password", Error: loginFieldError(d), Autofocus: d.Username != ""})
-				@ui.Check("remember", "Keep me signed in on this device", "", d.Error == "" || d.Remember, false)
+				@ui.Check("remember", "Keep me signed in on this device", "", d.Remember, false)
 				<button type="submit" class="btn btn-primary btn-tall">Sign in</button>
 			</form>
 			if d.SSO != "" {
@@ -346,9 +346,9 @@ templ usersPage(v usersView) {
 					<span class="urow-meta">{ u.Last + " · " + u.Sessions }</span>
 				}
 				if u.Detail != "" {
-					<a class="btn" href={ templ.SafeURL(u.Detail) }>Details</a>
+					<a class="btn" href={ templ.SafeURL(u.Detail) }>Details<span class="sr-only">{ " of " + u.Name }</span></a>
 				} else {
-					@ui.RowMenu("User actions", u.Menu, u.MenuOpensUp)
+					@ui.RowMenu("Actions for "+u.Name, u.Menu, u.MenuOpensUp)
 				}
 			</div>
 		}
@@ -421,7 +421,7 @@ templ userAddPage(v userAddView) {
 	<form class="ucard useradd" method="post" action={ templ.SafeURL(v.D.BasePath + "/users") }>
 		<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 		@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
-		@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: v.D.Username, Mono: true, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "username", v.D.Error), Autofocus: focus(v.D.ErrField, "username", false)})
+		@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: v.D.Username, Mono: true, Autocomplete: "off", NoAutocapitalize: true, NoSpellcheck: true, Error: fieldErr(v.D.ErrField, "username", v.D.Error), Autofocus: focus(v.D.ErrField, "username", false)})
 		@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: v.D.Email, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "email", v.D.Error), Autofocus: focus(v.D.ErrField, "email", false)})
 		<div class="ufield">
 			<span class="ufield-label">Role</span>

@@ -105,7 +105,10 @@ templ (h *handler) groupTopicCell(d model.Device) {
 	}
 }
 
-// powerCell is the relay switches of a device (or their states when switching is off).
+// powerCell is the relay switches of a device (or their states when switching is off). A switch is named by
+// its row: aria-labelledby points at the device name in the Name cell (dvn-ID) and at the hidden "relay N"
+// text of the page (rly-N, devicesTableBody), so this fragment holds no name and no id. The live stream sends
+// it for every health event knowing only the device id, and the row and the phone card both receive it.
 templ powerCellView(p powerCell) {
 	if len(p.Relays) > 0 {
 		for _, rl := range p.Relays {
@@ -113,14 +116,15 @@ templ powerCellView(p powerCell) {
 				<button
 					type="button"
 					class="pwr"
-					aria-pressed={ ariaBool(rl.State == "ON") }
+					role="switch"
+					aria-checked={ ariaBool(rl.State == "ON") }
+					aria-labelledby={ powerLabelledBy(p.ID, rl.N) }
 					title={ relayTitle(p, rl) }
 					hx-post={ p.Base + "/devices/" + strconv.FormatInt(int64(p.ID), 10) + "/power/" + strconv.Itoa(rl.N) }
 					hx-vals={ `{"action":"TOGGLE"}` }
 					hx-target="closest .pcell"
 					hx-swap="innerHTML"
 					hx-disabled-elt="this"
-					aria-label={ "Toggle relay " + strconv.Itoa(rl.N) + ", currently " + rl.State }
 					disabled?={ p.Off }
 				><span class="sw" aria-hidden="true"></span></button>
 			} else {
@@ -128,7 +132,7 @@ templ powerCellView(p powerCell) {
 			}
 		}
 	} else if p.Enabled {
-		<button type="button" class="pwr" aria-pressed="false" aria-label="Toggle power" title="The power state is not known yet" disabled><span class="sw" aria-hidden="true"></span></button>
+		<button type="button" class="pwr" role="switch" aria-checked="false" aria-labelledby={ powerLabelledBy(p.ID, 0) } title="The power state is not known yet" disabled><span class="sw" aria-hidden="true"></span></button>
 	} else {
 		<span class="muted">-</span>
 	}
@@ -146,7 +150,7 @@ templ (h *handler) deviceRows(d rowsData) {
 				<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" name="id" value={ devID(row.Device.ID) } aria-label={ "Select " + row.Device.Name }/></label></td>
 			}
 			<td data-label="Name" class="wrap p1 dv-name" title={ tip(row.Device.Name) }>
-				<a href={ templ.SafeURL(d.Base + "/devices/" + devID(row.Device.ID)) }>{ row.Device.Name }</a>
+				<a id={ nameID(row.Device.ID) } href={ templ.SafeURL(d.Base + "/devices/" + devID(row.Device.ID)) }>{ row.Device.Name }</a>
 				if row.Device.OTAExcluded {
 					{ " " }
 					<span class="tag" title={ h.hint("no-ota") }>no OTA</span>
@@ -221,17 +225,16 @@ templ (h *handler) deviceRows(d rowsData) {
 // deviceMenu is the row actions of a device in the list, in its table row and on its phone card.
 templ deviceMenu(m rowMenu) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", m.Up) }>
-		<summary class="btn btn-ghost btn-icon icon" aria-label="Actions" title={ "Actions for " + m.Device.Name }>⋯</summary>
-		<div class="rowmenu-body menu-panel" role="menu">
-			<a class="menu-item" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID)) }>Open</a>
+		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + m.Device.Name } title={ "Actions for " + m.Device.Name }>⋯</summary>
+		<div class="rowmenu-body menu-panel">
+			<a class="menu-item" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID)) }>Open</a>
 			if m.Console {
-				<a class="menu-item" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/console") }>Open console</a>
+				<a class="menu-item" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/console") }>Open console</a>
 			}
-			<button type="button" class="menu-item" role="menuitem" data-needs-device hx-post={ m.Base + "/devices/" + devID(m.Device.ID) + "/backup" } hx-vals={ `{"from":"list"}` } hx-target="#list-notice" hx-swap="innerHTML">Back up now</button>
+			<button type="button" class="menu-item" data-needs-device hx-post={ m.Base + "/devices/" + devID(m.Device.ID) + "/backup" } hx-vals={ `{"from":"list"}` } hx-target="#list-notice" hx-swap="innerHTML">Back up now</button>
 			if m.Admin && m.Console {
 				<a
 					class="menu-item"
-					role="menuitem"
 					data-needs-device
 					href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/restart") }
 					data-dialog="dlg-row"
@@ -244,7 +247,7 @@ templ deviceMenu(m rowMenu) {
 			}
 			if m.Admin {
 				<hr/>
-				<a class="menu-item danger" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/delete") }>Delete…</a>
+				<a class="menu-item danger" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/delete") }>Delete…</a>
 			}
 		</div>
 	</details>

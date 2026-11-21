@@ -93,11 +93,11 @@ test("row menu: Back up now is off for a device that does not answer", async ({ 
   await open(page, 1280);
   const menu = (name: string) => deviceEntry(page, name).locator("details.rowmenu").first();
   await menu(dead).locator("summary").click();
-  await expect(menu(dead).getByRole("menuitem", { name: "Back up now" })).toHaveAttribute("aria-disabled", "true");
+  await expect(menu(dead).getByRole("button", { name: "Back up now" })).toHaveAttribute("aria-disabled", "true");
   await shot(page, "offline-rowmenu-1280");
   await menu(dead).locator("summary").click();
   await menu(online).locator("summary").click();
-  await expect(menu(online).getByRole("menuitem", { name: "Back up now" })).not.toHaveAttribute("aria-disabled", "true");
+  await expect(menu(online).getByRole("button", { name: "Back up now" })).not.toHaveAttribute("aria-disabled", "true");
 });
 
 // #1059: select.js no longer walks the whole document for every settled live cell. The one thing in a live
@@ -111,7 +111,7 @@ test("a health cell that turns offline switches its row menu and the bulk bar of
   await expect(bar.locator("[data-bar-note]")).toBeHidden();
   const menu = deviceEntry(page, online).locator("details.rowmenu").first();
   await menu.locator("summary").click();
-  const item = menu.getByRole("menuitem", { name: "Back up now" });
+  const item = menu.getByRole("button", { name: "Back up now" });
   await expect(item).not.toHaveAttribute("aria-disabled", "true");
   // the swap of one live cell, as the stream does it, with the badge the server renders for a down device
   await deviceEntry(page, online)

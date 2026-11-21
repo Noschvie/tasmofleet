@@ -125,12 +125,12 @@ test("account pages carry the app shell", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   // one row per user; the actions sit in the row's "⋯" menu
   const helper = page.locator(".urow", { hasText: "helper" });
-  await helper.getByLabel("User actions").click();
-  await expect(helper.getByRole("menuitem", { name: "Reset password" })).toBeVisible();
+  await helper.getByLabel(/^Actions for /).click();
+  await expect(helper.getByRole("link", { name: "Reset password" })).toBeVisible();
   // your own row offers nothing that could lock you out, and says why (finding 88, design v2 P9)
   const own = page.locator(".urow", { hasText: "breakglass" });
-  await own.getByLabel("User actions").click();
-  await expect(own.getByRole("menuitem", { name: /Delete/ })).toHaveAttribute("aria-disabled", "true");
+  await own.getByLabel(/^Actions for /).click();
+  await expect(own.getByRole("button", { name: /Delete/ })).toHaveAttribute("aria-disabled", "true");
   await expect(own.getByText("You cannot delete your own account")).toBeVisible();
 });
 
@@ -163,8 +163,8 @@ async function signInBreakglass(page: Page) {
 // locked users page opens (design v2, P9).
 async function stepUp(page: Page, who: string, action: string) {
   const row = page.locator(".urow", { hasText: who });
-  await row.getByLabel("User actions").click();
-  await row.getByRole("menuitem", { name: action }).click();
+  await row.getByLabel(/^Actions for /).click();
+  await row.getByRole("link", { name: action }).click();
   const dlg = page.locator("dialog#users-stepup");
   await expect(dlg).toBeVisible();
   await dlg.getByLabel("Password").fill("e2e-fake-password-1");

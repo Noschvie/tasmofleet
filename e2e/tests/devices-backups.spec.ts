@@ -103,7 +103,7 @@ test("the schedule saves on this page and the row menu shows what the role may d
   await expect(page).toHaveURL(/\/devices\/backups\?ok=saved/);
   await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("5");
   await page.locator(".bk-table tbody tr").first().locator("summary").click();
-  await expect(page.locator(".bk-table tbody tr").first().getByRole("menuitem", { name: "Open backups" })).toBeVisible();
+  await expect(page.locator(".bk-table tbody tr").first().getByRole("link", { name: "Open backups" })).toBeVisible();
 });
 
 // Why (#949): the page is mostly a status page with one small folded form. A save bar that is on screen

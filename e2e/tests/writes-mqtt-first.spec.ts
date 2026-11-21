@@ -44,11 +44,11 @@ test("a change and a switch of a device on TasmoFleet's broker go over MQTT firs
 
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "lamp-1m" });
-  const toggle = () => row.getByRole("button", { name: /Toggle relay 1/ });
+  const toggle = () => row.getByRole("switch", { name: /relay 1$/ });
   await expect(toggle()).toBeVisible({ timeout: 30_000 });
-  const before = (await toggle().getAttribute("aria-pressed"))!;
+  const before = (await toggle().getAttribute("aria-checked"))!;
   await toggle().click();
-  await expect(toggle()).not.toHaveAttribute("aria-pressed", before);
+  await expect(toggle()).not.toHaveAttribute("aria-checked", before);
 
   await page.goto(app.url + "/audit");
   const detail = (text: string) => page.locator("table.audittable tr.detail-row", { hasText: text });

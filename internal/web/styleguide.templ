@@ -257,7 +257,7 @@ templ styleguidePage(v sgView) {
 				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Wrong username or password.", Text: "2 attempts left before this account is locked for 15 minutes.", Alert: true})
 				@ui.Field(ui.FieldData{Label: "Username", Name: "sg-user", Value: "maren", Autocomplete: "off"})
 				@ui.Field(ui.FieldData{Label: "Password", Name: "sg-pass", Type: "password", Error: "Check the password and try again.", Autocomplete: "off"})
-				@ui.Check("sg-remember", "Keep me signed in", "", true, false)
+				@ui.Check("sg-remember", "Keep me signed in", "", false, false)
 				@ui.Button(ui.Btn{Label: "Sign in", Kind: "primary"})
 			}
 		}

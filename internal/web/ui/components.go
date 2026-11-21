@@ -288,6 +288,8 @@ type FieldData struct {
 	Placeholder, Help, Error string
 	Mono, Wide               bool
 	Autocomplete             string
+	NoAutocapitalize         bool // autocapitalize="off": a username or an address is not a sentence
+	NoSpellcheck             bool // spellcheck="false": the same fields, and codes
 	Autofocus                bool // the page's first focus: the field the server rejected, else the first input
 }
 

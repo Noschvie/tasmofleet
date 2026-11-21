@@ -95,7 +95,7 @@ func TestPowerToggleReturnsCell(t *testing.T) {
 	if len(f.powers) != 1 || f.powers[0] != "test:operator|1|1|TOGGLE" {
 		t.Fatalf("service saw %v", f.powers)
 	}
-	if !strings.Contains(body, "ON") || !strings.Contains(body, `hx-post="/tf/devices/1/power/1"`) {
+	if !strings.Contains(body, `aria-checked="true"`) || !strings.Contains(body, `hx-post="/tf/devices/1/power/1"`) {
 		t.Fatalf("cell: %s", body)
 	}
 }

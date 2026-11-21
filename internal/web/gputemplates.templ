@@ -126,7 +126,7 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 					@ui.Badge(ui.ToneWarn, "Stale")
 				}
 				if d.UseRef != "" {
-					<a class="gt-act" href={ templ.SafeURL(p.Base + d.UseRef) }>Use as reference</a>
+					<a class="gt-act" href={ templ.SafeURL(p.Base + d.UseRef) }>Use as reference<span class="sr-only">{ " " + d.Name }</span></a>
 				}
 			</div>
 			if len(d.Diff) > 0 {
@@ -138,7 +138,7 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 			}
 			if d.Pins != nil {
 				<details class="gt-pins" open?={ d.Pins.Open }>
-					<summary>{ d.Pins.Summary }</summary>
+					<summary>{ d.Pins.Summary }<span class="sr-only">{ " (" + d.Pins.Device + ")" }</span></summary>
 					<table class="gt-ptab">
 						<thead>
 							<tr><th scope="col">Pin</th><th scope="col">Reference</th><th scope="col">{ d.Pins.Device }</th></tr>

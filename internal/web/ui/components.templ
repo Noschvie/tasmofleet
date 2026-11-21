@@ -221,22 +221,21 @@ templ RowMenuStatic(label string, items []MenuItem, up bool) {
 templ rowMenu(label string, items []MenuItem, up, static bool) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", up) } open?={ static } data-static?={ static }>
 		<summary class="btn btn-ghost btn-icon icon" aria-label={ label }>⋯</summary>
-		<div class="rowmenu-body menu-panel" role="menu">
+		<div class="rowmenu-body menu-panel">
 			for _, it := range items {
 				if it.Sep {
 					<hr/>
 				}
 				if it.Disabled {
-					<span class="menu-item" role="menuitem" aria-disabled="true">
+					<button type="button" class="menu-item" aria-disabled="true">
 						<span>{ it.Label }</span>
 						if it.Why != "" {
 							<span class="menu-why">{ it.Why }</span>
 						}
-					</span>
+					</button>
 				} else {
 					<a
 						class={ "menu-item", templ.KV("danger", it.Danger) }
-						role="menuitem"
 						href={ templ.SafeURL(it.Href) }
 						if it.Dialog != "" {
 							data-dialog={ it.Dialog }
@@ -345,6 +344,12 @@ templ Field(f FieldData) {
 			}
 			if f.Autocomplete != "" {
 				autocomplete={ f.Autocomplete }
+			}
+			if f.NoAutocapitalize {
+				autocapitalize="off"
+			}
+			if f.NoSpellcheck {
+				spellcheck="false"
 			}
 			if f.Error != "" {
 				aria-invalid="true"
@@ -481,11 +486,11 @@ templ AttentionList(props []AttProposal, items []AttItem, csrf string) {
 			<span class="att-acts">
 				<form method="post" action={ templ.SafeURL(p.SecondaryAction) }>
 					@attHidden(csrf, p.Version)
-					<button type="submit" class="btn btn-sm">{ p.Secondary }</button>
+					<button type="submit" class="btn btn-sm" aria-label={ p.Secondary + " " + p.Name }>{ p.Secondary }</button>
 				</form>
 				<form method="post" action={ templ.SafeURL(p.PrimaryAction) }>
 					@attHidden(csrf, p.Version)
-					<button type="submit" class="btn btn-sm btn-primary">{ p.Primary }</button>
+					<button type="submit" class="btn btn-sm btn-primary" aria-label={ p.Primary + " " + p.Name }>{ p.Primary }</button>
 				</form>
 			</span>
 		</div>

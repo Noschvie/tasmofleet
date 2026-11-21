@@ -34,21 +34,21 @@ test("switch a relay on and off from the device list, and follow outside changes
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
   await expect(row.getByText("Online", { exact: true })).toBeVisible({ timeout: 30_000 });
-  const button = row.getByRole("button", { name: /Toggle relay 1/ });
+  const button = row.getByRole("switch", { name: /relay 1$/ });
   await expect(button).toBeVisible({ timeout: 30_000 });
-  const before = (await button.getAttribute("aria-pressed"))!; // the switch: "true" is on
+  const before = (await button.getAttribute("aria-checked"))!; // the switch: "true" is on
   const flipped = before === "true" ? "false" : "true";
   await button.click();
-  await expect(row.getByRole("button", { name: /Toggle relay 1/ })).toHaveAttribute("aria-pressed", flipped);
-  await row.getByRole("button", { name: /Toggle relay 1/ }).click();
-  await expect(row.getByRole("button", { name: /Toggle relay 1/ })).toHaveAttribute("aria-pressed", before);
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).toHaveAttribute("aria-checked", flipped);
+  await row.getByRole("switch", { name: /relay 1$/ }).click();
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).toHaveAttribute("aria-checked", before);
 
   // A change made at the device itself shows up without reloading the page
   // (the HTTP poll feeds the same SSE stream).
   const addr = env.devices["plug-4m-http"].addr;
   const outside = before === "true" ? "false" : "true";
   await request.get(`http://${addr}/cm?cmnd=Power%20${outside === "true" ? "ON" : "OFF"}`);
-  await expect(row.getByRole("button", { name: /Toggle relay 1/ })).toHaveAttribute("aria-pressed", outside, { timeout: 30_000 });
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).toHaveAttribute("aria-checked", outside, { timeout: 30_000 });
 });
 
 // #463: the list reloads itself on device events (the first probes of a fresh import end there). A reload that the
@@ -60,9 +60,9 @@ test("a list reload rendered before a toggle does not bring the old relay state 
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
-  const toggle = () => row.getByRole("button", { name: /Toggle relay 1/ });
+  const toggle = () => row.getByRole("switch", { name: /relay 1$/ });
   await expect(toggle()).toBeVisible({ timeout: 30_000 });
-  const before = (await toggle().getAttribute("aria-pressed"))!;
+  const before = (await toggle().getAttribute("aria-checked"))!;
   const flipped = before === "true" ? "false" : "true";
 
   // Every table reload is rendered when it is asked for and delivered when its hold is released.
@@ -100,7 +100,7 @@ test("a list reload rendered before a toggle does not bring the old relay state 
   await page.evaluate(() => (window as any).htmx.trigger("#devtable", "sse:resync"));
   await first.renderedByServer;
   await toggle().click();
-  await expect(toggle()).toHaveAttribute("aria-pressed", flipped);
+  await expect(toggle()).toHaveAttribute("aria-checked", flipped);
 
   // 2. The dropped reload is asked for again (rendered now, with the toggled state); a second toggle follows
   //    before it arrives, so this one is stale as well and must be dropped.
@@ -108,22 +108,22 @@ test("a list reload rendered before a toggle does not bring the old relay state 
   const second = current;
   first.release();
   await decidedFirst;
-  await expect(toggle()).toHaveAttribute("aria-pressed", flipped, { timeout: 1000 });
+  await expect(toggle()).toHaveAttribute("aria-checked", flipped, { timeout: 1000 });
   await second.renderedByServer;
   const decidedSecond = nextDecision();
   await toggle().click();
-  await expect(toggle()).toHaveAttribute("aria-pressed", before);
+  await expect(toggle()).toHaveAttribute("aria-checked", before);
   current = hold(); // the next one is not held for long: it is released at once below
   const third = current;
   second.release();
   await decidedSecond;
-  await expect(toggle()).toHaveAttribute("aria-pressed", before, { timeout: 1000 });
+  await expect(toggle()).toHaveAttribute("aria-checked", before, { timeout: 1000 });
 
   // 3. Asked for again once more, rendered after both toggles: applied, and it agrees.
   const settled = nextSettled();
   third.release();
   await settled;
-  await expect(toggle()).toHaveAttribute("aria-pressed", before, { timeout: 1000 });
+  await expect(toggle()).toHaveAttribute("aria-checked", before, { timeout: 1000 });
 });
 
 test("switch a relay of an MQTT device", async ({ page }) => {
@@ -131,11 +131,11 @@ test("switch a relay of an MQTT device", async ({ page }) => {
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "lamp-1m" });
   await expect(row.getByText("Online", { exact: true })).toBeVisible({ timeout: 30_000 });
-  const button = row.getByRole("button", { name: /Toggle relay 1/ });
+  const button = row.getByRole("switch", { name: /relay 1$/ });
   await expect(button).toBeVisible({ timeout: 30_000 });
-  const before = (await button.getAttribute("aria-pressed"))!;
+  const before = (await button.getAttribute("aria-checked"))!;
   await button.click();
-  await expect(row.getByRole("button", { name: /Toggle relay 1/ })).not.toHaveAttribute("aria-pressed", before);
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).not.toHaveAttribute("aria-checked", before);
 });
 
 test("console: operator reads Status 2, admin commands need the admin role", { tag: "@core" }, async ({ page }) => {
@@ -172,4 +172,26 @@ test("console: a routine admin command is sent at once; a destructive one names 
   await expect(page.locator("input[type=password]")).toHaveCount(0); // nothing to retype
   await page.getByRole("link", { name: "Cancel" }).click(); // the simulator device stays as it is
   await expect(page.getByRole("log", { name: "Console output" }).getByText("Reset")).toHaveCount(0);
+});
+
+// Why (#1074): the switch is named by its row (aria-labelledby), and the toast of a click that never reached the
+// server must name the same thing, "<device> relay 1", not the bare "Toggle relay 1" it said before. The name is
+// whole words: a device called "Attic, left" is not cut at its comma.
+test("a switch that cannot be sent says which device and relay it is", async ({ page }) => {
+  await page.setExtraHTTPHeaders(operator);
+  await page.goto(app.url + "/devices");
+  const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
+  const toggle = row.getByRole("switch", { name: /relay 1$/ });
+  await expect(toggle).toBeVisible({ timeout: 30_000 });
+  await page.route(/\/power\/\d+$/, (route) => route.abort("failed"));
+  await toggle.click();
+  const toast = page.locator("#toasts .toast.tone-danger");
+  await expect(toast).toContainText("plug-4m-http relay 1 was not sent: no connection");
+  await expect(toggle).toBeEnabled();
+  // renamed and clicked in one task, so a live reload of the table cannot put the name back in between
+  await toggle.evaluate((b) => {
+    document.getElementById(b.getAttribute("aria-labelledby")!.split(" ")[0])!.textContent = "Attic, left";
+    b.click();
+  });
+  await expect(toast.filter({ hasText: "Attic, left relay 1 was not sent: no connection" })).toHaveCount(1);
 });

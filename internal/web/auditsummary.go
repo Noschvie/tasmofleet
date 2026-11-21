@@ -58,6 +58,16 @@ func auditLabel(action string) string {
 	return humanLabel(strings.NewReplacer(".", " ").Replace(action))
 }
 
+// auditEventName is how an audit row is named for a screen reader (the Details button): the action, and the
+// target in parentheses when the row has one. Two rows of one action in the same second (a bulk run) are told
+// apart by their target, which the visible columns do by sitting side by side.
+func auditEventName(ev auditRow) string {
+	if ev.TargetText == "" {
+		return ev.Label
+	}
+	return ev.Label + " (" + ev.TargetText + ")"
+}
+
 // Status values of an audit row: the Result column shows only this.
 const (
 	auditOK      = "ok"

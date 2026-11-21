@@ -203,6 +203,11 @@ templ devicesTableBody(v view, p devicesPage) {
 		</div>
 	} else {
 		<div class="dv-cols"><i class="colslot"></i></div>
+		// the texts the power switches are named by (cells.go powerLabelledBy): once per page, replaced with it
+		<span id="rly-0" hidden>power</span>
+		for n := 1; n <= maxRelays; n++ {
+			<span id={ "rly-" + strconv.Itoa(n) } hidden>{ "relay " + strconv.Itoa(n) }</span>
+		}
 		@rendered([]byte(p.Table))
 		@rendered([]byte(p.Cards))
 	}

@@ -289,7 +289,7 @@ test("audit: an entry opens its details inline in a log box and closes again", a
   await expect(page.locator(".audittable .tip")).toHaveCount(0);
   const row = page.locator(".audittable tbody tr:has(details)").first();
   const summary = row.locator("summary");
-  await expect(summary).toHaveText("Details");
+  await expect(summary).toHaveText(/^Details/); // the visible word; a hidden suffix names the event (#1074)
   await summary.click();
   await expect(row.locator("details")).toHaveAttribute("open", "");
   const detail = page.locator(".audittable tr.detail-row").first();

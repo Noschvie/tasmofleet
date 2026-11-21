@@ -1,6 +1,7 @@
 package web
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,9 @@ func TestAuditNamesTheIgnoredDiscoveredDevice(t *testing.T) {
 		e.aud.events = append(e.aud.events, ev)
 	}
 	_, body := e.do(t, "GET", "/audit?since=all", "admin", nil)
-	if n := strings.Count(body, "&lt;b&gt;Lamp&lt;/b&gt; (#5)"); n != 2 {
+	// the Details buttons repeat the target in a screen-reader-only name (#1074); the target cell is what is counted
+	visible := regexp.MustCompile(`<span class="sr-only">.*?</span>`).ReplaceAllString(body, "")
+	if n := strings.Count(visible, "&lt;b&gt;Lamp&lt;/b&gt; (#5)"); n != 2 {
 		t.Fatalf("the escaped name is in the target cell %d times, want 2 (dismiss and undismiss)", n)
 	}
 	if strings.Contains(body, "<b>Lamp</b>") {

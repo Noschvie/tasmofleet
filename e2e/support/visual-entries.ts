@@ -16,7 +16,7 @@ export type StackKind =
 /** One action after the page has loaded, with the semantics of the prototype's renderer (tools/render.mjs). */
 export type Step =
   | { click: string; exact?: boolean; nth?: number; optional?: boolean } // visible text, case-insensitive substring unless exact; optional: skipped when not on screen
-  | { aria: string; nth?: number } // aria-label, exact
+  | { aria: string; nth?: number; startsWith?: boolean } // aria-label, exact; startsWith: a label that names its row ("Actions for <name>")
   | { clickSel: string } // CSS selector
   | { wait: number }
   | { preselect: number } // tick the first N online devices (rows, or cards on a phone)
@@ -181,10 +181,10 @@ export const entries: Entry[] = [
   { id: "policyio-v-import", owner: "N3", route: "/policy/io", steps: [{custom: "policy-import"}] },
   { id: "devices-colmenu", owner: "P2", route: "/devices", steps: [{click: "Columns", exact: true, optional: true}], note: "the Columns chooser is offered from 720 px; on a phone the prototype shows the plain list" },
   { id: "devices-selected", owner: "P2", route: "/devices", steps: [{preselect: 3}] },
-  { id: "devices-rowmenu", owner: "P2", route: "/devices", steps: [{aria: "Actions", nth: 1}] },
-  { id: "devices-restart-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions", nth: 1}, {click: "Restart…", exact: true}], note: "the row menu writes Restart… (it opens a confirmation, wording table)" },
-  { id: "devices-delete-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions", nth: 1}, {click: "Delete…"}] },
-  { id: "devices-toast", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions", nth: 1}, {click: "Back up now"}], mutates: true },
+  { id: "devices-rowmenu", owner: "P2", route: "/devices", steps: [{aria: "Actions for", startsWith: true, nth: 1}] },
+  { id: "devices-restart-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions for", startsWith: true, nth: 1}, {click: "Restart…", exact: true}], note: "the row menu writes Restart… (it opens a confirmation, wording table)" },
+  { id: "devices-delete-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions for", startsWith: true, nth: 1}, {click: "Delete…"}] },
+  { id: "devices-toast", owner: "P2", route: "/devices", mode: "overlay", steps: [{aria: "Actions for", startsWith: true, nth: 1}, {click: "Back up now"}], mutates: true },
   { id: "devices-bulk-cmd-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{preselect: 3}, {click: "Send command"}] },
   { id: "devices-bulk-cmd-dialog-phone", owner: "P2", route: "/devices", mode: "overlay", steps: [{preselect: 3}, {click: "Command", exact: true}] },
   { id: "devices-bulk-restart-dialog", owner: "P2", route: "/devices", mode: "overlay", steps: [{preselect: 3}, {click: "Restart", exact: true}] },
@@ -197,9 +197,9 @@ export const entries: Entry[] = [
   { id: "policy-rule-delete-dialog", owner: "N3", route: "/policy", mode: "overlay", steps: [{clickSel: "section#rules tbody summary >> nth=1"}, {click: "Delete…"}] },
   { id: "policy-rule-edit", owner: "N3", route: "/policy", steps: [{clickSel: "section#rules td.p1 a >> nth=1"}] },
   { id: "policy-rule-new", owner: "N3", route: "/policy", steps: [{click: "New rule"}] },
-  { id: "users-menu", owner: "P9", route: "/users", steps: [{aria: "User actions", nth: 1}] },
-  { id: "users-menu-sso", owner: "P9", route: "/users", steps: [{aria: "User actions", nth: 2}] },
-  { id: "users-deactivate-dialog", owner: "P9", route: "/users", stack: "local", mode: "overlay", steps: [{custom: "signin-stepped-up"}, {aria: "User actions", nth: 1}, {click: "Deactivate", exact: true, nth: 1}], note: "the fleet stack is view only behind the header proxy; Deactivate asks in a dialog before anything changes, so the shared local stack stays as it is" },
+  { id: "users-menu", owner: "P9", route: "/users", steps: [{aria: "Actions for", startsWith: true, nth: 1}] },
+  { id: "users-menu-sso", owner: "P9", route: "/users", steps: [{aria: "Actions for", startsWith: true, nth: 2}] },
+  { id: "users-deactivate-dialog", owner: "P9", route: "/users", stack: "local", mode: "overlay", steps: [{custom: "signin-stepped-up"}, {aria: "Actions for", startsWith: true, nth: 1}, {click: "Deactivate", exact: true, nth: 1}], note: "the fleet stack is view only behind the header proxy; Deactivate asks in a dialog before anything changes, so the shared local stack stays as it is" },
   { id: "firmware-older", owner: "P5", route: "/firmware", steps: [{click: "Show 8 older releases"}] },
   { id: "firmware-selected-14.2.0", owner: "P5", route: "/firmware", steps: [{click: "14.2.0"}] },
   { id: "txn-cancelling-dialog", owner: "P4", route: "/transactions/{txn}", mode: "overlay", steps: [{click: "Cancel remaining"}] },

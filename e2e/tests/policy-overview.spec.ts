@@ -53,10 +53,10 @@ test("without JavaScript the row menu moves a rule down and back up", async ({ b
   const before = await names(page);
   const first = before[0];
   await page.locator("section#rules tbody tr").first().locator("summary").click();
-  await page.getByRole("menuitem", { name: "Move down" }).first().click();
+  await page.getByRole("button", { name: "Move down" }).first().click();
   expect(await names(page)).toEqual([before[1], first, ...before.slice(2)]);
   await page.locator("section#rules tbody tr").nth(1).locator("summary").click();
-  await page.getByRole("menuitem", { name: "Move up" }).first().click();
+  await page.getByRole("button", { name: "Move up" }).first().click();
   expect(await names(page)).toEqual(before);
   await ctx.close();
 });
@@ -67,13 +67,13 @@ test("a disabled rule says Disabled, is not checked and is counted as disabled",
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy");
   await page.getByLabel("Actions for Rule B").click();
-  await page.getByRole("menuitem", { name: "Disable" }).click();
+  await page.getByRole("button", { name: "Disable" }).click();
   const row = page.locator("section#rules tbody tr", { hasText: "Rule B" });
   await expect(row).toContainText("Disabled");
   await expect(row).toContainText("not checked while disabled");
   await expect(page.locator("[data-tile=rules]")).toContainText("2 enabled · 1 disabled");
   await page.getByLabel("Actions for Rule B").click();
-  await page.getByRole("menuitem", { name: "Enable" }).click();
+  await page.getByRole("button", { name: "Enable" }).click();
   await expect(row).not.toContainText("Disabled");
   await expect(row).not.toContainText("not checked while disabled");
 });

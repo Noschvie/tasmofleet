@@ -276,7 +276,7 @@ Also: [desktop, dark](../design/styleguide/forms-desktop-dark.png) · [phone, li
 
 ### Choices and switches
 
-Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`); the power switch of a row is 34 x 20 inside a 48 x 44 px target and disabled while the device is offline.
+Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`); the power switch of a row is 34 x 20 inside a 48 x 44 px target and disabled while the device is offline. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
 
 Component: `ui.RadioCards`, `ui.Segmented`, `ui.Check`, `ui.Toggle`, `ui.PowerSwitch`.
 
@@ -321,7 +321,7 @@ Also: [desktop, dark](../design/styleguide/tabs-desktop-dark.png) · [phone, lig
 
 ### Menus
 
-A row menu is a `<details>` with the ⋯ button and a 250 px panel (radius 10, `--shadow-lg`); items are links (`400 13px`), destructive ones in danger-fg after a rule, disabled ones in text-3 with the reason on a second line. `menu.js` keeps one menu open, closes on Escape and on a click elsewhere; `up` opens above the button (the server marks the last rows, the script decides by the viewport). The style guide shows menus open in the flow with `data-static`, which every script leaves alone.
+A row menu is a `<details>` with the ⋯ button and a 250 px panel (radius 10, `--shadow-lg`); items are links or buttons (`400 13px`), destructive ones in danger-fg after a rule, disabled ones in text-3 with the reason on a second line (a `<button type="button" aria-disabled="true">` that carries the reason in its own text and no action, so Tab still reaches it). It is a plain disclosure, not an ARIA menu: no `role="menu"` or `role="menuitem"` (they promise arrow keys and roving focus that `menu.js` does not have; a source test fails when a template claims them), and the trigger is named by its row, `Actions for <name>` (#1074). `menu.js` keeps one menu open, closes on Escape and on a click elsewhere; `up` opens above the button (the server marks the last rows, the script decides by the viewport). The style guide shows menus open in the flow with `data-static`, which every script leaves alone.
 
 Component: `ui.RowMenu(label, items, up)`, the shell's user menu and drawer.
 

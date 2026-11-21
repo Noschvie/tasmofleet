@@ -34,7 +34,7 @@ export async function runSteps(page: Page, steps: Step[], owner: string, vars: S
       const target = page.getByText(step.click, { exact: step.exact ?? false }).filter({ visible: true });
       if (step.optional && (await target.count()) === 0) continue; // the control exists only at some widths
       await target.nth(step.nth ?? 0).click({ timeout: 3_000 });
-    } else if ("aria" in step) await page.getByLabel(step.aria, { exact: true }).filter({ visible: true }).nth(step.nth ?? 0).click({ timeout: 3_000 });
+    } else if ("aria" in step) await page.getByLabel(step.startsWith ? new RegExp(`^${step.aria}\\b`) : step.aria, { exact: !step.startsWith }).filter({ visible: true }).nth(step.nth ?? 0).click({ timeout: 3_000 });
     else if ("clickSel" in step) await page.locator(step.clickSel).first().click({ timeout: 3_000 });
     else if ("wait" in step) await page.waitForTimeout(step.wait);
     else if ("preselect" in step) await preselect(page, step.preselect);

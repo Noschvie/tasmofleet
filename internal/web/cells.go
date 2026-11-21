@@ -73,6 +73,15 @@ func firmwareTitle(id model.Identity) string {
 	return s
 }
 
+// nameID is the id of a device's name link in the list: the switches of its row are named through it.
+func nameID(id model.DeviceID) string { return "dvn-" + devID(id) }
+
+// powerLabelledBy is the aria-labelledby of a power switch: the device name, then "relay N" (rly-0, "power", when
+// the relays are not known). The texts are rendered once per page (devicesTableBody), the name is the row's own.
+func powerLabelledBy(id model.DeviceID, relay int) string {
+	return nameID(id) + " rly-" + strconv.Itoa(relay)
+}
+
 // relayTitle is the tooltip of a relay switch.
 func relayTitle(p powerCell, rl relayState) string {
 	switch {

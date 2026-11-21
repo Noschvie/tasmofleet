@@ -149,9 +149,9 @@ templ policyRow(p policyView, i int, r ruleRow) {
 templ policyRowMenu(p policyView, r ruleRow) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", r.Last && !r.First) }>
 		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + r.Name }>⋯</summary>
-		<div class="rowmenu-body menu-panel" role="menu">
-			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }><span>Edit</span></a>
-			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/duplicate?id=" + r.ID) }><span>Duplicate</span></a>
+		<div class="rowmenu-body menu-panel">
+			<a class="menu-item" href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }><span>Edit</span></a>
+			<a class="menu-item" href={ templ.SafeURL(p.Base + rulesPath + "/duplicate?id=" + r.ID) }><span>Duplicate</span></a>
 			if r.Disabled {
 				@policyRowOp(p, r, "/enable", "", "list", "Enable")
 			} else {
@@ -164,7 +164,7 @@ templ policyRowMenu(p policyView, r ruleRow) {
 				@policyRowOp(p, r, "/order", "down", "", "Move down")
 			}
 			<hr/>
-			<a class="menu-item danger" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + r.ID) } data-dialog={ "dlg-rule-" + r.ID }><span>Delete…</span></a>
+			<a class="menu-item danger" href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + r.ID) } data-dialog={ "dlg-rule-" + r.ID }><span>Delete…</span></a>
 		</div>
 	</details>
 }
@@ -180,7 +180,7 @@ templ policyRowOp(p policyView, r ruleRow, path, move, back, label string) {
 		if back != "" {
 			<input type="hidden" name="back" value={ back }/>
 		}
-		<button type="submit" class="menu-item" role="menuitem">{ label }</button>
+		<button type="submit" class="menu-item">{ label }</button>
 	</form>
 }
 
