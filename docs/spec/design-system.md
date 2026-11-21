@@ -224,6 +224,8 @@ Badges are 20 px tinted labels (`500 11.5px`, radius 5) for states, results and 
 
 A badge never leaves its cell: in a list, the badges of a row stack in their own cell, and the badge column is
 at least as wide as the longest badge (the users list: 140 px, every row a subgrid of one column set).
+On a phone a row with more than one badge (a role and Deactivated or Password change due) puts its badges side by
+side on a line under the name instead; the name never gives way to a badge.
 
 Badge labels are sentence case ("Update", "Failed"). A device's connection status is a badge with the dot
 before the word, `ui.StatusBadge`, wherever it is shown (device list, device header, dashboard attention

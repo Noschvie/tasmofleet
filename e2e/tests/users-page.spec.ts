@@ -161,21 +161,23 @@ for (const width of [768, 1024]) {
 // password" (about 140 px) covered "Local" in the Source column of a 90 px track, so an admin could
 // not read how that user signs in; on a phone every cell took a line of its own, five lines per
 // user, so the list showed two users per screen. Three badges (role, Deactivated, Password change
-// due) are the worst case a row can hold.
+// due) are the worst case a row can hold. A phone row has two lines, three when it holds a second badge (#1182).
 let badgeUsersSeeded = false;
 function seedBadgeUsers() {
-  if (badgeUsersSeeded) return; // both widths use the same three accounts
+  if (badgeUsersSeeded) return; // both widths use the same four accounts
   badgeUsersSeeded = true;
   app.cli(["user", "add", "--role", "operator", "sam"], "e2e-fake-password-1\n");
   app.cli(["user", "add", "--role", "operator", "--must-change", "pia"], "e2e-fake-password-1\n");
   app.cli(["user", "add", "--role", "operator", "--must-change", "otto"], "e2e-fake-password-1\n");
   app.cli(["user", "disable", "otto"]);
+  // a long name, so a name column squeezed by the badge breaks it inside a word (#1182)
+  app.cli(["user", "add", "--role", "operator", "--must-change", "bartholomew-must-change"], "e2e-fake-password-1\n");
 }
 for (const [width, height] of [
   [1280, 900],
   [375, 800],
 ] as const) {
-  test(`users list: every badge stays in its column, two lines per user on a phone (${width}px)`, async ({ page }) => {
+  test(`users list: every badge stays in its column, two lines per user on a phone, three with a second badge (${width}px)`, async ({ page }) => {
     seedBadgeUsers();
     await loginAs("admin");
     await page.setViewportSize({ width, height });
@@ -218,7 +220,7 @@ for (const [width, height] of [
       }
       return out;
     });
-    expect(m.length, "the three accounts and the admins are listed").toBeGreaterThanOrEqual(4);
+    expect(m.length, "the four accounts and the admins are listed").toBeGreaterThanOrEqual(5);
     expect(m.flatMap((r) => r.bad.map((b) => `${r.who}: ${b}`)), "no badge leaves its cell or covers another cell").toEqual([]);
     if (width >= 1000) {
       expect(new Set(m.map((r) => Math.round(r.sourceX))).size, "the Source column starts at one x in every row").toBe(1);
@@ -237,3 +239,41 @@ for (const [width, height] of [
     expect(guardReport(`users list ${width}px`, found)).toBe("");
   });
 }
+
+// Why (#1182): on a phone the "Password change due" badge (about 150 px) took a track of line 1 beside
+// the name and left it 38 px, so a name broke every few characters ("chan/ge") and the row grew from 83
+// to 235 px. An admin who cannot read a name cannot tell which account a row is. A row with a second
+// badge puts its badges on a line of their own; the name never gives way to a badge.
+test("phone: a row with a second badge keeps the name as wide as a row without one (#1182)", async ({ page }) => {
+  seedBadgeUsers();
+  await loginAs("admin");
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(app.url + "/login/sso?next=%2Fusers");
+  const rows = page.locator(".users-list .urow");
+  await expect(rows.filter({ hasText: "bartholomew-must-change" }).locator(".urow-badges .bdg"), "role and password change").toHaveCount(2);
+
+  const m = await page.evaluate(() => {
+    const row = (name: string) => [...document.querySelectorAll(".users-list .urow")].find((r) => r.querySelector(".urow-name > span")!.textContent!.trim() === name)!;
+    const who = (name: string) => row(name).querySelector(".urow-who")!.getBoundingClientRect().width;
+    // pieces a name may break between (a hyphen or a dot): every client rect of a piece sits on one line
+    const split: string[] = [];
+    const span = row("bartholomew-must-change").querySelector(".urow-name > span")!;
+    const text = span.firstChild as Text;
+    let at = 0;
+    for (const piece of text.data.split(/(?<=[-.])/)) {
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + piece.length);
+      at += piece.length;
+      const tops = new Set([...range.getClientRects()].map((r) => Math.round(r.top)));
+      if (tops.size > 1) split.push(piece);
+    }
+    return { badge: who("bartholomew-must-change"), plain: who("sam"), split, badgeRowHeight: row("bartholomew-must-change").getBoundingClientRect().height, plainRowHeight: row("sam").getBoundingClientRect().height };
+  });
+  expect(m.badge, "the name of a row with a second badge is as wide as one without").toBeGreaterThanOrEqual(m.plain);
+  expect(m.split, "no name breaks inside a word").toEqual([]);
+  expect(m.plainRowHeight, "a row without a second badge stays at two lines").toBeLessThan(100);
+  expect(m.badgeRowHeight, "a second badge adds one line, not a column of broken names").toBeLessThan(140);
+  const found = await layoutGuards(page, ["a", "b", "o", "w"]);
+  expect(guardReport("users list 375px, second badge", found)).toBe("");
+});
