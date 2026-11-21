@@ -55,7 +55,7 @@ func TestBulkActionsAreAdminOnly(t *testing.T) {
 }
 
 // Why: the bar's post opens the scope page, never an action: the selected devices in the
-// order they were posted, who is skipped and why, the run button counting only the online
+// order of the name (#1188), who is skipped and why, the run button counting only the online
 // ones. Nothing is submitted and no restart token exists for a page that cannot run.
 func TestBulkScopeListsTheSelectionAndWhoIsSkipped(t *testing.T) {
 	e, fbk, fb := actionEnv(t)
@@ -66,7 +66,7 @@ func TestBulkScopeListsTheSelectionAndWhoIsSkipped(t *testing.T) {
 			t.Fatalf("%s: %d %s", kind, resp.StatusCode, body)
 		}
 		if strings.Index(body, ">attic<") > strings.Index(body, ">kitchen<") {
-			t.Errorf("%s: the devices keep the order of the list they were selected in", kind)
+			t.Errorf("%s: the devices are listed by name", kind)
 		}
 	}
 	if len(fbk.ids) != 0 || len(fb.reqs) != 0 {

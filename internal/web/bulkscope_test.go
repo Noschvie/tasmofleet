@@ -360,3 +360,41 @@ func TestBackupRowsShowTheDeviceIDNextToTheName(t *testing.T) {
 		t.Error("the ID is not part of the name")
 	}
 }
+
+// Why (#1188): "Back up all now" posts the ids in device ID order, so a scope page that keeps the posted order
+// shows a list nobody can scan. Every bulk action's scope page lists the devices by name, case-insensitive and
+// umlaut-aware ("Lüftung" under L, not after Z), equal names by address. The order must not depend on the order
+// posted, or "Change selection" and back would shuffle the list.
+func TestBulkScopeListsDevicesByName(t *testing.T) {
+	e, _, _ := actionEnv(t)
+	for id, d := range map[model.DeviceID][2]string{
+		3: {"Tasmota TV", "10.0.1.3"}, 4: {"lüftung", "10.0.1.4"}, 5: {"Dingtian", "10.0.1.5"},
+		6: {"Modbus Lüftung", "10.0.1.6"}, 7: {"Pump", "10.0.1.9"}, 8: {"Pump", "10.0.1.10"},
+		9: {"attic fan", "10.0.1.11"}, 10: {"zebra", "10.0.1.12"}, 11: {"Zulu", "10.0.1.13"},
+	} {
+		e.inv.devs[id] = model.Device{ID: id, Name: d[0], Address: d[1]}
+	}
+	want := []string{"10.0.1.11", "10.0.1.5", "10.0.1.4", "10.0.1.6", "10.0.1.9", "10.0.1.10", "10.0.1.3", "10.0.1.12", "10.0.1.13"}
+	// attic fan, Dingtian, lüftung, Modbus Lüftung, Pump (equal names: by address, numerically, so .9 before .10), Tasmota TV, zebra, Zulu
+	for _, kind := range []string{"backup", "restart", "power", "command"} {
+		for _, posted := range [][]string{
+			{"3", "4", "5", "6", "7", "8", "9", "10", "11"},
+			{"11", "10", "9", "8", "7", "6", "5", "4", "3"},
+			{"6", "3", "9", "7", "11", "4", "8", "5", "10"},
+		} {
+			args := []string{"action", "ON"} // only the power page reads it
+			for _, id := range posted {
+				args = append(args, "id", id)
+			}
+			_, body := e.do(t, "POST", "/devices/bulk/"+kind, "admin", bulkForm(args...))
+			at := -1
+			for _, addr := range want {
+				i := strings.Index(body, addr)
+				if i < 0 || i < at {
+					t.Fatalf("%s posted %v: %s at %d must come after the previous device (at %d)", kind, posted, addr, i, at)
+				}
+				at = i
+			}
+		}
+	}
+}

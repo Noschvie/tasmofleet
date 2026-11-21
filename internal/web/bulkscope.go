@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -101,8 +102,35 @@ func (v bulkScopeView) SkipNote() string {
 	return fmt.Sprintf("%d devices are offline or unknown and will be skipped.", v.SkipN)
 }
 
-// bulkScope builds the scope page from the posted devices, in the order they were posted (the
-// order of the list they were selected in). A device that no longer exists is left out; a device
+// scopeKey is the sort key of a device name on a scope page (#1188): lower case, with the umlauts and the
+// common Latin accents folded to their base letter, so "Lüftung" sorts under L and "lüftung" next to
+// "Lueftung" neighbours instead of after Z. golang.org/x/text/collate is not in the spec's dependency list, so
+// this is a deliberate simple key, not full locale collation (ß is "ss", ligatures and other scripts fall back
+// to their code point order).
+var scopeKey = strings.NewReplacer(
+	"ä", "a", "ö", "o", "ü", "u", "ß", "ss", "à", "a", "á", "a", "â", "a", "ã", "a", "å", "a",
+	"è", "e", "é", "e", "ê", "e", "ë", "e", "ì", "i", "í", "i", "î", "i", "ï", "i",
+	"ò", "o", "ó", "o", "ô", "o", "õ", "o", "ù", "u", "ú", "u", "û", "u", "ç", "c", "ñ", "n", "ý", "y",
+)
+
+// scopeLess orders two devices for a scope page: by folded name, then by address (numerically for IPs, so
+// .9 comes before .10), then port and ID so the order never depends on the posted order.
+func scopeLess(a, b model.Device) int {
+	if c := strings.Compare(scopeKey.Replace(strings.ToLower(a.Name)), scopeKey.Replace(strings.ToLower(b.Name))); c != 0 {
+		return c
+	}
+	if ia, err := netip.ParseAddr(a.Address); err == nil {
+		if ib, err := netip.ParseAddr(b.Address); err == nil {
+			if c := ia.Compare(ib); c != 0 {
+				return c
+			}
+		}
+	}
+	return cmp.Or(strings.Compare(a.Address, b.Address), cmp.Compare(a.Port, b.Port), cmp.Compare(a.ID, b.ID))
+}
+
+// bulkScope builds the scope page from the posted devices, sorted by name (#1188; the posted order is
+// the list's sort or the device ID order, and "Change selection" must not shuffle it). A device that no longer exists is left out; a device
 // that is not online is listed and skipped. "drop" removes one device ("×" on a row).
 func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (bulkScopeView, []model.DeviceID, error) {
 	v := h.view(r, "", "devices", nil)
@@ -125,6 +153,7 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 	for _, d := range devs {
 		byID[d.ID] = d
 	}
+	slices.SortStableFunc(ids, func(a, b model.DeviceID) int { return scopeLess(byID[a], byID[b]) }) // an unknown id sorts first and is left out below
 	act := bulkAction(kind)
 	if cmd := r.PostFormValue("command"); kind == bulkCmd && strings.TrimSpace(cmd) != "" {
 		act = transport.CommandAction(cmd) // a read needs only a way to read, not the strict rule of writes
