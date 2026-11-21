@@ -4,6 +4,15 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.45.1 "Rubjerg Knude" (2026-11-21)
+
+### Fixed
+
+- A button that cannot act now says why as text on the page, and keyboard and touch users reach it: Restart, Back up and Refresh identity on the device page (offline, no way to reach the device, HTTP API off), Retry failed while a transaction runs, the actions of a user page and Back up now on the Backups tab. A device that cannot be backed up says so in the empty Backups tab instead of offering a disabled button (#1072)
+- The info buttons (ⓘ), the settings "Reset to default" controls and the new update's "Select", "Older releases" and log links are 24 px or larger targets, and "Reset to default" says so in words on every field width instead of showing a bare arrow on narrow fields; ticked it reads "Undo" (the field already shows the default), and the count inside a filter chip keeps its full strength instead of being dimmed by opacity (#1075, #1174)
+- The users list keeps every badge in its column; "Must change password" is now "Password change due" (#1080)
+- Devices → Add → Discovered: the IP column shows a full address instead of cutting it, and the name column wraps instead of ending in an ellipsis (#905). "Show ignored" is a real checkbox with an Apply button for browsers without JavaScript, known devices that announced a new address or a conflict are rows of the same table with a badge instead of separate cards, the topic, the old address and what Add… does are written on the page instead of in a tooltip, the heading counts everything the table holds ("Waiting for a decision"), and one pair of words is used everywhere: Ignore and Show again (#1081).
+
 ## 0.45.0 "Rubjerg Knude" (2026-11-21)
 
 ### Fixed
