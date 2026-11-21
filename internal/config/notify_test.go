@@ -67,3 +67,19 @@ func TestRedactWebhookURLKeepsOnlySchemeHostAndPort(t *testing.T) {
 		}
 	}
 }
+
+// Why: url.Parse reads "user:1234" of https://user:1234#secret@host/x as host and
+// port, so the password showed in the webhook settings audit. An "@" outside
+// the user information means the value cannot be proven clean: hide it whole,
+// the same guard netaddr.RedactURL and netaddr.URLHost have (#1055, #1167).
+func TestRedactWebhookURLHidesUnencodedPassword(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://user:1234#secret@host/x": "***",
+		"https://user:12/34@host/x":       "***",
+		"https://user:p%23ss@host/x":      "https://host/***",
+	} {
+		if got := RedactWebhookURL(in); got != want {
+			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}

@@ -104,11 +104,16 @@ func (c Config) validateNotify(bad func(key, msg string)) {
 }
 
 // RedactWebhookURL keeps scheme, host and port of a webhook address for the audit log, the About page and hides
-// the path and query, which can be the secret itself (a Home Assistant webhook id, an ntfy topic).
+// the path and query, which can be the secret itself (a Home Assistant webhook id, an ntfy topic). An "@" outside
+// the user information (an unencoded password that url.Parse split at "#" or "/") hides the whole value as "***",
+// the guard netaddr.RedactURL has; user information is never shown.
 func RedactWebhookURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return ""
+	}
+	if u.User == nil && strings.Contains(raw, "@") {
+		return "***"
 	}
 	out := u.Scheme + "://" + u.Host
 	if u.Path != "" && u.Path != "/" || u.RawQuery != "" {
