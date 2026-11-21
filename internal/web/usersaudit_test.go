@@ -67,7 +67,7 @@ func TestUsersListShowsStateAsBadges(t *testing.T) {
 	d := usersFixture()
 	d.Users = append(d.Users, auth.UserRow{Subject: "local:old", Name: "old", Method: auth.MethodLocal, Role: "operator", Disabled: true, Guards: allowed})
 	body := renderUsersPage(t, d)
-	for _, want := range []string{`<span class="bdg t-neutral">You</span>`, `<span class="bdg t-warn">Must change password</span>`, `<span class="bdg t-neutral">Deactivated</span>`,
+	for _, want := range []string{`<span class="bdg t-neutral">You</span>`, `<span class="bdg t-warn">Password change due</span>`, `<span class="bdg t-neutral">Deactivated</span>`,
 		`<span class="bdg t-accent">Admin</span>`, "Never signed in · No sessions", ">Add local user</a>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("list lacks %q", want)
@@ -400,6 +400,31 @@ func TestOneTimePasswordIsShownOnceAndNotCached(t *testing.T) {
 	for _, want := range []string{"Password reset for lena", `data-copy-from="#otp-value"`, `<a class="btn btn-primary" href="/tf/users/lena">Done</a>`, "can’t be shown again"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("OTP page lacks %q", want)
+		}
+	}
+}
+
+// Why (#1080): one state has one name on every page. "Must change password" read as an order the
+// admin had to carry out and was about 140 px wide, more than the list's badge column; the pending
+// password is now "Password change due" on the list, on the user's page and in the style guide, and
+// the old wording is gone everywhere, so no page says something the others do not. The literal is
+// used on purpose: a test that used the constant could not tell a changed text from the same one.
+func TestPasswordChangeDueHasOneNameOnEveryPage(t *testing.T) {
+	const due, old = "Password change due", "Must change password"
+	_, guide := setup(t).do(t, "GET", "/styleguide", "admin", nil)
+	pages := map[string]string{
+		"users list": renderUsersPage(t, usersFixture()),
+		"user page": userDetailBody(t, auth.UserDetailData{BasePath: "/tf", CSRFToken: "tok", Self: "local:admin",
+			User:   auth.UserRow{Subject: "local:ops", Name: "ops", Method: auth.MethodLocal, Role: "operator", MustChangePassword: true},
+			Guards: allowed}),
+		"style guide": guide,
+	}
+	for name, body := range pages {
+		if !strings.Contains(body, `<span class="bdg t-warn">`+due+`</span>`) {
+			t.Errorf("%s lacks the %q badge", name, due)
+		}
+		if strings.Contains(body, old) {
+			t.Errorf("%s still says %q", name, old)
 		}
 	}
 }

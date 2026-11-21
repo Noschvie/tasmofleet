@@ -6368,16 +6368,28 @@ body.page-auth main {
   padding: var(--sp-14) var(--sp-16);
   gap: var(--sp-10);
 }
-/* one line per user in the wide stack (who, role, source, last seen, menu) */
+/* one line per user in the wide stack (who, role, source, last seen, menu). The columns belong to the
+   list and each row is a subgrid of them (#1080), so every row's source and last sign-in start at one x.
+   The badges of a row stack in their cell (.urow-badges), so the badge column is as wide as the widest
+   single badge, at least 140px: a row with three badges grows taller, it never widens the column and
+   squeezes the names. A badge never leaves its cell. */
 @media (min-width: 45rem) {
+  .cstack .users-list {
+    display: grid;
+    grid-template-columns:
+      minmax(0, 1.5fr) minmax(140px, max-content) minmax(0, 100px)
+      minmax(0, 1.6fr) auto;
+    column-gap: var(--sp-12);
+  }
   .cstack .users-list .urow {
     display: grid;
-    grid-template-columns: minmax(0, 1.5fr) 90px minmax(0, 100px) minmax(
-        0,
-        1.6fr
-      ) auto;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    column-gap: var(--sp-12);
+  }
+  .cstack .users-list .urow-badges {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 /* two half columns (tablet): the list takes the full row, a half column squeezes the names */
@@ -6433,6 +6445,7 @@ body.page-auth main {
 }
 .urow-badges {
   flex: 1 1 190px;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -6453,6 +6466,38 @@ body.page-auth main {
 .urow .uavatar {
   background: var(--color-surface-3);
   color: var(--color-text-2);
+}
+/* phone (#1080): name, role badge and menu (or Details link) on line 1, source and last sign-in on line 2.
+   Badges stack in their cell (as in the wide list), so a row with three of them grows taller instead of
+   squeezing the name. */
+@media (max-width: 44.99rem) {
+  .users-list .urow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: var(--sp-8); /* the widest line 1 (Password change due beside Details) just fits at 375px */
+  }
+  .users-list .urow-who {
+    grid-area: 1 / 1 / 2 / 3;
+  }
+  .users-list .urow-badges {
+    grid-area: 1 / 3 / 2 / 4;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .users-list .urow-meta {
+    grid-area: 2 / 1 / 3 / 2;
+    align-self: start;
+  }
+  /* The last sign-in runs under the menu or Details link and the source starts at the avatar's edge (no
+     indent under the name), so 'SSO · Single sign-on' beside 'Today 06:29 AM · No sessions' fit one line at 375px. */
+  .users-list .urow-meta + .urow-meta {
+    grid-area: 2 / 2 / 3 / 5;
+  }
+  .users-list .urow > .rowmenu,
+  .users-list .urow > a.btn {
+    grid-area: 1 / 4 / 2 / 5; /* line 1 only */
+  }
 }
 /* add-user form: two columns of fields, the password choice across, the buttons at the foot */
 .useradd-sum {

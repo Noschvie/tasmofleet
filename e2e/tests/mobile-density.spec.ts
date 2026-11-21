@@ -1,6 +1,6 @@
 import { deviceBox } from "../support/devicelist";
 import { test, expect } from "../support/fixtures";
-import { expectNoOverflow, overflowProblem, smallTargets } from "../support/layout";
+import { expectNoOverflow, overflowProblem, smallTargets, wrappedUserMeta } from "../support/layout";
 import { realisticDevenvArgs, realisticPolicyRules, seedAuditTail, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -95,6 +95,16 @@ test("phone: no main view scrolls sideways", async ({ page }) => {
     if (problem) overflowing.push(problem);
   }
   expect(overflowing, "pages wider than the visible width").toEqual([]);
+});
+
+// #1080: a view-only admin sees a Details link where the others have a menu; it must not squeeze the last
+// sign-in of every row onto a second line (line 2 is the source and the last sign-in, one line each).
+test("phone: the users list shows source and last sign-in on one line per user", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: SCREEN });
+  await page.goto(app.url + "/users");
+  await expect(page.locator(".users-list .urow a.btn").first()).toBeVisible();
+  expect(await wrappedUserMeta(page)).toEqual([]);
 });
 
 // UX review #22 and #36 (chips that wrapped on a phone), resolved by design v2: the settings sections (P8)

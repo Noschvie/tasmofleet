@@ -336,7 +336,7 @@ templ usersPage(v usersView) {
 						@ui.Badge(ui.ToneNeutral, "Deactivated")
 					}
 					if u.MustChange {
-						@ui.Badge(ui.ToneWarn, "Must change password")
+						@ui.Badge(ui.ToneWarn, passwordChangeDue)
 					}
 				</span>
 				<span class="urow-meta">{ u.Source }</span>

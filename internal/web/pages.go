@@ -259,6 +259,10 @@ func sessionsText(n int) string {
 // stepUpDialogID is the id of the users pages' "Confirm it's you" dialog.
 const stepUpDialogID = "users-stepup"
 
+// passwordChangeDue is the badge of an account that has to choose its own password at the next
+// sign-in: one name on the users list, the user's page and the style guide.
+const passwordChangeDue = "Password change due"
+
 // stepUpOf is the step-up dialog of the users pages while changes are locked; nil when the
 // viewer may change users now, or can never confirm (header principals, view only).
 func stepUpOf(d auth.UsersPageData, now time.Time, what string) *ui.StepUpData {

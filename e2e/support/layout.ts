@@ -863,6 +863,27 @@ export async function cardStackGaps(page: Page, maxGap = 17): Promise<string[]> 
   }, maxGap);
 }
 
+/**
+ * wrappedUserMeta (#1080) lists every source / last sign-in cell of the users list that needs more than one
+ * line. On a phone a user row is name and role on line 1, then source and last sign-in on line 2; a last
+ * sign-in that wraps (a view-only admin's Details link used to squeeze it) makes the row three lines tall.
+ */
+export async function wrappedUserMeta(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    for (const row of document.querySelectorAll(".users-list .urow")) {
+      const who = row.querySelector(".urow-name > span")?.textContent?.trim() ?? "?";
+      for (const m of row.querySelectorAll<HTMLElement>(".urow-meta")) {
+        const cs = getComputedStyle(m);
+        const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3;
+        const h = m.getBoundingClientRect().height;
+        if (h > line * 1.5) out.push(`${who}: "${m.textContent!.trim().replace(/\s+/g, " ")}" is ${Math.round(h)}px tall (one line is ${Math.round(line)}px)`);
+      }
+    }
+    return out;
+  });
+}
+
 /** The bubble the shared tooltip shows for an element, and which other rows' text it covers. */
 export interface TipReport {
   tip: { text: string; top: number; bottom: number; left: number; right: number } | null;

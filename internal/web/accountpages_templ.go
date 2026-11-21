@@ -1222,7 +1222,7 @@ func usersPage(v usersView) templ.Component {
 						}
 					}
 					if u.MustChange {
-						templ_7745c5c3_Err = ui.Badge(ui.ToneWarn, "Must change password").Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.Badge(ui.ToneWarn, passwordChangeDue).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

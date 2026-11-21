@@ -26,7 +26,7 @@ templ userDetailPage(v userDetailView) {
 					@ui.Badge(ui.ToneNeutral, "Deactivated")
 				}
 				if v.D.User.MustChangePassword {
-					@ui.Badge(ui.ToneWarn, "Must change password")
+					@ui.Badge(ui.ToneWarn, passwordChangeDue)
 				}
 			</h1>
 			<p class="ud-sub">{ v.Sub }</p>

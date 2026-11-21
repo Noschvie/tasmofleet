@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { layoutGuards, guardReport, wrappedUserMeta } from "../support/layout";
 import { App, Devenv, freePort, startApp, startDevenv } from "../support/stack";
 
 // Users page (v0.8.0, design v2 P9): the list of every principal is open to an admin
@@ -77,7 +78,7 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   await page.getByRole("button", { name: "Add user" }).click();
   const lena = page.locator(".urow", { hasText: "lena" });
   await expect(lena).toContainText("Local");
-  await expect(lena).toContainText("Must change password");
+  await expect(lena).toContainText("Password change due");
   // Why (v0.10.1): the opened menu must stay usable: its items are on top, not hidden by the row.
   await lena.getByLabel("User actions").click();
   const reset = lena.getByRole("menuitem", { name: "Reset password" });
@@ -153,5 +154,86 @@ for (const width of [768, 1024]) {
       stacks: document.querySelector(".cstacks")!.getBoundingClientRect().width,
     }));
     expect(w.list).toBe(w.stacks);
+  });
+}
+
+// Why (#1080): a badge that sticks out of its cell sits on top of the next one. "Must change
+// password" (about 140 px) covered "Local" in the Source column of a 90 px track, so an admin could
+// not read how that user signs in; on a phone every cell took a line of its own, five lines per
+// user, so the list showed two users per screen. Three badges (role, Deactivated, Password change
+// due) are the worst case a row can hold.
+let badgeUsersSeeded = false;
+function seedBadgeUsers() {
+  if (badgeUsersSeeded) return; // both widths use the same three accounts
+  badgeUsersSeeded = true;
+  app.cli(["user", "add", "--role", "operator", "sam"], "e2e-fake-password-1\n");
+  app.cli(["user", "add", "--role", "operator", "--must-change", "pia"], "e2e-fake-password-1\n");
+  app.cli(["user", "add", "--role", "operator", "--must-change", "otto"], "e2e-fake-password-1\n");
+  app.cli(["user", "disable", "otto"]);
+}
+for (const [width, height] of [
+  [1280, 900],
+  [375, 800],
+] as const) {
+  test(`users list: every badge stays in its column, two lines per user on a phone (${width}px)`, async ({ page }) => {
+    seedBadgeUsers();
+    await loginAs("admin");
+    await page.setViewportSize({ width, height });
+    await page.goto(app.url + "/login/sso?next=%2Fusers");
+    const rows = page.locator(".users-list .urow");
+    await expect(rows.filter({ hasText: "otto" }).locator(".urow-badges .bdg"), "role, Deactivated, password change").toHaveCount(3);
+
+    const m = await page.evaluate(() => {
+      const box = (e: Element) => {
+        const r = e.getBoundingClientRect();
+        return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+      };
+      type B = ReturnType<typeof box>;
+      const hit = (a: B, b: B) => a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
+      const out: { who: string; bad: string[]; sourceX: number; metaTops: number[]; whoBox: B; roleMid: number; badgeCount: number }[] = [];
+      for (const row of document.querySelectorAll(".users-list .urow")) {
+        const who = row.querySelector(".urow-who")!;
+        const cell = row.querySelector(".urow-badges")!;
+        const metas = [...row.querySelectorAll(".urow-meta")];
+        const others = [who, ...metas, ...(row.querySelector(".rowmenu, a.btn") ? [row.querySelector(".rowmenu, a.btn")!] : [])];
+        const bad: string[] = [];
+        const cb = box(cell);
+        for (const bdg of cell.querySelectorAll(".bdg")) {
+          const bb = box(bdg);
+          const label = bdg.textContent!.trim();
+          if (bb.l < cb.l - 0.5 || bb.r > cb.r + 0.5) bad.push(`${label} sticks out of its cell by ${Math.round(Math.max(cb.l - bb.l, bb.r - cb.r))} px`);
+          for (const o of others) if (hit(bb, box(o))) bad.push(`${label} covers ${o.className || o.tagName}`);
+        }
+        const first = cell.querySelector(".bdg")!;
+        const fb = box(first);
+        out.push({
+          who: row.querySelector(".urow-name > span")!.textContent!.trim(),
+          bad,
+          sourceX: box(metas[0]).l,
+          metaTops: metas.map((e) => box(e).t),
+          whoBox: box(who),
+          roleMid: (fb.t + fb.b) / 2,
+          badgeCount: cell.querySelectorAll(".bdg").length,
+        });
+      }
+      return out;
+    });
+    expect(m.length, "the three accounts and the admins are listed").toBeGreaterThanOrEqual(4);
+    expect(m.flatMap((r) => r.bad.map((b) => `${r.who}: ${b}`)), "no badge leaves its cell or covers another cell").toEqual([]);
+    if (width >= 1000) {
+      expect(new Set(m.map((r) => Math.round(r.sourceX))).size, "the Source column starts at one x in every row").toBe(1);
+    } else {
+      const sam = m.find((r) => r.who === "sam")!;
+      expect(sam.badgeCount).toBe(1);
+      expect(sam.roleMid, "line 1: the role badge sits beside the name").toBeGreaterThan(sam.whoBox.t);
+      expect(sam.roleMid, "line 1: the role badge sits beside the name").toBeLessThan(sam.whoBox.b);
+      for (const r of m) {
+        expect(r.metaTops[0], `${r.who}: line 2 holds the source`).toBeGreaterThanOrEqual(r.whoBox.b - 0.5);
+        expect(r.metaTops[1], `${r.who}: the last sign-in shares the source's line`).toBeCloseTo(r.metaTops[0], 0);
+      }
+      expect(await wrappedUserMeta(page), "line 2 is one line: source and last sign-in each fit beside the other").toEqual([]);
+    }
+    const found = await layoutGuards(page, ["a", "b", "o", "w"]);
+    expect(guardReport(`users list ${width}px`, found)).toBe("");
   });
 }

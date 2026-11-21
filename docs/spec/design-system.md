@@ -222,6 +222,9 @@ Also: [desktop, dark](../design/styleguide/buttons-desktop-dark.png) · [phone, 
 
 Badges are 20 px tinted labels (`500 11.5px`, radius 5) for states, results and counters. A status is a dot with its word (Online / Offline / Unknown), never the colour alone. Tones: ok, warn, danger, neutral, accent (`.t-*` classes); an unknown tone renders neutral. The avatar shows the initials; its colour follows the username, so a user keeps one colour everywhere.
 
+A badge never leaves its cell: in a list, the badges of a row stack in their own cell, and the badge column is
+at least as wide as the longest badge (the users list: 140 px, every row a subgrid of one column set).
+
 Badge labels are sentence case ("Update", "Failed"). A device's connection status is a badge with the dot
 before the word, `ui.StatusBadge`, wherever it is shown (device list, device header, dashboard attention
 list); the bare `ui.StatusDot` marks a tone where no status word is needed (stat tiles). `ui.StatusBadge`
