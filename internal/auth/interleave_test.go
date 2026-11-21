@@ -17,6 +17,16 @@ import (
 type hookedUsers struct {
 	*fakeUsers
 	before func()
+	// readErr, when set, fails GetLocalUser for the named account only (the acting admin's own reads must work).
+	readErrFor string
+	readErr    error
+}
+
+func (h *hookedUsers) GetLocalUser(ctx context.Context, name string) (store.LocalUser, error) {
+	if h.readErr != nil && name == h.readErrFor {
+		return store.LocalUser{}, h.readErr
+	}
+	return h.fakeUsers.GetLocalUser(ctx, name)
 }
 
 func (h *hookedUsers) fire() {
@@ -54,11 +64,15 @@ func (h *hookedUsers) DeleteLocalUser(ctx context.Context, n string, by store.Ac
 // hookedSessions fires the same hook before sessions are deleted for a user.
 type hookedSessions struct {
 	*fakeSessions
-	h *hookedUsers
+	h         *hookedUsers
+	deleteErr error
 }
 
 func (s *hookedSessions) DeleteUserSessionsAs(ctx context.Context, subject string, by store.Actor) (int64, error) {
 	s.h.fire()
+	if s.deleteErr != nil {
+		return 0, s.deleteErr
+	}
 	return s.fakeSessions.DeleteUserSessionsAs(ctx, subject, by)
 }
 

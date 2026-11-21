@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -522,5 +523,34 @@ func TestAdminCannotDisableDeleteOrDemoteThemselves(t *testing.T) {
 	// other accounts stay manageable, also by the same admin
 	if r := adm.post("/users/local/ops", url.Values{"action": {"disable"}}); r.code != http.StatusOK {
 		t.Errorf("disable another admin: %d", r.code)
+	}
+}
+
+// Why (#1162): a store that fails while looking the account up or deleting its rows must not look like
+// success, leak the cause into the page, or leave the admin guessing: 500, a generic body, an audit row
+// "error" with the same {subject} detail shape as every other outcome of the action, and nothing ended.
+func TestEndLocalSessionsStoreFailureIsAnErrorNotASuccess(t *testing.T) {
+	boom := errors.New("disk exploded: secret-detail")
+	for name, break_ := range map[string]func(h *hookedUsers, hs *hookedSessions){
+		"account lookup": func(h *hookedUsers, _ *hookedSessions) { h.readErrFor, h.readErr = "ops", boom },
+		"delete":         func(_ *hookedUsers, hs *hookedSessions) { hs.deleteErr = boom },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, h := hookedEnv(t)
+			adm := e.login("admin", testPassword)
+			adm.stepUp(testPassword)
+			e.login("ops", opsPassword)
+			break_(h, e.svc.o.Sessions.(*hookedSessions))
+			r := adm.post("/users/sessions", url.Values{"subject": {"local:ops"}})
+			if r.code != http.StatusInternalServerError || strings.Contains(r.body, "secret-detail") || strings.Contains(r.body, "Signed out") {
+				t.Fatalf("%d %s", r.code, r.body)
+			}
+			if a := e.audit.last(); a.Action != "account.sessions.end" || a.Result != "error" || !strings.Contains(a.Detail, `"subject":"local:ops"`) {
+				t.Errorf("audit %+v", a)
+			}
+			if countSessions(e, "local:ops") != 1 {
+				t.Error("a failed request ended the sessions")
+			}
+		})
 	}
 }
