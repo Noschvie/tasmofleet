@@ -42,12 +42,14 @@ test("Setup is one card without folds", async ({ page }) => {
   }
 });
 
-// Why: the policy overview is tiles, tabs and one table (design v2, N3), not folds: nothing is
-// hidden behind a chevron on a desktop, and the rule page's cards are titled surfaces.
-test("desktop: the policy overview is tiles, tabs and a table without folds", async ({ page }) => {
+// Why: the policy overview is one summary line, tabs and one table (design v2, N3; the count tiles went in #1086),
+// not folds: nothing is hidden behind a chevron on a desktop, and the rule page's cards are titled surfaces.
+test("desktop: the policy overview is a summary line, tabs and a table without folds", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/policy");
-  await expect(page.locator(".dev-tile")).toHaveCount(5);
+  await expect(page.locator(".pol-sum")).toHaveCount(1);
+  await expect(page.locator(".pol-sum-line")).toHaveCount(1);
+  await expect(page.locator(".dev-tiles")).toHaveCount(0);
   await expect(page.locator("nav.utabs")).toBeVisible();
   await expect(page.locator("section#rules table.dense tbody tr").first()).toBeVisible();
   await page.locator("td.p1 a").first().click();

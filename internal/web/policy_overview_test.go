@@ -21,6 +21,28 @@ func tileValue(t *testing.T, body, key string) string {
 	return m[1] + " | " + m[2]
 }
 
+// sumLine is the text of the summary line under the Policy title ("2 of 5 compliant · 3 deviating · 1 not
+// judged"), with the tags and the whitespace between them taken out. It fails the test when the page has none
+// or more than one: one line, from one FleetTally.
+func sumLine(t *testing.T, body string) string {
+	t.Helper()
+	m := regexp.MustCompile(`(?s)<p class="pol-sum-line" data-sum>(.*?)</p>`).FindAllStringSubmatch(body, -1)
+	if len(m) != 1 {
+		t.Fatalf("%d summary lines, want exactly 1 in\n%s", len(m), body)
+	}
+	return strings.Join(strings.Fields(regexp.MustCompile(`<[^>]*>`).ReplaceAllString(m[0][1], "")), " ")
+}
+
+// tabBadge is the number on the tab named label in the tab row of the policy pages.
+func tabBadge(t *testing.T, body, label string) string {
+	t.Helper()
+	m := regexp.MustCompile(`class="utab"[^>]*>` + regexp.QuoteMeta(label) + ` <span class="bdg t-accent">(\d+)</span>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("no badge on the tab %q in\n%s", label, body)
+	}
+	return m[1]
+}
+
 // fleetReport is five devices under three rules, chosen so that every tile rule of D3 has a
 // device that would be counted wrongly by a naive count:
 //
@@ -51,21 +73,34 @@ func fleetReport() PolicyReport {
 	}
 }
 
-// Why: the tiles decide what an admin fixes first, so each follows its definition and not the
+// Why (#1086): the counts decide what an admin fixes first, so each follows its definition and not the
 // obvious count: a device with only an Advisory deviation is still compliant, an unjudged device
 // is not, and a device that deviates is never also "not judged". A disabled rule is not counted.
-func TestPolicyOverviewTilesFollowTheDefinitions(t *testing.T) {
+// They are one sentence under the title (the four tiles took 400 px of a phone and the Rules count
+// repeated the tab badge), on Rules and on Deviating devices alike, and the number the line gives
+// for the deviating devices is the one on the Deviating tab.
+func TestPolicyOverviewSummaryFollowsTheDefinitions(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: fleetReport()} })
-	_, body := e.do(t, "GET", "/policy", "operator", nil)
-	for key, want := range map[string]string{
-		"rules":     "3 | 2 enabled · 1 disabled",
-		"compliant": "2 / 5 | all required rules met",
-		"deviating": "3 | 1 required · 2 advisory",
-		"unjudged":  "1 | no reading, or firmware cannot answer",
-	} {
-		if got := tileValue(t, body, key); got != want {
-			t.Errorf("tile %s = %q, want %q", key, got, want)
+	for _, path := range []string{"/policy", "/policy/deviations"} {
+		_, body := e.do(t, "GET", path, "operator", nil)
+		if got, want := sumLine(t, body), "2 of 5 compliant · 3 deviating · 1 not judged"; got != want {
+			t.Errorf("%s: summary = %q, want %q", path, got, want)
 		}
+		if got := tabBadge(t, body, "Deviating devices"); got != "3" {
+			t.Errorf("%s: the Deviating tab says %s, the line 3: the page must not disagree with itself", path, got)
+		}
+		for _, bad := range []string{`class="dev-tiles"`, `data-tile="rules"`, `data-tile="compliant"`, `data-tile="unjudged"`} {
+			if strings.Contains(body, bad) {
+				t.Errorf("%s still draws %s: the count tiles are the summary line now", path, bad)
+			}
+		}
+		if n := strings.Count(body, `class="pol-sum"`); n != 1 {
+			t.Errorf("%s: %d summary blocks, want 1", path, n)
+		}
+	}
+	_, body := e.do(t, "GET", "/policy", "operator", nil)
+	if got := tabBadge(t, body, "Rules"); got != "3" {
+		t.Errorf("the Rules count lives in the tab badge: %s, want 3", got)
 	}
 	rows := regexp.MustCompile(`(?s)<tr class[^>]*>.*?</tr>`).FindAllString(body, -1)
 	if len(rows) != 3 {
@@ -117,7 +152,7 @@ func TestPolicyOverviewIgnoresUnknownParameters(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: fleetReport()} })
 	for _, q := range []string{"?edit=2", "?edit=x", "?new=1", "?v=abc", "?v=-4", "?foo=bar&show=all"} {
 		r, body := e.do(t, "GET", "/policy"+q, "operator", nil)
-		if r.StatusCode != 200 || !strings.Contains(body, `data-tile="rules"`) || strings.Contains(body, `name="command"`) {
+		if r.StatusCode != 200 || !strings.Contains(body, `class="pol-sum"`) || strings.Contains(body, `name="command"`) {
 			t.Errorf("GET /policy%s = %d, want the overview", q, r.StatusCode)
 		}
 	}
@@ -172,11 +207,8 @@ func TestPolicyOverviewOneBrokenRuleDoesNotHideTheOthers(t *testing.T) {
 	mem.vs = append(mem.vs, store.PolicyRuleVersion{ID: 1, Actor: "old",
 		Rules: `[{"name":"A","command":"SaveData","want":"0"},{"name":"Broken","command":"PowerOnState","want":"7"},{"name":"C","command":"Timezone","want":"99"}]`})
 	_, body := e.do(t, "GET", "/policy", "admin", nil)
-	if got := tileValue(t, body, "rules"); got != "2 | 2 enabled · 0 disabled · 1 invalid" {
-		t.Errorf("rules tile = %q: only the valid rules are counted, the invalid one is named", got)
-	}
-	if got := tileValue(t, body, "compliant"); !strings.HasPrefix(got, "1 / 2") {
-		t.Errorf("compliant tile = %q: bravo deviates from C", got)
+	if got := sumLine(t, body); !strings.HasPrefix(got, "1 of 2 compliant") {
+		t.Errorf("summary = %q: bravo deviates from C", got)
 	}
 	rows := regexp.MustCompile(`(?s)<tr class[^>]*>.*?</tr>`).FindAllString(body, -1)
 	if len(rows) != 3 || !strings.Contains(rows[1], "invalid: ") || strings.Contains(rows[1], "health-bar") ||

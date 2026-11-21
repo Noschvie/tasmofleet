@@ -297,12 +297,20 @@ Also: [desktop, dark](../design/styleguide/controls-desktop-dark.png) · [phone,
 
 ### Stat tiles and fleet health
 
-A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The device overview and Policy header tiles (`.dev-tile-v`) follow this; `shell-css.spec.ts` guards it.
+A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The device overview tiles (`.dev-tile-v`) follow this; `shell-css.spec.ts` guards it.
 
-An info tile (Policy header, device overview) is not a link: label, value, hint and optionally a bar or up
+An info tile (device overview, rule page) is not a link: label, value, hint and optionally a bar or up
 to two small buttons. A number uses `--fs-stat`; a word ("Running", "MQTT · HTTP") uses `600 18px`
 (`--fs-word`). Values in a tone use the tone's `-fg` token. Today it is the `.dev-tile` markup;
 #1097 makes it the component `ui.InfoTile`.
+
+The Policy header is no tile row (#1086). Rules and Deviating devices show one summary block under the title (`.pol-sum`, no
+frame): the fleet counts as one sentence ("52 of 60 compliant · 3 deviating · 6 not judged", `policy.FleetTally`, the numbers
+in their tone's `-fg` text colour) and the live check (state, when it ran, Run now, Pause or Resume, Retry now), the state text
+sharing a phone row with the buttons so the rule list starts above 400 px at 375. After a failed live check the counts are left
+out and the state says why. History and GPIO templates show no rule counts at all: "Not judged" is the word of the rules, the
+templates page says "Can’t be compared". The Rules count lives in the tab badge. `shell-css.spec.ts` guards the text contrast of
+the summary in both themes and `policy-overview.spec.ts` the phone height.
 
 Component: `ui.StatTile(StatTileData{...})`, `ui.HealthBar(ok, off, unk)`; `ui.ComplianceBar(match, deviate, unknown)` draws a policy rule's compliance the same way.
 

@@ -29,7 +29,7 @@ func TestPolicyPageEmptyStateOffersNothingToCheck(t *testing.T) {
 	if !strings.Contains(body, "No policy rules yet") {
 		t.Error("no empty state")
 	}
-	for _, bad := range []string{"pol-line", "Run now", "Make compliant", "t-warn"} {
+	for _, bad := range []string{"pol-line", "pol-sum", "Run now", "Make compliant", "t-warn"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the empty page offers %q", bad)
 		}

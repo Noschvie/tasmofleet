@@ -61,9 +61,9 @@ test("without JavaScript the row menu moves a rule down and back up", async ({ b
   await ctx.close();
 });
 
-// Why: a switched-off rule says so in words and says it is not checked; the tile counts it as disabled. It is not drawn at
+// Why: a switched-off rule says so in words and says it is not checked. It is not drawn at
 // half opacity: that dropped its text below the AA contrast (#1071, contrast-dim.spec.ts measures it).
-test("a disabled rule says Disabled, is not checked and is counted as disabled", async ({ page }) => {
+test("a disabled rule says Disabled and is not checked", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy");
   await page.getByLabel("Actions for Rule B").click();
@@ -71,7 +71,6 @@ test("a disabled rule says Disabled, is not checked and is counted as disabled",
   const row = page.locator("section#rules tbody tr", { hasText: "Rule B" });
   await expect(row).toContainText("Disabled");
   await expect(row).toContainText("not checked while disabled");
-  await expect(page.locator("[data-tile=rules]")).toContainText("2 enabled · 1 disabled");
   await page.getByLabel("Actions for Rule B").click();
   await page.getByRole("button", { name: "Enable" }).click();
   await expect(row).not.toContainText("Disabled");
@@ -113,4 +112,24 @@ test("the first row's menu opens downwards", async ({ page }) => {
   const btn = (await row.locator("summary").boundingBox())!;
   const body = (await row.locator(".rowmenu-body").boundingBox())!;
   expect(body.y, "the menu starts below its button").toBeGreaterThanOrEqual(btn.y + btn.height - 1);
+});
+
+// Why (#1086): the four count tiles and the live-check tile took about 400 px of a phone before the first rule
+// (the first row started near y = 700), so the list the page is about was below the fold. The counts are one
+// sentence under the title now, with the live check beside its buttons, and the list starts above y = 400.
+// The state is the one at page load, no waiting: a fresh page, the rules and no devices.
+test("phone: the first rule starts above 400 px, under one summary line", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(app.url + "/policy");
+  await expect(page.locator(".pol-sum-line")).toHaveText("0 of 0 compliant · 0 deviating · 0 not judged");
+  await expect(page.locator(".dev-tile")).toHaveCount(0);
+  const top = await page.locator("section#rules tbody tr").first().evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+  expect(top, "the first rule row starts above y = 400").toBeLessThan(400);
+  // the two live-check buttons stay inside the screen and are the 40 px a phone control is
+  for (const name of ["Run now", "Pause"]) {
+    const box = (await page.locator("#live-tile").getByRole("button", { name, exact: true }).boundingBox())!;
+    expect(box.x + box.width, `${name} is inside the screen`).toBeLessThanOrEqual(375);
+    expect(box.height, `${name} is a phone touch target`).toBeGreaterThanOrEqual(40);
+  }
 });

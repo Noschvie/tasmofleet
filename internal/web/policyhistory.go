@@ -161,11 +161,9 @@ func (h *handler) historyRender(w http.ResponseWriter, r *http.Request, live boo
 		return
 	}
 	rep, repErr := h.d.Policy.Report(ctx, actor(r), live)
-	_, valid, bad := h.d.PolicyRules.ValidRules(st.Specs)
 	p := policyHistoryView{Base: v.Base, CSRF: v.CSRF, Admin: v.IsAdmin}
-	p.Head = h.policyHead(v, valid, len(bad), rep, repErr)
+	p.Head = h.policyHead(v, rep, repErr)
 	p.Head.Show = true
-	p.Head.Back = "history"
 	if live && p.Head.Line != nil && p.Head.Line.State != "failed" {
 		v.Flash = "Live check finished · " + deviateText(p.Head.Fleet.Deviating)
 	}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
-	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // The Deviating devices tab (/policy/deviations): every deviation of every device, grouped by
@@ -62,7 +61,7 @@ type devView struct {
 	Admin        bool
 	CanFix       bool // Make compliant is available (admin and the service exists)
 	CanBackup    bool
-	Failed       bool // the report could not be built: the live-check tile says why
+	Failed       bool // the report could not be built: the live check says why
 	Show, Q      string
 	NReq, NAdv   int
 	NUnknown     int
@@ -84,12 +83,6 @@ func (h *handler) devRender(w http.ResponseWriter, r *http.Request, status int, 
 		h.fail(w, r, err)
 		return
 	}
-	valid, invalid := st.Specs, 0
-	if len(st.Specs) > 0 {
-		var bad []*sysconfig.RuleError
-		_, valid, bad = h.d.PolicyRules.ValidRules(st.Specs)
-		invalid = len(bad)
-	}
 
 	p := devView{Base: v.Base, CSRF: v.CSRF, Admin: v.IsAdmin, Failed: repErr != nil,
 		CanFix: v.IsAdmin && h.d.PolicyFix != nil, CanBackup: v.IsAdmin && h.d.BackupBatch != nil}
@@ -99,9 +92,10 @@ func (h *handler) devRender(w http.ResponseWriter, r *http.Request, status int, 
 	}
 	p.Q = strings.TrimSpace(r.URL.Query().Get("q"))
 
-	p.Head = h.policyHead(v, valid, invalid, rep, repErr)
+	p.Head = h.policyHead(v, rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = len(st.Specs) > 0 || p.Head.HasVersions
+	p.Head.Counts = true
 	p.Head.Back = "deviations"
 	if repErr == nil {
 		h.devFill(&p, rep)

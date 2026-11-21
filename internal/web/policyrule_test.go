@@ -790,3 +790,29 @@ func TestRuleDraftRedrawnKeepsItsSourceLine(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1086): the rule page counted its devices three ways without saying which: the Applies to tile 56, the
+// scope line 56 and the Devices card's "All" chip 59, because the card also lists the devices a higher rule
+// judges instead. The reader saw 56 and 59 for the same rule and could not tell which to trust. The numbers
+// now come from one tally and add up: In scope = Applies to + covered by a higher rule, and the tile, the
+// scope line and the chip say which they are.
+func TestRulePageDeviceCountsComeFromOneTallyAndAddUp(t *testing.T) {
+	rp := defaultRP() // kitchen and shed are ESP8266, attic is ESP32
+	rp.values = map[model.DeviceID]map[string]string{1: {"savedata": "0"}, 2: {"savedata": "1"}, 3: {"savedata": "0"}}
+	e, mem := ruleEnvWith(t, rp)
+	ruleSeed(t, e, mem, url.Values{"name": {"ESP8266 first"}, "family": {"esp8266"}, "tag": {}, "tags_extra": {""}, "except": {}, "want": {"0"}})
+	id := ruleSeed(t, e, mem, url.Values{"name": {"Everyone"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}, "want": {"0"}})
+	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+	// the second rule applies to the ESP32 attic only: the two ESP8266 devices are judged by the rule above it
+	if v := tileValue(t, body, "applies"); !strings.HasPrefix(v, "1 | ") || !strings.Contains(v, "2 covered by a higher rule") {
+		t.Errorf("Applies to tile = %q, want 1 and the 2 covered devices named", v)
+	}
+	scope := sliceBetween(body, `id="scope-summary"`, "</span>")
+	if !strings.Contains(scope, "applies to 1 of 3 devices") || !strings.Contains(scope, "2 covered by a higher rule") {
+		t.Errorf("the scope line must give the tile's number and what it is out of:\n%s", scope)
+	}
+	devs := section(t, body, "dc-devs")
+	if !strings.Contains(devs, `In scope<span class="dv-n">3</span>`) || strings.Contains(devs, ">All<") {
+		t.Errorf("the chip counts what it lists (1 applies + 2 covered) and says so:\n%s", devs)
+	}
+}

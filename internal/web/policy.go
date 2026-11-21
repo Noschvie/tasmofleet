@@ -105,7 +105,7 @@ type policyOpts struct {
 	banner string
 }
 
-// liveLine is the live-check tile: idle, paused or failed.
+// liveLine is the live check of the summary: idle, paused or failed.
 type liveLine struct {
 	State string // "idle", "paused", "failed"
 	Value string // the big word: "Every 1 h", "Paused", "Failed"
@@ -274,9 +274,10 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 		p.Rows = append(p.Rows, row)
 	}
 
-	p.Head = h.policyHead(v, valid, len(invalid), rep, repErr)
+	p.Head = h.policyHead(v, rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = p.HasRules || p.Head.HasVersions
+	p.Head.Counts = true
 	p.Head.Tabs = h.policyTabs(v.Base, "rules", len(st.Specs), p.Head.Fleet.Deviating, 0)
 	if repErr == nil {
 		p.Alert = requiredAlert(rep, st.Specs)

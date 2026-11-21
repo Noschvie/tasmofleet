@@ -129,7 +129,7 @@ func TestPolicyLiveLineShowsThePause(t *testing.T) {
 	}
 	r, _ := e.do(t, "POST", "/policy/live/pause", "admin", url.Values{"csrf": {"tok"}})
 	_, body = e.do(t, "GET", r.Header.Get("Location")[len("/tf"):], "admin", nil)
-	for _, want := range []string{`data-tile="live"`, ">Paused<", "Live check paused by test:admin at <time", `data-ts="time"`, `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
+	for _, want := range []string{`id="live-tile"`, ">Paused<", "Live check paused by test:admin at <time", `data-ts="time"`, `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("paused page lacks %q", want)
 		}
@@ -168,12 +168,18 @@ func TestPolicyLiveLineShowsAFailure(t *testing.T) {
 	if r.StatusCode != 200 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
-	for _, want := range []string{`data-tile="live"`, ">Failed<", "Live check failed: The device list could not be read.", ">Retry now<", "Flash wear"} {
+	for _, want := range []string{`id="live-tile"`, ">Failed<", "Live check failed: The device list could not be read.", ">Retry now<", "Flash wear"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("failed page lacks %q", want)
 		}
 	}
 	if strings.Contains(body, "dlg-fix") {
 		t.Error("no Make compliant without a report")
+	}
+	// the counts of a fleet that was not read are left out, not shown as zeros that look like a result
+	for _, bad := range []string{"pol-sum-line", " compliant", " deviating", "needs the live check", `class="dev-tiles"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("a failed live check shows no fleet counts, found %q", bad)
+		}
 	}
 }

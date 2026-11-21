@@ -228,6 +228,39 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+// Why (#1086): the Policy header is a summary line, not a row of tiles, so its toned parts (compliant green,
+// deviating amber, the live check's state) sit on the page background and not on a tile's surface. They use the
+// tone's text variant like the tiles did, and must read at 4.5:1 on it in both themes.
+for (const scheme of ["light", "dark"] as const) {
+  test(`the Policy summary's toned text meets 4.5:1 (${scheme})`, async ({ page }) => {
+    await open(page, "/about", 1280, scheme);
+    await mount(
+      page,
+      `<div class="pol-sum"><p class="pol-sum-line"><span class="t-ok">1 of 2 compliant</span> · <span class="t-warn">1 deviating</span> · 0 not judged</p>` +
+        `<div class="pol-sum-live"><p class="pol-sum-state"><span class="pol-sum-v t-ok">Running</span> · hourly <span class="pol-sum-v t-danger">Failed</span> <span class="pol-sum-v t-neutral">Paused</span></p></div></div>`,
+    );
+    const m = await page.evaluate(() => {
+      // the first opaque background above the summary: it sits on the page, not on a card
+      let n: Element | null = document.querySelector("#sandbox");
+      let bg = "rgba(0, 0, 0, 0)";
+      for (; n && bg === "rgba(0, 0, 0, 0)"; n = n.parentElement) bg = getComputedStyle(n).backgroundColor;
+      return [
+        ...[...document.querySelectorAll("#sandbox .pol-sum-line > span, #sandbox .pol-sum-v")].map((el) => ({
+          what: `${el.className} ${el.textContent}`,
+          fg: getComputedStyle(el).color,
+        })),
+        { what: "the line's plain text", fg: getComputedStyle(document.querySelector("#sandbox .pol-sum-line")!).color },
+        { what: "the state text", fg: getComputedStyle(document.querySelector("#sandbox .pol-sum-state")!).color },
+      ].map((x) => ({ ...x, bg }));
+    });
+    expect(m.length).toBeGreaterThanOrEqual(7);
+    for (const x of m) {
+      const ratio = await contrast(page, x.fg, x.bg);
+      expect(ratio, `${scheme} ${x.what}: ${x.fg} on ${x.bg} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
 // Why: the select-all box sat 3-5px left of the row boxes.
 test("the select-all box is on the row boxes' vertical line", async ({
   page,

@@ -133,7 +133,7 @@ func TestGPIOTemplatesTabIsReadOnlyForOperators(t *testing.T) {
 		t.Errorf("operator apply: %d, applied=%v, want 403 and nothing applied", r.StatusCode, f.gotApply != nil)
 	}
 	_, adm := e.do(t, "GET", "/policy/templates", "admin", nil)
-	for _, want := range []string{"Apply reference to 1…", `name="pick" value="12"`, "most common, 2 of 3 read live", "Not judged", "Offline, no backup yet.", "GPIO templates"} {
+	for _, want := range []string{"Apply reference to 1…", `name="pick" value="12"`, "most common, 2 of 3 read live", "Can’t be compared", "Offline, no backup yet.", "GPIO templates"} {
 		if !strings.Contains(adm, want) {
 			t.Errorf("admin tab misses %q", want)
 		}
@@ -529,5 +529,31 @@ func TestGPIOTemplatesReferenceIsTheFirstRowAndMarked(t *testing.T) {
 				t.Errorf("the reference row does not carry the Reference chip:\n%s", first[:i])
 			}
 		})
+	}
+}
+
+// Why (#1086): "Not judged" is the word of the rules (a device a rule cannot judge). The GPIO templates have
+// their own idea, a template that cannot be compared with its group's reference, and the page showed both under
+// one word: the rule tile said 5, the template summary 10. The page also has nothing to do with the rules'
+// fleet counts: no summary line, no live check. fleetReport has one device that is "not judged" for a rule, so
+// a count that leaks from the policy header would show up here.
+func TestGPIOTemplatesPageSpeaksOfTemplatesNotOfRules(t *testing.T) {
+	e := gtEnv(t, gtFixture())
+	_, body := e.do(t, "GET", "/policy/templates", "admin", nil)
+	if strings.Contains(strings.ToLower(body), "not judged") {
+		t.Error("the templates page says \"not judged\": that is the rules' word")
+	}
+	for _, want := range []string{"1 group · 1 device differs · 1 can’t be compared", `aria-label="Can’t be compared"`, "<h2>Can’t be compared "} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the templates page lacks %q", want)
+		}
+	}
+	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, " compliant", `class="dev-tiles"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("the templates page carries the policy header's %q", bad)
+		}
+	}
+	if !strings.Contains(body, `class="utab"`) || !strings.Contains(body, ">Deviating devices <span") {
+		t.Error("the tab row (with the Deviating badge) stays")
 	}
 }

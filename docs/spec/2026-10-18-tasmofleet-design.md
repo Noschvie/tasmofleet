@@ -2216,9 +2216,10 @@ setting of one device to start a rule from it: a command refused by `policy.Read
 commands a backup holds (`policy.BackupReadable`); a value with credentials or one that cannot be an
 expected value is refused; the audit entry `policy.copy` names device and command, never the value.
 
-**Overview (`/policy`).** Five tiles: Rules (enabled and disabled), Compliant devices, Deviating
-(required and advisory), Not judged (all `policy.FleetTally`) and the live-check tile (state, last
-run, Run now, Pause or Resume for admins, Retry now after a failure). Tabs follow (Rules, Deviating devices, History;
+**Overview (`/policy`).** One summary under the title (Rules and Deviating devices only, #1086): the fleet counts as
+a sentence, "52 of 60 compliant · 3 deviating · 6 not judged" (`policy.FleetTally`; left out when the live check failed),
+and the live check (state, last run, Run now, Pause or Resume for admins, Retry now after a failure). History and the
+GPIO templates show neither: a rule count says nothing about them. Tabs follow (Rules, Deviating devices, History;
 Import or export has its own page, `/policy/io`), then the rule table in stored order: a drag handle (admins), name (a link to
 `/policy/rules/{id}`, Disabled chip), setting, applies to with the device count, Required or Advisory, a
 compliance bar from `policy.Tally` read by rule id, and the row menu (Edit, Duplicate, Enable or Disable,

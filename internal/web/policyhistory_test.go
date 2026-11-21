@@ -233,13 +233,20 @@ func TestPolicyHistoryFoldWithinOneMinuteShowsOneTime(t *testing.T) {
 	}
 }
 
-// Why: Run now on the History tab must stay on it (the other tabs do the same), and the tab
-// row of every page names the same tabs.
+// Why: the History tab has no rule counts and no live check (it is the list of saved versions, not
+// a result: #1086), so an old page whose Run now still posts back=history must land on History with the
+// result in the flash, not on a page that draws a second copy of the header; and the tab row of every page
+// names the same tabs.
 func TestPolicyHistoryRunNowStaysOnTheTab(t *testing.T) {
 	e, _ := historyEnv(t)
 	r, body := e.do(t, "POST", "/policy/live", "admin", url.Values{"csrf": {"tok"}, "back": {"history"}})
-	if r.StatusCode != 200 || !strings.Contains(body, `id="history"`) || !strings.Contains(body, `name="back" value="history"`) {
-		t.Fatalf("run now on the history tab: %d", r.StatusCode)
+	if r.StatusCode != 200 || !strings.Contains(body, `id="history"`) || !strings.Contains(body, "Live check finished") {
+		t.Fatalf("run now on the history tab: %d\n%s", r.StatusCode, body)
+	}
+	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, `class="dev-tiles"`, " compliant", "Not judged"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("the history tab carries %q: rule counts do not belong above the saved versions", bad)
+		}
 	}
 	_, over := e.do(t, "GET", "/policy", "admin", nil)
 	for _, w := range []string{">Rules", ">Deviating devices", ">History"} {

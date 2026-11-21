@@ -197,7 +197,7 @@ templ scopeSummaryLine(v scopeSummary, oob bool) {
 		{ " " }
 		if v.Count != "" {
 			<b>{ v.Count }</b>
-			{ " · " }
+			{ v.Covered + " · " }
 		}
 		{ v.Text }
 	</span>
@@ -450,7 +450,7 @@ templ ruleDevicesCard(v ruleDevicesView) {
 					<p class="devcard-note">This rule is disabled. The numbers show what it would judge if it were enabled.</p>
 				}
 				<div class="dv-chips">
-					@ruleDevChip(v, "", "All", v.NAll)
+					@ruleDevChip(v, "", "In scope", v.NAll)
 					@ruleDevChip(v, "deviate", "Deviate", v.Stat.Deviate)
 					@ruleDevChip(v, "unknown", "Not judged", v.Stat.Unknown)
 				</div>

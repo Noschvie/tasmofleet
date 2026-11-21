@@ -13455,6 +13455,50 @@ main.bare {
   color: var(--color-text-2);
   font-size: 13px;
 }
+/* the summary under the title of Rules and Deviating devices (#1086): the fleet counts as one sentence and the live
+   check (its state, Run now, Pause). No frame: on a phone the frame and its padding cost 40 px of the 400 the rule
+   list may start at. One row on a desktop; on a phone the sentence above the live check, whose state text shares the
+   row with the two buttons and wraps beside them */
+.pol-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-6) var(--sp-16);
+  margin-bottom: var(--card-gap);
+}
+.pol-sum-line {
+  flex: 1 1 18rem;
+  margin: 0;
+  font: 600 14px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-2);
+}
+/* the toned parts use the text variant of the tone, not the fill (#513) */
+.pol-sum-line .t-ok,
+.pol-sum-line .t-warn {
+  color: var(--t-fg);
+}
+.pol-sum-live {
+  display: flex;
+  flex: 1 1 22rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-6) var(--sp-12);
+}
+.pol-sum-state {
+  flex: 1 1 7rem;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  overflow-wrap: anywhere;
+}
+.pol-sum-live .pol-line-acts {
+  flex: none;
+}
+.pol-sum-v {
+  font-weight: 600;
+  color: var(--t-fg, var(--color-text));
+}
 .pol-line-dot {
   width: 8px;
   height: 8px;
@@ -13529,9 +13573,6 @@ main.bare {
 .uempty + .pol-tpls {
   margin-top: var(--sp-14);
 }
-.dev-tile .pol-line-acts {
-  margin-top: var(--sp-4);
-}
 tbody[data-rule-list] > tr.is-drag {
   opacity: 0.4;
 }
@@ -13566,12 +13607,9 @@ tbody[data-rule-list] td[data-label="Compliance"] > div > span {
   tbody[data-rule-list] td[aria-hidden="true"] {
     display: none;
   }
-  /* 40 px touch targets: the row menu and the live-check tile's buttons */
+  /* 40 px touch targets: the row menu (the summary's buttons are .btn-sm, 40 px through --ctl-sm) */
   tbody[data-rule-list] summary.btn-icon {
     min-width: 40px;
-    min-height: 40px;
-  }
-  .dev-tile .pol-line-acts .btn {
     min-height: 40px;
   }
   tbody[data-rule-list] td[data-label="Compliance"] > div > span {

@@ -3,7 +3,7 @@ package web
 import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // policyTemplatesPage is GET /policy/templates: the summary bar, the groups as cards in two column
-// stacks, and the folds (Not judged, Built-in modules, Used by one device). Mockup: gpio-templates-mockup/1 and 1b.
+// stacks, and the folds (Can’t be compared, Built-in modules, Used by one device). Mockup: gpio-templates-mockup/1 and 1b.
 templ policyTemplatesPage(p gtView) {
 	<div class="pol-page" id="gt-page" data-guard-swap>
 		@policyShell(p.Head) {
@@ -160,10 +160,10 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 }
 
 templ gtNotJudged(p gtView, rank string) {
-	<section class={ "scard", rank, "gt-card" } aria-label="Not judged">
+	<section class={ "scard", rank, "gt-card" } aria-label="Can’t be compared">
 		<div class="sch">
 			<div>
-				<h2>Not judged <span class="gt-n">{ plural(len(p.NotJudged), "device") }</span></h2>
+				<h2>Can’t be compared <span class="gt-n">{ plural(len(p.NotJudged), "device") }</span></h2>
 				<p class="cnote">No live reading and no backup, or nothing to compare against.</p>
 			</div>
 		</div>

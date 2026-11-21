@@ -2,8 +2,8 @@ package web
 
 import "github.com/hellwand/tasmofleet/internal/web/ui"
 
-// policyShell is the header the policy tabs share: Import / Export / New rule, the five tiles
-// and the tab row. The tab's own content is the child.
+// policyShell is the header the policy tabs share: Import / Export / New rule, on Rules and Deviating
+// devices the summary line (fleet counts and live check) and the tab row. The tab's own content is the child.
 templ policyShell(h policyHead) {
 	@ui.PageHeader("Policy", policySub) {
 		if h.Admin {
@@ -15,18 +15,9 @@ templ policyShell(h policyHead) {
 		}
 	}
 	if h.Show {
-		<div class="devlive">
-			<div class="dev-tiles">
-				for _, t := range h.Tiles {
-					<div class="dev-tile" data-tile={ t.Key }>
-						<div class="dev-tile-l">{ t.Label }</div>
-						<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
-						<div class="dev-tile-s">{ t.Sub }</div>
-					</div>
-				}
-				@policyLiveTile(h)
-			</div>
-		</div>
+		if h.Counts {
+			@policySummary(h)
+		}
 		if len(h.Cooldown) > 0 {
 			@policyCooldownNote(h)
 		}
@@ -52,37 +43,53 @@ templ policyCooldownNote(h policyHead) {
 	</div>
 }
 
-// policyLiveTile is the live-check tile: its state, when it last ran, Run now and Pause / Resume
-// (or Retry now after a failure).
-templ policyLiveTile(h policyHead) {
-	<div class="dev-tile" data-tile="live" id="live-tile">
-		<div class="dev-tile-l">Live check</div>
-		<div class={ "dev-tile-v", toneClass(h.Line.Tone) }>{ h.Line.Value }</div>
-		<div class="dev-tile-s" role="status">
-			if h.Line.State == "paused" {
-				Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(h.Line.PausedAt, ui.StampClock) }</time>
-				if !h.Line.Shown.IsZero() {
-					{ " · deviations shown are from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>
+// policySummary is the one block under the title of Rules and Deviating devices: the fleet counts
+// as a sentence ("52 of 60 compliant · 3 deviating · 6 not judged", left out when the live check failed:
+// no count pretends to be current) and the live check: its state, when it last ran, Run now and Pause /
+// Resume (or Retry now after a failure).
+templ policySummary(h policyHead) {
+	<div class="pol-sum">
+		if h.Sum != nil {
+			<p class="pol-sum-line" data-sum>
+				<span class="t-ok">{ h.Sum.Compliant } compliant</span>
+				{ " · " }<span class={ toneClass(h.Sum.DeviatingTone) }>{ h.Sum.Deviating } deviating</span>
+				{ " · " + h.Sum.NotJudged + " not judged" }
+			</p>
+		}
+		<div class="pol-sum-live" id="live-tile">
+			<p class="pol-sum-state">
+				if h.Line.State == "idle" {
+					{ "Live check " }
 				}
-			} else {
-				{ h.Line.Sub }
-			}
-		</div>
-		<div class="pol-line-acts">
-			switch h.Line.State {
-				case "failed":
-					@policyLiveForm(h, "/policy/live", "Retry now")
-				case "paused":
-					if h.Line.CanPause {
-						@policyLiveForm(h, "/policy/live/resume", "Resume")
+				<span class={ "pol-sum-v", toneClass(h.Line.Tone) }>{ h.Line.Value }</span>
+				{ " · " }
+				<span role="status">
+					if h.Line.State == "paused" {
+						Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(h.Line.PausedAt, ui.StampClock) }</time>
+						if !h.Line.Shown.IsZero() {
+							{ " · deviations shown are from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>
+						}
+					} else {
+						{ h.Line.Sub }
 					}
-					@policyLiveForm(h, "/policy/live", "Run now")
-				default:
-					@policyLiveForm(h, "/policy/live", "Run now")
-					if h.Line.CanPause {
-						@policyLiveForm(h, "/policy/live/pause", "Pause")
-					}
-			}
+				</span>
+			</p>
+			<div class="pol-line-acts">
+				switch h.Line.State {
+					case "failed":
+						@policyLiveForm(h, "/policy/live", "Retry now")
+					case "paused":
+						if h.Line.CanPause {
+							@policyLiveForm(h, "/policy/live/resume", "Resume")
+						}
+						@policyLiveForm(h, "/policy/live", "Run now")
+					default:
+						@policyLiveForm(h, "/policy/live", "Run now")
+						if h.Line.CanPause {
+							@policyLiveForm(h, "/policy/live/pause", "Pause")
+						}
+				}
+			</div>
 		</div>
 	</div>
 }

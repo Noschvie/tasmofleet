@@ -215,7 +215,7 @@ test("the policy page's pause time is the browser's clock", async ({ browser }) 
   await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Pause", exact: true }).click();
-  const line = page.locator("#live-tile .dev-tile-s"); // the live-check tile says who paused and when
+  const line = page.locator("#live-tile [role=status]"); // the live check says who paused and when
   await expect(line).toContainText("Live check paused by");
   const t = line.locator("time").first();
   const want = await page.evaluate(

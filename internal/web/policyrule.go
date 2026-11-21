@@ -63,12 +63,18 @@ type ruleDevRow struct {
 
 // ruleStat is what the rule does to the fleet: the counts of the four tiles and the rows.
 type ruleStat struct {
-	OK                                                          bool
-	Err, Hint                                                   string
-	Devices                                                     int // all devices of the fleet
-	Applies, Match, Deviate, Unknown, Excepted, Shadowed, Total int
-	Rows                                                        []ruleDevRow
+	OK        bool
+	Err, Hint string
+	Devices   int // all devices of the fleet
+	// RuleTally is policy.Tally of the rule: the one place that counts. Applies() is Match + Deviate +
+	// Unknown; Shadowed devices are in the scope but judged by a higher rule (#1086).
+	policy.RuleTally
+	Rows []ruleDevRow
 }
+
+// InScope is the devices the rule's scope reaches after its exceptions: the ones it applies to and the ones a
+// higher rule judges instead. It is what the devices card lists.
+func (st ruleStat) InScope() int { return st.Applies() + st.Shadowed }
 
 // ruleStats evaluates the rule at pos of specs (pos == len(specs): a draft appended to the list)
 // from cached values and backups; no device is read. The rule counts as if enabled: what it
@@ -128,13 +134,10 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 		src, haveSrc := rep.Provenance[o.DeviceID][key]
 		switch o.Kind {
 		case policy.OutcomeMatch:
-			st.Match++
 			row.Have, row.Source = o.Have, valueSource(src, haveSrc, now)
 		case policy.OutcomeDeviate:
-			st.Deviate++
 			row.Have, row.Source = o.Have, valueSource(src, haveSrc, now)
 		case policy.OutcomeUnknown:
-			st.Unknown++
 			switch note := notJudgedNote(rules[pos].Command, byID[o.DeviceID]); {
 			case policy.FirmwareNote(byID[o.DeviceID]) != "":
 				row.Source = policy.FirmwareNote(byID[o.DeviceID]) + "; checked again about once an hour" // nothing is sent to it (#558)
@@ -148,16 +151,13 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 				row.Source = "no backup yet"
 			}
 		case policy.OutcomeShadowed:
-			st.Shadowed++
 			row.Source = "covered by " + ruleName(sysconfig.RuleSpec{Name: rules[o.ByIndex].Name, Command: rules[o.ByIndex].Command})
 		case policy.OutcomeExcepted:
-			st.Excepted++
 			continue // exempt: counted in the tile, not listed
 		}
 		st.Rows = append(st.Rows, row)
 	}
-	st.Applies = st.Match + st.Deviate + st.Unknown
-	st.Total = len(st.Rows)
+	st.RuleTally = policy.Tally(rules, rep.Outcomes)[pos]
 	// What differs first, then what could not be judged, then the rest.
 	rank := map[policy.OutcomeKind]int{policy.OutcomeDeviate: 0, policy.OutcomeUnknown: 1, policy.OutcomeMatch: 2, policy.OutcomeShadowed: 3}
 	sort.SliceStable(st.Rows, func(i, j int) bool {
@@ -187,6 +187,15 @@ type ruleTile struct {
 	Tone                   ui.Tone
 }
 
+// coveredHint is the devices in the scope that a higher rule judges instead, for the Applies to tile and the
+// scope line: they are in the devices card's "In scope" but not in "Applies to".
+func coveredHint(st ruleStat) string {
+	if st.Shadowed == 0 {
+		return ""
+	}
+	return " · " + strconv.Itoa(st.Shadowed) + " covered by a higher rule"
+}
+
 func ruleTiles(st ruleStat, spec sysconfig.RuleSpec) []ruleTile {
 	if !st.OK {
 		dash := func(key, label string) ruleTile { return ruleTile{Key: key, Label: label, Value: "–"} }
@@ -194,15 +203,15 @@ func ruleTiles(st ruleStat, spec sysconfig.RuleSpec) []ruleTile {
 	}
 	exc := plural(len(spec.Except), "exception") // the draft's own count, so it follows the form
 	matchSub := "no device in scope"
-	if st.Applies > 0 {
-		matchSub = strconv.Itoa((st.Match*100+st.Applies/2)/st.Applies) + " % of the devices it applies to"
+	if n := st.Applies(); n > 0 {
+		matchSub = strconv.Itoa((st.Match*100+n/2)/n) + " % of the devices it applies to"
 	}
 	devSub := "required"
 	if spec.Severity == policy.SeverityInfo {
 		devSub = "advisory: hint only"
 	}
 	return []ruleTile{
-		{Key: "applies", Label: "Applies to", Value: strconv.Itoa(st.Applies), Sub: scopeShort(spec, true) + " · " + exc},
+		{Key: "applies", Label: "Applies to", Value: strconv.Itoa(st.Applies()), Sub: scopeShort(spec, true) + " · " + exc + coveredHint(st)},
 		{Key: "match", Label: "Match", Value: strconv.Itoa(st.Match), Sub: matchSub, Tone: ui.ToneOK},
 		{Key: "deviate", Label: "Deviate", Value: strconv.Itoa(st.Deviate), Sub: devSub, Tone: ui.ToneWarn},
 		{Key: "unknown", Label: "Not judged", Value: strconv.Itoa(st.Unknown), Sub: "no reading, or firmware cannot answer"},
@@ -226,7 +235,7 @@ type ruleDevicesView struct {
 
 func newRuleDevices(base, id string, edit bool, spec sysconfig.RuleSpec, st ruleStat, show string, all bool) ruleDevicesView {
 	v := ruleDevicesView{Base: base, ID: id, Draft: id == "new", Edit: edit, Show: show, All: all, Stat: st, Disabled: spec.Disabled, NoDevices: st.OK && st.Devices == 0}
-	v.NAll = st.Total
+	v.NAll = st.InScope()
 	for _, r := range st.Rows {
 		switch {
 		case show == "deviate" && r.Kind != policy.OutcomeDeviate:
@@ -398,7 +407,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		e.Enabled = !spec.Disabled // a duplicate keeps its source's state; the other drafts start enabled
 		p.Editor = e
 		if !draft {
-			p.DeleteText = "It currently judges " + plural(stat.Applies, "device") + ". They stop being checked for " + spec.Command +
+			p.DeleteText = "It currently judges " + plural(stat.Applies(), "device") + ". They stop being checked for " + spec.Command +
 				". The change is saved as a new version you can revert to."
 			if spec.Disabled {
 				p.DeleteText = "It is disabled and judges no device. The change is saved as a new version you can revert to."
@@ -504,8 +513,9 @@ func scopeShort(s sysconfig.RuleSpec, countTags bool) string {
 
 // scopeSummary is the line of the Applies to section: how many devices the draft reaches and why.
 type scopeSummary struct {
-	Count string // "12 devices"; empty while the draft cannot be judged
-	Text  string // "ESP8266, tag “lights” or 2 picked devices, minus 1 exception"
+	Count   string // "applies to 12 of 60 devices"; empty while the draft cannot be judged
+	Covered string // " · 3 covered by a higher rule": in the scope, judged by a rule above
+	Text    string // "ESP8266, tag “lights” or 2 picked devices, minus 1 exception"
 }
 
 func newScopeSummary(spec sysconfig.RuleSpec, st ruleStat) scopeSummary {
@@ -541,7 +551,8 @@ func newScopeSummary(spec sysconfig.RuleSpec, st ruleStat) scopeSummary {
 	}
 	sum := scopeSummary{Text: text}
 	if st.OK {
-		sum.Count = plural(st.Applies, "device")
+		sum.Count = "applies to " + strconv.Itoa(st.Applies()) + " of " + plural(st.Devices, "device")
+		sum.Covered = coveredHint(st)
 	}
 	return sum
 }

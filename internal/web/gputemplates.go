@@ -16,7 +16,6 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
 	"github.com/hellwand/tasmofleet/internal/policy"
-	"github.com/hellwand/tasmofleet/internal/sysconfig"
 	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 	"github.com/hellwand/tasmofleet/internal/templates"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -178,12 +177,6 @@ func (h *handler) gtRender(w http.ResponseWriter, r *http.Request, refresh bool)
 		h.fail(w, r, err)
 		return
 	}
-	valid, invalid := st.Specs, 0
-	if len(st.Specs) > 0 {
-		var bad []*sysconfig.RuleError
-		_, valid, bad = h.d.PolicyRules.ValidRules(st.Specs)
-		invalid = len(bad)
-	}
 	// The first pass uses the most common reference everywhere; it also tells which group a ?ref belongs to.
 	base, err := h.d.Templates.Overview(ctx, nil, refresh)
 	if err != nil {
@@ -207,10 +200,9 @@ func (h *handler) gtRender(w http.ResponseWriter, r *http.Request, refresh bool)
 			p.RefreshHref += "?" + q
 		}
 	}
-	p.Head = h.policyHead(v, valid, invalid, rep, repErr)
+	p.Head = h.policyHead(v, rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = len(st.Specs) > 0 || p.Head.HasVersions
-	p.Head.Back = "templates"
 	p.Head.Tabs = h.policyTabs(v.Base, "templates", len(st.Specs), p.Head.Fleet.Deviating, p.Differ)
 	p.CanBackup = v.IsAdmin && h.d.BackupBatch != nil
 	if r.Header.Get("HX-Request") == "true" { // the page's own refresh: just the page, no flash
@@ -287,7 +279,7 @@ func (h *handler) gtBuild(ov, base templates.Overview, chosen []model.DeviceID, 
 	if cannot > 0 {
 		p.Summary += " · " + strconv.Itoa(cannot) + " cannot be changed here"
 	}
-	p.Summary += " · " + strconv.Itoa(notJudged) + " not judged"
+	p.Summary += " · " + strconv.Itoa(notJudged) + " can’t be compared"
 	p.Empty = len(p.Groups)+len(p.NotJudged)+len(p.BuiltIn)+len(p.OneDevice) == 0
 	p.Stacks = gtStacks(p)
 	return p
@@ -434,7 +426,7 @@ func (h *handler) gtGroupOf(g templates.GroupView, baseNeedsRef, admin bool, ran
 		case g.Reference != nil && d.ID == refID: // chosen or the most common layout: the yardstick of the group
 			row.Chip, row.Tone, row.Ref = "Reference", ui.ToneAccent, true
 		case d.Plan == nil && g.Reference != nil:
-			row.Chip, row.Tone = "Not judged", ui.ToneNeutral
+			row.Chip, row.Tone = "Can’t be compared", ui.ToneNeutral
 			row.Why = d.NotJudgedReason
 			if row.Why == "" {
 				row.Why = "Its template was read from a backup; backup values are shown, never applied."
@@ -465,7 +457,7 @@ func (h *handler) gtGroupOf(g templates.GroupView, baseNeedsRef, admin bool, ran
 				}
 			}
 		default:
-			row.Chip, row.Tone = "Not judged", ui.ToneNeutral
+			row.Chip, row.Tone = "Can’t be compared", ui.ToneNeutral
 			row.Why = d.NotJudgedReason
 		}
 		if d.Source == templates.SourceStale && row.Why != "" && d.NotJudgedReason == "" {

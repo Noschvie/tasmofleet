@@ -5,32 +5,35 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/policy"
-	"github.com/hellwand/tasmofleet/internal/sysconfig"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
-// The header the three policy tabs share: page header with Import / Export / New rule, the five
-// tiles (rules, compliant, deviating, not judged, live check) and the tab row. The tile numbers
-// are policy.FleetTally of the one evaluation; a failed live check leaves the fleet tiles blank
-// and says so in the live-check tile.
+// The header the policy tabs share: page header with Import / Export / New rule, the summary
+// (Rules and Deviating devices only: one line of fleet counts and the live check) and the tab row.
+// The counts are policy.FleetTally of the one evaluation; a failed live check leaves them out and
+// says so in the live-check part.
 
-// fleetTile is one of the four fleet tiles.
-type fleetTile struct {
-	Key, Label, Value, Sub string
-	Tone                   ui.Tone
+// fleetSum is the summary line "52 of 60 compliant · 3 deviating · 6 not judged".
+type fleetSum struct {
+	Compliant, Deviating, NotJudged string
+	DeviatingTone                   ui.Tone
 }
 
 // policyHead is what policyShell draws.
 type policyHead struct {
 	Base, CSRF string
 	Admin      bool
-	// Show: tiles and tabs are drawn. Without rules and versions the page is an empty state.
+	// Show: summary and tabs are drawn. Without rules and versions the page is an empty state.
 	Show        bool
 	HasVersions bool
-	Tiles       []fleetTile
-	Line        *liveLine
-	Fleet       policy.Fleet
-	Tabs        []ui.Tab
+	// Counts: the summary line with the fleet counts and the live check is drawn. Only the pages that are
+	// about the rules' results (Rules, Deviating devices) set it; History and the GPIO templates have
+	// nothing to do with a rule count (#1086). Sum is empty when the live check failed.
+	Counts bool
+	Sum    *fleetSum
+	Line   *liveLine
+	Fleet  policy.Fleet
+	Tabs   []ui.Tab
 	// Back: the tab Run now returns to ("" = the overview).
 	Back string
 	// Cooldown names the devices the live check just left alone because they were read recently (#989): at
@@ -64,40 +67,18 @@ func cooldownHolds(rep PolicyReport) []cooldownHold {
 	return out
 }
 
-const policySub = "Settings every device should have. Nothing is written automatically."
+const policySub = "Settings every device should have. You decide when they are applied."
 
-// policyHead builds the shared header from the valid specs (invalid: how many stored rules were left
-// out) and the report of the page.
-func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, rep PolicyReport, repErr error) policyHead {
+// policyHead builds the shared header from the report of the page.
+func (h *handler) policyHead(v view, rep PolicyReport, repErr error) policyHead {
 	p := policyHead{Base: v.Base, CSRF: v.CSRF, Admin: v.IsAdmin}
-	disabled := 0
-	for _, s := range specs {
-		if s.Disabled {
-			disabled++
-		}
-	}
-	n := strconv.Itoa
-	rules := fleetTile{Key: "rules", Label: "Rules", Value: n(len(specs)), Sub: n(len(specs)-disabled) + " enabled · " + n(disabled) + " disabled"}
-	if invalid > 0 {
-		rules.Sub += " · " + n(invalid) + " invalid" // not counted above: they are not evaluated
-	}
-	if repErr != nil {
-		dash := func(key, label string) fleetTile {
-			return fleetTile{Key: key, Label: label, Value: "–", Sub: "needs the live check"}
-		}
-		p.Tiles = []fleetTile{rules, dash("compliant", "Compliant devices"), dash("deviating", "Deviating"), dash("unjudged", "Not judged")}
-	} else {
+	if repErr == nil {
 		f := policy.FleetTally(rep.Rules, rep.Devices, rep.Outcomes)
 		p.Fleet = f
-		deviating := fleetTile{Key: "deviating", Label: "Deviating", Value: n(f.Deviating), Sub: n(f.DeviatingRequired) + " required · " + n(f.DeviatingAdvisory) + " advisory"}
+		n := strconv.Itoa
+		p.Sum = &fleetSum{Compliant: n(f.Compliant) + " of " + n(f.Devices), Deviating: n(f.Deviating), NotJudged: n(f.NotJudged)}
 		if f.Deviating > 0 {
-			deviating.Tone = ui.ToneWarn
-		}
-		p.Tiles = []fleetTile{
-			rules,
-			{Key: "compliant", Label: "Compliant devices", Value: n(f.Compliant) + " / " + n(f.Devices), Sub: "all required rules met", Tone: ui.ToneOK},
-			deviating,
-			{Key: "unjudged", Label: "Not judged", Value: n(f.NotJudged), Sub: "no reading, or firmware cannot answer"},
+			p.Sum.DeviatingTone = ui.ToneWarn
 		}
 	}
 	p.Line = h.liveLine(rep, repErr, v.IsAdmin)
