@@ -1,6 +1,8 @@
 import { test, expect } from "../support/fixtures";
 import { menuFloatProblem } from "../support/layout";
+import { hitBox } from "../support/target";
 import { pickForUpdate, txnState } from "../support/updates";
+import type { Page } from "@playwright/test";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Updates and transactions: the behaviour of the pages that only a browser shows
@@ -8,7 +10,7 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 let app: App;
 let env: Devenv;
 test.beforeAll(async () => {
-  env = await startDevenv();
+  env = await startDevenv(["-releases", "3"]); // three releases: the oldest folds under "Older releases"
   const fwPort = await freePort(); // the transaction pages come with the firmware server
   app = await startApp({
     env: {
@@ -18,6 +20,7 @@ test.beforeAll(async () => {
       TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_POLL_INTERVAL: "5s",
+      TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_GITHUB_URL,
     },
   });
   expect(app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)])).toContain("created: plug-4m-http");
@@ -93,9 +96,8 @@ for (const vp of [{ width: 1280, height: 800 }, { width: 375, height: 812 }]) {
   });
 }
 
-// Why: the page re-reads itself on every job event and every 3 s while it runs; the reader's open
-// log must stay on the device they picked, also when two refreshes are in flight at once.
-test("the open log stays on its device while the page refreshes itself", async ({ page }) => {
+/** openTxnLog sends a command to two devices and opens the log of the second one on the finished transaction's page. */
+async function openTxnLog(page: Page): Promise<string> {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices");
   for (const name of ["plug-4m-http", "plug-4m"]) {
@@ -117,6 +119,13 @@ test("the open log stays on its device while the page refreshes itself", async (
   await second.click();
   await expect(page).toHaveURL(/\?job=\d+$/);
   await expect(page.locator("#log-h")).toHaveText(`Log · ${name}`);
+  return name;
+}
+
+// Why: the page re-reads itself on every job event and every 3 s while it runs; the reader's open
+// log must stay on the device they picked, also when two refreshes are in flight at once.
+test("the open log stays on its device while the page refreshes itself", async ({ page }) => {
+  const name = await openTxnLog(page);
   await page.evaluate(async () => {
     const htmx = (window as unknown as { htmx: { ajax: (m: string, u: string, o: object) => Promise<unknown> } }).htmx;
     const url = document.getElementById("txn")!.getAttribute("hx-get") ?? "";
@@ -125,6 +134,38 @@ test("the open log stays on its device while the page refreshes itself", async (
   await page.waitForTimeout(300); // the settle step runs after the swap
   await expect(page.locator("#log-h")).toHaveText(`Log · ${name}`);
   await expect(page.locator(".upd-row[aria-current=true] .upd-row-name")).toHaveText(name);
+});
+
+// Why (#1075): the quick selection and "Older releases" are the design system's link buttons (32 px target), and
+// the log's links reach 24 px: they were 18, 24 and 15 px tall, too small for a finger or a tremor (WCAG 2.5.8).
+test("the new update's links are real targets at 1280 px", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setExtraHTTPHeaders(admin);
+  const older = page.locator(".upd-older > summary");
+  await expect(async () => {
+    await page.goto(app.url + "/updates/new");
+    await expect(older).toBeVisible({ timeout: 1000 }); // the releases come from the fake upstream once it is fetched
+  }).toPass({ timeout: 30_000 });
+  const quick = page.locator(".upd-quick > summary");
+  const missed = [...(await hitBox(quick)), ...(await hitBox(older))];
+  expect(missed).toEqual([]);
+  for (const [what, el] of [["Select", quick], ["Older releases", older]] as const) {
+    const h = (await el.boundingBox())!.height;
+    expect(h, `${what} is a link button: 32 px high`).toBeGreaterThanOrEqual(32);
+  }
+  // making them taller must not make the head taller
+  const head = (await page.locator("#dev-h").evaluate((e) => e.closest(".ulist-head")!.getBoundingClientRect().height));
+  expect(head).toBeLessThan(50);
+});
+
+test("the open log's links are 24 px targets at 1280 px", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openTxnLog(page);
+  const links = page.locator(".upd-log-acts a, .upd-log-acts button");
+  expect(await links.count()).toBeGreaterThan(0);
+  const missed: string[] = [];
+  for (let i = 0; i < (await links.count()); i++) missed.push(...(await hitBox(links.nth(i))));
+  expect(missed).toEqual([]);
 });
 
 // Why (#419-U review): between 45rem and 75rem the card stacks are two balanced columns, so the Devices

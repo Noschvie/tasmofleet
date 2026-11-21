@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
 import { openSchedule } from "../support/nav";
+import { hitBox } from "../support/target";
 
 // The Settings page (issue #275): eight tabs in one form, a card grid, info popovers, one save bar.
 // Header authentication: header principals cannot confirm, so only settings without a step-up are
@@ -62,6 +63,74 @@ test("info popovers open on click, close on Escape and show one at a time", asyn
   await page.keyboard.press("Escape");
   await expect(page.locator("#info-TELEPERIOD")).toBeHidden();
   await expect(second).toHaveAttribute("aria-expanded", "false");
+});
+
+// Why (#1075): a 16 px info button and a 15 px "Reset to default" are hard to hit with a finger or a tremor
+// (WCAG 2.5.8: 24 x 24). The drawing stays small; what a pointer hits must not. hitBox probes the points
+// around the control with elementFromPoint, so the transparent hit area counts and a 16 px box does not.
+test("every info button and reset control on the settings pages is a 24 x 24 px target at 1280", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(admin);
+  // stored values that differ from their defaults, so the reset controls show (two narrow fields on Backups; no
+  // other test of this file stores those, and this file's tests run one after the other against one app)
+  await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
+  await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
+  await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("48h");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.waitForLoadState("load");
+
+  let infos = 0;
+  let resets = 0;
+  const missed: string[] = [];
+  try {
+    await page.goto(app.url + "/settings/system?tab=general");
+    const hrefs = await tabs(page).getByRole("link").evaluateAll((a) => a.map((l) => (l as HTMLAnchorElement).getAttribute("href")!));
+    expect(hrefs.length).toBeGreaterThanOrEqual(7);
+    const pages = [...hrefs, "/devices/backups"];
+    for (const href of pages) {
+      await page.goto(app.url + href);
+      if (href === "/devices/backups") await openSchedule(page);
+      for (const sel of [".uinfo", "label.srst"]) {
+        const all = page.locator(sel);
+        for (let i = 0; i < (await all.count()); i++) {
+          const el = all.nth(i);
+          if (!(await el.isVisible())) continue;
+          if (await el.evaluate((e) => e.closest("[inert]") !== null)) continue; // a switched-off region takes no pointer at all
+          if (sel === ".uinfo") infos++;
+          else resets++;
+          for (const m of await hitBox(el)) missed.push(`${href}: ${m}`);
+        }
+      }
+    }
+  } finally {
+    // put the stored values back: the file's other tests expect the Backups fields untouched (one app, tests run serially)
+    await page.goto(app.url + "/devices/backups");
+    await openSchedule(page);
+    await page.locator("[data-key='BACKUP_KEEP'] label.srst").click();
+    await page.locator("[data-key='BACKUP_MAX_AGE'] label.srst").click();
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await page.waitForLoadState("load");
+    await page.goto(app.url + "/devices/backups");
+    await expect(page.locator("input[name='clear.BACKUP_KEEP']")).toHaveCount(0);
+  }
+
+  expect(infos, "the pages show info buttons").toBeGreaterThan(5);
+  expect(resets, "the stored values show reset controls").toBeGreaterThanOrEqual(2);
+  expect(missed.slice(0, 6).concat(missed.length > 6 ? [`${missed.length} misses in all`] : [])).toEqual([]);
+});
+
+// Why (#1075): the info button's hit box reaches past its drawing, and a click there must do what a click on
+// the drawing does (open the popover), not fall through to the label.
+test("a click on the edge of an info button's hit box opens its popover", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=network");
+  const btn = page.getByRole("button", { name: "About Device networks" });
+  const r = (await btn.boundingBox())!;
+  await page.mouse.click(r.x - 3, r.y - 3); // 3 px outside the drawn 16 px box, inside the 24 px hit box
+  await expect(page.locator("#info-DEVICE_NETWORKS")).toBeVisible();
+  await expect(btn).toHaveAttribute("aria-expanded", "true");
 });
 
 // Why: scan interval and networks do nothing while the scan is off; they are dimmed (and not

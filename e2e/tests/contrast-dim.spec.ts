@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { lowContrast, textRuns } from "../support/contrast";
+import { faded, lowContrast, textRuns } from "../support/contrast";
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -103,6 +103,31 @@ for (const width of [1280, 375]) {
       await expect(page.locator("#rule-devices")).toContainText("not a command in 13.4.0");
       await expectReadable(page, "#rule-devices tbody");
     });
+
+    // #1174: the count inside a filter chip was drawn at opacity 0.75 on the span that holds it. Contrast alone still
+    // passes at that opacity (about 8:1), so the check is the #1071 rule itself: no text at less than full opacity,
+    // and the current chip, drawn inverted, keeps a readable count too.
+    for (const [row, path] of [
+      ["the rule page's All / Deviate / Not judged", "/policy"],
+      ["Devices", "/devices"],
+      ["Backups", "/devices/backups"],
+    ]) {
+      test(`the chip counts of ${row} are not dimmed by opacity and stay readable at ${at}`, async ({ page }) => {
+        await setup(page, width, scheme);
+        await page.goto(app.url + path);
+        if (path === "/policy") {
+          await page.getByRole("link", { name: "Power lock" }).click();
+          await expect(page.locator("#rule-devices tbody tr").first()).toBeVisible();
+        }
+        const chips = page.locator(".dv-chips .dv-chip");
+        expect(await chips.count(), "the page shows its chips").toBeGreaterThan(1);
+        await expect(page.locator(".dv-chips .dv-chip[aria-current] .dv-n").first(), "one chip is the current one").toBeVisible();
+        const runs = await textRuns(page, ".dv-chips");
+        expect(runs.some((r) => r.where.includes("dv-n")), "the counts were measured").toBe(true);
+        expect(faded(runs), "no chip text is drawn at less than full opacity").toEqual([]);
+        expect(lowContrast(runs), "chip text below AA").toEqual([]);
+      });
+    }
 
     test(`the Policy rules list keeps a disabled rule readable at ${at}`, async ({ page }) => {
       await setup(page, width, scheme);

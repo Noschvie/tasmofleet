@@ -58,7 +58,12 @@ func TestSettingFieldResetCarriesItsDefault(t *testing.T) {
 	if !strings.Contains(empty, `data-default=""`) {
 		t.Errorf("an empty default must still be said (the field is cleared): %s", empty)
 	}
-	if !strings.Contains(got, "Default, set on save") {
-		t.Errorf("the ticked state must say it is the default: %s", got)
+	// The ticked control says "Undo" (a second click brings the old value back; the default already shows),
+	// and its name still says what it does: a name that contains the visible text (WCAG 2.5.3).
+	if !strings.Contains(got, `<span class="srst-on">Undo <span class="sr-only">reset to default</span></span>`) {
+		t.Errorf("the ticked state must read Undo and keep its full name for a screen reader: %s", got)
+	}
+	if !strings.Contains(got, `<span class="srst-off">Reset to default</span>`) {
+		t.Errorf("the control must say what it does in words on every field width: %s", got)
 	}
 }

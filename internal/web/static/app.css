@@ -7494,7 +7494,10 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 }
 .dv-n {
   font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+  color: var(--color-text-2); /* the secondary text colour, never opacity on content (#1071, #1174) */
+}
+.dv-chip[aria-current] .dv-n {
+  color: inherit; /* the current chip is drawn inverted: its count keeps the chip's own text colour */
 }
 .dv-vsep {
   flex: none;
@@ -9252,7 +9255,8 @@ nav.crumbs a {
   display: inline-flex;
   align-items: center;
   height: auto;
-  min-height: 0;
+  min-height: 24px; /* a 24 px target (#1075); the head's padding takes the extra height */
+  margin-block: -5px;
   padding: 0;
   border: 0;
   background: none;
@@ -9384,7 +9388,6 @@ nav.crumbs a {
   position: relative;
 }
 .upd-quick > summary {
-  height: 22px;
   list-style: none;
 }
 .upd-quick > summary::-webkit-details-marker {
@@ -9881,18 +9884,16 @@ html:has(dialog#dlg-txn:modal) body {
   }
 }
 .upd-quick > summary.btn {
-  height: 18px;
+  /* the design system's link-button size (32 px target, #1075); the negative margin keeps the head's height */
+  margin-block: -7px;
   padding: 0;
 }
 .upd-older > summary.btn {
   justify-content: flex-start;
   width: max-content;
-  height: 24px;
   padding: 0;
 }
-.upd-prev .ulist-head .btn.btn-link,
-.upd-quick > summary.btn,
-.upd-older > summary.btn {
+.upd-prev .ulist-head .btn.btn-link {
   min-height: 0;
 }
 @media (max-width: 44.99rem) {
@@ -11672,8 +11673,21 @@ a.bk-namelink:hover {
 .sf.w-xs .meta {
   margin-left: 0;
 }
+/* a narrow field's label, info button and the words of its reset do not always fit one line (two narrow fields
+   side by side in a half-width card): the reset then drops to its own line under a one-line label. The rule
+   hangs on the reset being there, not on :checked, so ticking it moves nothing (#623, #1075) */
+.sf.w-xs .lrow:has(.srst) {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
 .srst {
   position: relative;
+  /* both texts sit in one cell: the one that is not showing keeps the width, so the control never
+     resizes under the pointer when it is ticked (#1075) */
+  display: inline-grid;
+  align-items: center;
+  min-height: 24px; /* a 24 px target; the margin keeps the label row's height */
+  margin-block: -2px;
   font: 500 12px var(--font-sans);
   color: var(--color-accent-fg);
   cursor: pointer;
@@ -11694,29 +11708,21 @@ a.bk-namelink:hover {
   outline-offset: 2px;
   border-radius: var(--r-xs);
 }
+.srst .srst-off,
+.srst .srst-on {
+  grid-area: 1 / 1;
+}
 .srst .srst-on,
 .srst:has(input:checked) .srst-off {
-  display: none;
+  visibility: hidden;
 }
 .srst:has(input:checked) .srst-on {
-  display: inline;
-  color: var(--color-warn-fg);
+  visibility: visible;
 }
-.sf.w-xs .srst .srst-off,
-.sf.w-xs .srst .srst-on {
-  font-size: 0;
-}
-.sf.w-xs .srst .srst-on::before {
-  content: "\21BA  Default";
-  content: "\21BA  Default" / ""; /* the box is named by its text, "Default, set on save" */
-  font-size: 12px;
-}
-.sf.w-xs .lrow:has(.srst input:checked) {
-  flex-wrap: wrap;
-}
-.sf.w-xs .srst .srst-off::before {
-  content: "\21BA";
-  font-size: 13px;
+/* the phone rule for checkbox labels (label:has(> input[type="checkbox"]) { display: flex }, 0,2,2) would
+   split the two texts into two cells and widen the control; the reset stays one cell, its 40 px min-height stays */
+.lrow .meta label.srst {
+  display: inline-grid;
 }
 .sf-locked .in.ro,
 .in.ro {
@@ -11875,6 +11881,7 @@ input:focus-visible + .swtrack {
 }
 /* the info button and its popover */
 .uinfo {
+  position: relative;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -11887,6 +11894,12 @@ input:focus-visible + .swtrack {
   display: inline-grid;
   place-items: center;
   flex: none;
+}
+/* the drawing stays 16 px; the hit box is 24 x 24 (design system, Info button; #1075) */
+.uinfo::after {
+  content: "";
+  position: absolute;
+  inset: calc(-4px - var(--hair-w));
 }
 .uinfo:hover,
 .uinfo[aria-expanded="true"] {
@@ -12128,6 +12141,9 @@ input:focus-visible + .swtrack {
       var(--color-border-strong) 7px 8px,
       transparent 8px
     );
+  }
+  .uinfo::after {
+    inset: 0; /* the button is the 40 px box itself */
   }
   /* hovered or open, the 16px picture changes colour; the 40px box must not fill (#680: it covered the last letters of the label) */
   .uinfo:hover,

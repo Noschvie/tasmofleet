@@ -265,6 +265,8 @@ Label above (`500 12.5px`, text-2), the control (34 px, radius 7, strong border)
 
 Component: `ui.Field(FieldData{...})`, `ui.SelectField`, `ui.ErrorSummary`.
 
+A setting that has a stored value shows "Reset to default" after its label, in words on every field width (never a bare glyph), as a 24 px high target (a checkbox in a label: `clear.KEY`). Ticked, the control reads "Undo" (named "Undo reset to default" for a screen reader) and the field already shows the default; a second click brings the old value back. The control keeps the width of "Reset to default" in both states, so the row does not move when it is ticked. On a narrow field that shares its row with another one, a label row that cannot hold label, info button and the words wraps, and the control sits on its own line under a one-line label (the rule hangs on the control being there, never on its state). Typing in the field unticks it. The info button (ⓘ) after a label is drawn 16 px with a 24 px hit box (40 px on phones).
+
 ![Form fields, desktop, light](../design/styleguide/forms-desktop-light.png)
 
 Also: [desktop, dark](../design/styleguide/forms-desktop-dark.png) · [phone, light](../design/styleguide/forms-phone-light.png) · [phone, dark](../design/styleguide/forms-phone-dark.png)

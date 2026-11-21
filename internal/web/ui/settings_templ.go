@@ -546,7 +546,7 @@ func SettingField(d SettingFieldData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><span class=\"srst-off\">Reset to default</span><span class=\"srst-on\">Default, set on save</span></label>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><span class=\"srst-off\">Reset to default</span><span class=\"srst-on\">Undo <span class=\"sr-only\">reset to default</span></span></label>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
