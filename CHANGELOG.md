@@ -4,6 +4,19 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.45.0 "Rubjerg Knude" (2026-11-21)
+
+### Fixed
+
+- Offline devices, rules that are not judged or disabled, and switched-off settings keep readable text and say their state in words (#1071).
+- Inline banners keep their 820 px reading width on every page (the System MQTT page showed the broker ACL warning across the whole content width), and the setup's broker ACL help link is a text link inside its sentence (#1078)
+- The broker ACL warning is one short warn banner and shows only where a broker is configured (#1078).
+
+### Security
+
+- A broker or sign-in URL whose password holds an unencoded `#` or `/` is now hidden whole on the About page, in the settings form and in the audit trail; before, it was shown with the password. The hidden user information reads `***@` instead of `%2A%2A%2A@` (#1055)
+- A webhook URL whose password holds an unencoded `#` or `/` is now hidden whole in the webhook settings audit; before, the audit showed the part of the password before the `#` or `/` (#1167)
+
 ## 0.44.0 "Montauk Point" (2026-11-20)
 
 ### Changed
