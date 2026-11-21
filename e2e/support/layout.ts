@@ -592,7 +592,6 @@ export type TableGuardId = "s" | "r";
 export const knownLayoutIssues: Record<string, { findings: string; guards: (GuardId | TableGuardId)[] }> = {
   // red on main when the table guards of #821 landed: each finding has its own issue, the guard stays on
   "devices list 1280px": { findings: "#906 (Address is 14 px too narrow for a 15-character address)", guards: ["s"] },
-  "add devices: discovered 1280px": { findings: "#905 (the IP column cuts a 12-character address)", guards: ["s"] },
   "policy deviations 375px": { findings: "#907 (a host name breaks inside a label)", guards: ["w"] },
   "devices list saved layout 1290px": { findings: "#912 (Last restart cuts the date by 2-3 px beside spare room)", guards: ["s"] },
   "devices list saved layout 1290px bubbles": { findings: "#908 (the OTA URL bubble covers the row above)", guards: ["r"] },

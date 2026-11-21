@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/discovery"
@@ -29,14 +28,9 @@ type whyLineView struct {
 	Name, Href     string
 	Topic          bool // Name is an MQTT topic, not a device name
 	Lead, Detail   string
-	Anchor         string // a link to the section of the page the device is listed in
+	Anchor         string // a link to the table of the page the device is listed in
 	RestoreID      int64
 	RestoreVersion string
-}
-
-// anchorID is the id of a section of the Discovered box, from its title.
-func anchorID(title string) string {
-	return "disc-" + strings.ReplaceAll(strings.ToLower(title), " ", "-")
 }
 
 // proposalDays is the number of days after which a proposal without a sighting is deleted.
@@ -81,18 +75,14 @@ func (h *handler) whyLineOf(base string, f discovery.Finding, days string) whyLi
 			Detail: "It stays hidden while the data it announces stays the same. It comes back when that changes, or when it announces itself after " + days + " days without a sighting."}
 	case discovery.FindingListed:
 		p := f.Proposal
-		title, lead := "New devices", "is listed under New devices."
+		lead := "is listed in the table."
 		switch p.Kind {
 		case discovery.KindAddressChange:
-			title, lead = "Address changed", "is listed under Address changed: a known device announced a new address."
+			lead = "is listed in the table with the badge New address: it announced a new address."
 		case discovery.KindConflict:
-			title, lead = "Conflicts", "is listed under Conflicts: it claims the address or topic of a known device."
+			lead = "is listed in the table with the badge Conflict: it claims the address or topic of a known device."
 		}
-		anchor := "#disc-new"
-		if p.Kind != discovery.KindNew {
-			anchor = "#" + anchorID(title)
-		}
-		return whyLineView{Name: dash(p.Device.Name), Lead: lead, Anchor: anchor}
+		return whyLineView{Name: dash(p.Device.Name), Lead: lead, Anchor: "#disc-new"}
 	default: // FindingUnidentified
 		u := f.Unidentified
 		why := capitalize(u.Reason)

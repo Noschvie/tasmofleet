@@ -162,15 +162,15 @@ func TestShowIgnoredIsAFilterAboveTheTable(t *testing.T) {
 	e, fd := setupDiscovery(t)
 	fd.ignored = []discovery.Proposal{{ID: 9, Kind: discovery.KindNew, SeenAt: time.Now(), Device: model.Device{Name: "hidden-lamp", Address: "10.0.0.60", MAC: "aa:bb:cc:dd:ee:09"}}}
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
-	sw := regexp.MustCompile(`<a class="add-showign"[^>]*>`).FindString(body)
-	if !strings.Contains(sw, `aria-checked="false"`) || !strings.Contains(sw, `href="/tf/devices/new?ignored=1"`) || !strings.Contains(body, "Show ignored (1)") {
+	sw := reShowIgnForm.FindString(body)
+	if !strings.Contains(sw, `<input type="checkbox" name="ignored"`) || strings.Contains(sw, " checked") || !strings.Contains(sw, "Show ignored (1)") {
 		t.Fatalf("Show ignored: %q", sw)
 	}
 	if strings.Index(body, sw) > strings.Index(body, "<table") || strings.Contains(body, "hidden-lamp") {
 		t.Error("the switch must sit above the table, and ignored devices stay hidden")
 	}
 	_, body = e.do(t, "GET", "/devices/new?ignored=1", "admin", nil)
-	if sw := regexp.MustCompile(`<a class="add-showign"[^>]*>`).FindString(body); !strings.Contains(sw, `aria-checked="true"`) || !strings.Contains(body, "hidden-lamp") {
+	if sw := reShowIgnForm.FindString(body); !strings.Contains(sw, `<input type="checkbox" name="ignored" checked`) || !strings.Contains(body, "hidden-lamp") {
 		t.Error("the switch must stay on while ignored devices are listed")
 	}
 }
@@ -227,7 +227,7 @@ func TestScanRowsOfferTheNextStep(t *testing.T) {
 	_, body := e.do(t, "GET", "/discovery/scan", "admin", nil)
 	for _, want := range []string{
 		`href="/tf/devices/new?proposal=4#card-manual"`, `formaction="/tf/discovery/proposals/4/dismiss"`, `value="4:v4"`,
-		`formaction="/tf/discovery/proposals/5/undismiss"`, ">Un-ignore</button>",
+		`formaction="/tf/discovery/proposals/5/undismiss"`, ">Show again</button>",
 		`href="/tf/devices/2"`, ">Already known</span>", ">attic<",
 		`All<span class="add-chip-n">3</span>`, `New<span class="add-chip-n">1</span>`, `Known<span class="add-chip-n">1</span>`, `Ignored<span class="add-chip-n">1</span>`,
 	} {

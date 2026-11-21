@@ -41,7 +41,7 @@ var auditLabels = map[string]string{
 	"restore.start": "Restore", "restore.finish": "Restore finished", "restore.download": "Restore download",
 	"discovery.scan_start": "Network scan", "discovery.scan_end": "Network scan finished", "discovery.scan_cancel": "Network scan cancelled",
 	"discovery.scan_refused": "Network scan refused", "discovery.accept": "Accept discovered device",
-	"discovery.dismiss": "Ignore discovered device", "discovery.undismiss": "Un-ignore discovered device",
+	"discovery.dismiss": "Ignore discovered device", "discovery.undismiss": "Show discovered device again",
 	"firmware.delete": "Delete firmware file", "firmware.prune": "Prune firmware cache", "firmware.prefetch": "Download firmware",
 	"firmware.custom.upload": "Upload firmware", "firmware.custom.use": "Use uploaded firmware",
 	"backup.bulk.start": "Start backups", "command.bulk.start": "Start command run",

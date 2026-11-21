@@ -107,21 +107,64 @@ test("phone: Discovered, Add manually, Network scan, Import, one column", async 
   await expectNoOverflow(page, "Add devices phone");
 });
 
-// Why: Ignore, Show ignored and Restore of a discovered device must keep working from the box, and "Add…" must
+// Why: Ignore, Show ignored and Show again of a discovered device must keep working from the box, and "Add…" must
 // take the person to the manual form with that device filled in (the form is in the same page).
-test("Discovered: ignore, show ignored, restore, and Add… prefills the manual box", async ({ page }) => {
+test("Discovered: ignore, show ignored, show again, and Add… prefills the manual box", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/devices/new");
   const row = (name: string) => box(page, "discovered").getByRole("row").filter({ hasText: name });
   await row("Porch plug").getByRole("button", { name: "Ignore", exact: true }).click();
-  await expect(page.getByText("Dismissed.")).toBeVisible();
+  await expect(page.getByText("Ignored.", { exact: true })).toBeVisible();
   await expect(row("Porch plug")).toHaveCount(0);
   await box(page, "discovered").getByRole("checkbox", { name: /Show ignored/ }).click();
-  await row("Porch plug").getByRole("button", { name: "Restore" }).click();
-  await expect(page.getByText("Restored.")).toBeVisible();
+  await expect(box(page, "discovered").getByRole("checkbox", { name: /Show ignored/ })).toBeChecked();
+  await row("Porch plug").getByRole("button", { name: "Show again" }).click();
+  await expect(page.getByText("Shown again.", { exact: true })).toBeVisible();
   await row("Porch plug").getByRole("link", { name: "Add…" }).click();
   await expect(box(page, "manual").locator("input[name=address]")).toHaveValue("127.0.0.22");
   await expect(box(page, "manual")).toContainText("Prefilled from MQTT discovery");
+});
+
+// Why (A3-003, #1081): Show ignored was a link with role=checkbox: a screen reader announced a checkbox that Space
+// could not toggle (on a link Space only scrolls). It is a real checkbox: it has the checkbox role, Space toggles it
+// and the list follows at once, and the URL carries what it sends.
+test("Discovered: Show ignored is a checkbox, Space toggles it and the list follows", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/devices/new");
+  const disc = box(page, "discovered");
+  const showIgn = () => disc.getByRole("checkbox", { name: /Show ignored/ });
+  await expect(showIgn()).not.toBeChecked();
+  await expect(disc.locator("a[role=checkbox]")).toHaveCount(0);
+  await showIgn().focus();
+  await page.keyboard.press("Space");
+  await expect(page).toHaveURL(/ignored=on/);
+  await expect(showIgn()).toBeChecked();
+  await showIgn().focus();
+  await page.keyboard.press("Space");
+  await expect(page).not.toHaveURL(/ignored=/);
+  await expect(showIgn()).not.toBeChecked();
+});
+
+// Why: the filter must work without JavaScript too: the form has an Apply button for that, so a person whose
+// script is blocked ticks the box, presses Apply and sees the ignored devices (and Ignore and Show again, plain
+// form posts, work as well).
+test("Discovered: without JavaScript, ticking Show ignored and pressing Apply shows the ignored devices", async ({ browser }) => {
+  const ctx = await browser.newContext({ javaScriptEnabled: false, extraHTTPHeaders: adam, viewport: { width: 1280, height: 900 } });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(app.url + "/devices/new");
+    const disc = box(page, "discovered");
+    const row = (name: string) => disc.getByRole("row").filter({ hasText: name });
+    await row("Shed light").getByRole("button", { name: "Ignore", exact: true }).click();
+    await expect(row("Shed light")).toHaveCount(0);
+    await disc.getByRole("checkbox", { name: /Show ignored/ }).check();
+    await disc.getByRole("button", { name: "Apply" }).click();
+    await expect(page).toHaveURL(/ignored=on/);
+    await row("Shed light").getByRole("button", { name: "Show again" }).click();
+    await expect(row("Shed light")).toHaveCount(1);
+  } finally {
+    await ctx.close();
+  }
 });
 
 // Why (#713): a device that is on the broker but not offered as new has to be findable. The lookup of the
@@ -136,16 +179,16 @@ test("Discovered: the lookup says where a device is and what it has not seen", a
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(page).toHaveURL(/why=127\.0\.0\.21/);
   await expect(disc.locator("#why")).toContainText("Shed light");
-  await expect(disc.locator("#why")).toContainText("is listed under New devices");
+  await expect(disc.locator("#why")).toContainText("is listed in the table");
   await disc.getByLabel("Not listed? Look it up").fill("127.0.0.99");
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(disc.locator("#why")).toContainText("has not seen this on MQTT");
   await expectNoOverflow(page, "Add devices with a lookup");
 });
 
-// Why (#714): Dismiss is offered on an address change and on a conflict, so Restore must be too. Show ignored
-// counts and lists them in their own section (never under New devices) with Restore as the only action.
-test("Discovered: a dismissed address change and conflict are counted, listed and restored", async ({ page }) => {
+// Why (#714, A3-005): Ignore is offered on an address change and on a conflict, so Show again must be too. Show ignored
+// counts them and lists them as rows of the one table (never a section of their own) with Show again as the only action.
+test("Discovered: an ignored address change and conflict are counted, listed and shown again", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
@@ -167,29 +210,29 @@ test("Discovered: a dismissed address change and conflict are counted, listed an
   }
   try {
     const disc = box(page, "discovered");
-    const section = (name: string) => disc.locator(`section[aria-label="${name}"]`);
+    const kindRow = (badge: string) => disc.locator(".add-disc-table").getByRole("row").filter({ hasText: badge });
     await page.goto(app.url + "/devices/new");
-    await section("Address changed").getByRole("button", { name: "Dismiss" }).click();
-    await section("Conflicts").getByRole("button", { name: "Dismiss" }).click();
-    await expect(section("Address changed")).toHaveCount(0);
-    await expect(section("Conflicts")).toHaveCount(0);
-    const showIgn = disc.getByRole("checkbox", { name: /Show ignored/ });
-    await expect(showIgn).toContainText("Show ignored (2)");
-    await showIgn.click();
-    for (const name of ["Address changed", "Conflicts"]) {
-      await expect(section(name), `${name} lists the dismissed row`).toContainText("Ignored");
-      await expect(section(name).getByRole("button", { name: "Restore" })).toHaveCount(1);
-      await expect(section(name).getByRole("button", { name: /Dismiss|Apply/ })).toHaveCount(0);
+    await expect(disc.locator("section.add-moves[aria-label=\"Address changed\"]")).toHaveCount(0);
+    await kindRow("New address").getByRole("button", { name: "Ignore" }).click();
+    await kindRow("Conflict").getByRole("button", { name: "Ignore" }).click();
+    await expect(kindRow("New address")).toHaveCount(0);
+    await expect(kindRow("Conflict")).toHaveCount(0);
+    await expect(disc.getByRole("checkbox", { name: "Show ignored (2)" })).toBeVisible();
+    await disc.getByRole("checkbox", { name: /Show ignored/ }).click();
+    for (const badge of ["New address", "Conflict"]) {
+      await expect(kindRow(badge), `${badge} lists the ignored row`).toContainText("Ignored");
+      await expect(kindRow(badge).getByRole("button", { name: "Show again" })).toHaveCount(1);
+      await expect(kindRow(badge).getByRole("button", { name: /Ignore|Apply/ })).toHaveCount(0);
+      await expect(kindRow(badge).getByRole("checkbox"), "no selection box on a known device's row").toHaveCount(0);
     }
-    await expect(disc.locator("form.add-newdev").getByRole("button", { name: "Restore" }), "never listed under New devices").toHaveCount(0);
-    await section("Address changed").getByRole("button", { name: "Restore" }).click();
-    await expect(page.getByText("Restored.")).toBeVisible();
-    await expect(showIgn, "Restore keeps the switch on").toHaveAttribute("aria-checked", "true");
-    await expect(section("Address changed")).toContainText("Address changed (1)");
-    await expect(section("Address changed").getByRole("button", { name: "Dismiss" })).toBeVisible();
-    await section("Conflicts").getByRole("button", { name: "Restore" }).click();
-    await expect(section("Conflicts")).toContainText("Conflicts (1)");
-    await expect(showIgn).toContainText("Show ignored (0)");
+    await kindRow("New address").getByRole("button", { name: "Show again" }).click();
+    await expect(page.getByText("Shown again.", { exact: true })).toBeVisible();
+    await expect(disc.getByRole("checkbox", { name: /Show ignored/ }), "Show again keeps the switch on").toBeChecked();
+    await expect(kindRow("New address").getByRole("button", { name: "Apply" })).toBeVisible();
+    await expect(kindRow("New address").getByRole("button", { name: "Ignore" })).toBeVisible();
+    await kindRow("Conflict").getByRole("button", { name: "Show again" }).click();
+    await expect(kindRow("Conflict").getByRole("button", { name: "Ignore" })).toBeVisible();
+    await expect(disc.getByRole("checkbox", { name: "Show ignored (0)" })).toBeVisible();
     await expectNoOverflow(page, "Add devices with restored moves");
   } finally {
     const db2 = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
@@ -200,6 +243,71 @@ test("Discovered: a dismissed address change and conflict are counted, listed an
     } finally {
       db2.close();
     }
+  }
+});
+
+// Why (#905, A3-001): the IP column was a fixed 110 px, so a 12-character address was cut and a 15-character one lost 30 px,
+// shown whole only in a tooltip. The column takes the width of its longest address (at least 140 px) and the name
+// column takes the slack and wraps, so neither a long address nor a long name is cut with an ellipsis.
+test("Discovered: a 15-character address and a long name are shown whole", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { DatabaseSync } = await import("node:sqlite");
+  const file = join(app.dataDir, "tasmofleet.db");
+  const mac = "aa:bb:cc:00:05:01";
+  const withDb = (fn: (db: import("node:sqlite").DatabaseSync) => void) => {
+    const db = new DatabaseSync(file);
+    try {
+      db.exec("PRAGMA busy_timeout=5000");
+      fn(db);
+    } finally {
+      db.close();
+    }
+  };
+  const name = "Workshop ceiling spotlight controller south wing with the extension cable to the shed";
+  const oldHost = "kitchen-strip.home.internal.lan";
+  const moveMac = "aa:bb:cc:00:05:02";
+  withDb((db) => {
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO discovery_proposals (mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at, hostname)
+       VALUES (?, 'new', 'mqtt', '', ?, '127.100.100.100', 80, 'long_topic_name', '', 0, 0, ?, ?, '')`,
+    ).run(mac, name, now - 3600_000, now - 5_000);
+    // a known device stored under a long hostname that announces a new address: its "was <old address>" line
+    // is a second line of the IP cell and must not widen the column (the frame would scroll, the sticky action
+    // column would cover Source and Last seen: the #905 symptom through a secondary line)
+    db.prepare(`INSERT INTO devices (id, name, address, port, mac, created_at, updated_at) VALUES (9716, 'Kitchen strip', ?, 80, ?, ?, ?)`).run(
+      oldHost, moveMac, now, now,
+    );
+    db.prepare(
+      `INSERT INTO discovery_proposals (mac, kind, via, name, address, port, existing_id, dismissed, first_seen, seen_at)
+       VALUES (?, 'address-change', 'mqtt', 'Kitchen strip', '127.100.100.101', 80, 9716, 0, ?, ?)`,
+    ).run(moveMac, now - 3600_000, now - 5_000);
+  });
+  try {
+    await page.goto(app.url + "/devices/new");
+    const frame = box(page, "discovered").locator(".add-disc-table");
+    const sideways = await frame.evaluate((f) => f.scrollWidth - f.clientWidth);
+    expect(sideways, "the table does not scroll sideways at 1280 px with a 30-character old hostname").toBeLessThanOrEqual(0);
+    await expect(box(page, "discovered").getByRole("row").filter({ hasText: "was " + oldHost })).toHaveCount(1);
+    const row = box(page, "discovered").getByRole("row").filter({ hasText: "127.100.100.100" });
+    await expect(row).toHaveCount(1);
+    const cut = await row.evaluate((tr) =>
+      [...tr.querySelectorAll<HTMLElement>("td")]
+        .filter((c) => c.scrollWidth > c.clientWidth + 1 || [...c.querySelectorAll<HTMLElement>("*")].some((x) => x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflowX !== "visible"))
+        .map((c) => `${(c.textContent ?? "").trim().slice(0, 20)}: ${c.scrollWidth} in ${c.clientWidth}`),
+    );
+    expect(cut, "no cell of the row is cut off").toEqual([]);
+    await expect(row.locator("td.mono")).toHaveText("127.100.100.100");
+    await expect(row.locator("td.name")).toContainText(name);
+    await expect(row.locator("td.name")).toContainText("long_topic_name");
+    const ip = await row.locator("td.mono").evaluate((c) => c.clientWidth);
+    expect(ip, "the address column is at least 140 px").toBeGreaterThanOrEqual(139);
+    await expectNoOverflow(page, "Add devices with a long name");
+  } finally {
+    withDb((db) => {
+      db.prepare("DELETE FROM discovery_proposals WHERE mac IN (?, ?)").run(mac, moveMac);
+      db.prepare("DELETE FROM devices WHERE id = 9716").run();
+    });
   }
 });
 
@@ -238,7 +346,7 @@ test("Discovered: Ignore on a stale page is refused and does not hide the device
     await row("Stale lamp").getByRole("button", { name: "Ignore", exact: true }).click();
     await expect(page.getByText("The form is out of date. Reload the page and try again.")).toBeVisible();
     await expect(row("Fresh lamp"), "the device that took the number is still listed").toHaveCount(1);
-    await expect(box(page, "discovered").getByRole("checkbox", { name: /Show ignored/ })).toContainText("Show ignored (0)");
+    await expect(box(page, "discovered").getByRole("checkbox", { name: "Show ignored (0)" })).toBeVisible();
   } finally {
     withDb((db) => db.prepare("DELETE FROM discovery_proposals WHERE mac IN (?, ?)").run(macs[0], macs[1]));
   }

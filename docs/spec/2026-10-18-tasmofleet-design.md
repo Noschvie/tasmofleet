@@ -1590,8 +1590,8 @@ accounts are created fresh). MyConfig `ota_server_ip/port` is printed as a hint 
   row. A changed IP of a device without a password is verified by MAC and updated (fixes DHCP
   drift). A stored hostname is never replaced by an IP, and a device with a password is never
   moved by discovery: both become an "address changed" suggestion that an admin applies or
-  dismisses. Refused attempts are audited at most once per device and day. Dismissed
-  proposals can be listed ("Show ignored") and restored.
+  ignores. Refused attempts are audited at most once per device and day. Ignored
+  proposals can be listed ("Show ignored") and shown again.
 - **HTTP autoscan**: an admin starts a scan of CIDRs, each of which must lie inside
   `DEVICE_NETWORKS` (at most 1024 addresses per scan). It probes `Status 2` with 16
   concurrent requests, a 2 s timeout and 1 retry, and streams results over SSE. It runs as a
@@ -1646,7 +1646,7 @@ over a kept claim, and a topic that becomes an inventory device drops its claim.
 device networks shrink, proposals outside them stay listed until they expire (30 days) but
 cannot be accepted.
 
-**Lookup.** A device that is on the broker but not listed under New devices is in one of four places:
+**Lookup.** A device that is on the broker but not listed in the Discovered table is in one of four places:
 ignored, in the device list (also when discovery bound it to a stored record without MAC, which keeps
 its old name), listed as an address change or conflict, or not identified yet. The Add page answers
 this for one device (#713): `GET /devices/new?why=<IP, MAC or topic>` (admin only) expands the text

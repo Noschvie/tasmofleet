@@ -164,9 +164,10 @@ func TestDiscoveryPageEscapesClaimedNames(t *testing.T) {
 	if strings.Contains(body, "<script>alert(1)") || !strings.Contains(body, "&lt;script&gt;") {
 		t.Fatal("claimed name rendered unescaped")
 	}
-	moves := body[strings.Index(body, `aria-label="Address changed"`):strings.Index(body, `aria-label="Conflicts"`)]
-	conflicts := body[strings.Index(body, `aria-label="Conflicts"`):strings.Index(body, "New devices (")]
-	if !strings.Contains(moves, ">Apply</button>") || !strings.Contains(conflicts, "Resolve this in the inventory") || strings.Contains(conflicts, ">Apply</button>") {
+	table := discTable(body)
+	moveRow := rowWith(table, ">New address<")
+	conflictRow := rowWith(table, ">Conflict<")
+	if !strings.Contains(moveRow, ">Apply</button>") || !strings.Contains(body, "resolve it in the inventory") || conflictRow == "" || strings.Contains(conflictRow, ">Apply</button>") {
 		t.Error("address-change needs a confirm button, a conflict must not offer accept")
 	}
 	if !strings.Contains(body, `name="version" value="v2"`) {
@@ -285,7 +286,7 @@ func TestTooManyRangesRefused(t *testing.T) {
 }
 
 // Why: "Ignore" must be reversible. The page offers "Show ignored" and each
-// ignored device a "Restore" that reaches the service; only admins may use it.
+// ignored device a "Show again" that reaches the service; only admins may use it.
 func TestIgnoredDevicesCanBeShownAndUnignored(t *testing.T) {
 	e, fd := setupDiscovery(t)
 	fd.ignored = []discovery.Proposal{{ID: 9, Version: "v9", Kind: discovery.KindNew, SeenAt: time.Now(), Device: model.Device{Name: "hidden-lamp", Address: "10.0.0.60", MAC: "aa:bb:cc:dd:ee:09"}}}
@@ -294,8 +295,8 @@ func TestIgnoredDevicesCanBeShownAndUnignored(t *testing.T) {
 		t.Fatal("the ignored list must be offered but not shown by default")
 	}
 	_, body = e.do(t, "GET", "/devices/new?ignored=1", "admin", nil)
-	if !strings.Contains(body, "hidden-lamp") || !strings.Contains(body, `formaction="/tf/discovery/proposals/9/undismiss" name="version" value="v9">Restore</button>`) {
-		t.Fatal("ignored devices are not listed with a Restore button")
+	if !strings.Contains(body, "hidden-lamp") || !strings.Contains(body, `formaction="/tf/discovery/proposals/9/undismiss" name="version" value="v9">Show again</button>`) {
+		t.Fatal("ignored devices are not listed with a Show again button")
 	}
 	r, _ := e.do(t, "POST", "/discovery/proposals/9/undismiss", "admin", url.Values{"version": {"v9"}})
 	if r.StatusCode != 303 || len(fd.undismiss) != 1 || fd.undismiss[0] != 9 || fd.undismissVersions[0] != "v9" {
@@ -303,82 +304,75 @@ func TestIgnoredDevicesCanBeShownAndUnignored(t *testing.T) {
 	}
 }
 
-// Why (#714): Dismiss is offered on an address change and on a conflict, so Restore must be too.
+// Why (#714): Ignore is offered on an address change and on a conflict, so Show again must be too.
 // Before, "Show ignored" skipped every dismissed proposal that was not a new device: it neither
 // counted nor listed them, and as the device keeps announcing the same data the 30-day expiry
-// never removed them either, so the dismissal was permanent. Each is listed in its own section
-// (never among the new devices) with Restore as its only action, and Restore puts it back there.
+// never removed them either, so the dismissal was permanent. Each is a row of the table (marked
+// Ignored, never counted among the new devices) with Show again as its only action, and Show
+// again puts it back among the open rows.
 func TestDismissedAddressChangeAndConflictCanBeRestored(t *testing.T) {
 	e, fd := setupDiscovery(t)
-	fd.ignored, fd.props = fd.props[1:], fd.props[:1] // the address change (2) and the conflict (3) are dismissed
+	fd.ignored, fd.props = fd.props[1:], fd.props[:1] // the address change (2) and the conflict (3) are ignored
 
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
-	if !strings.Contains(body, "Show ignored (2)") || !strings.Contains(body, "New devices (1)") {
-		t.Fatal("the switch counts every dismissed kind, the heading only new devices")
+	if !strings.Contains(body, "Show ignored (2)") || !strings.Contains(body, "Waiting for a decision (1)") {
+		t.Fatal("the switch counts every ignored kind, the heading what waits for a decision")
 	}
-	if strings.Contains(body, `aria-label="Address changed"`) || strings.Contains(body, `aria-label="Conflicts"`) {
-		t.Fatal("dismissed proposals stay hidden until the switch is on (D11)")
+	if strings.Contains(body, ">New address<") || strings.Contains(body, ">Conflict<") {
+		t.Fatal("ignored proposals stay hidden until the switch is on (D11)")
 	}
 
 	_, body = e.do(t, "GET", "/devices/new?ignored=1", "admin", nil)
-	i, j, k := strings.Index(body, `aria-label="Address changed"`), strings.Index(body, `aria-label="Conflicts"`), strings.Index(body, "New devices (")
-	if i < 0 || j < i || k < j {
-		t.Fatal("the dismissed address change and conflict need their own sections above the new devices")
-	}
-	moves, conflicts, news := body[i:j], body[j:k], body[k:]
-	for _, c := range []struct{ name, section, id string }{{"address change", moves, "2"}, {"conflict", conflicts, "3"}} {
-		if !strings.Contains(c.section, `formaction="/tf/discovery/proposals/`+c.id+`/undismiss">Restore</button>`) {
-			t.Errorf("%s: no Restore", c.name)
+	table := discTable(body)
+	for _, c := range []struct{ name, badge, id string }{{"address change", ">New address<", "2"}, {"conflict", ">Conflict<", "3"}} {
+		row := rowWith(table, c.badge)
+		if row == "" {
+			t.Errorf("%s: no row", c.name)
+			continue
 		}
-		if !strings.Contains(c.section, "Ignored") {
+		if !strings.Contains(row, `formaction="/tf/discovery/proposals/`+c.id+`/undismiss" name="version" value="`) || !strings.Contains(row, `>Show again</button>`) {
+			t.Errorf("%s: no Show again", c.name)
+		}
+		if !strings.Contains(row, ">Ignored<") {
 			t.Errorf("%s: not marked as ignored", c.name)
 		}
-		if strings.Contains(c.section, ">Apply</button>") || strings.Contains(c.section, ">Dismiss</button>") {
-			t.Errorf("%s: an ignored proposal's only action is Restore", c.name)
-		}
-		if !strings.Contains(c.section, `<input type="hidden" name="ignored" value="1">`) {
-			t.Errorf("%s: Restore must return to the list with the switch on", c.name)
-		}
-		if strings.Contains(news, `proposals/`+c.id+`/`) {
-			t.Errorf("%s: must never be listed under New devices", c.name)
+		if strings.Contains(row, ">Apply</button>") || strings.Contains(row, ">Ignore</button>") {
+			t.Errorf("%s: an ignored proposal's only action is Show again", c.name)
 		}
 	}
-	if !strings.Contains(body, "New devices (1)") {
+	if !strings.Contains(body, `<input type="hidden" name="ignored" value="1">`) {
+		t.Error("Show again must return to the list with the switch on")
+	}
+	if !strings.Contains(body, "Waiting for a decision (1)") {
 		t.Error("ignored rows of other kinds do not count as new devices")
 	}
 
 	for _, id := range []string{"2", "3"} {
 		if r, _ := e.do(t, "POST", "/discovery/proposals/"+id+"/undismiss", "admin", url.Values{"version": {"v" + id}}); r.StatusCode != 303 {
-			t.Fatalf("restore %s: status %d", id, r.StatusCode)
+			t.Fatalf("show again %s: status %d", id, r.StatusCode)
 		}
 	}
 	_, body = e.do(t, "GET", "/devices/new", "admin", nil)
-	i, j, k = strings.Index(body, `aria-label="Address changed"`), strings.Index(body, `aria-label="Conflicts"`), strings.Index(body, "New devices (")
-	if i < 0 || j < i || k < j {
-		t.Fatal("restored proposals are back in their sections")
-	}
-	if !strings.Contains(body[i:j], "Address changed (1)") || !strings.Contains(body[i:j], ">Apply</button>") ||
-		!strings.Contains(body[j:k], "Conflicts (1)") || !strings.Contains(body, "Show ignored (0)") {
-		t.Error("restored sections lack their count or Apply, or the switch still counts them")
+	table = discTable(body)
+	if !strings.Contains(rowWith(table, ">New address<"), ">Apply</button>") || !strings.Contains(table, ">Conflict<") || !strings.Contains(body, "Show ignored (0)") {
+		t.Error("restored rows are not back, or lack Apply, or the switch still counts them")
 	}
 }
 
-// Why: the suggestion for a known device must be recognisable as such, not as
-// a new one: it is listed under "Address changed" with the stored device's name
-// and both addresses, never among the new devices.
+// Why: the suggestion for a known device must be recognisable as such, not as a new one: it is a row
+// marked New address with the stored device's name and both addresses, and it does not count as a new device.
 func TestAddressChangeIsLabelledAsKnownDevice(t *testing.T) {
 	e, _ := setupDiscovery(t)
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
-	i, j := strings.Index(body, `aria-label="Address changed"`), strings.Index(body, "New devices (")
-	if i < 0 || j < i {
-		t.Fatal("no Address changed section above the new devices")
+	moves := rowWith(discTable(body), ">New address<")
+	if moves == "" {
+		t.Fatal("no New address row")
 	}
-	moves, news := body[i:j], body[j:]
-	if !strings.Contains(moves, "Address changed (1)") || !strings.Contains(moves, `href="/tf/devices/2"`) || !strings.Contains(moves, "<b>10.0.0.51</b>") {
+	if !strings.Contains(moves, `href="/tf/devices/2"`) || !strings.Contains(moves, "<b>10.0.0.51</b>") || !strings.Contains(moves, "was 10.0.0.2") {
 		t.Errorf("address change: %s", moves)
 	}
-	if strings.Contains(news, "10.0.0.51") || !strings.Contains(body, "New devices (1)") {
-		t.Error("an address change must not count or show as a new device")
+	if !strings.Contains(body, "Waiting for a decision (3)") {
+		t.Error("the heading must count the new device, the address change and the conflict the table lists")
 	}
 }
 

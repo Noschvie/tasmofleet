@@ -10516,7 +10516,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   border-top: var(--hair-w) solid var(--color-border);
 }
 
-/* Discovered: address changes (and conflicts) */
+/* Discovered: the lookup answer and the topics MQTT saw but could not identify */
 .add-moves {
   margin-bottom: var(--sp-14);
   overflow: hidden;
@@ -10587,7 +10587,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 
 /* Discovered: "Show ignored" help and the lookup "Not listed?" (#713) */
 .add-ignhelp {
-  margin: 0 0 var(--sp-10);
+  margin: 0 0 var(--sp-8);
   font-size: 12.5px;
   color: var(--color-text-2);
 }
@@ -10610,13 +10610,22 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
 }
 
-/* Discovered: the New devices bar, "Show ignored" (a link drawn as a checkbox) */
+/* Discovered: the New devices bar and "Show ignored" (a GET form with a real checkbox). The POST form of
+   the table is display: contents, so its bulk buttons sit in the same row as the heading and the checkbox;
+   the rest of it (notes, chips, table) is the full-width line below. */
 .add-bar {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
   flex-wrap: wrap;
   margin-bottom: var(--sp-10);
+}
+.add-newdev {
+  display: contents;
+}
+.add-bar-body {
+  flex: 0 0 100%;
+  min-width: 0;
 }
 .add-bar h2 {
   margin-right: var(--sp-8);
@@ -10625,24 +10634,9 @@ dialog.fw-notes-dlg .fw-dlg-body {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
+}
+.add-showign .ucheck {
   min-height: var(--ctl);
-  font-size: 13px;
-  color: var(--color-text);
-  text-decoration: none;
-}
-.add-box {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  border: var(--hair-w) solid var(--color-text-2);
-  border-radius: 3px;
-  background: var(--color-surface);
-}
-.add-showign[aria-checked="true"] .add-box {
-  border-color: var(--color-accent);
-  background: var(--color-accent)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E")
-    center / 14px no-repeat;
 }
 
 /* the tables of Discovered and Network scan: fixed columns, the actions stay at the right edge */
@@ -10660,10 +10654,18 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
 }
 .add-disc-table table {
-  min-width: 700px; /* #410: the Discovered box is two thirds wide; below this the table scrolls */
+  /* #905: the columns size to their content (an address is never cut), the name column takes the slack and
+     wraps. The widths below are minimums; the name keeps 146 px, so the table scrolls inside its frame
+     before the name collapses. */
+  table-layout: auto;
+  min-width: 750px; /* the fixed columns take 604 px with the selection column, the name keeps 146: below this the frame scrolls instead of squeezing the headers */
+}
+.add-disc-table td.name,
+.add-disc-table th:nth-child(2) {
+  min-width: 146px;
 }
 .add-scan-table table {
-  min-width: 940px; /* the fixed columns take 766 px with the selection column, the name keeps 170 */
+  min-width: 950px; /* the fixed columns take 776 px with the selection column, the name keeps 170 */
 }
 .add-table thead th {
   height: 38px;
@@ -10734,6 +10736,56 @@ dialog.fw-notes-dlg .fw-dlg-body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the Discovered name wraps instead of being cut: the full name, topic and reason are text, not a tooltip */
+.add-disc-table td.name {
+  white-space: normal;
+  overflow: visible;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.add-disc-table .add-label {
+  flex-wrap: wrap;
+}
+.add-disc-table .add-label-t {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.add-disc-table .add-label a.add-label-t {
+  color: var(--color-text);
+  text-decoration: none;
+}
+.add-disc-table .add-label a.add-label-t:hover {
+  text-decoration: underline;
+}
+/* a second line under a cell's value: the MQTT topic, the old address, a row's own reason */
+.add-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
+.add-disc-table td.mono .add-sub {
+  font-family: var(--font-mono);
+  /* only the address itself sets the column's width; a long old hostname breaks inside it (anywhere, above) */
+  white-space: normal;
+}
+/* a known device's own reason: under its row, across the table, so it does not wrap in the name column */
+.add-disc-table tr.has-note td {
+  border-bottom: 0;
+}
+.add-disc-table td.add-note-cell {
+  height: auto;
+  padding: 0 10px 10px 54px;
+  white-space: normal;
+  overflow: visible;
+  font-size: 12px;
+  color: var(--color-text-2);
+}
+.add-disc-table td.mono b {
+  font-weight: 600;
+}
 
 .add-table th.act,
 .add-table td.act {
@@ -10769,10 +10821,10 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: auto;
 }
 .add-disc-table col.c-ip {
-  width: 110px;
+  width: 140px; /* at least; the cells do not wrap, so a longer address widens the column (#905) */
 }
 .add-disc-table col.c-src {
-  width: 132px;
+  width: 128px;
 }
 .add-disc-table col.c-last {
   width: 88px;
@@ -10784,7 +10836,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: auto; /* #811: the name takes what the fixed columns leave, so no column is cut off while there is room */
 }
 .add-scan-table col.c-ip {
-  width: 130px;
+  width: 140px; /* a 15-character address in 12.5 px mono needs about 113 px plus the padding (#905) */
 }
 .add-scan-table col.c-mac {
   width: 160px;
@@ -10874,6 +10926,14 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .add-card-src {
   font-size: 12px;
   color: var(--color-text-3);
+}
+.add-card-why {
+  font-size: 12px;
+  color: var(--color-text-2);
+}
+a.add-card-name {
+  color: var(--color-text);
+  text-decoration: none;
 }
 .add-card-acts {
   display: flex;

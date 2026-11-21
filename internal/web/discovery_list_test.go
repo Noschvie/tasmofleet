@@ -72,8 +72,15 @@ func TestNewDevicesFilterByState(t *testing.T) {
 	}
 	// the chips and the ignored switch keep the other parameters
 	_, body = e.do(t, "GET", "/devices/new?state=offline&sort=ip&dir=desc", "admin", nil)
-	if !strings.Contains(body, "ignored=1") || !strings.Contains(body, "state=online") || !strings.Contains(body, "sort=ip") {
+	if !strings.Contains(body, "state=online") || !strings.Contains(body, "sort=ip") {
 		t.Error("links lose the filter or sort")
+	}
+	// the Show ignored form is a GET form: it keeps them in hidden fields
+	form := reShowIgnForm.FindString(body)
+	for _, want := range []string{`name="state" value="offline"`, `name="sort" value="ip"`, `name="dir" value="desc"`} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the Show ignored form loses %s: %s", want, form)
+		}
 	}
 }
 

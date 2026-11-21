@@ -242,7 +242,7 @@ func viaText(via string) string {
 }
 
 // dashProposals are the proposals an admin can act on from the dashboard: new devices (Ignore,
-// Add) first, then address changes (Dismiss, Apply). Conflicts need the discovery page.
+// Add) first, then address changes (Ignore, Apply). Conflicts need the discovery page.
 func dashProposals(base string, props []discovery.Proposal, devs map[model.DeviceID]model.Device) []ui.AttProposal {
 	var news, moves []ui.AttProposal
 	act := func(p discovery.Proposal, verb string) string {
@@ -266,7 +266,7 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 				continue
 			}
 			moves = append(moves, ui.AttProposal{Name: cur.Name, Text: "Address changed · " + cur.Address + " → " + p.Device.Address,
-				Primary: "Apply", Secondary: "Dismiss", PrimaryAction: act(p, "accept"), SecondaryAction: act(p, "dismiss"), Version: p.Version})
+				Primary: "Apply", Secondary: "Ignore", PrimaryAction: act(p, "accept"), SecondaryAction: act(p, "dismiss"), Version: p.Version})
 		}
 	}
 	out := append(news, moves...)

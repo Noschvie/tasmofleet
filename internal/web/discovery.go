@@ -57,8 +57,14 @@ func (h *handler) registerDiscovery(route func(string, func(http.Handler) http.H
 	route("POST /discovery/proposals/dismiss", adm, h.discoveryDismissSelected)
 }
 
-// discView is the Discovered box: the address changes and conflicts a known device reported,
-// then the new devices (and, with ?ignored=1, the ignored ones) with selection, Ignore and Add….
+// OpenCount is what the table's heading counts: the new devices and the known devices at a new address or in a
+// conflict that wait for a decision (the ignored rows listed after them are counted by Show ignored).
+func (v discView) OpenCount() int {
+	return v.NewCount + openMoves(v.Moves) + openMoves(v.Conflicts)
+}
+
+// discView is the Discovered box: one table of the address changes and conflicts a known device reported
+// and the new devices (and, with ?ignored, the ignored ones), with selection, Ignore and Add….
 type discView struct {
 	Base, CSRF string
 	// Off: MQTT discovery is switched off (or there is no broker), only scans find devices.
@@ -111,20 +117,62 @@ type propRow struct {
 	OfflineText    string // "Offline since 2 h ago" style words, "" when not offline or the moment is unknown
 }
 
-// moveRow is a known device that announced itself at a new address (or a conflict).
+// moveRow is a known device that announced itself at a new address (or a conflict): a row of the
+// Discovered table. The same type carries the topics MQTT saw but could not identify (Unident).
 type moveRow struct {
 	ID       int64
 	Version  string
 	Name     string
 	Href     string // the stored device
 	Seen     time.Time
-	SeenText string // "4 min ago · MQTT discovery"
+	SeenText string // "4 min ago · MQTT discovery" (the unidentified topics)
+	Source   string // "MQTT discovery", "Network scan": the Source column of the table
+	LastText string // "4 min ago": the Last seen column
 	Old, New string
+	// Why is the row's own exception (a stored hostname or password, a refusal). What holds for every
+	// row of its kind is said once above the table (discView.Help).
 	Why      string
 	CanApply bool
-	Ignored  bool // dismissed (shown with "Show ignored"): the only action is Restore
+	Ignored  bool // ignored (shown with "Show ignored"): the only action is Show again
 	Conflict bool // a conflict, not an address change
 }
+
+// The sentences above the Discovered table, one per kind of row that is listed (not ignored). A row
+// repeats none of them.
+const (
+	moveHelp     = "Known devices marked New address announced themselves at a new IP and can’t be moved automatically. The new address must answer with the device’s MAC before TasmoFleet uses it."
+	conflictHelp = "A Conflict means another device claims the address or MQTT topic of a known device. Nothing is changed until you resolve it in the inventory (edit or delete the stored device), then ignore it."
+)
+
+// Help says once what the rows of the table need explained: what Add and Add… do, what a new address
+// is, what a conflict is. Only kinds that have an open row are explained.
+func (v discView) Help() []string {
+	var out []string
+	for _, r := range v.Rows {
+		if !r.Ignored {
+			if v.HasDefault {
+				out = append(out, "Add uses the default device password from Settings. Add… opens the form so you can type the device’s own web password first.")
+			} else {
+				out = append(out, "Add uses no web password; Add… lets you type one first.")
+			}
+			break
+		}
+	}
+	if openMoves(v.Moves) > 0 {
+		out = append(out, moveHelp)
+	}
+	if openMoves(v.Conflicts) > 0 {
+		out = append(out, conflictHelp)
+	}
+	return out
+}
+
+// HasTable says whether the table has a row: a new device, or a known device that reported something.
+func (v discView) HasTable() bool { return len(v.Rows) > 0 || len(v.Moves) > 0 || len(v.Conflicts) > 0 }
+
+// ignoredShown reads the "Show ignored" switch: any value turns it on. The checkbox of the GET form
+// sends "on", the links and the hidden fields of the POST forms send "1".
+func ignoredShown(q url.Values) bool { return q.Get("ignored") != "" }
 
 // discoveryOff reports whether MQTT discovery cannot find devices: switched off in the
 // settings, or no broker to listen on.
@@ -144,7 +192,7 @@ func (h *handler) discoveryOff() bool {
 
 func (h *handler) discoveryData(r *http.Request) discView {
 	q := listParams(r)
-	v := discView{ShowIgn: q.Get("ignored") == "1", Off: h.discoveryOff(), ProposalDays: proposalDays()}
+	v := discView{ShowIgn: ignoredShown(q), Off: h.discoveryOff(), ProposalDays: proposalDays()}
 	if h.d.SysConfig != nil {
 		v.Settings = httpBase(r) + sysPath + "?section=discovery"
 	}
@@ -249,8 +297,9 @@ func (v *discView) addMove(m moveRow) {
 
 // moveRowOf is the row of an address change or a conflict; an ignored one can only be restored.
 func (h *handler) moveRowOf(ctx context.Context, base string, now time.Time, p discovery.Proposal, ignored bool) moveRow {
+	src := viaText(p.Via)
 	m := moveRow{ID: p.ID, Version: p.Version, Name: p.Device.Name, Seen: p.SeenAt, Ignored: ignored, Conflict: p.Kind == discovery.KindConflict,
-		SeenText: agoWords(now, p.SeenAt) + " · " + viaText(p.Via), New: netaddr.Display(p.Device.Address, p.Device.Port, "http"),
+		SeenText: agoWords(now, p.SeenAt) + " · " + src, Source: strings.ToUpper(src[:1]) + src[1:], LastText: agoWords(now, p.SeenAt), New: netaddr.Display(p.Device.Address, p.Device.Port, "http"),
 		CanApply: p.Kind == discovery.KindAddressChange && !ignored}
 	if p.ExistingID != 0 {
 		if d, err := h.d.Inventory.Get(ctx, p.ExistingID); err == nil {
@@ -259,13 +308,13 @@ func (h *handler) moveRowOf(ctx context.Context, base string, now time.Time, p d
 			if p.Kind == discovery.KindAddressChange {
 				if merr := discovery.MoveRefusal(d); merr != nil {
 					m.CanApply = false
-					m.Why = capitalize(strings.TrimPrefix(merr.Error(), discovery.ErrNotAcceptable.Error()+": ")) + ". Change it in the device edit form, then dismiss this."
+					m.Why = capitalize(strings.TrimPrefix(merr.Error(), discovery.ErrNotAcceptable.Error()+": ")) + ". Change it in the device edit form, then ignore this."
 				}
 			}
 		}
 	}
 	if p.Kind == discovery.KindConflict {
-		m.Why = "Another device claims its address or MQTT topic. Resolve this in the inventory (edit or delete the stored device), then dismiss it."
+		m.Why = "" // conflictHelp says it once above the table
 	}
 	return m
 }
@@ -337,7 +386,7 @@ func discState(q url.Values) string {
 }
 
 // listParams are the list's own parameters (state, sort, dir, ignored): from the URL, and on a
-// POST from the form's hidden fields, so Add, Ignore and Restore leave the list as it was.
+// POST from the form's hidden fields, so Add, Ignore and Show again leave the list as it was.
 func listParams(r *http.Request) url.Values {
 	q := r.URL.Query()
 	if r.Method == http.MethodPost {
@@ -355,15 +404,17 @@ func listParams(r *http.Request) url.Values {
 func discBack(r *http.Request, ok string) string {
 	q := listParams(r)
 	key, dir := discSort(q)
-	href := discHref("", discState(q), key, dir, q.Get("ignored") == "1")
+	href := discHref("", discState(q), key, dir, ignoredShown(q))
 	if strings.Contains(href, "?") {
 		return href + "&ok=" + ok
 	}
 	return href + "?ok=" + ok
 }
 
-// discHref is the Add page's URL with the given filter, sort and ignored switch.
-func discHref(base, state, sortKey, dir string, ignored bool) string {
+// discQuery is the list's own parameters as they go into a URL or a form: the state filter and the sort
+// when they differ from the default, and the ignored switch. Links (discHref) and the hidden fields of the
+// Show ignored form (discFields) both come from it, so the two cannot drift.
+func discQuery(state, sortKey, dir string, ignored bool) url.Values {
 	q := url.Values{}
 	if state != stateAll {
 		q.Set("state", state)
@@ -375,10 +426,29 @@ func discHref(base, state, sortKey, dir string, ignored bool) string {
 	if ignored {
 		q.Set("ignored", "1")
 	}
+	return q
+}
+
+// discHref is the Add page's URL with the given filter, sort and ignored switch.
+func discHref(base, state, sortKey, dir string, ignored bool) string {
+	q := discQuery(state, sortKey, dir, ignored)
 	if len(q) == 0 {
 		return base + "/devices/new"
 	}
 	return base + "/devices/new?" + q.Encode()
+}
+
+// discFields are the hidden fields of the Show ignored form: the filter and the sort the list has now,
+// so ticking the box changes nothing else. The box itself is the form's own field.
+func discFields(p discView) [][2]string {
+	q := discQuery(p.State, p.Sort, p.Dir, false)
+	var out [][2]string
+	for _, k := range []string{"state", "sort", "dir"} {
+		if v := q.Get(k); v != "" {
+			out = append(out, [2]string{k, v})
+		}
+	}
+	return out
 }
 
 // sortRows orders the rows by key: the ignored ones stay after the new ones, equal values keep
@@ -429,7 +499,8 @@ func compareAddr(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-// moveWhy says in a sentence why discovery left an address change to an admin.
+// moveWhy says why discovery left this address change to an admin when it is not the usual reason
+// (the new address must prove the MAC, which moveHelp says once for all rows); "" for the usual one.
 func moveWhy(p discovery.Proposal, d model.Device) string {
 	switch {
 	case !isIPAddress(d.Address):
@@ -437,7 +508,7 @@ func moveWhy(p discovery.Proposal, d model.Device) string {
 	case d.HasCredentials():
 		return "It has a stored web password, so TasmoFleet won’t move it on its own. Apply sends the password to the new address."
 	}
-	return "The new address must answer with the device’s MAC before TasmoFleet uses it."
+	return ""
 }
 
 func isIPAddress(s string) bool {
@@ -633,13 +704,13 @@ func (h *handler) shownProposal(r *http.Request, id int64) (shownProposal, bool)
 	}
 	sp := shownProposal{P: p, CanApply: p.Kind != discovery.KindConflict}
 	if p.Kind == discovery.KindConflict {
-		sp.Why = "Resolve this in the inventory (edit or delete the stored device), then dismiss it."
+		sp.Why = "Resolve this in the inventory (edit or delete the stored device), then ignore it."
 	}
 	if p.Kind == discovery.KindAddressChange && p.ExistingID != 0 {
 		if d, err := h.d.Inventory.Get(r.Context(), p.ExistingID); err == nil {
 			if merr := discovery.MoveRefusal(d); merr != nil {
 				sp.CanApply = false
-				sp.Why = capitalize(strings.TrimPrefix(merr.Error(), discovery.ErrNotAcceptable.Error()+": ")) + ". Change it in the device edit form, then dismiss this."
+				sp.Why = capitalize(strings.TrimPrefix(merr.Error(), discovery.ErrNotAcceptable.Error()+": ")) + ". Change it in the device edit form, then ignore this."
 			}
 		}
 	}
@@ -834,7 +905,7 @@ func (h *handler) discoveryUndismiss(w http.ResponseWriter, r *http.Request) {
 	h.discoveryToggle(w, r, h.d.Discovery.Undismiss, "undismissed")
 }
 
-// discoveryToggle is Ignore or Restore of the proposal numbered in the path. The form carries
+// discoveryToggle is Ignore or Show again of the proposal numbered in the path. The form carries
 // the version the page showed; the number alone is not enough because it is reused after
 // the row behind it is deleted, so a stale page would act on another device (#745).
 func (h *handler) discoveryToggle(w http.ResponseWriter, r *http.Request, act func(ctx context.Context, actor string, id int64, version string) error, done string) {

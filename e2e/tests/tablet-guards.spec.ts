@@ -36,11 +36,12 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)]);
-  // proposals for the New devices list of Devices -> Add (a table only a discovery fills)
+  // proposals for the New devices list of Devices -> Add (a table only a discovery fills); the longest IPv4
+  // address (15 characters) is in it on purpose: the IP column must show it whole (#905, guard s)
   await insertProposals(app, [
     { mac: "aa:bb:cc:00:01:01", name: "Workshop lamp", topic: "workshop_lamp", host: "workshop-lamp-1a2b", ip: "127.0.0.11", seen: 600 },
     { mac: "aa:bb:cc:00:01:02", name: "", topic: "attic_fan", host: "tasmota-attic-3c4d", ip: "127.0.0.9", seen: 300 },
-    { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", host: "balcony-plug-5e6f", ip: "127.0.0.100", seen: 60 },
+    { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", host: "balcony-plug-5e6f", ip: "127.100.100.100", seen: 60 },
   ]);
   const p = await browser.newPage({ extraHTTPHeaders: adam });
   try {

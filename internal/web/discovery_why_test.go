@@ -68,7 +68,10 @@ func (n *whyNet) Connected() bool                           { return true }
 
 func (n *whyNet) sent() int32 { return n.probes.Load() + n.asks.Load() + n.pubs.Load() }
 
-func newWhyEnv(t *testing.T) *whyEnv {
+func newWhyEnv(t *testing.T) *whyEnv { return newWhyEnvWith(t, nil) }
+
+// newWhyEnvWith is newWhyEnv with a change to the web dependencies (a fleet default password, for one).
+func newWhyEnvWith(t *testing.T, mutate func(*Deps)) *whyEnv {
 	t.Helper()
 	dir := t.TempDir()
 	box, err := secretbox.LoadOrCreate(dir)
@@ -96,7 +99,12 @@ func newWhyEnv(t *testing.T) *whyEnv {
 	done := make(chan struct{})
 	go func() { _ = mgr.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
-	e := setupWith(t, func(d *Deps) { d.Inventory, d.Discovery = inv, mgr })
+	e := setupWith(t, func(d *Deps) {
+		d.Inventory, d.Discovery = inv, mgr
+		if mutate != nil {
+			mutate(d)
+		}
+	})
 	return &whyEnv{env: e, st: st, inv: inv, mgr: mgr, net: n}
 }
 
@@ -193,6 +201,10 @@ func TestLookupOfAnIgnoredDeviceOffersRestoreWithItsVersion(t *testing.T) {
 			t.Fatalf("%q: status %d", q, status)
 		}
 		hasAll(t, body, "porch", "is ignored", `action="/tf/discovery/proposals/`+id+`/undismiss"`, `name="version" value="`+ver+`"`)
+		hasAll(t, body, ">Show again</button>")
+		if strings.Contains(body, ">Restore</button>") {
+			t.Errorf("%q: the answer says Restore, the table says Show again", q)
+		}
 	}
 	res, _ := w.do(t, "POST", "/discovery/proposals/"+id+"/undismiss", "admin", url.Values{"version": {ver}})
 	if res.StatusCode != 303 {
@@ -202,7 +214,7 @@ func TestLookupOfAnIgnoredDeviceOffersRestoreWithItsVersion(t *testing.T) {
 		t.Fatalf("the restored device is not under New devices: %+v", got)
 	}
 	_, body := w.lookup(t, "porch")
-	hasAll(t, body, "New devices")
+	hasAll(t, body, "is listed in the table.")
 	if strings.Contains(body, "is ignored") {
 		t.Error("the answer still says ignored after Restore")
 	}
@@ -295,5 +307,26 @@ func TestLookupIsAdminOnly(t *testing.T) {
 	res, body := e.do(t, "GET", "/devices/new?why=lamp", "operator", nil)
 	if res.StatusCode == 200 || strings.Contains(body, `id="why"`) {
 		t.Fatalf("an operator got status %d", res.StatusCode)
+	}
+}
+
+// Why (A3-005): an address change is a row of the Discovered table now, not a section of its own. The
+// answer of the lookup must name the place the device is in (a section that no longer exists would send the
+// admin to a link that goes nowhere) and link to the table.
+func TestLookupOfAnAddressChangeLinksToTheTable(t *testing.T) {
+	w := newWhyEnv(t)
+	id, err := w.inv.Create(t.Context(), "t", model.Device{Name: "lamp", Address: "10.0.0.60", MAC: "02:00:5e:00:00:07", Topic: "lamp", HTTPPassword: "pw"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.mgr.HandleMQTT(w.discoveryConfig("02:00:5e:00:00:07", "10.0.0.61", "lamp", "Lamp"))
+	waitFor(t, "the address change to be proposed", func() bool {
+		props, _ := w.mgr.Proposals(t.Context())
+		return len(props) == 1 && props[0].Kind == discovery.KindAddressChange && props[0].ExistingID == id
+	})
+	_, body := w.lookup(t, "10.0.0.61")
+	hasAll(t, body, "is listed in the table with the badge New address", `href="#disc-new"`)
+	if strings.Contains(body, "listed under Address changed") || strings.Contains(body, `href="#disc-address-changed"`) {
+		t.Error("the answer sends the admin to a section that no longer exists")
 	}
 }

@@ -76,7 +76,7 @@ func TestAuditSummaryPerActionType(t *testing.T) {
 		{"scan refused", ev("discovery.scan_refused", "", "refused: outside device networks", `{"cidrs":["10.0.0.0/8"]}`), "Network scan refused", "refused", "Outside device networks"},
 		{"accept", ev("discovery.accept", "proposal:5", "ok", `{"kind":"address-change","mac":"aa","address":"172.31.13.9"}`), "Accept discovered device", "ok", "Known device – address changed · 172.31.13.9"},
 		{"dismiss", ev("discovery.dismiss", "proposal:5", "ok", `{"kind":"new","name":"Lamp","mac":"aa","address":"172.31.13.9"}`), "Ignore discovered device", "ok", "New device · 172.31.13.9"},
-		{"undismiss", ev("discovery.undismiss", "proposal:5", "ok", `{"kind":"address-change","name":"Lamp","mac":"aa","address":"172.31.13.9"}`), "Un-ignore discovered device", "ok", "Known device – address changed · 172.31.13.9"},
+		{"undismiss", ev("discovery.undismiss", "proposal:5", "ok", `{"kind":"address-change","name":"Lamp","mac":"aa","address":"172.31.13.9"}`), "Show discovered device again", "ok", "Known device – address changed · 172.31.13.9"},
 		{"dismiss before the detail existed", ev("discovery.dismiss", "proposal:5", "ok", `{}`), "Ignore discovered device", "ok", ""},
 		{"firmware delete", ev("firmware.delete", "artifact:7", "ok", `{"release":"16.0.0","file":"tasmota.bin.gz","size":1}`), "Delete firmware file", "ok", "16.0.0 · tasmota.bin.gz"},
 		{"firmware delete refused", ev("firmware.delete", "artifact:7", "refused: needed by transaction #3", `{}`), "Delete firmware file", "refused", "Needed by transaction #3"},

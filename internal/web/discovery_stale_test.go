@@ -246,7 +246,7 @@ func TestIgnoreAndRestoreButtonsCarryTheShownVersion(t *testing.T) {
 		{add, "Add page Ignore", `formaction="/tf/discovery/proposals/4/dismiss" name="version" value="v4"`, 2},
 		{add, "Add page Restore", `formaction="/tf/discovery/proposals/5/undismiss" name="version" value="v5"`, 2},
 		{scan, "scan Ignore", `formaction="/tf/discovery/proposals/4/dismiss" name="version" value="v4"`, 2},
-		{scan, "scan Un-ignore", `formaction="/tf/discovery/proposals/5/undismiss" name="version" value="v5"`, 2},
+		{scan, "scan Show again", `formaction="/tf/discovery/proposals/5/undismiss" name="version" value="v5"`, 2},
 	} {
 		if n := strings.Count(c.page, c.want); n != c.count {
 			t.Errorf("%s: %d buttons carry the version, want %d", c.name, n, c.count)

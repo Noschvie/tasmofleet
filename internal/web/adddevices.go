@@ -63,9 +63,9 @@ func (h *handler) renderAdd(w http.ResponseWriter, r *http.Request, status int, 
 	case "moved":
 		v.Flash = "Address updated."
 	case "dismissed":
-		v.Flash = "Dismissed."
+		v.Flash = "Ignored."
 	case "undismissed":
-		v.Flash = "Restored."
+		v.Flash = "Shown again."
 	}
 	h.show(w, r, status, "add", v, addPageView(page))
 }
@@ -232,8 +232,8 @@ func sortHeader(p discView, key string) (href, class, aria string) {
 	return discHref(p.Base, p.State, key, dir, p.ShowIgn), class, aria
 }
 
-// openMoves counts the rows that are not dismissed: the heading of an Address changed or Conflicts
-// section counts what waits for a decision, not the ignored rows listed after them.
+// openMoves counts the rows that are not ignored: what waits for a decision, not the ignored rows
+// listed after them.
 func openMoves(rows []moveRow) int {
 	n := 0
 	for _, m := range rows {
@@ -242,11 +242,6 @@ func openMoves(rows []moveRow) int {
 		}
 	}
 	return n
-}
-
-// showIgnoredHref is the "Show ignored" switch: a link to the other state.
-func showIgnoredHref(p discView) string {
-	return discHref(p.Base, p.State, p.Sort, p.Dir, !p.ShowIgn)
 }
 
 // listSep is the separator before item i of n in running text: ", " or " and ".

@@ -126,7 +126,7 @@ func TestDashboardNeedsAttention(t *testing.T) {
 	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
 	order := []string{
 		"Shed Light", "New device · 10.0.0.88 · Network scan", "/tf/discovery/proposals/30/dismiss", ">Ignore<", "/tf/discovery/proposals/30/accept", ">Add<",
-		"kitchen", "Address changed · 10.0.0.1 → 10.0.0.11", ">Dismiss<", "/tf/discovery/proposals/31/accept", ">Apply<",
+		"kitchen", "Address changed · 10.0.0.1 → 10.0.0.11", ">Ignore<", "/tf/discovery/proposals/31/accept", ">Apply<",
 		"hallway", "Offline · last seen 5h ago",
 		"annex", "Has not answered since it was added",
 		"porch", "Refuses the stored web login",
