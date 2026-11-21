@@ -194,4 +194,11 @@ test("a switch that cannot be sent says which device and relay it is", async ({ 
     b.click();
   });
   await expect(toast.filter({ hasText: "Attic, left relay 1 was not sent: no connection" })).toHaveCount(1);
+  // a long device name is cut, the relay is kept: the toast still names the switch instead of "The request"
+  await toggle.evaluate((b) => {
+    document.getElementById(b.getAttribute("aria-labelledby")!.split(" ")[0])!.textContent =
+      "workshop-ceiling-spotlight-controller-north";
+    b.click();
+  });
+  await expect(toast.filter({ hasText: "workshop-ceiling-spotlight-cont… relay 1 was not sent: no connection" })).toHaveCount(1);
 });

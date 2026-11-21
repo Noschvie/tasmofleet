@@ -580,19 +580,24 @@
 
   // The name of a control for a message: what it says, else what it is labelled. A list switch is named
   // by the texts its aria-labelledby points at ("Attic Dimmer relay 1": the device and the relay, #1074); those
-  // are whole words and are not cut. Any other name is cut at its first comma ("Save, and close").
+  // are not cut at a comma, and a device name too long for a message is shortened, never the relay. Any other name is cut at its first comma ("Save, and close").
   function nameOf(el) {
-    var by = (el instanceof HTMLButtonElement ? el.getAttribute("aria-labelledby") || "" : "")
+    var parts = (el instanceof HTMLButtonElement ? el.getAttribute("aria-labelledby") || "" : "")
       .split(/\s+/)
       .map(function (id) {
         var t = id && document.getElementById(id);
-        return t ? t.textContent : "";
+        return t ? t.textContent.replace(/\s+/g, " ").trim() : "";
       })
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (by) {
-      return by.length <= 40 ? by : "The request";
+      .filter(Boolean);
+    if (parts.length) {
+      var last = parts.pop();
+      var head = parts.join(" ");
+      if (head.length + last.length + 1 <= 40) {
+        return (head + " " + last).trim();
+      }
+      // too long for a message: cut the device, never the relay ("workshop-ceiling-spotlight-cont… relay 1")
+      var room = 40 - last.length - 2;
+      return room >= 1 ? head.slice(0, room) + "\u2026 " + last : "The request";
     }
     var src = el instanceof HTMLFormElement ? submitButtons(el)[0] : null;
     var s =

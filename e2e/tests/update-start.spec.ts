@@ -112,7 +112,7 @@ test.describe("in a browser at UTC+5:30", () => {
     // the audit entry records the planned start, in UTC, as the instant the browser sent
     await page.goto(app.url + "/audit");
     const entry = page.locator("table.audittable tbody tr", { hasText: "Start update" }).first();
-    await entry.getByText("Details", { exact: true }).click();
+    await entry.locator("summary").click();
     const planned = new Date(instant).toISOString().replace(".000Z", "Z");
     await expect(entry.locator("xpath=following-sibling::tr[1]")).toContainText(`"start_at": "${planned}"`);
 

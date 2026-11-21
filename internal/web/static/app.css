@@ -13838,7 +13838,6 @@ button.pol-chip-x {
 .pol-ed-foot {
   display: flex;
   justify-content: flex-end;
-  align-items: flex-end; /* the buttons sit level with the note input, not with its label above (#1074) */
   gap: var(--sp-8);
   padding-top: var(--sp-12);
   border-top: var(--hair-w) solid var(--color-border);
@@ -14715,7 +14714,7 @@ button.pol-chip-x {
 }
 .devcard .pol-ed-foot {
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end; /* the buttons sit level with the note input, not with its label above (#1074) */
 }
 .devcard .pol-ed-foot .ufield {
   flex: 1 1 14rem;
