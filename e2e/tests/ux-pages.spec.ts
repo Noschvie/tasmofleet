@@ -70,7 +70,19 @@ test("device settings: three card columns at 1280, two at 1024, one at 375, stic
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 800 });
   const p = (await pages(page))["device settings"];
-  await page.goto(app.url + p);
+  // Wait for the settings read the page triggers, not for a window (#1172, as #1014). Once the device
+  // is live on our broker the read goes over MQTT and is paced by design (bus gap plus the identity
+  // window): about 4 s on an idle machine, more under load, longer than the default expect window;
+  // over HTTP, before the tracker has stored the topic, it takes a fraction of a second. The test must
+  // pass on either path. With a remembered reading (the second visit) the page refreshes it through
+  // the same URL and swaps the cards, so the layout is measured only once nothing is busy.
+  const open = async () => {
+    const form = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith(p + "/form"));
+    await page.goto(app.url + p);
+    expect((await form).status()).toBe(200);
+    await expect(page.locator("main [aria-busy=true]")).toHaveCount(0);
+  };
+  await open();
   await expect(page.getByRole("button", { name: "Save to device" })).toBeVisible();
   await expect(page.getByText("Applied immediately and saved to the device once.")).toBeVisible();
   const cards = page.locator("form.devform-cards section.gcard");
@@ -91,7 +103,7 @@ test("device settings: three card columns at 1280, two at 1024, one at 375, stic
   expect(new Set(await lefts()).size, "two card columns at 1024").toBe(2);
   await expectNoOverflow(page, "device settings 1024");
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto(app.url + p);
+  await open();
   await expect(cards.first()).toBeVisible();
   expect(new Set(await lefts()).size, "one column at 375").toBe(1);
   const ids = await cards.evaluateAll((els) => els.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((e) => e.id));
