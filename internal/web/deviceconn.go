@@ -28,6 +28,9 @@ import (
 // reasonOffline is blockReason's sentence for a device that stopped answering.
 const reasonOffline = "The device is offline."
 
+// reasonNotAnswered is blockReason's sentence for a device that never answered.
+const reasonNotAnswered = "The device has not answered yet."
+
 // How a device with its HTTP API switched off is named everywhere (#447): the tile, the card, the list tooltip, the
 // Back up note, the banner and the refusals of the actions. A refusal only happens when the device is reached by an
 // address other than its own IP or hostname (TasmoFleet sends a matching Referer), so that is a fix too.
@@ -355,6 +358,43 @@ func (t deviceTabs) backupNote() string {
 		return ""
 	}
 	return t.BackupWhy
+}
+
+// restartWhy is why the header's Restart cannot act now, "" when it can: the device does not answer (whatever the
+// transport, Restart is not tried then), or its HTTP API is off and nothing else carries a change (#645).
+func (t deviceTabs) restartWhy() string {
+	switch {
+	case t.Health == model.HealthOffline && t.Updating:
+		return t.Reason // the operation that holds the device, named by the same sentence as Back up
+	case t.Health == model.HealthOffline:
+		return reasonOffline
+	}
+	return t.writesAPIOff()
+}
+
+// restartNote is the line under the actions for a Restart that cannot act; the offline banner says it itself.
+func (t deviceTabs) restartNote() string {
+	if t.offline() {
+		return ""
+	}
+	return t.restartWhy()
+}
+
+// restartDescribedBy names the element that says why Restart cannot act: the banner when it is shown, else the line.
+func (t deviceTabs) restartDescribedBy() string {
+	if t.offline() {
+		return "devhd-off"
+	}
+	return "devhd-why"
+}
+
+// headReasons are the lines of #devhd-why: why Restart and Back up cannot act, where no banner says it already.
+func (t deviceTabs) headReasons() []reasonGroup {
+	as := []blockedAction{{"Back up", t.backupNote()}}
+	if t.CanRestart {
+		as = append([]blockedAction{{"Restart", t.restartNote()}}, as...)
+	}
+	return groupReasons(as)
 }
 
 // updateDescribedBy names the element that says why "Update to" is disabled.

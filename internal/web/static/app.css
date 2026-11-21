@@ -4771,6 +4771,38 @@ html[data-live="offline"] .conn-banner.conn-off {
   cursor: default;
   pointer-events: none;
 }
+/* a blocked button is reached by Tab, so its focus ring keeps full strength: the half opacity of the disabled look would
+   cut the ring to about 2:1 against the page (#1072); only <button>s, the aria-disabled primary links keep their look */
+button.btn[aria-disabled="true"]:focus-visible {
+  opacity: 1;
+  color: var(--color-text-3);
+}
+/* a button that cannot act now keeps its place in the Tab order and says why as text (ui.Btn DisabledReason, #1072);
+   with its own reason line the two stack, left-aligned, in the row the button stood in */
+.btn-blocked {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  max-width: 100%;
+}
+.btn-why {
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
+/* the reason of a page header's blocked button, one line under the whole header (Retry failed on a running transaction),
+   so the header's buttons stay side by side; at desktop width it ends where the buttons end */
+.pghead-why {
+  flex-basis: 100%;
+  margin: calc(-1 * var(--sp-4)) 0 0;
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
+@media (min-width: 45rem) {
+  .pghead-why {
+    text-align: end;
+  }
+}
 .btn-row {
   display: flex;
   gap: var(--sp-8);
@@ -14083,7 +14115,8 @@ button.pol-chip-x {
   gap: var(--sp-6);
   margin-bottom: var(--sp-8);
 }
-.ud-acts .btn:disabled {
+.ud-acts .btn:disabled,
+.ud-acts .btn[aria-disabled="true"] {
   color: var(--color-text-3);
 }
 .ud-acts .btn.ud-danger:not(:disabled) {
@@ -14093,6 +14126,16 @@ button.pol-chip-x {
   margin: 0 0 var(--sp-14);
   font-size: 12.5px;
   color: var(--color-text-2);
+}
+/* the reasons of the disabled buttons: one line each, the block keeps the single line's distance below */
+.ud-whys {
+  margin: 0 0 var(--sp-14);
+}
+.ud-whys .ud-why {
+  margin: 0 0 var(--sp-4);
+}
+.ud-whys .ud-why:last-child {
+  margin-bottom: 0;
 }
 .ud-acts + .banner,
 .ud-acts + .ud-grid {

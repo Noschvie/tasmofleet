@@ -160,7 +160,7 @@
   // Device overview (#145, #126): the page refreshes #devlive, the header and the Activity list
   // when the device changes, but never the Connection card and the Identity card only when what it
   // shows changed (#1003; both hold answers and notices). Those follow the offline state from here:
-  // their "Last reported" label shown (a word, never an opacity: #1071), and Refresh identity disabled.
+  // their "Last reported" label shown (a word, never an opacity: #1071), and Refresh identity blocked with its reason.
   function syncDeviceOffline() {
     var live = document.getElementById("devlive");
     if (!live) {
@@ -172,9 +172,13 @@
       .forEach(function (el) {
         el.hidden = !off;
       });
-    // The live region says why Refresh identity cannot work (the device's HTTP API is off and nothing else
-    // reads it, #659): the Identity card is not swapped for it, so the button follows that reason both ways.
-    var refused = live.getAttribute("data-reads-off") || "";
+    // Refresh identity cannot act while the device is offline, or while its HTTP API is off and nothing else reads it
+    // (#659). The button stays focusable (aria-disabled, never disabled) and the reason is the line #ident-why
+    // names, as text: the Identity card is not swapped for either, so both follow the live region from here (#1072).
+    // The words come from the server: the offline sentence from the line's data-off-why, the API wording (with
+    // its non-breaking markup) from the template the live region carries.
+    var refused = live.hasAttribute("data-reads-off");
+    var why = document.getElementById("ident-why");
     document
       .querySelectorAll("#identity [data-needs-device]")
       .forEach(function (b) {
@@ -182,18 +186,23 @@
         if (b.classList.contains("htmx-request")) {
           return;
         }
-        if (refused) {
-          b.setAttribute("data-refused", "");
-          b.title = refused;
-          b.disabled = true;
+        if (refused || off) {
+          b.setAttribute("aria-disabled", "true");
         } else {
-          if (b.hasAttribute("data-refused")) {
-            b.removeAttribute("data-refused");
-            b.removeAttribute("title");
-          }
-          b.disabled = off;
+          b.removeAttribute("aria-disabled");
         }
       });
+    if (why) {
+      var tpl = live.querySelector("template[data-ident-why]");
+      if (refused && tpl) {
+        why.replaceChildren(tpl.content.cloneNode(true));
+      } else if (off) {
+        why.textContent = why.getAttribute("data-off-why") || "";
+      } else {
+        why.replaceChildren();
+      }
+      why.hidden = !why.firstChild;
+    }
   }
   // Only a swap of #devlive, #identity or #devconn, of something inside one of them or of something that holds
   // one changes what syncDeviceOffline reads or writes; a live cell of the device list is none of these (#1059).

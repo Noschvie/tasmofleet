@@ -175,7 +175,7 @@ templ txnBody(p txnPage) {
 		<div class="pghead-acts">
 			if p.RetryN > 0 {
 				if p.Active {
-					<button type="button" class="btn" disabled title="Retry when every device has finished">Retry failed ({ strconv.Itoa(p.RetryN) })</button>
+					@ui.Button(ui.Btn{Label: "Retry failed (" + strconv.Itoa(p.RetryN) + ")", DisabledReason: retryRunningWhy, ReasonID: "txn-retry-why", ReasonShared: true})
 				} else {
 					<a class="btn" href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/retry") }>Retry failed ({ strconv.Itoa(p.RetryN) })</a>
 				}
@@ -233,6 +233,9 @@ templ txnBody(p txnPage) {
 				@ui.Button(ui.Btn{Label: "Back to policy", Kind: "primary", Href: p.Base + "/policy"})
 			}
 		</div>
+		if p.RetryN > 0 && p.Active {
+			<p class="pghead-why" id="txn-retry-why">{ retryRunningWhy }</p>
+		}
 	</div>
 	if p.Sched != nil && p.Sched.Kind == "notstarted" {
 		<div class="banner tone-warn" role="status">

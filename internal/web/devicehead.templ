@@ -82,22 +82,22 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 					</form>
 				}
 			</div>
-			if t.backupNote() != "" {
-				<p class="devcard-note" id="devhd-why">Back up: @keepTogether(t.backupNote())</p>
+			if lines := t.headReasons(); len(lines) > 0 {
+				<p class="devcard-note" id="devhd-why">
+					for i, g := range lines {
+						if i > 0 {
+							<br/>
+						}
+						{ g.Lead() + ": " }
+						@keepTogether(g.Why)
+					}
+				</p>
 			}
 		</div>
 		<div class="devhd-acts">
 			if t.CanRestart {
-				if t.Health == model.HealthOffline {
-					<button type="button" class="btn" disabled>Restart</button>
-				} else if t.writesAPIOff() != "" {
-					<button
-						type="button"
-						class="btn"
-						disabled
-						title={ t.writesAPIOff() }
-						aria-disabled="true"
-					>Restart</button>
+				if t.restartWhy() != "" {
+					@ui.Button(ui.Btn{Label: "Restart", DisabledReason: t.restartWhy(), ReasonID: t.restartDescribedBy(), ReasonShared: true})
 				} else {
 					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
 				}
@@ -105,16 +105,11 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 			<form method="post" action={ templ.SafeURL(t.Base + devPath(t.ID, "/backup")) }>
 				<input type="hidden" name="csrf" value={ t.CSRF }/>
 				<input type="hidden" name="back" value={ t.backPath() }/>
-				<button
-					type="submit"
-					class="btn"
-					disabled?={ t.BackupWhy != "" }
-					if t.BackupWhy != "" {
-						title={ t.BackupWhy }
-						aria-disabled="true"
-						aria-describedby={ t.backupDescribedBy() }
-					}
-				>Back up</button>
+				if t.BackupWhy != "" {
+					@ui.Button(ui.Btn{Label: "Back up", DisabledReason: t.BackupWhy, ReasonID: t.backupDescribedBy(), ReasonShared: true})
+				} else {
+					<button type="submit" class="btn">Back up</button>
+				}
 			</form>
 			if t.IsAdmin {
 				@ui.Button(ui.Btn{Label: "Edit", Href: t.Base + devPath(t.ID, "/edit")})
@@ -257,6 +252,10 @@ templ liveRegion(l liveView) {
 		hx-trigger={ "sse:devstate-" + devID(l.ID) + " throttle:2s, sse:devjob-" + devID(l.ID) + " throttle:2s, sse:power-" + devID(l.ID) + " throttle:10s, sse:uptime-" + devID(l.ID) + " throttle:10s, sse:resync" }
 		hx-swap="outerHTML"
 	>
+		if l.ReadsOff != "" {
+			// the reason as the page writes it (the "(SetOption128 0)" kept on one line): live.js puts it into the Identity card's line
+			<template data-ident-why>@keepTogether(l.ReadsOff)</template>
+		}
 		<div class="dev-tiles">
 			for _, t := range l.Tiles {
 				@liveTile(t, l)
@@ -492,14 +491,24 @@ templ identityCard(c identCard) {
 					hx-swap="outerHTML"
 					hx-disabled-elt="this"
 					data-needs-device
-					disabled?={ c.Off || c.Why != "" }
-					if c.Why != "" {
-						title={ c.Why }
-						data-refused
+					if c.whyText() != "" {
+						aria-disabled="true"
 					}
+					aria-describedby="ident-why"
 				>Refresh identity</button>
 			}
 		</div>
+		if c.CanProbe {
+			// The reason Refresh identity cannot act, as text: the button stays focusable (aria-disabled) and live.js sets and
+			// clears this line as the device goes offline and comes back, because the card is not swapped for that (#1072).
+			<p class="devcard-note" id="ident-why" data-off-why={ reasonOffline } hidden?={ c.whyText() == "" }>
+				if c.Why != "" {
+					@keepTogether(c.Why)
+				} else if c.Off {
+					{ reasonOffline }
+				}
+			</p>
+		}
 		@identityID(c.ID)
 		if c.Topic != nil {
 			@ui.KV(c.Rows[:c.TopicAt])

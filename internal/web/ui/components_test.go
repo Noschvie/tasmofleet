@@ -356,3 +356,51 @@ func TestBannerActionLinkKeepsTargetAndRel(t *testing.T) {
 		t.Errorf("an action inside TasmoFleet opens in the same tab and says nothing of a new one: %s", same)
 	}
 }
+
+// Why (#1072): a blocked button whose reason is a banner the page shows already names the banner with
+// aria-describedby; the banner needs an id for that, and a banner without one must not render an empty id.
+func TestBannerIDIsTheTargetOfADescribedBy(t *testing.T) {
+	if got := comp(t, Banner(BannerData{Tone: ToneAccent, Text: "Managed elsewhere.", ID: "ud-info"})); !strings.Contains(got, `id="ud-info"`) {
+		t.Errorf("the banner lost its id: %s", got)
+	}
+	if got := comp(t, Banner(BannerData{Tone: ToneAccent, Text: "Text."})); strings.Contains(got, "id=") {
+		t.Errorf("a banner without an id renders one: %s", got)
+	}
+}
+
+// Why (#1072): a button that cannot act now must still be reachable by Tab and say why as text, so it is
+// aria-disabled (never the disabled attribute, which no key reaches and no touch explains) and names the line that
+// holds the reason; and it must not be able to do anything with JavaScript off, so it carries no address, dialog,
+// name, value or submit type even when the caller set them.
+func TestBtnDisabledReasonIsABlockedButtonThatCarriesNoAction(t *testing.T) {
+	got := comp(t, Button(Btn{Label: "Restart", Href: "/devices/1/restart", Dialog: "dlg-restart", Type: "submit", Name: "n", Value: "v",
+		DisabledReason: "The device is offline.", ReasonID: "why-1"}))
+	for _, want := range []string{`<button type="button"`, `aria-disabled="true"`, `aria-describedby="why-1"`, `<span class="btn-why" id="why-1">The device is offline.</span>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lacks %q: %s", want, got)
+		}
+	}
+	for _, bad := range []string{" disabled", "title=", "href=", "data-dialog", "name=", "value=", `type="submit"`} {
+		if strings.Contains(got, bad) {
+			t.Errorf("a blocked button must not carry %q: %s", bad, got)
+		}
+	}
+}
+
+// Why (#1072): several buttons may name one line the page shows already (a banner, a line for the whole row); the
+// button then draws no second copy of the reason.
+func TestBtnSharedReasonDrawsNoLineOfItsOwn(t *testing.T) {
+	got := comp(t, Button(Btn{Label: "Back up", DisabledReason: "The device is offline.", ReasonID: "devhd-off", ReasonShared: true}))
+	if !strings.Contains(got, `aria-describedby="devhd-off"`) || strings.Contains(got, "btn-why") || strings.Contains(got, "The device is offline.") {
+		t.Errorf("shared reason: %s", got)
+	}
+}
+
+// Why (#1072): a button without a reason is what it was: the native disabled attribute stays for a button that is
+// off for a moment and says nothing.
+func TestBtnDisabledWithoutReasonStaysNative(t *testing.T) {
+	got := comp(t, Button(Btn{Label: "Save", Disabled: true}))
+	if !strings.Contains(got, "disabled") || strings.Contains(got, "aria-disabled") {
+		t.Errorf("plain disabled: %s", got)
+	}
+}

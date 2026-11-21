@@ -72,9 +72,10 @@ func TestDeviceHeaderIsTheSameOnEveryTab(t *testing.T) {
 func TestNeverAnsweredDeviceDisablesBackupAndExplains(t *testing.T) {
 	e, _, _ := subPageEnv(t)
 	_, body := e.do(t, "GET", "/devices/2", "admin", nil) // attic: no health, never probed
+	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || describedBy(bt) != "devhd-why" {
+		t.Errorf("Back up is not blocked with its reason as text: %s", bt)
+	}
 	for _, want := range []string{
-		`disabled title="The device has not answered yet." aria-disabled="true" aria-describedby="devhd-why">Back up</button>`,
-		`<p class="devcard-note" id="devhd-why">Back up: The device has not answered yet.</p>`,
 		"This device has not answered yet",
 		`<h2 id="dc-act">Activity</h2>`,
 		"No state changes or transactions yet.",
@@ -83,8 +84,11 @@ func TestNeverAnsweredDeviceDisablesBackupAndExplains(t *testing.T) {
 			t.Errorf("missing %q:\n%s", want, body)
 		}
 	}
+	if line := elementText(body, "devhd-why", "</p>"); line != "Back up: The device has not answered yet." {
+		t.Errorf("the line Back up names: %q", line)
+	}
 	_, ok := e.do(t, "GET", "/devices/1", "admin", nil)
-	if strings.Contains(ok, `disabled title=`) || strings.Contains(ok, "has not answered yet") {
+	if strings.Contains(ok, `aria-disabled="true"`) || strings.Contains(ok, "has not answered yet") {
 		t.Errorf("an online device must not be blocked:\n%s", ok)
 	}
 }
@@ -95,13 +99,16 @@ func TestBackupIsDisabledWhileAnOperationHoldsTheDevice(t *testing.T) {
 	e, _, j, _ := setupOTA(t)
 	j.jobs = []model.Job{{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobApplying, CreatedAt: time.Now()}}
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(body, `disabled title="Unavailable while a backup of the device is running." aria-disabled="true" aria-describedby="devhd-why">Back up<`) {
-		t.Errorf("Back up now is not disabled with its reason:\n%s", body)
+	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || describedBy(bt) != "devhd-why" {
+		t.Errorf("Back up is not blocked with its reason as text: %s", bt)
+	}
+	if line := elementText(body, "devhd-why", "</p>"); !strings.Contains(line, "Unavailable while a backup of the device is running.") {
+		t.Errorf("the line Back up names does not say why: %q", line)
 	}
 	j.jobs = []model.Job{{ID: 2, BatchID: 8, DeviceID: 1, State: model.JobUpgradeIssued, CreatedAt: time.Now()}}
 	_, body = e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(body, `title="Unavailable while the device is being updated."`) {
-		t.Errorf("update reason missing:\n%s", body)
+	if line := elementText(body, "devhd-why", "</p>"); !strings.Contains(line, "Unavailable while the device is being updated.") {
+		t.Errorf("update reason missing: %q", line)
 	}
 }
 
@@ -292,10 +299,10 @@ func TestEmptyBackupsTabOffersTheActionNotTheControls(t *testing.T) {
 			t.Errorf("%q is offered without a backup", bad)
 		}
 	}
-	// A device that cannot answer gets the button disabled, with the reason.
+	// A device that cannot answer gets no "Back up now" at all: the empty state says why nothing can be taken (#1072).
 	_, nb := e.do(t, "GET", "/devices/2/backups", "admin", nil)
-	if !strings.Contains(nb, `disabled title="The device has not answered yet."`) {
-		t.Errorf("never-answered device: %s", nb)
+	if strings.Contains(nb, ">Back up now<") || !strings.Contains(nb, "<h2>Can’t back up yet</h2>") || !strings.Contains(nb, "<p>The device has not answered yet. It can be backed up once it answers again.") {
+		t.Errorf("never-answered device: %s", sliceBetween(nb, `class="uempty"`, "</div></div>"))
 	}
 }
 

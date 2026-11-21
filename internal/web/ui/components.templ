@@ -37,9 +37,12 @@ templ pageHeader(title, sub string, sample bool) {
 	</div>
 }
 
-// Button is a button, or a link styled as one (Btn).
+// Button is a button, or a link styled as one (Btn). A button with a DisabledReason is the blocked variant
+// (blockedButton).
 templ Button(b Btn) {
-	if b.Href != "" {
+	if b.DisabledReason != "" {
+		@blockedButton(b)
+	} else if b.Href != "" {
 		<a
 			class={ b.classes() }
 			href={ templ.SafeURL(b.Href) }
@@ -85,6 +88,36 @@ templ Button(b Btn) {
 			disabled?={ b.Disabled }
 		>{ b.Label }</button>
 	}
+}
+
+// blockedButton is a button that cannot act now and says why (#1072). It is no <button disabled>, which no key reaches
+// and no touch explains: it is aria-disabled, so Tab still lands on it, and aria-describedby names a line that
+// shows the reason as text. It carries no action at all (type=button, no href, dialog, name or value), so
+// pressing it does nothing with or without JavaScript. Its own reason line sits under it; with ReasonShared the
+// line is one the page shows already (a banner, or one line for several buttons).
+templ blockedButton(b Btn) {
+	if b.ReasonShared {
+		@blockedBtn(b)
+	} else {
+		<span class="btn-blocked">
+			@blockedBtn(b)
+			<span class="btn-why" id={ b.ReasonID }>{ b.DisabledReason }</span>
+		</span>
+	}
+}
+
+templ blockedBtn(b Btn) {
+	<button
+		type="button"
+		class={ b.classes() }
+		aria-disabled="true"
+		if b.ReasonID != "" {
+			aria-describedby={ b.ReasonID }
+		}
+		if b.Aria != "" {
+			aria-label={ b.Aria }
+		}
+	>{ b.Label }</button>
 }
 
 // ButtonRow lays buttons out in a wrapping row with the prototype's 8 px gap.
@@ -219,6 +252,9 @@ templ rowMenu(label string, items []MenuItem, up, static bool) {
 templ Banner(b BannerData) {
 	<div
 		class={ "banner", "tone-" + string(b.Tone) }
+		if b.ID != "" {
+			id={ b.ID }
+		}
 		if b.Alert {
 			role="alert"
 		} else {

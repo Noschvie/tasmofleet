@@ -72,8 +72,11 @@ func TestCardAndDisabledButtonsCarryTheChooserSentence(t *testing.T) {
 	if n := strings.Count(body, html.EscapeString(want)); n < 2 {
 		t.Fatalf("the Back up sentence must appear in the card and on the disabled button (%d times):\n%s", n, want)
 	}
-	if !strings.Contains(body, `title="`+html.EscapeString(want)+`"`) {
-		t.Fatal("the Back up button must carry the sentence as its title")
+	if bt := buttonTag(body, "Back up"); !blockedButton(bt) || strings.Contains(bt, "title=") {
+		t.Fatalf("Back up must be a blocked button that reaches Tab, not a tooltip: %s", bt)
+	}
+	if line := elementText(body, "devhd-why", "</p>"); line != "Back up: "+want {
+		t.Fatalf("the line Back up names must say the chooser's sentence: %q", line)
 	}
 	// Commands go over MQTT: the card says so and the Console tab is not disabled.
 	if !strings.Contains(body, sentence(transport.Choose(f).Reason(transport.ActCommands))[:20]) {

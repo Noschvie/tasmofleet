@@ -37,14 +37,22 @@ templ userDetailPage(v userDetailView) {
 		// Deactivate is a danger in its dialog only.
 		for _, a := range v.Actions {
 			if a.Disabled {
-				<button type="button" class={ "btn", templ.KV("ud-danger", a.Danger && a.Sep) } disabled title={ a.Why }>{ a.Label }</button>
+				@ui.Button(ui.Btn{Label: a.Label, Disabled: true, DisabledReason: a.Why, ReasonID: v.reasonID(a.Label), ReasonShared: true})
 			} else {
 				<a class={ "btn", templ.KV("ud-danger", a.Danger && a.Sep) } href={ templ.SafeURL(a.Href) } data-dialog={ a.Dialog }>{ a.Label }</a>
 			}
 		}
 	</div>
-	if v.Why != "" {
-		<p class="ud-why">{ v.Why }</p>
+	if len(v.Reasons) > 0 || v.Why != "" {
+		<div class="ud-whys">
+			// why the disabled buttons are, one line per reason; each button names its line (#1072)
+			for i, g := range v.Reasons {
+				<p class="ud-why" id={ udReasonID(i) }>{ g.Lead() }: { g.Why }</p>
+			}
+			if v.Why != "" {
+				<p class="ud-why">{ v.Why }</p>
+			}
+		</div>
 	}
 	@usersBanners(auth.UsersPageData{Notice: v.D.Notice, Error: v.D.Error, ErrField: v.D.ErrField, ViewOnly: v.D.ViewOnly})
 	if v.D.User.Disabled {
@@ -57,7 +65,7 @@ templ userDetailPage(v userDetailView) {
 		</div>
 	}
 	if v.Info != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: v.Info})
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: v.Info, ID: udInfoID})
 	}
 	<div class="ud-grid">
 		<section class="ucard ud-details" aria-labelledby="ud-details-h">

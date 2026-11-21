@@ -115,6 +115,10 @@ templ styleguidePage(v sgView) {
 				@ui.Button(ui.Btn{Label: "⋯", Icon: true, Kind: "ghost", Small: true, Aria: "Actions"})
 				@ui.Button(ui.Btn{Label: "Link", Kind: "link"})
 			}
+			<p class="sg-label">Blocked: cannot act now, says why as text (Tab reaches it)</p>
+			@ui.ButtonRow() {
+				@ui.Button(ui.Btn{Label: "Restart", DisabledReason: "The device is offline.", ReasonID: "sg-blocked-why"})
+			}
 		}
 		@sgSec("badges") {
 			<div class="sg-row">

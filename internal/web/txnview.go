@@ -366,3 +366,7 @@ type fixChange struct {
 
 // errEvents are the job events that report a failure: their log lines are drawn in red.
 var errEvents = map[string]bool{"command_failed": true, "guard_refused": true, "timeout": true, "backup_failed": true}
+
+// retryRunningWhy is what stands under "Retry failed" while devices of the transaction still run: the engine would
+// refuse a retry then (ErrBatchRunning), so the button says when it comes back (#1072).
+const retryRunningWhy = "Retry becomes available when every device has finished."

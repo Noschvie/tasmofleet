@@ -115,6 +115,10 @@ func (t Tone) class() string {
 // (outlined), "danger-solid", "ghost" or "link" (text only). With Href it is a link (it only
 // navigates, or opens the dialog named by Dialog); without it a button of Type (default
 // "button"). Name and Value make it a submit button that sends a value (console chips).
+//
+// A button that cannot act now sets DisabledReason (#1072): it is drawn aria-disabled (Tab still reaches it) with
+// the reason as visible text that aria-describedby names, and it carries no action (blockedButton). Disabled is
+// the native attribute, for a button that is off for a moment and says nothing (a request in flight).
 type Btn struct {
 	Label, Kind, Href, Type string
 	Name, Value             string
@@ -125,6 +129,12 @@ type Btn struct {
 	Current                 bool   // the one a row of them is on (a pager's page size): aria-current="page", the accent tint
 	Aria                    string // accessible name when the label is a glyph (icon button "⋯")
 	Icon                    bool   // square icon button
+	// DisabledReason is the visible reason the button cannot act now; it makes the blocked variant, which drops
+	// Href, Dialog, Name, Value and Type. ReasonID is the id of the element that holds it: the button's own line
+	// (ReasonShared false, drawn under it) or a line the page shows already (ReasonShared true, several buttons
+	// may name the same one).
+	DisabledReason, ReasonID string
+	ReasonShared             bool
 }
 
 func (b Btn) classes() string {
@@ -156,7 +166,8 @@ type BannerData struct {
 	Tone        Tone
 	Title, Text string
 	Action      *Btn
-	Alert       bool // role=alert (a failure the user has to act on) instead of role=status
+	Alert       bool   // role=alert (a failure the user has to act on) instead of role=status
+	ID          string // the banner's id, for a control that aria-describedby points at it (#1072)
 }
 
 // The broker ACL notice (#840, #1078): the page that explains the access control list (the long explanation lives

@@ -356,8 +356,12 @@ test("Refresh identity follows the live refusal both ways, without a reload", { 
   await control("/device/ov-api-flip/api-off");
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
   await expect(refresh).toBeDisabled();
+  // #1072: the reason is text on the card, which the button names; it is no title (a title is for a mouse only)
+  await expect(refresh).not.toHaveAttribute("title", /.+/);
+  const why = page.locator("#ident-why");
+  await expect(refresh).toHaveAttribute("aria-describedby", "ident-why");
   // #1062: the fix leads with the own address; SetOption128 1 (the Referer check off) comes second, with the web password
-  await expect(refresh).toHaveAttribute("title", /HTTP API off \(SetOption128 0\)\. Add the device by its own IP or hostname;.*SetOption128 1.*web password/);
+  await expect(why).toHaveText(/HTTP API off \(SetOption128 0\)\. Add the device by its own IP or hostname;.*SetOption128 1.*web password/);
   // The API coming back is found by the health tracker only minutes later (a refused device is polled slowly), so the
   // way back is driven by the live region itself: what the server renders into it when it no longer says "off".
   const setReason = (reason: string | null) =>
@@ -375,10 +379,53 @@ test("Refresh identity follows the live refusal both ways, without a reload", { 
     await setReason(null);
     await expect(refresh).toBeEnabled({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });
-  await expect(refresh).not.toHaveAttribute("title", /.+/);
-  await expect(refresh).not.toHaveAttribute("data-refused", /.*/);
+  await expect(refresh).not.toHaveAttribute("aria-disabled", /.*/);
+  await expect(why).toBeHidden();
   await setReason(reason);
   await expect(refresh).toBeDisabled();
+  await expect(why).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1); // same document: no reload
+});
+
+// #1072: a button that cannot act stays reachable and says why. Refresh identity follows the offline state of the live
+// region both ways without the card being swapped: it is aria-disabled (never disabled), Tab and the screen reader reach
+// it, the reason is text on the card, a click, Enter and Space send nothing, and when the device is back it works again.
+test("Refresh identity is blocked, not disabled, while the device is offline and works again after (#1072)", async ({ page }) => {
+  await openDevice(page, "plug-4m");
+  await page.evaluate(() => ((window as unknown as { __kept: number }).__kept = 1));
+  const probes: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /\/probe$/.test(new URL(r.url()).pathname)) probes.push(r.url());
+  });
+  const refresh = page.getByRole("button", { name: "Refresh identity" });
+  const why = page.locator("#ident-why");
+  const sync = (off: boolean) =>
+    page.evaluate((o) => {
+      const live = document.getElementById("devlive")!;
+      if (o) live.setAttribute("data-off", "");
+      else live.removeAttribute("data-off");
+      // htmx fires its events on the swapped element: the same event a live refresh ends with
+      live.dispatchEvent(new Event("htmx:afterSettle", { bubbles: true }));
+    }, off);
+  await expect(why).toBeHidden();
+  await sync(true);
+  await expect(refresh).toHaveAttribute("aria-disabled", "true");
+  await expect(refresh).not.toHaveAttribute("disabled", /.*/);
+  await expect(refresh).toHaveAttribute("aria-describedby", "ident-why");
+  await expect(why).toBeVisible();
+  await expect(why).toHaveText("The device is offline.");
+  await refresh.focus();
+  await expect(refresh, "a blocked button keeps the keyboard focus").toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
+  await refresh.dispatchEvent("click");
+  await page.waitForTimeout(500);
+  expect(probes, "a blocked Refresh identity sends nothing").toEqual([]);
+  await sync(false);
+  await expect(refresh).not.toHaveAttribute("aria-disabled", /.*/);
+  await expect(why).toBeHidden();
+  await refreshIdentity(page);
+  expect(probes).toHaveLength(1);
   expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1); // same document: no reload
 });
 

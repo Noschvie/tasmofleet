@@ -133,8 +133,20 @@ func TestRetryWaitsForTheTransactionToFinish(t *testing.T) {
 		{ID: 2, BatchID: 7, DeviceID: 2, State: model.JobQueued, TargetRelease: "16.1.0", CreatedAt: now},
 	}
 	_, body := e.do(t, "GET", "/transactions/7", "operator", nil)
-	if !strings.Contains(body, `disabled title="Retry when every device has finished">Retry failed (1)`) || strings.Contains(body, `/transactions/7/retry"`) {
-		t.Errorf("a running transaction offers a working retry: %s", body)
+	if bt := buttonTag(body, "Retry failed (1)"); !blockedButton(bt) || describedBy(bt) != "txn-retry-why" || strings.Contains(body, `/transactions/7/retry"`) {
+		t.Errorf("a running transaction offers a working retry, or the blocked one is not described: %s", bt)
+	}
+	if line := elementText(body, "txn-retry-why", "</p>"); line != "Retry becomes available when every device has finished." {
+		t.Errorf("the reason under Retry failed: %q", line)
+	}
+	// the reason is one line under the whole header, not a column of the button: Retry failed stays next to Cancel
+	// remaining instead of floating away from the action it belongs with
+	acts := sliceBetween(body, `<div class="pghead-acts">`, `</div>`)
+	if !strings.Contains(acts, "Retry failed (1)") || !strings.Contains(acts, "Cancel remaining") || strings.Contains(acts, `id="txn-retry-why"`) {
+		t.Errorf("the header's buttons are not side by side with the reason outside them: %s", acts)
+	}
+	if !strings.Contains(body, `<p class="pghead-why" id="txn-retry-why">`) {
+		t.Errorf("the reason is not the header's own line: %s", body)
 	}
 	if !strings.Contains(body, "The 1 queued device is skipped.") || !strings.Contains(body, `data-dlg-verb="Cancel remaining"`) {
 		t.Errorf("Cancel remaining does not say what it skips: %s", body)

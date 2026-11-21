@@ -125,3 +125,33 @@ test("a health cell that turns offline switches its row menu and the bulk bar of
   await expect(bar.locator("[data-bar-note]")).toHaveText(/it is not online$/);
   for (const b of await bar.locator("[data-needs-device]").all()) await expect(b).toBeDisabled();
 });
+
+// #1072: Restart of an offline device was a bare <button disabled>: Tab skipped it and nothing said why. It is now
+// blocked, not disabled: Tab reaches it, and the offline banner it names is on screen. Last in the file, because the
+// plug of the device is pulled for good.
+test("an offline device's Restart is reached by Tab and its reason is on screen at 375 px (#1072)", async ({ page }) => {
+  const victim = Object.keys(env.devices).filter((n) => n !== online).at(-1)!;
+  const r = await fetch(env.vars.DEVENV_CONTROL_URL + `/device/${victim}/off`, { method: "POST" });
+  expect(r.status).toBe(204);
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices");
+  await page.getByRole("link", { name: victim, exact: true }).first().click();
+  const banner = page.locator("#devhd-off");
+  await expect(banner).toContainText("Offline since", { timeout: 60_000 });
+  const restart = page.getByRole("button", { name: "Restart", exact: true });
+  await expect(restart).toHaveAttribute("aria-disabled", "true");
+  await expect(restart).not.toHaveAttribute("disabled", /.*/);
+  await expect(restart).toHaveAttribute("aria-describedby", "devhd-off");
+  await expect(banner, "the reason is visible text, not a tooltip").toBeVisible();
+  await expect(banner).toContainText("Restart");
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  for (let i = 0; i < 80; i++) {
+    await page.keyboard.press("Tab");
+    if (await restart.evaluate((el) => el === document.activeElement)) break;
+  }
+  await expect(restart, "Tab reaches a blocked Restart").toBeFocused();
+  // the blocked look is half opacity, which would cut the 2px focus ring to about 2:1: focused, it draws at full strength
+  expect(await restart.evaluate((el) => getComputedStyle(el).opacity), "the focus ring of a blocked button is not dimmed").toBe("1");
+  await shot(page, "offline-restart-375");
+});

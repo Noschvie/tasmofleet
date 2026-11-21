@@ -316,8 +316,18 @@ func TestUserDetailExplainsDisabledActions(t *testing.T) {
 		User: auth.UserRow{Subject: "local:admin", Name: "admin", Method: auth.MethodLocal, Role: "admin"},
 		Guards: auth.UserGuards{Role: last, Disable: last, Delete: last, Reset: auth.Guard{Reason: "Use Change password for your own account."},
 			Profile: auth.Guard{Reason: "Edit your own profile on the Account page."}}})
-	for _, want := range []string{`disabled title="This would leave no enabled administrator">Delete…</button>`, `disabled title="Use Change password for your own account">Reset password</button>`,
-		"That’s you, and you’re the last active admin.", `<span class="bdg t-neutral">You</span>`} {
+	// each disabled action is blocked, not disabled (Tab reaches it), and names a visible line with its reason (#1072)
+	for label, why := range map[string]string{"Delete…": "This would leave no enabled administrator", "Reset password": "Use Change password for your own account"} {
+		bt := buttonTag(body, label)
+		if !blockedButton(bt) {
+			t.Errorf("%s is not a blocked button: %s", label, bt)
+			continue
+		}
+		if line := elementText(body, describedBy(bt), "</p>"); !strings.Contains(line, why+".") || !strings.Contains(line, strings.TrimSuffix(label, "…")+":") {
+			t.Errorf("the line %s names does not say why: %q", label, line)
+		}
+	}
+	for _, want := range []string{"That’s you, and you’re the last active admin.", `<span class="bdg t-neutral">You</span>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail lacks %q", want)
 		}

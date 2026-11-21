@@ -322,7 +322,7 @@ func TestDeviceBackUpNoticeStaysWhileAJobHoldsTheDevice(t *testing.T) {
 	})
 	for _, tab := range []string{"/devices/1", "/devices/1/backups"} {
 		_, page := e.do(t, "GET", tab, "admin", nil)
-		if !strings.Contains(page, `title="Unavailable while a backup of the device is running."`) {
+		if !blockedButton(buttonTag(page, "Back up")) || !strings.Contains(elementText(page, "devhd-why", "</p>"), "Unavailable while a backup of the device is running.") {
 			t.Fatalf("%s: the fixture's Back up button is not held by the running backup", tab)
 		}
 		if n := aclCount(devHeadOf(t, page)); n != 1 {

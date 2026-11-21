@@ -349,7 +349,7 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 	case u.Method == auth.MethodLocal:
 		end.Reason = "Deactivate signs a local user out"
 	case u.Method == auth.MethodHeader:
-		end.Reason = "The proxy signs this user in on every request"
+		end.Reason = endHeaderWhy
 	case u.Sessions == 0:
 		end.Reason = "No active sessions"
 	}
@@ -436,11 +436,13 @@ type userDetailView struct {
 	Role         string // "Admin", "Operator", "" (unknown)
 	Method       string // "Local", "SSO · Authentik", "Proxy header"
 	Username     string
-	Actions      []ui.MenuItem   // the buttons: Make admin/operator, Reset password, Deactivate/Reactivate, End all sessions, Delete…
-	Dialogs      []ui.DialogData // their confirmations
-	Why          string          // why buttons are disabled (local accounts; principals have the banner)
-	Info         string          // the banner of an SSO or proxy user
-	Reactivate   *ui.MenuItem    // the deactivated banner's button
+	Actions      []ui.MenuItem     // the buttons: Make admin/operator, Reset password, Deactivate/Reactivate, End all sessions, Delete…
+	Dialogs      []ui.DialogData   // their confirmations
+	Why          string            // why buttons are disabled (local accounts; principals have the banner)
+	Reasons      []reasonGroup     // one line per reason of a disabled action button (reasonID names the line of a button)
+	ReasonIDs    map[string]string // button label -> id of the element that says why it is disabled (a line, or the info banner)
+	Info         string            // the banner of an SSO or proxy user
+	Reactivate   *ui.MenuItem      // the deactivated banner's button
 	Facts        []ui.KVRow
 	Sessions     []sessionView
 	Activity     []activityView
@@ -450,6 +452,18 @@ type userDetailView struct {
 	PasswordOpen bool
 	StepUp       *ui.StepUpData
 }
+
+// udReasonID is the id of the n-th line that says why an action button of the user page is disabled.
+func udReasonID(n int) string { return "ud-why-" + strconv.Itoa(n) }
+
+// udInfoID is the id of the info banner of an SSO or proxy user: it says why a button it already explains is off.
+const udInfoID = "ud-info"
+
+// endHeaderWhy is why End all sessions is off for a proxy user (the info banner of that user says the same).
+const endHeaderWhy = "The proxy signs this user in on every request"
+
+// reasonID is the id of the line that says why the button labelled label is disabled.
+func (v userDetailView) reasonID(label string) string { return v.ReasonIDs[label] }
 
 type sessionView struct {
 	ID, Started, StartedAt, Seen, SeenAt string
@@ -512,6 +526,26 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	if u.Method == auth.MethodLocal {
 		v.Why = guardText(v.Self, d.Guards)
+	}
+	// A disabled button is explained by the info banner when that says it already (managed elsewhere, signed in by
+	// the proxy), else by a line of its own reason, which reads as a sentence.
+	v.ReasonIDs = map[string]string{}
+	managed := strings.TrimSuffix(d.Guards.Role.Reason, ".")
+	var blocked []blockedAction
+	for _, a := range v.Actions {
+		switch {
+		case !a.Disabled || a.Why == "":
+		case v.Info != "" && u.Method != auth.MethodLocal && (a.Why == managed || a.Why == endHeaderWhy):
+			v.ReasonIDs[a.Label] = udInfoID
+		default:
+			blocked = append(blocked, blockedAction{Label: a.Label, Why: strings.TrimSuffix(a.Why, ".") + "."})
+		}
+	}
+	v.Reasons = groupReasons(blocked)
+	for i, g := range v.Reasons {
+		for _, l := range g.Labels {
+			v.ReasonIDs[l] = udReasonID(i)
+		}
 	}
 	if s := stepUpOf(list, now, "Changing "+possessive(v.Title)+" account"); s != nil {
 		if s.IdP != "" {

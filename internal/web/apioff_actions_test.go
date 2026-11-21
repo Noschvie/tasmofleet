@@ -77,11 +77,13 @@ func TestRelaySwitchAndRestartRefuseADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	if sw := sliceBetween(page, `class="devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
 		t.Errorf("the relay switch is not disabled with the reason: %s", sw)
 	}
-	// the header's Restart: the tag of the button that ends in ">Restart</button>"
-	if i := strings.Index(page, ">Restart</button>"); i < 0 {
-		t.Error("the header has no Restart button")
-	} else if rb := page[strings.LastIndex(page[:i], "<button"):i]; !strings.Contains(rb, "disabled") || !strings.Contains(rb, "HTTP API off") {
-		t.Errorf("Restart is not disabled with the reason: %s", rb)
+	// the header's Restart is blocked (Tab reaches it, no title is the only carrier) and a visible line gives the reason
+	rb := buttonTag(page, "Restart")
+	if !blockedButton(rb) || describedBy(rb) != "devhd-why" {
+		t.Errorf("Restart is not blocked with its reason as text: %s", rb)
+	}
+	if line := elementText(page, "devhd-why", "</p>"); !strings.HasPrefix(line, "Restart") || !strings.Contains(line, "HTTP API off") {
+		t.Errorf("the line that Restart names does not give its reason: %q", line)
 	}
 	// device 2 has reads over MQTT but no write path: also refused for a change
 	r, body = e.do(t, "POST", "/devices/2/power/1", "operator", url.Values{"csrf": {"tok"}})
@@ -115,8 +117,13 @@ func TestRefreshIdentityRefusesADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 		t.Fatalf("refresh: refreshs %v, body %q", e.pr.refreshs, body)
 	}
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
-	if btn := sliceBetween(page, "hx-post=\"/tf/devices/1/probe\"", ">Refresh identity<"); !strings.Contains(btn, "disabled") || !strings.Contains(btn, "data-refused") {
-		t.Errorf("Refresh identity is not disabled with the reason: %s", btn)
+	btn := sliceBetween(page, "hx-post=\"/tf/devices/1/probe\"", ">Refresh identity<")
+	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || strings.Contains(btn, "title=") ||
+		!strings.Contains(btn, `aria-describedby="ident-why"`) || !strings.Contains(btn, "data-needs-device") {
+		t.Errorf("Refresh identity is not blocked (focusable, reason as text, still the probe): %s", btn)
+	}
+	if line := elementText(page, "ident-why", "</p>"); !strings.Contains(line, "HTTP API off") {
+		t.Errorf("the identity card does not say why as text: %q", line)
 	}
 	e.do(t, "POST", "/devices/2/probe", "admin", url.Values{"csrf": {"tok"}})
 	if len(e.pr.refreshs) != 1 || e.pr.refreshs[0] != 2 {
@@ -540,18 +547,21 @@ func TestRestartRefusalSaysNothingWasSent(t *testing.T) {
 	}
 }
 
-// Why (#659): Restart's aria-describedby named the "Back up:" note, a sentence about another button (and an id that
-// is not always on the page). Restart says why through its title; no described-by may name the Back up note. Every
-// id a described-by names must exist.
+// Why (#659, #1072): Restart's aria-describedby named the "Back up:" note, a sentence about another button (and an id
+// that is not always on the page). Restart names the line that says "Restart: ..." (or "Restart and Back up: ..." when
+// both cannot act for one reason), never a line about another button only. Every id a described-by names must exist.
 func TestEveryDescribedByNamesAnElementOnThePage(t *testing.T) {
 	e, _ := apiOffActionsEnv(t, nil)
 	e.health[1] = refusedHealth(1)
 	for _, path := range []string{"/devices/1", "/devices/2"} {
 		_, page := e.do(t, "GET", path, "admin", nil)
-		if i := strings.Index(page, ">Restart</button>"); i < 0 {
+		rb := buttonTag(page, "Restart")
+		if rb == "" {
 			t.Fatalf("%s: no Restart button", path)
-		} else if rb := page[strings.LastIndex(page[:i], "<button"):i]; strings.Contains(rb, "aria-describedby") {
-			t.Errorf("%s: Restart is described by another element: %s", path, rb)
+		}
+		// the line Restart names says "Restart: ..." or "Restart and Back up: ...", never a sentence about another button only
+		if line := elementText(page, describedBy(rb), "</p>"); !strings.HasPrefix(line, "Restart") {
+			t.Errorf("%s: Restart is described by another element: %q", path, line)
 		}
 		for rest := page; ; {
 			i := strings.Index(rest, `aria-describedby="`)

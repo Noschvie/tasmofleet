@@ -38,6 +38,8 @@ type backupsView struct {
 	// RestoreBlocked is why Restore… is disabled for every row (no path to the device), "" when it may be used.
 	RestoreBlocked string
 	Blocked        string // why Back up now cannot be used right now
+	BlockedBy      string // the id of the line on the page that says it already (the device header's: Back up names it)
+	CanEdit        bool   // the Edit link of the empty tab's next step (admins)
 	CanKeep        bool   // the Keep toggle (N1)
 	CanDelete      bool   // Delete per row, Delete selected, Prune now (admins)
 
@@ -206,7 +208,7 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 	_, canDelete := h.backupAdmin()
 	_, canKeep := h.backupKeeper()
 	p := backupsView{Base: v.Base, CSRF: v.CSRF, DeviceID: d.ID, Head: deviceHeader(tabs),
-		CanRetention: v.IsAdmin && v.Features.SysConfig, CanBackup: true, Blocked: tabs.BackupWhy, RestoreBlocked: tabs.RestoreWhy,
+		CanRetention: v.IsAdmin && v.Features.SysConfig, CanBackup: true, Blocked: tabs.BackupWhy, BlockedBy: tabs.backupDescribedBy(), CanEdit: v.IsAdmin, RestoreBlocked: tabs.RestoreWhy,
 		CanKeep: canKeep, CanDelete: canDelete && v.IsAdmin, Schedule: schedulePlan(h.fleetSchedule())}
 	ret, hasRet, err := h.backupRetention(r.Context(), d.ID)
 	if err != nil {

@@ -341,7 +341,9 @@ test("disabled actions carry the reason", async ({ page }) => {
   // without a way to back it up over MQTT the button says the same sentence as the card
   if (/^No path/.test(reason)) {
     await expect(button).toBeDisabled();
-    await expect(button).toHaveAttribute("title", reason);
+    // #1072: the sentence is text the button names, no title
+    await expect(button).not.toHaveAttribute("title", /.+/);
+    await expect(button).toHaveAttribute("aria-describedby", "devhd-why");
     await expect(page.locator("#devhd-why")).toContainText(reason);
   } else {
     await expect(button).toBeEnabled();

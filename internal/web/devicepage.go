@@ -194,6 +194,17 @@ type identCard struct {
 	Changed bool
 }
 
+// whyText is why Refresh identity cannot act now, "" when it can: the reason the HTTP API gives, else the offline one.
+func (c identCard) whyText() string {
+	switch {
+	case c.Why != "":
+		return c.Why
+	case c.Off:
+		return reasonOffline
+	}
+	return ""
+}
+
 // identSig is a short fingerprint of what the Identity card shows from the stored device. It leaves out the answer of
 // a Refresh identity (Notice, Error), which only that answer carries, and the dimming and the reason the button is
 // disabled (Off, Why), which live.js follows from the live region: neither is a reason to swap the card.

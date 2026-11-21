@@ -179,13 +179,14 @@
     return st === "online" || st === "stale";
   }
   // The row menus of the device list: Back up and Restart need a live device.
-  // root is the document, or the one row whose badge a swap replaced (#1059).
+  // root is the document, or the one row whose badge a swap replaced (#1059). Only an element inside a row is judged
+  // by its row's badge: a data-needs-device button elsewhere (Refresh identity on the device page) is marked blocked
+  // by the page and by live.js, with its reason as text, and must keep that mark (#1072).
   function markDown(root) {
     root.querySelectorAll("[data-needs-device]").forEach(function (el) {
-      if (!el.closest("[data-bulkbar]")) {
-        var row = el.closest("tr, li.dcard");
-        var off = !!row && !answers(row);
-        if (off) {
+      var row = el.closest("tr, li.dcard");
+      if (row && !el.closest("[data-bulkbar]")) {
+        if (!answers(row)) {
           el.setAttribute("aria-disabled", "true");
           el.setAttribute("tabindex", "-1");
         } else {
