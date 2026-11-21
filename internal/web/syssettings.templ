@@ -512,6 +512,8 @@ templ sysLocked(row sysRow) {
 		Help: sysLockedHelp(row), Locked: true, Switch: false}) {
 		if row.Secret {
 			<div class="in ro mono">{ sysSetWord(row.HasValue) }</div>
+		} else if row.Key == "AUTH_MODE" {
+			<div class="in ro">{ sysAuthModeWords(row.Value) }</div>
 		} else {
 			<div class="in ro mono">{ row.Value }</div>
 		}

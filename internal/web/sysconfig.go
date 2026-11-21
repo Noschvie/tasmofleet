@@ -913,6 +913,21 @@ func sysAuthOptions(cur string) []ui.Option {
 	}
 }
 
+// sysAuthModeWords names a sign-in mode the way the page shows a mode that the environment fixes: in words, not as
+// the value of the variable. "header" is not a choice of the radio cards (only the environment can set it), so
+// the choices above do not name it. An unknown value is shown as it is.
+func sysAuthModeWords(mode string) string {
+	switch mode {
+	case "header":
+		return "Sign-in is handled by your proxy (header)"
+	case "local":
+		return "Local accounts"
+	case "oidc":
+		return "Single sign-on"
+	}
+	return mode
+}
+
 // sysDescribe points a control at its message: the error (and aria-invalid) when the server
 // rejected it, else the help line.
 func sysDescribe(row sysRow) templ.Attributes {

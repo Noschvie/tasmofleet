@@ -10,11 +10,14 @@ templ Info(id, label, text string) {
 }
 
 // SettingsCardData describes a card: Class is "" or a phone rank (StackRank); Depends is the
-// data-depends rule (see sysform.js) that switches the card off (is-off, inert) while it does not apply. NoteHTML replaces
+// data-depends rule (see sysform.js) that switches the card off (is-off, inert) while it does not apply; Off draws it
+// that way from the start, for a rule whose control the page does not have (a setting the environment fixes) and for
+// a page without JavaScript. NoteHTML replaces
 // Note where the one-line note holds a link or a path in code type.
 type SettingsCardData struct {
 	ID, Title, Note, Class, Depends string
 	NoteHTML                        templ.Component
+	Off                             bool // the rule does not hold for the configured values
 	Badges                          []SettingsBadge
 	Plain                           bool // body is not the two-column field grid
 }
@@ -27,7 +30,7 @@ type SettingsBadge struct {
 
 // SettingsCard is one card of the grid: header (title, one-line note, badges) and body (children).
 templ SettingsCard(d SettingsCardData) {
-	<section class={ "scard", d.Class } id={ d.ID }
+	<section class={ "scard", d.Class, templ.KV("is-off", d.Off) } id={ d.ID } inert?={ d.Off }
 		if d.Depends != "" {
 			data-depends={ d.Depends }
 		}

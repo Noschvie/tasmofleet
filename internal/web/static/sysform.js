@@ -4,7 +4,8 @@
 //  - marks settings and cards whose switch or sign-in mode is off (data-depends) is-off and inert; the controls inside
 //    take the disabled look from app.css, the text keeps its colour (#1071),
 //  - runs the phone section picker.
-// Without this file the tabs are links (a page load per tab) and everything is enabled.
+// Without this file the tabs are links (a page load per tab); a card that does not apply for the configured sign-in
+// mode is still drawn inactive by the server, the other dependent settings are enabled.
 (function () {
   "use strict";
 
@@ -208,19 +209,24 @@
   }
 
   // ---- dependent settings ----
-  // data-depends="NAME" (a switch is on) or "NAME=value" (a radio group has that value).
+  // data-depends="NAME" (a switch is on), "NAME=value" (a radio group has that value) or "NAME!=value" (it has
+  // another). The server draws a card whose control the page does not have (a setting the environment fixes) off
+  // from the start (sysRuleOn in syscards.go reads the same rules); this script keeps the state current while the
+  // control exists and leaves an element alone while it does not (null).
   function isOn(rule) {
-    var parts = rule.split("=");
+    var m = /^(.*?)(!?=)(.*)$/.exec(rule);
+    var name = m ? m[1] : rule;
     var ctl = Array.prototype.slice.call(form.elements).filter(function (c) {
-      return c.name === parts[0] && c.type !== "hidden";
+      return c.name === name && c.type !== "hidden";
     });
     if (ctl.length === 0) {
-      return true;
+      return null;
     }
-    if (parts.length > 1) {
-      return ctl.some(function (c) {
-        return c.checked && c.value === parts[1];
+    if (m) {
+      var has = ctl.some(function (c) {
+        return c.checked && c.value === m[3];
       });
+      return m[2] === "=" ? has : !has;
     }
     return ctl.some(function (c) {
       return c.checked;
@@ -229,6 +235,9 @@
   function depends() {
     document.querySelectorAll("[data-depends]").forEach(function (el) {
       var on = isOn(el.getAttribute("data-depends"));
+      if (on === null) {
+        return;
+      }
       el.classList.toggle("is-off", !on);
       if (on) {
         el.removeAttribute("inert");

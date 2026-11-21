@@ -39,6 +39,7 @@ type sysCard struct {
 	sysCardDef
 	Rows       []sysRow
 	RestartAll bool // every setting of the card applies after a restart: one badge in the header
+	Off        bool // the card's Depends rule does not hold for the configured values: drawn inactive by the server (#1087)
 }
 
 // sysTab is one tab of the page.
@@ -98,9 +99,9 @@ var sysLayout = []sysTabDef{
 	}},
 	{"signin", "Sign-in", []int{ui.SpanAll, 2, 1}, []sysCardDef{
 		{ID: "mode", Title: "Sign-in mode", Stack: 0, StepUp: true, Keys: []string{"AUTH_MODE"}},
-		{ID: "idp", Title: "Identity provider", Note: "Disabled while Local accounts is selected.", Stack: 1, Depends: "v.AUTH_MODE=oidc", StepUp: true,
+		{ID: "idp", Title: "Identity provider", Note: "Only used when sign-in mode is Single sign-on.", Stack: 1, Depends: "v.AUTH_MODE=oidc", StepUp: true,
 			Keys: []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SCOPES", "OIDC_NAME_CLAIM", "OIDC_DISPLAY_NAME"}},
-		{ID: "roles", Title: "Roles and claims", Stack: 2, Depends: "v.AUTH_MODE=oidc", StepUp: true,
+		{ID: "roles", Title: "Roles and claims", Stack: 2, Depends: "v.AUTH_MODE!=local", StepUp: true,
 			Keys: []string{"ADMIN_GROUPS", "OPERATOR_GROUPS", "OIDC_GROUPS_CLAIM", "OIDC_USERNAME_CLAIM"}},
 	}},
 	{"advanced", "Advanced", []int{1}, []sysCardDef{
@@ -222,6 +223,7 @@ func sysTabsOf(rows map[string]sysRow) []sysTab {
 		for ci := range tabs[ti].Cards {
 			c := &tabs[ti].Cards[ci]
 			c.Rows = sysNest(c.Rows)
+			c.Off = c.Depends != "" && !sysRuleOn(c.Depends, rows)
 			if c.RestartAll = sysRestartAll(c.Rows); c.RestartAll {
 				for i := range c.Rows {
 					c.Rows[i].InRestartCard = true
@@ -269,19 +271,56 @@ func sysFindRow(rows []sysRow, key string) *sysRow {
 // sysRestartAll says that every editable setting of a card applies after a restart, so the card
 // carries one badge instead of each field.
 func sysRestartAll(rows []sysRow) bool {
-	n := 0
-	for _, r := range rows {
-		for _, x := range append([]sysRow{r}, r.Deps...) {
-			if x.Locked {
-				continue
-			}
-			if x.Apply == sysconfig.Live {
-				return false
-			}
-			n++
+	editable := sysEditable(rows)
+	for _, x := range editable {
+		if x.Apply == sysconfig.Live {
+			return false
 		}
 	}
-	return n > 0
+	return len(editable) > 0
+}
+
+// sysEditable lists the settings of a card the admin can change: the rows and the rows hung under them, without
+// the ones the environment fixes. What a save of the card can touch, so what its badges may promise.
+func sysEditable(rows []sysRow) []sysRow {
+	var out []sysRow
+	for _, r := range rows {
+		for _, x := range append([]sysRow{r}, r.Deps...) {
+			if !x.Locked {
+				out = append(out, x)
+			}
+		}
+	}
+	return out
+}
+
+// sysRuleOn reads a data-depends rule for the values that are configured, as sysform.js reads it from the
+// controls of the form: "v.KEY" (a switch is on), "v.KEY=val" (the setting has that value) and "v.KEY!=val" (it has
+// another). A setting the environment fixes has no control, so its configured value counts; an editable one counts
+// as the form shows it, which after a refused save is what was posted. A rule that names no setting of the page
+// says nothing, so what it guards stays on, as the script leaves such an element alone.
+func sysRuleOn(rule string, rows map[string]sysRow) bool {
+	name, want, op := rule, "", ""
+	if i := strings.Index(rule, "!="); i >= 0 {
+		name, want, op = rule[:i], rule[i+2:], "!="
+	} else if i := strings.Index(rule, "="); i >= 0 {
+		name, want, op = rule[:i], rule[i+1:], "="
+	}
+	row, ok := rows[strings.TrimPrefix(name, "v.")]
+	if !ok {
+		return true
+	}
+	cur := row.Posted
+	if row.Locked {
+		cur = row.Value
+	}
+	switch op {
+	case "=":
+		return cur == want
+	case "!=":
+		return cur != want
+	}
+	return cur == "true"
 }
 
 // sysCardData is the frame every settings card shares: header, notes, badges and its phone place. A card
@@ -289,7 +328,7 @@ func sysRestartAll(rows []sysRow) bool {
 // not copied.
 func sysCardData(p sysPage, c sysCard) ui.SettingsCardData {
 	return ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, NoteHTML: sysCardNote(p, c),
-		Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c),
+		Class: ui.StackRank(c.Phone), Depends: c.Depends, Off: c.Off, Badges: sysCardBadges(c),
 		Plain: c.ID == "devicepasswords" && p.PW != nil} // its counts and list stack under the switch like the storage card's
 }
 
@@ -422,13 +461,13 @@ func sysChecked(r sysRow) []string {
 }
 
 // sysCardBadges are the badges in a card's header: one Restart badge when every setting needs a
-// restart, and the note that saving asks to confirm.
+// restart, and the note that saving asks to confirm (not on a card with nothing in it to save).
 func sysCardBadges(c sysCard) []ui.SettingsBadge {
 	var out []ui.SettingsBadge
 	if c.RestartAll {
 		out = append(out, ui.SettingsBadge{Tone: ui.ToneWarn, Label: "Restart"})
 	}
-	if c.StepUp {
+	if c.StepUp && len(sysEditable(c.Rows)) > 0 {
 		out = append(out, ui.SettingsBadge{Tone: ui.ToneAccent, Label: "Asks you to confirm"})
 	}
 	return out

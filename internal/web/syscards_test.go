@@ -702,3 +702,128 @@ func TestEverySaveBarShowsOnlyWhileDirtyButStaysAfterARefusedSave(t *testing.T) 
 		})
 	}
 }
+
+// signInCardOf is the HTML of one settings card: from its opening tag to the next card's.
+func signInCardOf(t *testing.T, page, id string) (open, whole string) {
+	t.Helper()
+	i := strings.Index(page, `id="card-`+id+`"`)
+	if i < 0 {
+		t.Fatalf("no card %s on the page", id)
+	}
+	start := strings.LastIndex(page[:i], "<section")
+	end := i + strings.Index(page[i:], ">") + 1
+	rest := page[end:]
+	if j := strings.Index(rest, "</section>"); j >= 0 {
+		rest = rest[:j]
+	}
+	return page[start:end], page[start:end] + rest
+}
+
+// cardIsOff says whether the server rendered the card inactive: the is-off class and inert, the pair
+// sysform.js sets in the browser. Without JavaScript this is the only place the state can come from.
+func cardIsOff(open string) bool {
+	return strings.Contains(open, "is-off") && strings.Contains(open, " inert")
+}
+
+// Why (#1087): the Sign-in tab said "Disabled while Local accounts is selected" in every mode and the
+// inactive state only existed in the browser, where a mode fixed by the environment has no control to
+// read. So behind a proxy the page claimed Local accounts was selected, and a person with no JavaScript
+// never saw a card dimmed. The cards follow the mode that is configured, rendered by the server: the
+// identity provider counts only with single sign-on, and the roles card counts with single sign-on and
+// with the proxy (header mode takes the role from ADMIN_GROUPS and OPERATOR_GROUPS), so only local
+// accounts make it inactive. An admin must not edit fields that do nothing, nor be told that the
+// settings that grant rights do nothing.
+func TestSignInTabCardsFollowTheConfiguredMode(t *testing.T) {
+	header := []string{"TASMOFLEET_AUTH_MODE=header", "TASMOFLEET_TRUSTED_PROXIES=127.0.0.1/32", "TASMOFLEET_ADMIN_GROUPS=adm"}
+	oidc := []string{"TASMOFLEET_AUTH_MODE=oidc", "TASMOFLEET_PUBLIC_URL=https://tf.example", "TASMOFLEET_OIDC_ISSUER=https://idp.example/",
+		"TASMOFLEET_OIDC_CLIENT_ID=tasmofleet", "TASMOFLEET_OIDC_CLIENT_SECRET=fake-env-secret-1087", "TASMOFLEET_ADMIN_GROUPS=adm"}
+	cases := []struct {
+		name               string
+		env                []string
+		post               url.Values // a refused save, shown again
+		idpOff, rolesOff   bool
+		modeWords, notWord string
+	}{
+		{name: "header, locked by the environment", env: header, idpOff: true, rolesOff: false, modeWords: "Sign-in is handled by your proxy (header)", notWord: "Local accounts is selected"},
+		{name: "local, stored", env: nil, idpOff: true, rolesOff: true},
+		{name: "local, locked", env: []string{"TASMOFLEET_AUTH_MODE=local"}, idpOff: true, rolesOff: true, modeWords: "Local accounts"},
+		{name: "oidc, locked", env: oidc, idpOff: false, rolesOff: false, modeWords: "Single sign-on"},
+		// A refused save is drawn again with what was posted: after picking single sign-on the fields to correct
+		// must be reachable, with or without JavaScript.
+		{name: "oidc posted, refused", env: nil, post: url.Values{"csrf": {"tok"}, "v.AUTH_MODE": {"oidc"}, "v.OIDC_ISSUER": {"https://idp.example/"}}, idpOff: false, rolesOff: false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, _, _, _ := sysEnvWith(t, true, c.env...)
+			method, form := "GET", url.Values(nil)
+			if c.post != nil {
+				method, form = "POST", c.post
+			}
+			_, page := e.do(t, method, "/settings/system?tab=signin", "admin", form)
+			idp, idpAll := signInCardOf(t, page, "idp")
+			roles, _ := signInCardOf(t, page, "roles")
+			if got := cardIsOff(idp); got != c.idpOff {
+				t.Errorf("identity provider card inactive = %v, want %v: %s", got, c.idpOff, idp)
+			}
+			if got := cardIsOff(roles); got != c.rolesOff {
+				t.Errorf("roles card inactive = %v, want %v: %s", got, c.rolesOff, roles)
+			}
+			if !strings.Contains(idpAll, "Only used when sign-in mode is Single sign-on.") || strings.Contains(page, "Disabled while Local accounts") {
+				t.Errorf("the identity provider note must say when the card is used, not claim a mode: %.120s", idpAll[strings.Index(idpAll, "<h2>"):])
+			}
+			_, mode := signInCardOf(t, page, "mode")
+			if c.modeWords != "" && !strings.Contains(pageText(mode), c.modeWords) {
+				t.Errorf("the locked mode must be shown in words (%q):\n%s", c.modeWords, pageText(mode))
+			}
+			if c.notWord != "" && strings.Contains(pageText(page), c.notWord) {
+				t.Errorf("the page claims %q", c.notWord)
+			}
+			if strings.Contains(mode, `>header<`) || strings.Contains(mode, `>oidc<`) {
+				t.Errorf("the locked mode shows its raw value: %s", pageText(mode))
+			}
+		})
+	}
+}
+
+// Why (#1087): the badge "Asks you to confirm" promises that saving this card needs the admin's password.
+// A card with nothing in it that can be saved (the mode is fixed by the environment) makes no such request;
+// the badge made the page ask for a confirmation it never would. The editable cards keep it.
+func TestLockedModeCardDoesNotAskToConfirm(t *testing.T) {
+	locked, _, _, _ := sysEnvWith(t, true, "TASMOFLEET_AUTH_MODE=header", "TASMOFLEET_TRUSTED_PROXIES=127.0.0.1/32", "TASMOFLEET_ADMIN_GROUPS=adm")
+	_, page := locked.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+	if _, mode := signInCardOf(t, page, "mode"); strings.Contains(mode, "Asks you to confirm") {
+		t.Errorf("the locked mode card asks to confirm, but nothing on it can be saved:\n%s", pageText(mode))
+	}
+	if _, idp := signInCardOf(t, page, "idp"); !strings.Contains(idp, "Asks you to confirm") {
+		t.Error("the identity provider card can still be saved: it keeps its badge")
+	}
+	free, _, _, _ := sysEnv(t, true)
+	_, page = free.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+	if _, mode := signInCardOf(t, page, "mode"); !strings.Contains(mode, "Asks you to confirm") {
+		t.Error("an editable mode card keeps its badge")
+	}
+}
+
+// Why (#1087): sysform.js and the server read one rule string. The server's reading decides the state without
+// JavaScript and with a mode fixed by the environment, so it must agree with the script on every form the
+// cards use: a switch ("v.KEY"), a value ("v.KEY=val") and the other values ("v.KEY!=val"). A locked row is
+// judged by its configured value, an editable one by what the form shows (the posted value).
+func TestSysRuleOnReadsTheSameRulesAsTheScript(t *testing.T) {
+	rows := map[string]sysRow{
+		"SWITCH_ON":  {Posted: "true"},
+		"SWITCH_OFF": {Posted: "false"},
+		"MODE":       {Posted: "oidc"},
+		"LOCKED":     {Posted: "oidc", FieldState: sysconfig.FieldState{Locked: true, Value: "header"}},
+	}
+	for rule, want := range map[string]bool{
+		"v.SWITCH_ON": true, "v.SWITCH_OFF": false,
+		"v.MODE=oidc": true, "v.MODE=local": false,
+		"v.MODE!=oidc": false, "v.MODE!=local": true,
+		"v.LOCKED=header": true, "v.LOCKED=oidc": false, "v.LOCKED!=local": true,
+		"v.NOWHERE=oidc": true, // no such setting: the rule says nothing, so the card stays on (the script's null case)
+	} {
+		if got := sysRuleOn(rule, rows); got != want {
+			t.Errorf("sysRuleOn(%q) = %v, want %v", rule, got, want)
+		}
+	}
+}

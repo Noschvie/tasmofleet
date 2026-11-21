@@ -329,6 +329,20 @@ test("phone: section picker, no horizontal overflow, save bar in view", async ({
   await expect(save).toBeInViewport();
 });
 
+// Why (#1087): behind a proxy the mode is fixed by the environment, so the page has no mode control for the script to
+// read. The script used to switch the identity provider card on whenever it found no control, so the card that does
+// nothing in this mode was drawn live, and the field above it said "header". The server now draws the card inactive
+// and names the mode; the roles card stays live because the proxy's groups give the roles in this mode.
+test("sign-in tab behind a proxy: the identity provider card is inactive, the mode is named", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=signin");
+  await expect(page.locator("[data-key='AUTH_MODE']")).toContainText("Sign-in is handled by your proxy (header)");
+  await expect(page.locator("#card-idp")).toHaveClass(/is-off/);
+  await expect(page.locator("#card-idp")).toHaveAttribute("inert", "");
+  await expect(page.locator("#card-roles")).not.toHaveClass(/is-off/);
+  await expect(page.locator("#card-mode")).not.toContainText("Asks you to confirm");
+});
+
 // Local accounts (the default): the Sign-in tab shows the identity provider cards, which wait for
 // single sign-on to be selected.
 test.describe("with local accounts", () => {
@@ -358,6 +372,7 @@ test.describe("with local accounts", () => {
     await expect(page.locator("#card-roles")).toHaveClass(/is-off/);
     await page.locator("[data-key='AUTH_MODE'] label.rcard", { hasText: "Single sign-on" }).click();
     await expect(page.locator("#card-idp")).not.toHaveClass(/is-off/);
+    await expect(page.locator("#card-roles")).not.toHaveClass(/is-off/);
     await expect(page.locator("[data-sys-bar] .sbar-chip")).toHaveText(["Sign-in"]);
   });
 
