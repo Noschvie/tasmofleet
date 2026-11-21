@@ -192,12 +192,18 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Role = s.o.Roles.Role(p.Groups)
 	if p.Role == model.RoleNone {
-		// No matching group: 403 and no session (spec §15.1).
+		// No matching group: 403 and no session (spec §15.1). The reason stays in the audit row;
+		// the page says what to do and leads on (#1084): back to sign-in, and the provider's own
+		// sign-out to switch accounts there (no session exists here for a TasmoFleet sign-out).
 		s.record(r, p.Subject, "auth.login.oidc", "denied: no matching group", map[string]string{"user": p.Name})
-		s.o.Pages.Message(w, r, http.StatusForbidden, MessageData{
-			BasePath: base, Title: "Access denied",
-			Text: "You are signed in at the identity provider, but none of your groups grants access to TasmoFleet.",
-		})
+		d := MessageData{
+			BasePath: base, Title: "Access denied", LocalLogin: true,
+			Text: "Your account isn’t allowed to use TasmoFleet. Ask an admin to give you access, then sign in again.",
+		}
+		if end, ok := s.endSessionURL(""); ok {
+			d.IdPSignOut, d.IdP = end, s.o.OIDC.DisplayName
+		}
+		s.o.Pages.Message(w, r, http.StatusForbidden, d)
 		return
 	}
 	if tok.RefreshToken == "" {

@@ -107,6 +107,52 @@ test("a page on another site cannot sign you out", { tag: "@core" }, async ({ pa
   await expect(page).toHaveURL(/\/devices$/);
 });
 
+// postFormFrom posts a plain form (no htmx) from the open page, the way a form left open in a tab is sent later.
+async function postFormFrom(page: Page, action: string, fields: Record<string, string>) {
+  await page.evaluate(
+    ([action, fields]) => {
+      const f = document.createElement("form");
+      f.method = "post";
+      f.action = action;
+      for (const [k, v] of Object.entries(fields)) {
+        const i = document.createElement("input");
+        i.type = "hidden";
+        i.name = k;
+        i.value = v;
+        f.appendChild(i);
+      }
+      document.body.appendChild(f);
+      f.submit();
+    },
+    [action, fields] as const,
+  );
+}
+
+// Why (#1084): a form left open past a sign-in change carries a token that no longer matches. The browser
+// got a white page with "missing or invalid CSRF token" and lost what it had selected. It must land on a
+// page that says what happened and leads on (Reload back to the page the form was on, Dashboard); still
+// refused, so nothing was done. Without any session the form leads to the sign-in page that says the
+// session expired. The check is the same: the request is not carried out either way.
+test("a form left open past a sign-in change ends on a page that leads on", { tag: "@core" }, async ({ page }) => {
+  await signInBreakglass(page);
+  await page.goto(app.url + "/devices");
+  const answer = page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith("/devices/bulk/command"));
+  await postFormFrom(page, app.url + "/devices/bulk/command", { csrf: "token-of-an-earlier-sign-in", id: "1", command: "Power" });
+  expect((await answer).status(), "the stale form is still refused").toBe(403);
+  await expect(page.getByRole("heading", { name: "This page is out of date" })).toBeVisible();
+  await expect(page.getByText("missing or invalid CSRF token")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Reload" })).toHaveAttribute("href", "/devices");
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+
+  await page.goto(app.url + "/devices");
+  await page.context().clearCookies(); // the server-side effect of an ended session: no session cookie matches
+  await postFormFrom(page, app.url + "/devices/bulk/command", { csrf: "token-of-an-earlier-sign-in", id: "1", command: "Power" });
+  await expect(page).toHaveURL(/\/login\?expired=1$/);
+  await expect(page.getByText("Your session expired.")).toBeVisible();
+  await expect(page.getByLabel("Username")).toBeVisible();
+});
+
 // UX review #2: the account pages are part of the app: navigation, sign-out, the same
 // layout. Only the sign-in and the forced first password change stay centred.
 test("account pages carry the app shell", async ({ page }) => {

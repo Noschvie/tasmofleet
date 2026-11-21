@@ -77,6 +77,16 @@ func (p *Pages) Message(w http.ResponseWriter, r *http.Request, status int, d au
 	p.write(w, r, status, messagePage(p.frame(r, d.Title, d.BasePath), d))
 }
 
+// StaleForm is the answer to a form whose CSRF token no longer matches (#1084: the sign-in changed
+// since the page was opened), for a browser that loads it as a page. It is the standalone card: the
+// check runs before any role is decided, so it draws no navigation. reload is the local path of the
+// page the form was on (the caller checked it; the base path when it is not known). The answer stays
+// a refusal: 403.
+func (p *Pages) StaleForm(w http.ResponseWriter, r *http.Request, reload string) {
+	base := httpx.BasePath(r.Context())
+	p.write(w, r, http.StatusForbidden, stalePage(p.frame(r, staleTitle, base), base, reload))
+}
+
 // ChangePassword renders the account page, or the forced change before first use.
 func (p *Pages) ChangePassword(w http.ResponseWriter, r *http.Request, status int, d auth.PasswordPageData) {
 	// The forced change stays a centred card: nothing else is reachable yet.

@@ -169,16 +169,49 @@ templ signOutForm(base, csrf string) {
 }
 
 // messagePage is a short standalone message: a failed single sign-on, no role at all, a password
-// change still required.
+// change still required. Its ways on are one row of buttons: back to sign-in first, then the
+// identity provider's sign-out when single sign-on was refused (#1084).
 templ messagePage(f authFrame, d auth.MessageData) {
 	@authDoc(f) {
 		<h1>{ d.Title }</h1>
 		<p class="auth-text">{ d.Text }</p>
-		if d.LocalLogin {
-			<a class="btn btn-tall" href={ templ.SafeURL(d.BasePath + "/login") }>Back to sign-in</a>
+		if d.LocalLogin || d.IdPSignOut != "" {
+			@ui.ButtonRow() {
+				if d.LocalLogin {
+					@ui.Button(ui.Btn{Label: "Back to sign-in", Kind: "primary", Href: d.BasePath + "/login"})
+				}
+				if d.IdPSignOut != "" {
+					@ui.Button(ui.Btn{Label: idpSignOutLabel(d.IdP), Href: d.IdPSignOut})
+				}
+			}
 		}
 		if d.SignOut {
 			@signOutForm(d.BasePath, d.CSRFToken)
+		}
+	}
+}
+
+// idpSignOutLabel names the identity provider's sign-out like the sign-in button names its sign-in:
+// "Sign out of Authentik", or "Sign out of SSO" when the provider has no name of its own.
+func idpSignOutLabel(name string) string {
+	if name == "" || name == "Single sign-on" {
+		return "Sign out of SSO"
+	}
+	return "Sign out of " + name
+}
+
+// staleTitle is the title of the stale-form page.
+const staleTitle = "This page is out of date"
+
+// stalePage answers a form whose sign-in changed since it was opened (#1084): what happened in the
+// person's words, Reload back to the page the form was on, and the dashboard.
+templ stalePage(f authFrame, base, reload string) {
+	@authDoc(f) {
+		<h1>{ staleTitle }</h1>
+		<p class="auth-text">Your sign-in changed since you opened it. Reload the page and try again.</p>
+		@ui.ButtonRow() {
+			@ui.Button(ui.Btn{Label: "Reload", Kind: "primary", Href: reload})
+			@ui.Button(ui.Btn{Label: "Dashboard", Href: base + "/"})
 		}
 	}
 }

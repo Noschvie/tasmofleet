@@ -253,6 +253,10 @@ type TokenSource interface {
 type CSRF struct {
 	cop    *http.CrossOriginProtection
 	tokens TokenSource
+	// Refused answers a same-origin request whose token is missing or wrong (#1084: the app shows a
+	// browser a page that leads on). It must answer 403. A cross-origin request never reaches it: it
+	// keeps the plain "cross-origin request rejected". nil answers with CSRFRefused.
+	Refused func(w http.ResponseWriter, r *http.Request)
 }
 
 // CSRFField and CSRFHeader carry the token in forms and HTMX requests.
@@ -280,6 +284,12 @@ func NewCSRF(tokens TokenSource, trustedOrigins ...string) (*CSRF, error) {
 // ErrCSRF is reported when a request fails the CSRF check.
 var ErrCSRF = errors.New("httpx: CSRF check failed")
 
+// CSRFRefused is the plain answer to a request without a valid token: 403 and one line of text.
+// htmx and API callers always get it; it is also CSRF's answer when Refused is nil.
+func CSRFRefused(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "missing or invalid CSRF token", http.StatusForbidden)
+}
+
 // Middleware rejects unsafe requests that are cross-origin or carry no
 // valid token with 403.
 func (c *CSRF) Middleware(next http.Handler) http.Handler {
@@ -299,7 +309,11 @@ func (c *CSRF) Middleware(next http.Handler) http.Handler {
 			got = r.PostFormValue(CSRFField)
 		}
 		if want == "" || subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			http.Error(w, "missing or invalid CSRF token", http.StatusForbidden)
+			if c.Refused != nil {
+				c.Refused(w, r)
+				return
+			}
+			CSRFRefused(w, r)
 			return
 		}
 		next.ServeHTTP(w, r)

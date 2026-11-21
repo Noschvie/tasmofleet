@@ -567,3 +567,243 @@ func TestGuardUnsafeSendsHTMXWithoutSessionToSignIn(t *testing.T) {
 		}
 	}
 }
+
+// chromeAccept is what Chrome sends with a form post that navigates (a plain form, not htmx).
+const chromeAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+
+// withBase runs r through the proxy middleware with a static base path, so the request carries the
+// base path in its context the way the app's handlers see it (prefix stripped from the path).
+func withBase(t *testing.T, base string, h http.Handler) http.Handler {
+	t.Helper()
+	return httpx.Proxy{BasePath: base}.Middleware(h)
+}
+
+// Why (#1084): only a browser that loads the answer as a page may get the styled page or the
+// redirect; htmx swaps the answer into the page and an API client reads the text. "*/*" alone is
+// what htmx, curl and fetch send, so it must not count as asking for a page, and neither may a
+// text/html the client refuses (q=0).
+func TestAcceptsPage(t *testing.T) {
+	cases := []struct {
+		accept string
+		htmx   bool
+		want   bool
+	}{
+		{chromeAccept, false, true},
+		{"text/html", false, true},
+		{"TEXT/HTML; charset=utf-8", false, true},
+		{"application/json, text/html;q=0.5", false, true},
+		{chromeAccept, true, false},
+		{"", false, false},
+		{"*/*", false, false},
+		{"text/*", false, false},
+		{"application/json", false, false},
+		{"text/html;q=0", false, false},
+		{"text/html;q=0.000", false, false},
+		{"text/html;q=x", false, false},
+		{"text/plain, text/htmlx", false, false},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest(http.MethodPost, "/devices/bulk/command", nil)
+		if c.accept != "" {
+			r.Header.Set("Accept", c.accept)
+		}
+		if c.htmx {
+			r.Header.Set("HX-Request", "true")
+		}
+		if got := acceptsPage(r); got != c.want {
+			t.Errorf("Accept %q htmx=%v: %v, want %v", c.accept, c.htmx, got, c.want)
+		}
+	}
+}
+
+// Why (#1084): Reload on the stale page leads back to the page the form was on. The Referer is
+// request input, so it may only become a local path of this app: a Referer of another site, a
+// malformed one, one outside the base path or one that a browser would read as another host
+// ("//host") falls back to the base path; a backslash leaves only escaped (%5C), so the path stays
+// on this host. PUBLIC_URL's origin counts as this app (a
+// proxy may rewrite Host), as it does for the origin check.
+func TestReloadTarget(t *testing.T) {
+	cases := []struct {
+		base, referer, want string
+	}{
+		{"", "http://example.com/devices?q=a", "/devices?q=a"},
+		{"", "http://EXAMPLE.com/devices", "/devices"},
+		{"", "http://example.com/devices#row-7", "/devices"},
+		{"", "https://fleet.example/devices", "/devices"},
+		{"", "", "/"},
+		{"", "http://evil.example/devices", "/"},
+		{"", "https://fleet.example.evil/devices", "/"},
+		{"", "http://example.com.evil/devices", "/"},
+		{"", "%zz", "/"},
+		{"", "http://example.com/%zz", "/"},
+		{"", "//example.com/devices", "/"},
+		{"", "/devices", "/"},
+		{"", "http://example.com//evil.example/x", "/"},
+		{"", `http://example.com/\evil.example`, "/%5Cevil.example"}, // escaped: a path on this host, never "/\evil.example"
+		{"", "javascript:alert(1)", "/"},
+		{"", "ftp://example.com/devices", "/"},
+		{"", "http://user@example.com/devices", "/"},
+		{"/tf", "http://example.com/tf/devices", "/tf/devices"},
+		{"/tf", "http://example.com/tf", "/tf"},
+		{"/tf", "http://example.com/devices", "/tf/"},
+		{"/tf", "http://example.com/tfx/devices", "/tf/"},
+		{"/tf", "http://evil.example/tf/devices", "/tf/"},
+	}
+	for _, c := range cases {
+		var got string
+		h := withBase(t, c.base, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			got = reloadTarget(r, []string{"https://fleet.example"})
+		}))
+		r := httptest.NewRequest(http.MethodPost, c.base+"/devices/bulk/command", nil) // Host: example.com
+		if c.referer != "" {
+			r.Header.Set("Referer", c.referer)
+		}
+		h.ServeHTTP(httptest.NewRecorder(), r)
+		if got != c.want {
+			t.Errorf("base %q Referer %q: %q, want %q", c.base, c.referer, got, c.want)
+		}
+	}
+}
+
+// Why (#1084): a form left open past a sign-in change (sign-out and in again, another tab, a
+// restart) carries a token that no longer matches. A browser got a white page with "missing or
+// invalid CSRF token" and lost what it had selected; it must get the styled page that says what
+// happened and leads on (Reload back to the page the form was on, Dashboard). The check itself does
+// not soften: the answer stays 403 and the handler is never reached. htmx and API callers keep the
+// plain text (htmx swaps it into the page, a script reads it), and a cross-origin post keeps its own
+// plain refusal, so a forged form never gets the friendly page. The guard is built by
+// newUnsafeGuard, as the app builds it, so the page is wired where the app wires it.
+func TestGuardUnsafeStaleFormPage(t *testing.T) {
+	const plain, crossOrigin = "missing or invalid CSRF token", "cross-origin request rejected"
+	cases := []struct {
+		name   string
+		base   string
+		s      sessionFn
+		header map[string]string
+		body   string
+		want   int
+		page   bool   // the stale page, else plain text
+		text   string // the plain text wanted
+		reload string // Reload's href on the page
+	}{
+		{"wrong token", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "Referer": "http://example.com/devices?q=a"}, "csrf=old", 403, true, "", "/devices?q=a"},
+		{"no token", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "Referer": "http://example.com/devices"}, "id=1", 403, true, "", "/devices"},
+		{"under a base path", "/tf", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "Referer": "http://example.com/tf/devices"}, "csrf=old", 403, true, "", "/tf/devices"},
+		{"Referer of another site", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "Referer": "http://evil.example/devices"}, "csrf=old", 403, true, "", "/"},
+		{"pre-session cookie, wrong token", "", sessionFn{token: "pre"}, map[string]string{"Accept": chromeAccept}, "csrf=old", 403, true, "", "/"},
+		{"htmx", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "HX-Request": "true"}, "csrf=old", 403, false, plain, ""},
+		{"API caller", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": "application/json"}, "csrf=old", 403, false, plain, ""},
+		{"no Accept", "", sessionFn{token: "tok", valid: true}, nil, "csrf=old", 403, false, plain, ""},
+		{"another site", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept, "Sec-Fetch-Site": "cross-site"}, "csrf=old", 403, false, crossOrigin, ""},
+		{"right token", "", sessionFn{token: "tok", valid: true}, map[string]string{"Accept": chromeAccept}, "csrf=tok", 204, false, "", ""},
+	}
+	for _, c := range cases {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached = true; w.WriteHeader(http.StatusNoContent) })
+		guard, err := newUnsafeGuard(c.s, web.NewPages(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, c.base+"/devices/bulk/command", strings.NewReader(c.body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range c.header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		withBase(t, c.base, guard(next)).ServeHTTP(rec, req)
+		body, ctype := rec.Body.String(), rec.Header().Get("Content-Type")
+		if rec.Code != c.want || reached != (c.want == 204) {
+			t.Errorf("%s: %d reached=%v, want %d", c.name, rec.Code, reached, c.want)
+			continue
+		}
+		switch {
+		case c.page:
+			dashboard := c.base + "/"
+			for _, want := range []string{
+				"<h1>This page is out of date</h1>",
+				"Your sign-in changed since you opened it. Reload the page and try again.",
+				`<a class="btn btn-primary" href="` + c.reload + `">Reload</a>`,
+				`<a class="btn" href="` + dashboard + `">Dashboard</a>`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s: missing %q in %s", c.name, want, body)
+				}
+			}
+			if !strings.HasPrefix(ctype, "text/html") || strings.Contains(body, plain) {
+				t.Errorf("%s: %q, want the styled page and not the plain text", c.name, ctype)
+			}
+		case c.text != "":
+			if strings.TrimSpace(body) != c.text || !strings.HasPrefix(ctype, "text/plain") {
+				t.Errorf("%s: %q %q, want the plain %q", c.name, ctype, body, c.text)
+			}
+		}
+	}
+}
+
+// Why (#1084): without any session no token can exist, so a form posted from a tab whose sign-in
+// ended (expired, signed out elsewhere, a restart that dropped the session) can never pass. A
+// browser is sent to the sign-in page that says the session expired, instead of a white 403 page;
+// nothing is read from the body. Everything else keeps today's answer: htmx gets #717's 401, the
+// plain sign-out #508's exemption, an API caller and a failed session lookup the plain 403, and a
+// request with a pre-session cookie (the login form itself) still goes through the token check, so
+// a correct sign-in is never redirected. A post from another site never gets the redirect: the
+// origin check comes first (a page there cannot sign you out, e2e auth-local.spec.ts).
+func TestGuardUnsafeSendsAPageWithoutSessionToSignIn(t *testing.T) {
+	const plain = "missing or invalid CSRF token"
+	cases := []struct {
+		name     string
+		base     string
+		target   string // "METHOD path", default POST /devices/bulk/command
+		s        sessionFn
+		header   map[string]string
+		body     string // "" sends a body that fails the test when read
+		want     int
+		location string
+	}{
+		{"no session", "", "", sessionFn{}, map[string]string{"Accept": chromeAccept}, "", 303, "/login?expired=1"},
+		{"no session, same origin", "", "", sessionFn{}, map[string]string{"Accept": chromeAccept, "Sec-Fetch-Site": "same-origin", "Origin": "http://example.com"}, "", 303, "/login?expired=1"},
+		{"session expired", "", "", sessionFn{err: auth.ErrSessionExpired}, map[string]string{"Accept": chromeAccept}, "", 303, "/login?expired=1"},
+		{"under a base path", "/tf", "", sessionFn{}, map[string]string{"Accept": chromeAccept}, "", 303, "/tf/login?expired=1"},
+		{"another site", "", "", sessionFn{}, map[string]string{"Accept": chromeAccept, "Sec-Fetch-Site": "cross-site"}, "", 403, ""},
+		{"another site signs out", "", "POST /logout", sessionFn{}, map[string]string{"Accept": chromeAccept, "Sec-Fetch-Site": "cross-site", "Origin": "http://evil.example"}, "", 403, ""},
+		{"another origin without Sec-Fetch-Site", "", "", sessionFn{}, map[string]string{"Accept": chromeAccept, "Origin": "http://evil.example"}, "", 403, ""},
+		{"API caller", "", "", sessionFn{}, map[string]string{"Accept": "application/json"}, "", 403, ""},
+		{"no Accept", "", "", sessionFn{}, nil, "", 403, ""},
+		{"Accept */*", "", "", sessionFn{}, map[string]string{"Accept": "*/*"}, "", 403, ""},
+		{"session lookup failed", "", "", sessionFn{err: errors.New("database down")}, map[string]string{"Accept": chromeAccept}, "", 403, ""},
+		{"reserved header subject", "", "", sessionFn{err: auth.ErrReservedSubject}, map[string]string{"Accept": chromeAccept}, "", 403, ""},
+		{"htmx", "", "", sessionFn{}, map[string]string{"Accept": chromeAccept, "HX-Request": "true"}, "", 401, ""},
+		{"sign-in with the pre-session cookie", "", "POST /login/local", sessionFn{token: "pre"}, map[string]string{"Accept": chromeAccept}, "csrf=pre", 204, ""},
+		{"plain sign-out", "", "POST /logout", sessionFn{}, map[string]string{"Accept": chromeAccept}, "csrf=old", 204, ""},
+		{"GET", "", "GET /devices", sessionFn{}, map[string]string{"Accept": chromeAccept}, "", 204, ""},
+	}
+	for _, c := range cases {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached = true; w.WriteHeader(http.StatusNoContent) })
+		guard, err := newUnsafeGuard(c.s, web.NewPages(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		method, path, _ := strings.Cut(c.target, " ")
+		if c.target == "" {
+			method, path = http.MethodPost, "/devices/bulk/command"
+		}
+		var body io.Reader = untouchedBody{t}
+		if c.body != "" {
+			body = strings.NewReader(c.body)
+		}
+		req := httptest.NewRequest(method, c.base+path, body)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range c.header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		withBase(t, c.base, guard(next)).ServeHTTP(rec, req)
+		if rec.Code != c.want || reached != (c.want == 204) || rec.Header().Get("Location") != c.location {
+			t.Errorf("%s: %d Location=%q reached=%v, want %d Location=%q", c.name, rec.Code, rec.Header().Get("Location"), reached, c.want, c.location)
+		}
+		if c.want == 403 && strings.TrimSpace(rec.Body.String()) != plain {
+			t.Errorf("%s: body %q, want the plain CSRF refusal", c.name, rec.Body.String())
+		}
+	}
+}

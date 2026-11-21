@@ -679,24 +679,12 @@ func (a *runtime) handler() (http.Handler, error) {
 	if cfg.PublicURL != "" {
 		origins = append(origins, cfg.PublicURL)
 	}
-	csrf, err := httpx.NewCSRF(a.authSvc, origins...)
+	guard, err := newUnsafeGuard(a.authSvc, a.pages, origins)
 	if err != nil {
 		return nil, err
 	}
-	// The sign-out exemption (#508) skips only the token: it keeps the origin
-	// check of csrf, with the same trusted origins.
-	cop := http.NewCrossOriginProtection()
-	for _, o := range origins {
-		u, err := url.Parse(o)
-		if err != nil {
-			return nil, err
-		}
-		if err := cop.AddTrustedOrigin(u.Scheme + "://" + u.Host); err != nil {
-			return nil, err
-		}
-	}
 	h := a.countRequests(mux)
-	h = guardUnsafe(a.authSvc, cop, csrf.Middleware, h)
+	h = guard(h)
 	h = a.authSvc.Middleware(h)
 	h = sec(h)
 	h = httpx.AccessLog(a.log, h)

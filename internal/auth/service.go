@@ -703,6 +703,29 @@ func (s *Service) sso(w http.ResponseWriter, r *http.Request) {
 	s.startOIDC(w, r, httpx.LocalPath(r.URL.Query().Get("next")))
 }
 
+// endSessionURL is the provider's end-session address (OIDC RP-initiated logout) from discovery, with
+// client_id, post_logout_redirect_uri and, when idTokenHint is set, id_token_hint. ok is false when
+// discovery gave no end_session_endpoint or one that is not an http(s) address with a host: the
+// refused sign-in page draws it as a link, so nothing else may get there. Logout (with the session's
+// id token) and that page (without one: the token must never sit in a page) build it here only.
+func (s *Service) endSessionURL(idTokenHint string) (string, bool) {
+	s.mu.RLock()
+	end := s.endSession
+	s.mu.RUnlock()
+	u, err := url.Parse(end)
+	if end == "" || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return "", false
+	}
+	q := u.Query()
+	if idTokenHint != "" {
+		q.Set("id_token_hint", idTokenHint)
+	}
+	q.Set("client_id", s.o.OIDC.ClientID)
+	q.Set("post_logout_redirect_uri", s.o.OIDC.PostLogoutURL)
+	u.RawQuery = q.Encode()
+	return u.String(), true
+}
+
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	ci := s.resolve(r)
 	base := httpx.BasePath(r.Context())
@@ -716,23 +739,12 @@ func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
 	case ci.err == nil && ci.p.Method == ModeHeader && s.o.Header.LogoutURL != "":
 		http.Redirect(w, r, s.o.Header.LogoutURL, http.StatusSeeOther)
 	case ci.idToken != "":
-		s.mu.RLock()
-		end := s.endSession
-		s.mu.RUnlock()
-		if end == "" {
+		end, ok := s.endSessionURL(ci.idToken)
+		if !ok {
 			http.Redirect(w, r, base+"/", http.StatusSeeOther)
 			return
 		}
-		u, err := url.Parse(end)
-		if err != nil {
-			http.Redirect(w, r, base+"/", http.StatusSeeOther)
-			return
-		}
-		q := u.Query()
-		q.Set("id_token_hint", ci.idToken)
-		q.Set("post_logout_redirect_uri", s.o.OIDC.PostLogoutURL)
-		u.RawQuery = q.Encode()
-		http.Redirect(w, r, u.String(), http.StatusSeeOther) //nolint:gosec // G710: end_session_endpoint comes from the configured issuer's discovery, not the request
+		http.Redirect(w, r, end, http.StatusSeeOther) //nolint:gosec // G710: end_session_endpoint comes from the configured issuer's discovery, not the request
 	case ci.err == nil && ci.p.Method == "local":
 		http.Redirect(w, r, base+"/login?signedout=1", http.StatusSeeOther)
 	default:

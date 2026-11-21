@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -192,18 +193,59 @@ func TestCallbackReplayFails(t *testing.T) {
 	}
 }
 
+// Why (spec §15.1, #1084): an account in no mapped group gets no session, and the refusal must
+// still lead on. The card used to hold one admin-worded sentence ("none of your groups", "identity
+// provider") and no button: the person could neither go back nor switch accounts. It now says what to
+// do, offers the way back to sign-in and, when the provider publishes an end-session endpoint, a
+// sign-out there (TasmoFleet holds no session on this answer, so its own Sign out would do nothing).
+// That link carries client_id and the post-logout address only: never the id token, which would sit
+// in the page and the browser history. The technical reason stays in the audit row.
 func TestNoMatchingGroupMeans403AndNoSession(t *testing.T) {
 	e := newEnv(t, ModeOIDC)
-	b := e.browser()
-	r := b.get(b.startOIDC("/", eve))
-	if r.code != http.StatusForbidden || !strings.Contains(r.body, "none of your groups") {
-		t.Fatalf("%d %s", r.code, r.body)
+	signOutLink := regexp.MustCompile(`<a href="([^"]*)">Sign out of `)
+	refuse := func() (string, resp) {
+		t.Helper()
+		b := e.browser()
+		r := b.get(b.startOIDC("/", eve))
+		if r.code != http.StatusForbidden {
+			t.Fatalf("%d %s", r.code, r.body)
+		}
+		if len(e.sessions.all()) != 0 || b.cookie(CookieInsecure) != "" {
+			t.Fatal("user without a mapped group got a session")
+		}
+		if a := e.audit.last(); a.Result != "denied: no matching group" {
+			t.Fatalf("denied login not audited with its reason: %+v", a)
+		}
+		m := signOutLink.FindStringSubmatch(r.body)
+		if m == nil {
+			return "", r
+		}
+		return html.UnescapeString(m[1]), r
 	}
-	if len(e.sessions.all()) != 0 || b.cookie(CookieInsecure) != "" {
-		t.Fatal("user without a mapped group got a session")
+	link, r := refuse()
+	if !strings.Contains(r.body, "Your account isn’t allowed to use TasmoFleet. Ask an admin to give you access, then sign in again.") ||
+		!strings.Contains(r.body, `href="/login">Back to sign-in</a>`) {
+		t.Fatalf("the refusal does not say what to do or lacks the way back: %s", r.body)
 	}
-	if a := e.audit.last(); !strings.HasPrefix(a.Result, "denied") {
-		t.Fatalf("denied login not audited: %+v", a)
+	if low := strings.ToLower(r.body); strings.Contains(low, "groups") || strings.Contains(low, "identity provider") {
+		t.Fatalf("admin words reach the person: %s", r.body)
+	}
+	u, err := url.Parse(link)
+	if err != nil || link == "" || !strings.HasPrefix(link, e.idp.Issuer()+"end-session/") {
+		t.Fatalf("no sign-out at the provider (%q): %s", link, r.body)
+	}
+	q := u.Query()
+	if q.Get("client_id") != "tasmofleet" || q.Get("post_logout_redirect_uri") != e.srv.URL+"/" || q.Has("id_token_hint") || len(q) != 2 {
+		t.Fatalf("sign-out link must carry client_id and the post-logout address only: %s", link)
+	}
+	// A provider without an end-session endpoint, or one that is no web address: no link at all.
+	for _, end := range []string{"", "javascript:alert(1)//", "http:///no-host"} {
+		e.svc.mu.Lock()
+		e.svc.endSession = end
+		e.svc.mu.Unlock()
+		if link, r := refuse(); link != "" || strings.Contains(r.body, "Sign out") {
+			t.Fatalf("end_session_endpoint %q: sign-out offered: %s", end, r.body)
+		}
 	}
 }
 
@@ -271,7 +313,9 @@ func TestLogoutIsRPInitiated(t *testing.T) {
 	if r.code != http.StatusSeeOther || !strings.HasPrefix(r.loc, e.idp.Issuer()+"end-session/") {
 		t.Fatalf("logout: %d %q", r.code, r.loc)
 	}
-	if u.Query().Get("id_token_hint") != idToken || u.Query().Get("post_logout_redirect_uri") != e.srv.URL+"/" {
+	// client_id names the client the post-logout address belongs to (#1084 builds the URL in one place for logout
+	// and the refused sign-in, which has no id token to name it).
+	if u.Query().Get("id_token_hint") != idToken || u.Query().Get("post_logout_redirect_uri") != e.srv.URL+"/" || u.Query().Get("client_id") != "tasmofleet" {
 		t.Fatalf("logout params %v", u.Query())
 	}
 	if len(e.sessions.all()) != 0 {

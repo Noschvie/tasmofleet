@@ -374,6 +374,8 @@ Also: [desktop, dark](../design/styleguide/errors-desktop-dark.png) · [phone, l
 
 Sign-in, setup and password pages: the brand above, a 420 px card (radius 12, padding 24) with the h1 (`600 20px`), banners, fields and the button, and the footer "TasmoFleet x.y.z · host" in mono (D15).
 
+The same card carries the short messages that come before any role is known, so they draw no navigation: a failed or refused single sign-on (`messagePage`) and the stale form (`stalePage`, #1084: "This page is out of date", a form whose sign-in changed since it was opened). Their ways on are one `ui.ButtonRow` of `ui.Button`s at the default size, the way back first and primary: Back to sign-in, then "Sign out of <provider>" (the provider's end-session link, only when it has one) on the refused sign-on; Reload (the page the form was on) and Dashboard on the stale form. The tall full-width size stays with the sign-in and password forms until #1092 makes it a `Btn` option.
+
 Component: `ui.AuthCard(base, version, host)`.
 
 ![Sign-in card, desktop, light](../design/styleguide/auth-desktop-light.png)

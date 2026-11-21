@@ -1,12 +1,14 @@
 package web
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/httpx"
 )
 
 // Why: the sign-in, forced-change and denial pages are rendered outside the app
@@ -125,5 +127,62 @@ func TestSSOLinkKeepsTheWholeWayBack(t *testing.T) {
 	want := `href="/tf/login/sso?next=` + url.QueryEscape(next) + `"`
 	if !strings.Contains(w.Body.String(), want) {
 		t.Errorf("SSO link does not carry next escaped (%s): %s", want, w.Body)
+	}
+}
+
+// Why (#1084): a form left open past a sign-in change ends on this page, before any principal is
+// known. It is the standalone card (no navigation that would need a role), it follows the system
+// theme like every card, it says what happened in the person's words, and it leads on: Reload goes
+// back to the page the form was on (the caller has made that a local path), Dashboard to the start
+// under the base path. The answer is a refusal, so it keeps the 403 and is never cached.
+func TestStaleFormPageLeadsOn(t *testing.T) {
+	w := httptest.NewRecorder()
+	h := httpx.Proxy{BasePath: "/tf"}.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		NewPages().StaleForm(w, r, "/tf/devices?q=a")
+	}))
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/tf/devices/bulk/command", nil))
+	body := w.Body.String()
+	if w.Code != http.StatusForbidden || w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("status %d, Cache-Control %q: want 403, no-store", w.Code, w.Header().Get("Cache-Control"))
+	}
+	for _, want := range []string{
+		`<html lang="en" data-theme-auto>`,
+		"<title>This page is out of date - TasmoFleet</title>",
+		`<div class="auth-card"><h1>This page is out of date</h1>`,
+		`<p class="auth-text">Your sign-in changed since you opened it. Reload the page and try again.</p>`,
+		`<div class="btn-row"><a class="btn btn-primary" href="/tf/devices?q=a">Reload</a><a class="btn" href="/tf/">Dashboard</a></div>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in %s", want, body)
+		}
+	}
+	if strings.Contains(body, "CSRF") || strings.Contains(body, `class="sn-in"`) {
+		t.Errorf("technical words or navigation on the stale page: %s", body)
+	}
+}
+
+// Why (#1084): the refused single sign-on card must lead on. Back to sign-in is its first way on;
+// the sign-out at the identity provider is a plain link (TasmoFleet holds no session there), named
+// after the provider like the sign-in button, and only drawn when auth handed one over.
+func TestMessagePageOffersSignOutAtTheProvider(t *testing.T) {
+	render := func(d auth.MessageData) string {
+		w := httptest.NewRecorder()
+		NewPages().Message(w, httptest.NewRequest("GET", "/oidc/callback", nil), 403, d)
+		return w.Body.String()
+	}
+	end := "https://idp.example/end?client_id=tf&post_logout_redirect_uri=https%3A%2F%2Ffleet.example%2F"
+	d := auth.MessageData{BasePath: "/tf", Title: "Access denied", Text: "x", LocalLogin: true, IdP: "Authentik", IdPSignOut: end}
+	back := `<div class="btn-row"><a class="btn btn-primary" href="/tf/login">Back to sign-in</a>`
+	idp := `<a class="btn" href="https://idp.example/end?client_id=tf&amp;post_logout_redirect_uri=https%3A%2F%2Ffleet.example%2F">Sign out of Authentik</a></div>`
+	if body := render(d); !strings.Contains(body, back) || !strings.Contains(body, idp) || strings.Index(body, back) > strings.Index(body, idp) {
+		t.Errorf("want %q, then %q in %s", back, idp, body)
+	}
+	d.IdP = "Single sign-on" // the default name: the button says SSO, like the sign-in button
+	if body := render(d); !strings.Contains(body, ">Sign out of SSO</a>") {
+		t.Errorf("default provider name: %s", body)
+	}
+	d.IdPSignOut = ""
+	if body := render(d); strings.Contains(body, "Sign out") || !strings.Contains(body, back) {
+		t.Errorf("without an end-session link only the way back is drawn: %s", body)
 	}
 }

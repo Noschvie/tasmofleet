@@ -8,6 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
@@ -50,7 +53,7 @@ func guardBodies(tokens httpx.TokenSource, next http.Handler) http.Handler {
 			return
 		}
 		if tokens.CSRFToken(r) == "" {
-			http.Error(w, "missing or invalid CSRF token", http.StatusForbidden)
+			httpx.CSRFRefused(w, r)
 			return
 		}
 		if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(mt, "multipart/") {
@@ -100,6 +103,13 @@ type sessionTokens interface {
 // with a missing or wrong token is still refused with 403, requests that are
 // not htmx keep the 403, and so does a reserved header subject (Require answers
 // it with 403, not with the sign-in page).
+//
+// A form that a browser posts as a page (acceptsPage) without any session and
+// without any token (none can exist, so guardBodies would refuse it) is sent to
+// the sign-in page that says the session expired (#1084), again without reading
+// the body. Like the #508 exemption it needs the origin check: a form another
+// site posts never gets the redirect. A pre-session cookie (the login form)
+// carries a token, so the login post still goes through the token check.
 func guardUnsafe(a sessionTokens, cop *http.CrossOriginProtection, csrf func(http.Handler) http.Handler, next http.Handler) http.Handler {
 	guarded := guardBodies(a, csrf(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -116,8 +126,110 @@ func guardUnsafe(a sessionTokens, cop *http.CrossOriginProtection, csrf func(htt
 				return
 			}
 		}
+		if isUnsafe(r) && acceptsPage(r) && a.CSRFToken(r) == "" && cop.Check(r) == nil {
+			if _, err := a.Principal(r); errors.Is(err, auth.ErrUnauthenticated) && !errors.Is(err, auth.ErrReservedSubject) {
+				http.Redirect(w, r, httpx.BasePath(r.Context())+"/login?expired=1", http.StatusSeeOther)
+				return
+			}
+		}
 		guarded.ServeHTTP(w, r)
 	})
+}
+
+// newUnsafeGuard builds the guard of every unsafe request as the app uses it:
+// guardUnsafe around the CSRF middleware, both origin checks with the trusted
+// origins (PUBLIC_URL), and the stale-form page as the answer to a refused
+// token (#1084).
+func newUnsafeGuard(a sessionTokens, pages *web.Pages, origins []string) (func(http.Handler) http.Handler, error) {
+	csrf, err := httpx.NewCSRF(a, origins...)
+	if err != nil {
+		return nil, err
+	}
+	csrf.Refused = staleForm(pages, origins)
+	// The sign-out exemption (#508) and the redirect without a session skip
+	// only the token: they keep the origin check of csrf, with the same
+	// trusted origins.
+	cop := http.NewCrossOriginProtection()
+	for _, o := range origins {
+		u, err := url.Parse(o)
+		if err != nil {
+			return nil, err
+		}
+		if err := cop.AddTrustedOrigin(u.Scheme + "://" + u.Host); err != nil {
+			return nil, err
+		}
+	}
+	return func(next http.Handler) http.Handler { return guardUnsafe(a, cop, csrf.Middleware, next) }, nil
+}
+
+// staleForm answers a same-origin request whose CSRF token is missing or wrong
+// (#1084): a form left open past a sign-in change. A browser loading the answer
+// as a page gets the styled page with Reload and Dashboard; htmx and API
+// callers keep the plain 403. Both answers are 403.
+func staleForm(pages *web.Pages, origins []string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !acceptsPage(r) {
+			httpx.CSRFRefused(w, r)
+			return
+		}
+		pages.StaleForm(w, r, reloadTarget(r, origins))
+	}
+}
+
+// acceptsPage reports whether r is a browser loading the answer as a page: not
+// htmx (it swaps the answer into the page), and Accept names text/html with a
+// q above 0. "*/*" alone (htmx, fetch, curl) does not count.
+func acceptsPage(r *http.Request) bool {
+	if r.Header.Get("HX-Request") != "" {
+		return false
+	}
+	for _, v := range r.Header.Values("Accept") {
+		for part := range strings.SplitSeq(v, ",") {
+			mt, params, err := mime.ParseMediaType(part)
+			if err != nil || mt != "text/html" {
+				continue
+			}
+			if q, ok := params["q"]; ok {
+				if f, err := strconv.ParseFloat(q, 64); err != nil || f <= 0 {
+					continue
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// reloadTarget is where the stale-form page's Reload leads: the page the form
+// was on, taken from the Referer, but only as a local path of this app. The
+// Referer must be an http(s) address of this host or of a trusted origin
+// (PUBLIC_URL), its path under the base path, and the path and query must pass
+// httpx.LocalPath; otherwise it is the base path. The result is never an
+// absolute address, so the page cannot lead off-site.
+func reloadTarget(r *http.Request, origins []string) string {
+	base := httpx.BasePath(r.Context())
+	home := base + "/"
+	ref, err := url.Parse(r.Referer())
+	if err != nil || (ref.Scheme != "http" && ref.Scheme != "https") || ref.User != nil || ref.Host == "" {
+		return home
+	}
+	if !strings.EqualFold(ref.Host, r.Host) && !slices.ContainsFunc(origins, func(o string) bool {
+		u, err := url.Parse(o)
+		return err == nil && strings.EqualFold(u.Scheme+"://"+u.Host, ref.Scheme+"://"+ref.Host)
+	}) {
+		return home
+	}
+	p := ref.EscapedPath()
+	if p != base && !strings.HasPrefix(p, base+"/") {
+		return home
+	}
+	if ref.RawQuery != "" {
+		p += "?" + ref.RawQuery
+	}
+	if httpx.LocalPath(p) != p {
+		return home
+	}
+	return p
 }
 
 // isUnsafe is true for the methods guardBodies checks: all but GET, HEAD and OPTIONS.

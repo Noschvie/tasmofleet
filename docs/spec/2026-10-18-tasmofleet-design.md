@@ -2381,6 +2381,10 @@ default on) can be combined with every mode and are the only method in `local` m
 - Roles from groups (`ADMIN_GROUPS`, `OPERATOR_GROUPS`), highest wins. At
   least one of these lists must be configured; there is **no implicit "any authenticated
   user"** (config validation fails). No matching group: 403 with a clear page, no session.
+  The page says what to do (ask an admin for access, then sign in again) and leads on: back to
+  sign-in, and, when discovery gave an `end_session_endpoint`, a link to sign out there (with
+  `client_id` and `post_logout_redirect_uri`, never the id token); TasmoFleet holds no session to
+  end. The reason (no matching group) is in the audit row only (#1084).
 - **Group revocation.** The refresh token is stored server-side with the session, sealed
   with secretbox. On a request at least `OIDC_RECHECK` (15 min) after the last check, the
   session refreshes at the IdP and re-evaluates the groups. A role change applies at once.
@@ -2389,8 +2393,9 @@ default on) can be combined with every mode and are the only method in `local` m
   request from the stored groups and the current mapping, so a config change applies
   immediately.
 - Logout clears the session, then does an RP-initiated logout: redirect to
-  `end_session_endpoint` with `id_token_hint` and `post_logout_redirect_uri`
-  (`OIDC_POST_LOGOUT_URL`, default `PUBLIC_URL + BASE_PATH + "/"`).
+  `end_session_endpoint` with `id_token_hint`, `client_id` and `post_logout_redirect_uri`
+  (`OIDC_POST_LOGOUT_URL`, default `PUBLIC_URL + BASE_PATH + "/"`). An endpoint that is not an
+  http(s) address with a host counts as none.
 - Post-login redirect targets are local paths only (must start with `/`, not `//` or `/\`,
   no scheme).
 
@@ -2528,6 +2533,12 @@ Example: `Tasmofleet Users` -> operator, `Tasmofleet Admins` -> admin.
   `PUBLIC_URL`'s origin added as trusted origin, plus a per-session synchronizer token
   (form field `csrf` or header `X-CSRF-Token`, which HTMX sends via `hx-headers`).
   Login POST (`/login/local`) uses a pre-session token cookie (double submit).
+- A refused request is answered with 403. A cross-origin one gets the plain text "cross-origin
+  request rejected". A missing or wrong token gets the plain text "missing or invalid CSRF token"
+  for htmx and API callers; a browser loading the answer as a page (no `HX-Request`, `Accept` names
+  `text/html`) gets the page "This page is out of date" with Reload (the same-origin Referer as a
+  local path, else the base path) and Dashboard. A same-origin page request without any session
+  and without any token is redirected to `/login?expired=1` instead (#1084).
 - CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
 connect-src 'self'; frame-ancestors 'self'; form-action 'self' <issuer origin>`. `frame-ancestors` is not configurable (the code passes no extra sources).
   No inline scripts (HTMX config via meta/attributes). `X-Content-Type-Options: nosniff`,

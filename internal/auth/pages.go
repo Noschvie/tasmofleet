@@ -34,9 +34,15 @@ type MessageData struct {
 	BasePath   string
 	Title      string
 	Text       string
-	LocalLogin bool   // offer the link back to the sign-in page (local sign-in is possible there)
+	LocalLogin bool   // offer the link back to the sign-in page (local sign-in or a new single sign-on starts there)
 	SignOut    bool   // offer a Sign out form: the user holds a session but no page of the app is open to them
 	CSRFToken  string // the token that form carries
+	// IdPSignOut is the identity provider's end-session address (RP-initiated logout with client_id and
+	// the post-logout address, never an id token), offered as a link when single sign-on was refused:
+	// TasmoFleet holds no session then, so only the provider's sign-out lets the person switch accounts.
+	// Empty: no link (the provider publishes no end-session endpoint). IdP is the provider's name.
+	IdPSignOut string
+	IdP        string
 }
 
 // Pages renders the few HTML pages auth needs. Package web may supply its
@@ -147,6 +153,7 @@ var pagesTmpl = template.Must(template.New("").Parse(`
 {{define "message"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{.Title}}</title></head><body>
 <h1>{{.Title}}</h1><p>{{.Text}}</p>
 {{if .LocalLogin}}<p><a href="{{.BasePath}}/login">Back to sign-in</a></p>{{end}}
+{{if .IdPSignOut}}<p><a href="{{.IdPSignOut}}">Sign out of {{.IdP}}</a></p>{{end}}
 {{if .SignOut}}<form method="post" action="{{.BasePath}}/logout"><input type="hidden" name="csrf" value="{{.CSRFToken}}"><button type="submit">Sign out</button></form>{{end}}
 </body></html>{{end}}`))
 

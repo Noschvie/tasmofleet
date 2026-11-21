@@ -221,6 +221,66 @@ func TestCSRF(t *testing.T) {
 	}
 }
 
+// Why (#1084): a form left open past a sign-in change fails the token check, and the app answers
+// a browser with a page that leads on instead of the plain text. Only that failure may reach the
+// app's answer: a cross-origin request is refused before the token is looked at and keeps its plain
+// "cross-origin request rejected", so a forged form never gets the friendly page. Without a refusal
+// handler the answer stays the plain 403 text, and a valid token never reaches the handler.
+func TestCSRFRefusedAnswersOnlyTheTokenFailure(t *testing.T) {
+	c, err := NewCSRF(tokens("tok123"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refused int
+	c.Refused = func(w http.ResponseWriter, _ *http.Request) {
+		refused++
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("the app's page")) // a recorder never fails
+	}
+	h := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	do := func(hdr map[string]string) *httptest.ResponseRecorder {
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://fleet/devices/1/delete", nil)
+		for k, v := range hdr {
+			r.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do(map[string]string{"Sec-Fetch-Site": "same-origin", "X-CSRF-Token": "old"}); w.Code != http.StatusForbidden || w.Body.String() != "the app's page" || refused != 1 {
+		t.Errorf("wrong token: %d %q refused=%d, want the refusal handler's answer", w.Code, w.Body, refused)
+	}
+	if w := do(map[string]string{"Sec-Fetch-Site": "same-origin"}); w.Code != http.StatusForbidden || refused != 2 {
+		t.Errorf("no token: %d refused=%d, want the refusal handler's answer", w.Code, refused)
+	}
+	for _, hdr := range []map[string]string{
+		{"Sec-Fetch-Site": "cross-site", "X-CSRF-Token": "old"},
+		{"Origin": "http://evil.example", "X-CSRF-Token": "tok123"},
+	} {
+		w := do(hdr)
+		if w.Code != http.StatusForbidden || strings.TrimSpace(w.Body.String()) != "cross-origin request rejected" || refused != 2 {
+			t.Errorf("cross-origin %v: %d %q refused=%d, want the plain cross-origin refusal", hdr, w.Code, w.Body, refused)
+		}
+	}
+	if w := do(map[string]string{"Sec-Fetch-Site": "same-origin", "X-CSRF-Token": "tok123"}); w.Code != http.StatusNoContent || refused != 2 {
+		t.Errorf("right token: %d refused=%d, want the handler", w.Code, refused)
+	}
+
+	plain, _ := NewCSRF(tokens("tok123")) // no Refused: today's answer
+	w := httptest.NewRecorder()
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://fleet/x", nil)
+	r.Header.Set("X-CSRF-Token", "old")
+	plain.Middleware(http.NotFoundHandler()).ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden || w.Body.String() != "missing or invalid CSRF token\n" || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+		t.Errorf("default refusal: %d %q %q, want the plain 403 text", w.Code, w.Body, w.Header().Get("Content-Type"))
+	}
+	w = httptest.NewRecorder()
+	CSRFRefused(w, r)
+	if w.Code != http.StatusForbidden || w.Body.String() != "missing or invalid CSRF token\n" {
+		t.Errorf("CSRFRefused: %d %q, want the plain 403 text", w.Code, w.Body)
+	}
+}
+
 // Why: an open event stream re-checks its session with Detach. It must keep the scheme and base
 // path (the session cookie's name and path depend on them) but drop everything else: a principal
 // cached at connect time would make the re-check a no-op, and the request's cancellation is not
