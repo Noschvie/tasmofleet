@@ -127,7 +127,7 @@ test("a new rule from a template is a draft until Save, then lives at its own id
     "LedState",
   );
   await page.goto(app.url + "/policy/rules/rzzzzzzzzzz");
-  await expect(page.getByText("This page doesn't exist")).toBeVisible();
+  await expect(page.getByText("This page doesn’t exist")).toBeVisible();
 
   // editing the rule keeps its id; Save lands on the overview with that rule marked
   await page.goto(app.url + "/policy/rules/" + first);

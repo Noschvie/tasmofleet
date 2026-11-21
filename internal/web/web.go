@@ -619,21 +619,21 @@ func (h *handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 // notFoundDevice / notFoundBatch; the route prefix says nothing about which
 // object is missing (a device can exist while one of its backups does not).
 func (h *handler) notFound(w http.ResponseWriter, r *http.Request) {
-	h.renderNotFound(w, r, "Not found", "This page doesn't exist",
-		"The link may be from an older version of TasmoFleet, or the device it pointed to was deleted.",
+	h.renderNotFound(w, r, "Not found", "This page doesn’t exist",
+		"Check the address, or go back to the dashboard.",
 		ui.Btn{Label: "Go to dashboard", Kind: "primary", Href: "/"}, ui.Btn{Label: "All devices", Href: "/devices"})
 }
 
 // notFoundDevice answers 404 for a device that does not exist and links to the list.
 func (h *handler) notFoundDevice(w http.ResponseWriter, r *http.Request) {
-	h.renderNotFound(w, r, "Device not found", "This device doesn't exist",
+	h.renderNotFound(w, r, "Device not found", "This device doesn’t exist",
 		"It may have been deleted, or the link is mistyped.",
 		ui.Btn{Label: "All devices", Kind: "primary", Href: "/devices"}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
 
 // notFoundBatch answers 404 for a transaction that does not exist and links to the list.
 func (h *handler) notFoundBatch(w http.ResponseWriter, r *http.Request) {
-	h.renderNotFound(w, r, "Transaction not found", "This transaction doesn't exist",
+	h.renderNotFound(w, r, "Transaction not found", "This transaction doesn’t exist",
 		"The link may be mistyped.",
 		ui.Btn{Label: "All transactions", Kind: "primary", Href: "/transactions"}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
@@ -671,16 +671,24 @@ type leftItem struct {
 // explanation instead of a bare 404: a bookmark to /firmware or /transactions
 // keeps making sense when the feature is off.
 func (h *handler) registerUnavailable(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), op func(http.Handler) http.Handler) {
+	const switchedOffText = "This feature is switched off. An admin can turn it on."
 	explain := func(title, text, setting string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			base := httpx.BasePath(r.Context())
-			// The box under the text names the setting that switches the feature on.
-			e := errView{Code: "Feature switched off", Title: title, Body: text, Path: setting,
-				Primary: ui.Btn{Label: "Go to the dashboard", Kind: "primary", Href: base + "/"}, Secondary: ui.Btn{Label: "All devices", Href: base + "/devices"}}
-			if h.d.SysConfig != nil && h.view(r, "", "", nil).IsAdmin {
-				e.Primary, e.Secondary = ui.Btn{Label: "Open the system settings", Kind: "primary", Href: base + "/settings/system"}, ui.Btn{Label: "Go to the dashboard", Href: base + "/"}
+			nav := navOfPath(r.URL.Path)
+			// An operator cannot fix the setting: the page says the feature is off and who can turn it on, and shows
+			// the address of the page, not the name of a variable. An admin gets the setting's name in the mono line
+			// and the way to the settings.
+			e := errView{Code: "Feature switched off", Title: title, Body: switchedOffText, Path: base + r.URL.Path}
+			v := h.errorView(r, title, nav, e)
+			e.Primary, e.Secondary = wayButtons(v, base)
+			if v.IsAdmin {
+				e.Body, e.Path = text, setting
+				if h.d.SysConfig != nil {
+					e.Primary, e.Secondary = ui.Btn{Label: "Open the system settings", Kind: "primary", Href: base + "/settings/system"}, ui.Btn{Label: "Go to the dashboard", Href: base + "/"}
+				}
 			}
-			h.errorPage(w, r, http.StatusNotFound, title, e)
+			h.show(w, r, http.StatusNotFound, "error", v, errPage(e))
 		}
 	}
 	const noOTA = "Firmware updates are switched off because no firmware base URL is set. Devices fetch firmware from TasmoFleet over plain http, so they need an address to reach it at."

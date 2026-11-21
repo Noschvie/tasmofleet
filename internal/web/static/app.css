@@ -5798,15 +5798,26 @@ dialog.stepup {
   background: var(--color-surface-2);
 }
 
-/* error page: code, title, explanation, the failed path, two ways on */
+/* error page: a 560 px card centred on the page: code, title, explanation, the failed path, two ways on (#1085) */
 .errpage {
   min-height: 440px;
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: var(--sp-24) 0;
 }
+/* under a page's own header (a device's name is the h1): the card follows the header, no centring in a tall box */
+.errpage-sub {
+  min-height: 0;
+  align-items: flex-start;
+}
 .errpage-in {
-  max-width: 560px;
+  width: min(560px, 100%);
+  box-sizing: border-box;
+  background: var(--color-surface);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-panel);
+  padding: var(--sp-24);
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
@@ -5816,6 +5827,7 @@ dialog.stepup {
   font: 500 13px var(--font-mono);
   color: var(--color-text-3);
 }
+.errpage h2,
 .errpage h1,
 .errpage .h1-sample {
   margin: 0;

@@ -76,16 +76,20 @@ func TestNotFoundAndSwitchedOffPagesLeadOn(t *testing.T) {
 	}
 }
 
-// Why: the switched-off page names the setting in its code box, and for an admin the primary
-// button is the way out (system settings), not a loop back to the dashboard.
+// Why: the switched-off page shows an admin the setting in its code box, and the admin's primary button is the way
+// out (system settings), not a loop back to the dashboard. An operator cannot change the setting: the box shows the
+// address of the page instead (#1085; TestSwitchedOffPagesSpeakToTheRole checks the words).
 func TestSwitchedOffPageNamesTheSetting(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/firmware", "operator", nil)
-	if !strings.Contains(body, `<div class="errpage-path">FIRMWARE_BASE_URL</div>`) {
-		t.Errorf("setting not shown as code: %s", body)
+	if !strings.Contains(body, `<div class="errpage-path">/tf/firmware</div>`) || strings.Contains(body, "FIRMWARE_BASE_URL") {
+		t.Errorf("operator: the box must show the page's address and no setting: %s", body)
 	}
 	e, _, _, _ = sysEnv(t, true)
 	_, body = e.do(t, "GET", "/firmware", "admin", nil)
+	if !strings.Contains(body, `<div class="errpage-path">FIRMWARE_BASE_URL</div>`) {
+		t.Errorf("admin: setting not shown as code: %s", body)
+	}
 	settings := strings.Index(body, `<a class="btn btn-primary" href="/tf/settings/system">Open the system settings</a><a class="btn" href="/tf/">Go to the dashboard</a>`)
 	if settings < 0 {
 		t.Errorf("admin: system settings must be the primary button, ahead of the dashboard link: %s", body)
@@ -184,5 +188,21 @@ func TestMessagePageOffersSignOutAtTheProvider(t *testing.T) {
 	d.IdPSignOut = ""
 	if body := render(d); strings.Contains(body, "Sign out") || !strings.Contains(body, back) {
 		t.Errorf("without an end-session link only the way back is drawn: %s", body)
+	}
+}
+
+// Why: the forced password change has one primary action, Save and continue. Sign out is its quiet way out: if it
+// were as loud (a second primary button, #1085 made the no-role card's Sign out one), a person who only wants to
+// leave would be as likely to press the wrong one, and the page would lose its one obvious next step.
+func TestForcedChangeKeepsOnePrimaryActionAndAQuietSignOut(t *testing.T) {
+	p := NewPages()
+	w := httptest.NewRecorder()
+	p.ChangePassword(w, httptest.NewRequest("GET", "/account/password", nil), 200, auth.PasswordPageData{Forced: true, Self: "adam", CSRFToken: "tok"})
+	body := w.Body.String()
+	if n := strings.Count(body, "btn-primary"); n != 1 {
+		t.Errorf("the forced change must have exactly one primary button, got %d: %s", n, body)
+	}
+	if !strings.Contains(body, `<button type="submit" class="btn btn-link">Sign out</button>`) {
+		t.Errorf("Sign out on the forced change is not the quiet link button: %s", body)
 	}
 }

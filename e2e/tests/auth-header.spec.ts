@@ -44,6 +44,9 @@ test("a user without a mapped group is denied", { tag: "@core" }, async ({ page 
   await page.setExtraHTTPHeaders({ "X-Test-User": "nina", "X-Test-Groups": "Unrelated" });
   const res = await page.goto(proxyURL + "/");
   expect(res?.status()).toBe(403);
+  // #1085: no app shell whose links all refuse again; the card offers Sign out
+  await expect(page.locator("nav[aria-label='Main']")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
 test("forged identity headers on a direct connection are ignored", { tag: "@core" }, async ({ request }) => {

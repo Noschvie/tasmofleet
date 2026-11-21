@@ -263,14 +263,18 @@ func TestRoleEnforcement(t *testing.T) {
 }
 
 // Why: a 403 that only says "not enough role" leaves the user guessing which role
-// is missing; the page names the role needed and the one the account has.
+// is missing; the page names who can do this, the role the account has, and what to do (#1085: ask an
+// admin; no sentence listing the admin areas, the navigation names them).
 func TestAccessDeniedNamesTheRoles(t *testing.T) {
 	e := newEnv(t, ModeOIDC)
 	b := e.browser()
 	b.get(b.startOIDC("/", bob)) // operator
 	r := b.do(http.MethodPost, "/admin-action", url.Values{"csrf": {b.csrfToken()}}, nil)
-	if r.code != http.StatusForbidden || !strings.Contains(r.body, "needs the admin role") || !strings.Contains(r.body, "operator role") {
-		t.Fatalf("403 does not name the roles: %d %q", r.code, r.body)
+	if r.code != http.StatusForbidden || !strings.Contains(r.body, "Only admins can do this") || !strings.Contains(r.body, "with the operator role. Ask an admin if you need this.") {
+		t.Fatalf("403 does not name the roles or say what to do: %d %q", r.code, r.body)
+	}
+	if strings.Contains(r.body, "cannot manage") {
+		t.Fatalf("403 lists admin areas in a sentence of nouns: %q", r.body)
 	}
 }
 
@@ -853,5 +857,9 @@ func TestNoRole403OffersSignOutWithoutAppShell(t *testing.T) {
 	body := w.Body.String()
 	if w.Code != http.StatusForbidden || !strings.Contains(body, `action="/logout"`) || !strings.Contains(body, `name="csrf" value="`) || strings.Contains(body, `name="csrf" value=""`) {
 		t.Fatalf("no-role 403 lacks a Sign out form: %d %s", w.Code, body)
+	}
+	// #1085: the card says what to do in the person's words, not "mapped group" (an admin's word).
+	if !strings.Contains(body, "You can sign in, but your account has no access to TasmoFleet yet. Ask an admin to give you a role.") || strings.Contains(body, "mapped group") {
+		t.Fatalf("no-role 403 does not say what to do: %s", body)
 	}
 }

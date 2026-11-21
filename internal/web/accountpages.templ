@@ -160,11 +160,23 @@ templ forcedPasswordPage(f authFrame, d auth.PasswordPageData) {
 	}
 }
 
-// signOutForm is Sign out as a quiet link-styled button.
+// signOutForm is Sign out as a quiet link-styled button: the way out of the forced password change, whose one
+// primary action is Save and continue.
 templ signOutForm(base, csrf string) {
 	<form class="auth-signout" method="post" action={ templ.SafeURL(base + "/logout") }>
 		<input type="hidden" name="csrf" value={ csrf }/>
-		<button type="submit" class="btn btn-link">Sign out</button>
+		@ui.Button(ui.Btn{Label: "Sign out", Kind: "link", Type: "submit"})
+	</form>
+}
+
+// signOutCard is Sign out as the one button of the card of a person without a role (#1085): a primary ui.Button in
+// the card's button row, in its own form so the CSRF token travels with it.
+templ signOutCard(base, csrf string) {
+	<form method="post" action={ templ.SafeURL(base + "/logout") }>
+		<input type="hidden" name="csrf" value={ csrf }/>
+		@ui.ButtonRow() {
+			@ui.Button(ui.Btn{Label: "Sign out", Kind: "primary", Type: "submit"})
+		}
 	</form>
 }
 
@@ -186,7 +198,7 @@ templ messagePage(f authFrame, d auth.MessageData) {
 			}
 		}
 		if d.SignOut {
-			@signOutForm(d.BasePath, d.CSRFToken)
+			@signOutCard(d.BasePath, d.CSRFToken)
 		}
 	}
 }
@@ -500,4 +512,11 @@ type errView struct {
 
 templ errPage(e errView) {
 	@ui.ErrorPage(e.Code, e.Title, e.Body, e.Path, e.Primary, e.Secondary)
+}
+
+// deniedDevicePage is a refused page of one device: the device's header with its tabs (the device's name is the
+// page's one h1), then the refusal as a card under it (#1085).
+templ deniedDevicePage(t deviceTabs, e errView) {
+	@deviceHeader(t)
+	@ui.ErrorCard(e.Code, e.Title, e.Body, e.Path, e.Primary, e.Secondary)
 }

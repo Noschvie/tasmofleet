@@ -545,11 +545,12 @@ func (s *Service) require(min model.Role, allowMustChange bool) func(http.Handle
 				return
 			}
 			if ci.p.Role == model.RoleNone {
-				// No role at all: the app shell would only offer links that lead back here, so this
-				// stays a standalone page. It carries Sign out, else the user cannot switch accounts.
+				// No role at all: the app shell would only offer links that lead back here, so this is the
+				// standalone card (Pages.Message draws no navigation for a principal without a role). It carries
+				// Sign out, else the user cannot switch accounts.
 				s.o.Pages.Message(w, r, http.StatusForbidden, MessageData{
 					BasePath: base, Title: "Access denied", SignOut: true, CSRFToken: ci.csrf,
-					Text: "You are signed in, but none of your groups grants access to TasmoFleet. Ask an administrator to add you to a mapped group.",
+					Text: "You can sign in, but your account has no access to TasmoFleet yet. Ask an admin to give you a role.",
 				})
 				return
 			}
@@ -586,18 +587,16 @@ func SignIn(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// deniedMessage explains a page above the user's role: who is signed in, which role the page
-// needs, and what the user's role does allow (design v2 screen e403).
+// deniedMessage explains a page above the user's role: who can do this, who is signed in with which
+// role, and what to do about it (design v2 screen e403, #1085). The page lists no admin areas in a sentence
+// of nouns: the navigation names them, and the page's buttons lead back to what the role may open.
 func deniedMessage(base string, p model.Principal, min model.Role) MessageData {
 	who := p.Name
 	if who == "" {
 		who = p.Subject
 	}
-	text := "This page needs the " + roleName(min) + " role. You are signed in as " + who + " with the " + roleName(p.Role) + " role."
-	if min == model.RoleAdmin && p.Role == model.RoleOperator {
-		text += " Operators can switch, restart and back up devices, but cannot manage firmware, policy, users or settings."
-	}
-	return MessageData{BasePath: base, Title: "Only " + roleName(min) + "s can open this page", Text: text}
+	text := "You are signed in as " + who + " with the " + roleName(p.Role) + " role. Ask an admin if you need this."
+	return MessageData{BasePath: base, Title: "Only " + roleName(min) + "s can do this", Text: text}
 }
 
 // routePatterns are the routes of the login flows. The routes that change

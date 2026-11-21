@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
@@ -61,17 +64,11 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request, status int, d auth
 
 // Message renders a short message page.
 func (p *Pages) Message(w http.ResponseWriter, r *http.Request, status int, d auth.MessageData) {
-	// A signed-in user with too little role keeps the navigation and gets the error page.
-	if _, ok := auth.FromContext(r.Context()); ok && p.h != nil && !d.LocalLogin {
-		code := strconv.Itoa(status)
-		if status == http.StatusForbidden {
-			code += " · Not allowed"
-		}
-		p.h.errorPage(w, r, status, "Not allowed", errView{
-			Code: code, Title: d.Title, Body: d.Text, Path: httpx.BasePath(r.Context()) + r.URL.Path,
-			Primary:   ui.Btn{Label: "Back to dashboard", Kind: "primary", Href: d.BasePath + "/"},
-			Secondary: ui.Btn{Label: "All devices", Href: d.BasePath + "/devices"},
-		})
+	// A signed-in user who may use the app keeps the navigation and gets the error page in the shell. A user
+	// without a role (#1085) has no page of the app to go to: every link of the shell would answer 403 again, so
+	// the card stands alone with Sign out, and nothing about devices, jobs or the broker is read for it.
+	if pr, ok := auth.FromContext(r.Context()); ok && p.h != nil && !d.LocalLogin && pr.Role >= model.RoleOperator {
+		p.h.deniedPage(w, r, status, d)
 		return
 	}
 	p.write(w, r, status, messagePage(p.frame(r, d.Title, d.BasePath), d))
@@ -376,24 +373,115 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 	return items, dialogs
 }
 
-// errorPage writes an error page in the shell (design v2 screens e404, e403, eoff).
-func (h *handler) errorPage(w http.ResponseWriter, r *http.Request, status int, title string, e errView) {
-	h.errorPageIn(w, r, status, title, "", e)
+// errorPageIn writes an error page in the shell (design v2 screens e404, e403, eoff) under a navigation entry, so a 404 below /devices keeps Devices
+// highlighted and the trail says where the missing page would have been. short is the last step of the
+// trail ("Not found"); the page's own title, and so the browser tab's, is its heading (#1085).
+func (h *handler) errorPageIn(w http.ResponseWriter, r *http.Request, status int, short, nav string, e errView) {
+	h.show(w, r, status, "error", h.errorView(r, short, nav, e), errPage(e))
 }
 
-// errorPageIn is errorPage under a navigation entry, so a 404 below /devices keeps Devices
-// highlighted and the trail says where the missing page would have been.
-func (h *handler) errorPageIn(w http.ResponseWriter, r *http.Request, status int, title, nav string, e errView) {
-	h.show(w, r, status, "error", h.view(r, title, nav, nil), errPage(e))
+// errorView is the view of an error page: titled like its heading, the trail ends in short.
+func (h *handler) errorView(r *http.Request, short, nav string, e errView) view {
+	v := h.view(r, e.Title, nav, nil)
+	v.Crumbs = []ui.Crumb{{Label: short}}
+	return v
 }
 
-// navOfPath is the navigation entry a missing page belongs to, by the first path segment
-// (the router has already stripped the base path from r.URL.Path); "" for the rest.
+// wayButtons are the two ways on of a refused or switched-off page: back to the place it belongs to first, the
+// dashboard second. A page that belongs to no group (the dashboard's own) leads back to the dashboard, then to the devices.
+func wayButtons(v view, base string) (primary, secondary ui.Btn) {
+	label, path := shellData(v).WayBack()
+	if label == "Dashboard" {
+		return ui.Btn{Label: "Back to dashboard", Kind: "primary", Href: base + "/"}, ui.Btn{Label: "All devices", Href: base + "/devices"}
+	}
+	return ui.Btn{Label: "Back to " + label, Kind: "primary", Href: base + path}, ui.Btn{Label: "Go to dashboard", Href: base + "/"}
+}
+
+// deniedPage is an answer of the auth guard (a refusal, an unknown user) for a person who may use the app: the
+// error page in the shell, in the place the address belongs to (#1085). A refused GET below /devices/{id}/ stays
+// inside that device's header with its tabs, when the device exists; every other address lights the group
+// navOfPath names. The device header is drawn only for a page the person reads (a GET, no htmx): a refused POST or
+// swap needs no read of the device, the jobs or the router. The caller has checked that the principal is an
+// operator or more: a person without a role never gets here.
+func (h *handler) deniedPage(w http.ResponseWriter, r *http.Request, status int, d auth.MessageData) {
+	base := httpx.BasePath(r.Context())
+	code, short := strconv.Itoa(status), d.Title
+	switch status {
+	case http.StatusForbidden:
+		code, short = code+" · Not allowed", "Not allowed"
+	case http.StatusNotFound:
+		code, short = code+" · Not found", "Not found"
+	}
+	e := errView{Code: code, Title: d.Title, Body: d.Text, Path: base + r.URL.Path}
+	if dev, ok := h.deniedDevice(r); ok {
+		v := h.deviceMessageView(r, dev, e.Title, nil)
+		v.Crumbs[len(v.Crumbs)-1].Label = short
+		e.Primary = ui.Btn{Label: "Back to " + dev.Name, Kind: "primary", Href: base + devPath(dev.ID, "")}
+		e.Secondary = ui.Btn{Label: "All devices", Href: base + "/devices"}
+		h.show(w, r, status, "error", v, deniedDevicePage(h.tabsOf(r, v, dev, ""), e))
+		return
+	}
+	v := h.errorView(r, short, navOfPath(r.URL.Path), e)
+	e.Primary, e.Secondary = wayButtons(v, base)
+	h.show(w, r, status, "error", v, errPage(e))
+}
+
+// deniedDevice is the device a refused page of the person's reading belongs to: a GET without htmx below
+// /devices/{id}/, whose device exists. A failed read only costs the header (the page falls back to the Devices group).
+func (h *handler) deniedDevice(r *http.Request) (model.Device, bool) {
+	if r.Method != http.MethodGet || r.Header.Get("HX-Request") != "" {
+		return model.Device{}, false
+	}
+	segs := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(segs) < 3 || segs[0] != "devices" {
+		return model.Device{}, false
+	}
+	id, err := strconv.ParseInt(segs[1], 10, 64)
+	if err != nil || id <= 0 {
+		return model.Device{}, false
+	}
+	dev, err := h.d.Inventory.Get(r.Context(), model.DeviceID(id))
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			h.log.WarnContext(r.Context(), "refused page: device unavailable", "device", id, "err", err)
+		}
+		return model.Device{}, false
+	}
+	return dev, true
+}
+
+// navOfPath is the navigation entry an error page belongs to, by the address of the page (the router has
+// already stripped the base path from r.URL.Path); "" for the rest. The auth guard answers an admin-only page with
+// a 403 before any handler runs, so this is the one place that knows which entry that page would have lit:
+// TestDeniedPageLightsTheAdminPagesGroup compares it with the pages themselves.
 func navOfPath(p string) string {
-	seg, _, _ := strings.Cut(strings.TrimPrefix(p, "/"), "/")
-	switch seg {
-	case "devices", "transactions", "firmware", "policy", "users", "audit":
-		return seg
+	segs := strings.Split(strings.Trim(p, "/"), "/")
+	second := ""
+	if len(segs) > 1 {
+		second = segs[1]
+	}
+	switch segs[0] {
+	case "devices":
+		switch second {
+		case "new":
+			return "discovery"
+		case "backups":
+			return "backups"
+		}
+		return "devices"
+	case "discovery", "import":
+		return "discovery"
+	case "backups", "restores":
+		return "backups"
+	case "updates":
+		return "updates"
+	case "settings":
+		if len(segs) > 2 && segs[2] == "snapshots" {
+			return "snapshots"
+		}
+		return "system"
+	case "transactions", "firmware", "policy", "users", "audit", "about":
+		return segs[0]
 	}
 	return ""
 }

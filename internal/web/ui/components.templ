@@ -726,25 +726,35 @@ templ Skeleton(label string, rows int) {
 }
 
 // ErrorPage is a full error page: the status code, a title, the explanation, the path that
-// failed and two ways on.
+// failed and two ways on, in a card centred on the page (#1085).
 templ ErrorPage(code, title, body, path string, primary, secondary Btn) {
-	@errorPage(code, title, body, path, primary, secondary, false)
+	@errorPage(code, title, body, path, primary, secondary, "h1")
+}
+
+// ErrorCard is ErrorPage for a page that has its own h1 already (a device's page keeps the device's name as
+// its one h1): the title is an h2.
+templ ErrorCard(code, title, body, path string, primary, secondary Btn) {
+	@errorPage(code, title, body, path, primary, secondary, "h2")
 }
 
 // ErrorPageSample is ErrorPage for a sample on /styleguide: the title is a div with the h1
 // styling, because the page around the sample already has its own h1 (#515).
 templ ErrorPageSample(code, title, body, path string, primary, secondary Btn) {
-	@errorPage(code, title, body, path, primary, secondary, true)
+	@errorPage(code, title, body, path, primary, secondary, "sample")
 }
 
-templ errorPage(code, title, body, path string, primary, secondary Btn, sample bool) {
-	<div class="errpage">
+// errorPage draws the card. level is the title's element: "h1", "h2" or "sample" (a div with the h1 look).
+templ errorPage(code, title, body, path string, primary, secondary Btn, level string) {
+	<div class={ "errpage", templ.KV("errpage-sub", level == "h2") }>
 		<div class="errpage-in">
 			<span class="errpage-code">{ code }</span>
-			if sample {
-				<div class="h1-sample">{ title }</div>
-			} else {
-				<h1>{ title }</h1>
+			switch level {
+				case "sample":
+					<div class="h1-sample">{ title }</div>
+				case "h2":
+					<h2>{ title }</h2>
+				default:
+					<h1>{ title }</h1>
 			}
 			<p>{ body }</p>
 			if path != "" {

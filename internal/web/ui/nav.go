@@ -141,6 +141,24 @@ func (d ShellData) currentGroup() (NavGroupData, bool) {
 	return NavGroupData{}, false
 }
 
+// WayBack is where a refused or missing page leads back to, by name and path (below the base path): the
+// entry the page lights up when this user may open it and it is more than the group's own first page, else
+// the group (its button's target: the first page of it the user may open), else the dashboard. Nothing
+// here decides who may open what: it reads the same model as the tabs, so the button never leads to the
+// page that refused (#1085).
+func (d ShellData) WayBack() (label, path string) {
+	g, ok := d.currentGroup()
+	if !ok || g.Key == "dashboard" {
+		return "Dashboard", "/"
+	}
+	for _, it := range g.Items {
+		if it.Current && (d.IsAdmin || !it.Admin) && it.Path != g.Path {
+			return it.Label, it.Path
+		}
+	}
+	return g.Label, g.Path
+}
+
 // Trail is the breadcrumb trail of the page, and the only place that builds its start (#1000):
 // the group (the top-bar button), then the sub-navigation entry the page lights up, then the
 // page's own steps (Crumbs, which therefore holds no group and no entry). The trail and the

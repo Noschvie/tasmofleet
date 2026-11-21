@@ -157,7 +157,7 @@ func TestStyleguideHasOneH1OneBreadcrumbAndUniqueIDs(t *testing.T) {
 	for name, want := range map[string]string{
 		"page header sample": "Balcony Windowsill",
 		"crumbs sample":      ">Balcony Windowsill</a>",
-		"error page sample":  "This page doesn&#39;t exist",
+		"error page sample":  "This page doesn’t exist",
 		"sign-in sample":     "Sign in</div>",
 	} {
 		if !strings.Contains(body, want) {

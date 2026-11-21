@@ -370,9 +370,16 @@ Also: [desktop, dark](../design/styleguide/states-desktop-dark.png) · [phone, l
 
 ### Error page
 
-The status code (mono), a title (`600 26px`), what happened, the path that failed and two ways on. Used for 404, 403 ("Not allowed") and a feature that is switched off.
+The status code (mono), a title (`600 26px`), what happened, the path that failed and two ways on, in a card centred on the page (560 px at most, the sign-in card's surface and radius). Used for 404, 403 and a feature that is switched off. The browser tab's `<title>` is the title, so the tab and the heading say one thing.
 
-Component: `ui.ErrorPage(code, title, body, path, primary, secondary)`.
+- **The place stays.** An error page lights the group its address belongs to and ends the trail in "Not found" or "Not allowed" (`navOfPath`; `TestDeniedPageLightsTheAdminPagesGroup` compares it with the admin pages). The navigation is still the same for every role: an operator sees Add and System, and the refusal is where the way back starts, so no entry is hidden.
+- **Two ways on.** The way back first and primary, the dashboard second: "Back to Policy" (the entry the page lights, when the person may open it and it is more than the group's first page) or "Back to Devices" / "Back to System" (the group button's own target, its first page this role may open; `ShellData.WayBack`), then "Go to dashboard". A page outside every group leads to the dashboard and the devices. A button never leads to the page that refused.
+- **The path line** shows the address that failed, in mono. A switched-off feature shows an admin the setting that turns it on instead (`FIRMWARE_BASE_URL`), with "Open the system settings" as the primary button.
+- **Words by role.** 403 for an operator: "Only admins can do this" and "You are signed in as olivia with the operator role. Ask an admin if you need this." A switched-off feature for an operator: "This feature is switched off. An admin can turn it on." (no setting name: the operator cannot change it). 404: "This page doesn’t exist" with "Check the address, or go back to the dashboard." (typographic apostrophe, no guess at a cause).
+- **A device's page keeps the device.** A refused page below `/devices/{id}/` (a GET the person reads, the device exists) is drawn inside the device's header with its tabs: the device's name is the page's one h1, the refusal is the card's h2 (`ui.ErrorCard`) and the `<title>`, and the trail reads Devices / name / Not allowed. This is the one page whose `<title>` is not its h1. A refused POST or htmx request draws no header.
+- **No role, no shell.** A person who signed in but holds no role has no page to go to, so they get the standalone card of the sign-in family (below): "Access denied", "You can sign in, but your account has no access to TasmoFleet yet. Ask an admin to give you a role.", and Sign out as its one button. Nothing about devices is read for them.
+
+Component: `ui.ErrorPage(code, title, body, path, primary, secondary)`; `ui.ErrorCard` is the same card with an h2 for a page that has its own h1.
 
 ![Error page, desktop, light](../design/styleguide/errors-desktop-light.png)
 
@@ -382,7 +389,7 @@ Also: [desktop, dark](../design/styleguide/errors-desktop-dark.png) · [phone, l
 
 Sign-in, setup and password pages: the brand above, a 420 px card (radius 12, padding 24) with the h1 (`600 20px`), banners, fields and the button, and the footer "TasmoFleet x.y.z · host" in mono (D15).
 
-The same card carries the short messages that come before any role is known, so they draw no navigation: a failed or refused single sign-on (`messagePage`) and the stale form (`stalePage`, #1084: "This page is out of date", a form whose sign-in changed since it was opened). Their ways on are one `ui.ButtonRow` of `ui.Button`s at the default size, the way back first and primary: Back to sign-in, then "Sign out of <provider>" (the provider's end-session link, only when it has one) on the refused sign-on; Reload (the page the form was on) and Dashboard on the stale form. The tall full-width size stays with the sign-in and password forms until #1092 makes it a `Btn` option.
+The same card carries the short messages that come before any role is known, so they draw no navigation: a failed or refused single sign-on (`messagePage`), the answer to a person who signed in without a role (Sign out is its one button, a primary `ui.Button` in its own form) and the stale form (`stalePage`, #1084: "This page is out of date", a form whose sign-in changed since it was opened). Their ways on are one `ui.ButtonRow` of `ui.Button`s at the default size, the way back first and primary: Back to sign-in, then "Sign out of <provider>" (the provider's end-session link, only when it has one) on the refused sign-on; Reload (the page the form was on) and Dashboard on the stale form. The tall full-width size stays with the sign-in and password forms until #1092 makes it a `Btn` option.
 
 Component: `ui.AuthCard(base, version, host)`.
 

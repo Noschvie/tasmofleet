@@ -948,7 +948,7 @@ func styleguidePage(v sgView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = ui.ErrorPageSample("404", "This page doesn't exist", "The address may be mistyped, or the device or transaction it pointed to was deleted.", "/devices/d99", ui.Btn{Label: "Go to the dashboard", Kind: "primary", Href: v.Base + "/styleguide"}, ui.Btn{Label: "All devices", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.ErrorPageSample("404", "This page doesn’t exist", "Check the address, or go back to the dashboard.", "/devices/d99", ui.Btn{Label: "Go to the dashboard", Kind: "primary", Href: v.Base + "/styleguide"}, ui.Btn{Label: "All devices", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
