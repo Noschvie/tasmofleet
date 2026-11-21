@@ -471,7 +471,9 @@ test("the still-working note goes away when its request ends", async ({ page }) 
 // Why: the replace page reads the new device while the page loads; the link that was clicked is the
 // only thing the person sees meanwhile. It says aria-busy until the next page replaces this one. The
 // page cannot be inspected while its navigation is held, so a probe in the page writes what it saw
-// at the moment it was left to sessionStorage.
+// at the moment it was left to sessionStorage. The page has a second "Replace device" link, in the
+// phone header's "⋯" menu (#1079), earlier in the document and hidden on a wide screen: the probe
+// reads the tab that was clicked, not the first link to the page.
 test("a link to a page that reads a device is busy until the page arrives", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   const href = await devicePath(page);
@@ -480,9 +482,11 @@ test("a link to a page that reads a device is busy until the page arrives", asyn
     await route.continue();
   });
   await page.goto(app.url + href);
-  const link = page.getByRole("link", { name: "Replace device" });
+  const link = page.getByRole("navigation", { name: "Device pages" }).getByRole("link", { name: "Replace device" });
   await page.evaluate(() => {
-    window.addEventListener("pagehide", () => sessionStorage.setItem("probe", document.querySelector('a[href$="/replace"]')?.getAttribute("aria-busy") ?? "none"));
+    window.addEventListener("pagehide", () =>
+      sessionStorage.setItem("probe", document.querySelector('nav[aria-label="Device pages"] a[href$="/replace"]')?.getAttribute("aria-busy") ?? "none"),
+    );
   });
   await link.click({ noWaitAfter: true });
   await expect(page.getByRole("heading", { name: "Move this configuration onto a new device" })).toBeVisible();
