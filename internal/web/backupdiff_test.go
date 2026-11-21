@@ -158,3 +158,15 @@ func TestTheDeviceTabIsCalledChanges(t *testing.T) {
 		t.Errorf("the tab reads Changes and keeps its route:\n%s", body)
 	}
 }
+
+// Why: the browser tab, the history and a bookmark name the page by its title. #1083 renamed the tab
+// to Changes because "Drift" is a developer's word; a title that still says drift contradicts the tab
+// the person just clicked. The route /drift stays (#1211).
+func TestChangesPageTitleSaysChanges(t *testing.T) {
+	e, _, _ := newDiffEnv(t)
+	_, body := e.do(t, "GET", "/devices/1/drift", "admin", nil)
+	title := strings.TrimPrefix(sliceBetween(body, "<title>", "</title>"), "<title>")
+	if !strings.HasSuffix(title, " changes - TasmoFleet") || strings.Contains(strings.ToLower(title), "drift") {
+		t.Errorf("the Changes page's title must say changes and not drift, got %q", title)
+	}
+}

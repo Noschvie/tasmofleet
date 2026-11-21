@@ -2162,7 +2162,7 @@ from decoded backups (preferred) or live `Status` replies. The view lists drift 
 Fixing it is an explicit bulk action. Example rules: PowerOnState 0,
 SetOption0 0 (ESP32 exception: 1), SaveData 0, Timezone 99.
 
-The device's Changes tab (route `/drift`, called Drift before 0.46.1) compares configuration, not readings: the live groups of the status snapshot (Status 7 time,
+The device's Changes tab (route `/drift`, called Drift before 0.46.1; the browser title reads "<name> changes") compares configuration, not readings: the live groups of the status snapshot (Status 7 time,
 Status 8 and 10 sensors and energy, Status 11 runtime) and clock, uptime and counter leaves are left out of the
 comparison and of "Show all" (#446). A section that one side could not read (a failed `Status N` read is stored as
 `{"_error": ...}`) is no setting that changed: it is left out of the comparison and of "Show all", and a banner names it
@@ -2773,7 +2773,7 @@ page enforces its own permission). Groups and pages:
   result of a scan is its own page, `/discovery/scan/{id}`). The page heading of the list stays "Devices". The device list is a sortable table with filter chips and a search box (`q`, health,
   family, tag, chip); the selection bar feeds Update, Back up, Send command, Restart and power.
 - **Device page** (tabs): Overview (tiles, identity, network facts), Settings and Console where the
-  device allows them, Backups, Drift and Replace device (admin).
+  device allows them, Backups, Changes and Replace device (admin).
 - **Updates**: _Transactions_ (batches of every job kind, with progress, cancel and retry) and _Firmware_
   (releases, cache, prefetch, upload, release notes). The update flow is: select release + policy
   (+ variant override; the preview shows it, no confirmation checkbox since 2026-10-20), a preview
