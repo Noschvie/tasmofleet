@@ -707,25 +707,28 @@ func (h *handler) rulesRevert(w http.ResponseWriter, r *http.Request) {
 
 // ioRow is one line of the import preview.
 type ioRow struct {
-	Kind   string // New, Update, Remove
+	Kind   string // New, Changed, Unchanged, Removed
 	Tone   ui.Tone
 	Rule   string
 	Detail string
 }
 
-// policyIOView is the import / export page: the export as JSON, or the import form with the
-// checked file's changes.
+// policyIOView is the Import / export tab: the export as JSON (everyone) and the import form with the
+// checked file's fate for every rule (admins).
 type policyIOView struct {
+	Head       policyHead
 	Base, CSRF string
 	Admin      bool
-	Import     bool // the Import tab is open
+	Import     bool // the Import card comes first (?tab=import, or a checked or refused file)
 	JSON       string
 	Text       string // the pasted import
 	Error      string
 	Checked    bool
-	Count      int
-	Rows       []ioRow
-	Counts     []ui.KVRow // "2 update", "1 new" for the preview's header
+	Count      int        // rules in the checked file
+	Replaces   bool       // Save would store the file as a new version: the banner and the button are drawn
+	OrderOnly  bool       // ...although every row reads Unchanged: only the order or the ids differ
+	Rows       []ioRow    // one per rule: New, Changed, Unchanged, then the Removed ones
+	Counts     []ui.KVRow // "2 changed", "1 new" for the preview's header
 }
 
 func (h *handler) policyIO(w http.ResponseWriter, r *http.Request) {
@@ -737,6 +740,8 @@ func (h *handler) policyIO(w http.ResponseWriter, r *http.Request) {
 	h.policyIORender(w, r, http.StatusOK, policyIOView{Import: tab == "import"})
 }
 
+// policyIORender draws the tab inside the policy shell. The tab judges no device, so its head has no summary
+// and the Deviating devices tab has no badge here (#1088); only the Rules tab shows its count.
 func (h *handler) policyIORender(w http.ResponseWriter, r *http.Request, status int, p policyIOView) {
 	v := h.view(r, "Import / export rules", "policy", nil)
 	v.Crumbs = []ui.Crumb{{Label: "Import / export"}}
@@ -744,14 +749,19 @@ func (h *handler) policyIORender(w http.ResponseWriter, r *http.Request, status 
 	if p.Import && !p.Admin {
 		p.Import = false // viewers only export
 	}
-	if !p.Import {
-		b, err := h.d.PolicyRules.Export(r.Context())
-		if err != nil {
-			h.fail(w, r, err)
-			return
-		}
-		p.JSON = string(b)
+	st, err := h.d.PolicyRules.State(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
 	}
+	b, err := h.d.PolicyRules.Export(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	p.JSON = string(b)
+	p.Head = policyHead{Base: v.Base, CSRF: v.CSRF, Admin: v.IsAdmin, Show: true, HasVersions: len(st.History) > 0}
+	p.Head.Tabs = h.policyTabs(v.Base, "io", len(st.Specs), 0, 0)
 	h.show(w, r, status, "policyio", v, policyIOPage(p))
 }
 
@@ -810,32 +820,49 @@ func (h *handler) rulesImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Checked, p.Count = true, len(specs)
-	p.Rows, p.Counts = ioRows(sysconfig.DiffSpecs(st.Specs, specs))
+	var onlyUnchanged bool
+	p.Rows, p.Counts, onlyUnchanged = ioRows(sysconfig.ImportPreview(st.Specs, specs))
+	// The same test Save uses for ErrNoChange, so the page never withholds a save that would be stored (a file
+	// that only reorders the rules reads Unchanged in every row, but their order is their precedence).
+	p.Replaces = st.VersionID == 0 || !sysconfig.SameRules(st.Specs, specs)
+	p.OrderOnly = p.Replaces && onlyUnchanged
 	h.policyIORender(w, r, http.StatusOK, p)
 }
 
-// ioRows turns the differences into the preview's rows and its header counts.
-func ioRows(changes []sysconfig.RuleChange) ([]ioRow, []ui.KVRow) {
+// ioRows turns the preview into the rows, the header counts and whether every row reads Unchanged (a file can
+// still replace the rules then: it moves a rule or changes ids, which the rows do not show).
+func ioRows(changes []sysconfig.RuleChange) (rows []ioRow, counts []ui.KVRow, onlyUnchanged bool) {
 	n := map[string]int{}
-	var rows []ioRow
 	for _, c := range changes {
 		row := ioRow{Rule: c.Rule, Detail: c.Detail}
 		switch c.Kind {
 		case "added":
 			row.Kind, row.Tone = "New", ui.ToneOK
 		case "removed":
-			row.Kind, row.Tone = "Remove", ui.ToneDanger
+			row.Kind, row.Tone = "Removed", ui.ToneDanger
+		case "unchanged":
+			row.Kind, row.Tone = "Unchanged", ui.ToneNeutral
 		default:
-			row.Kind, row.Tone = "Update", ui.ToneAccent
+			row.Kind, row.Tone = "Changed", ui.ToneAccent
 		}
 		n[row.Kind]++
 		rows = append(rows, row)
 	}
-	var counts []ui.KVRow
-	for _, k := range []string{"Update", "New", "Remove"} {
+	for _, k := range []string{"New", "Changed", "Unchanged", "Removed"} {
 		if n[k] > 0 {
 			counts = append(counts, ui.KVRow{Key: k, Value: strconv.Itoa(n[k]) + " " + strings.ToLower(k)})
 		}
 	}
-	return rows, counts
+	return rows, counts, len(rows) > 0 && n["Unchanged"] == len(rows)
+}
+
+// replaceLabel is the import button: it says what it does, and with an empty file that it removes every rule.
+func replaceLabel(n int) string {
+	switch n {
+	case 0:
+		return "Remove all rules"
+	case 1:
+		return "Replace rules with this rule"
+	}
+	return "Replace rules with these " + strconv.Itoa(n)
 }

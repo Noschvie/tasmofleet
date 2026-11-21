@@ -2,14 +2,17 @@ package web
 
 import "github.com/hellwand/tasmofleet/internal/web/ui"
 
-// policyShell is the header the policy tabs share: Import / Export / New rule, on Rules and Deviating
-// devices the summary line (fleet counts and live check) and the tab row. The tab's own content is the child.
+// policyShell is the header the policy tabs share: New rule, on Rules and Deviating devices the summary line
+// (fleet counts and live check) and the tab row. The tab's own content is the child. Import / export is a tab;
+// only the empty state, which has no tab row, keeps its Import… and Export buttons (#1088).
 templ policyShell(h policyHead) {
 	@ui.PageHeader("Policy", policySub) {
-		if h.Admin {
-			<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath + "?tab=import") }>Import…</a>
+		if !h.Show {
+			if h.Admin {
+				<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath + "?tab=import") }>Import…</a>
+			}
+			<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath) }>Export</a>
 		}
-		<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath) }>Export</a>
 		if h.Admin {
 			<a class="btn btn-primary" href={ templ.SafeURL(h.Base + rulesPath + "/new") }>New rule</a>
 		}

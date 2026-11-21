@@ -267,7 +267,7 @@ Component: `ui.CardStacks(cols)`, `ui.CardStack(span)`, `ui.StackRank(n)`. Used 
 
 Rule (maintainer, #419): a card is as wide as its content needs, and a page fills the width the app gives it.
 
-- **Content use.** Measured at 1280 px, a card that takes the full content width must use at least 60 % of it: its max-content width divided by its actual width. A card that uses less sits in a narrower column stack next to other cards (`ui.CardStacks`), not alone across the page. Deliberate exceptions carry a reason: the Relays card, the Console terminal, one-line bars (the device Settings save bar, the "Reset all settings" strip), and the Policy import/export card, which stays narrow. For a card that holds a list in several equal columns the rendered extent of its content counts too (the larger of the two figures), because the max-content width of such a list can be one column.
+- **Content use.** Measured at 1280 px, a card that takes the full content width must use at least 60 % of it: its max-content width divided by its actual width. A card that uses less sits in a narrower column stack next to other cards (`ui.CardStacks`), not alone across the page. Deliberate exceptions carry a reason: the Relays card, the Console terminal and one-line bars (the device Settings save bar, the "Reset all settings" strip). For a card that holds a list in several equal columns the rendered extent of its content counts too (the larger of the two figures), because the max-content width of such a list can be one column.
 - **Page width.** A page uses the Dashboard's content width (1204 px at 1280, the app's capped content width on larger screens), never wider and never a fixed narrower card. The exceptions are the single-form and confirmation pages, which stay narrow on purpose: device edit, device delete, `ui.ConfirmPage` and add user. Replace device is not one of them: it uses the full content width. Banners keep their 820 px reading width above the stacks.
 - **Transactions history** (61 % today) stays as it is; the guard lets it fall to 50 %, not further.
 
@@ -309,7 +309,7 @@ frame): the fleet counts as one sentence ("52 of 60 compliant · 3 deviating · 
 in their tone's `-fg` text colour) and the live check (state, when it ran, Run now, Pause or Resume, Retry now), the state text
 sharing a phone row with the buttons so the rule list starts above 400 px at 375. After a failed live check the counts are left
 out and the state says why. History and GPIO templates show no rule counts at all: "Not judged" is the word of the rules, the
-templates page says "Can’t be compared". The Rules count lives in the tab badge. `shell-css.spec.ts` guards the text contrast of
+templates page says "Can’t be compared", and Import / export (#1088) is a tab of the same shell with no summary and no Deviating badge (it judges no device); its Export and Import cards are full width, and the replace note of the import is a warn banner above the button. The Rules count lives in the tab badge. `shell-css.spec.ts` guards the text contrast of
 the summary in both themes and `policy-overview.spec.ts` the phone height.
 
 Component: `ui.StatTile(StatTileData{...})`, `ui.HealthBar(ok, off, unk)`; `ui.ComplianceBar(match, deviate, unknown)` draws a policy rule's compliance the same way.

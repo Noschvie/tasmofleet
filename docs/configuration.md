@@ -112,7 +112,7 @@ New settings get a page field, not a variable.
 | `TASMOFLEET_DISCOVERY_SCAN_INTERVAL`      | legacy    | `24h`                          | no            | Scan interval.                                                                                                                                                                                                          |
 | `TASMOFLEET_DISCOVERY_SCAN_CIDRS`         | legacy    |                                | no            | Ranges to scan (inside `DEVICE_NETWORKS`, each at most a /22, at most 1024 addresses in all).                                                                                                                                                               |
 | `TASMOFLEET_POLICY_LIVE_INTERVAL`         | legacy    | `1h`                           | no            | Background reads for the policy view (`0` = off).                                                                                                                                                                       |
-| `TASMOFLEET_POLICY_RULES`                 | legacy    |                                | no            | Policy rules as inline JSON or a file path. Imported once as the managed rules.                                                                                                                                         |
+| `TASMOFLEET_POLICY_RULES`                 | legacy    |                                | no            | Policy rules as inline JSON or a file path. Imported once as the managed rules; format: [Policy rules file](#policy-rules-file).                                                                                        |
 | `TASMOFLEET_METRICS_ENABLED`              | legacy    | `true`                         | no            | Master switch for `/metrics` (off: 404).                                                                                                                                                                                |
 | `TASMOFLEET_METRICS_DEVICE_LABELS`        | legacy    | `false`                        | no            | Device names in metric labels.                                                                                                                                                                                          |
 | `TASMOFLEET_AUDIT_RETENTION`              | legacy    | `8760h`                        | no            | How long the audit log is kept.                                                                                                                                                                                         |
@@ -136,6 +136,27 @@ New settings get a page field, not a variable.
 | `TASMOFLEET_NOTIFY_SMTP_TO`               | legacy    |                                | no            | Recipient addresses, comma separated.                                                                                                                                                                                   |
 
 Not prefixed with `TASMOFLEET_`: `TZ`, see [Time zone](#time-zone).
+
+## Policy rules file
+
+`TASMOFLEET_POLICY_RULES` (inline JSON or a file path), the file the Policy page exports and the file `settings import` reads are one format: a JSON array of rules, in the order of their precedence. A rule says what the page says: `level` is `required` or `advisory`, and `expected` is the value the setting should have.
+
+```json
+[
+  {
+    "name": "Flash wear",
+    "command": "SaveData",
+    "expected": "0",
+    "level": "required",
+    "families": ["esp32*"],
+    "except": ["lamp"],
+    "note": "Keeps flash writes low"
+  },
+  { "command": "SetOption0", "expected": "1", "level": "advisory", "tags": ["kitchen"] }
+]
+```
+
+Files written before 0.46.1 keep working: `severity` (`warn` is Required, `info` is Advisory) and `want` are read as `level` and `expected`. A rule that gives both spellings with different values (`"level": "advisory"` and `"severity": "warn"`) is refused, naming the rule, rather than taking one of them. Rules saved in TasmoFleet keep their stored form; only the file changed. A file exported by 0.46.1 or later cannot be imported by 0.46.0 or older, which only know `severity` and `want`.
 
 ## How TLS is chosen
 

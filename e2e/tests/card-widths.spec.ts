@@ -73,7 +73,6 @@ const exempt: Exempt[] = [
   use("device console", "console"), // the terminal: a console is wide, its text is not
   use("device settings", "devform-foot"), // the save bar under the settings columns: one line
   use("system settings advanced", "sys-danger"), // the "Reset all settings" strip: one line
-  span("policy io"), // import/export stays a narrow card
   use("policy rule", "History of this rule"), // a collapsed <details>: one line until opened
   use("transactions", "History", true), // 61 % today (#419 decision): a hair under the line must not fail the guard
 

@@ -562,8 +562,10 @@ func countTone(kind string) ui.Tone {
 	switch kind {
 	case "New":
 		return ui.ToneOK
-	case "Remove":
+	case "Removed":
 		return ui.ToneDanger
+	case "Unchanged":
+		return ui.ToneNeutral
 	}
 	return ui.ToneAccent
 }

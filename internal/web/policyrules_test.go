@@ -436,7 +436,7 @@ func TestPolicyRulesImportChecksThenSaves(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	good := `[{"command":"SetOption0","want":"1","families":["esp32*"],"except":["lamp"]}]`
 	r, body := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {good}})
-	if r.StatusCode != 200 || len(mem.vs) != 0 || !strings.Contains(body, ">New<") || !strings.Contains(body, `name="confirm"`) || !strings.Contains(body, "Import 1 rule<") {
+	if r.StatusCode != 200 || len(mem.vs) != 0 || !strings.Contains(body, ">New<") || !strings.Contains(body, `name="confirm"`) || !strings.Contains(body, "Replace rules with this rule<") {
 		t.Fatalf("import check: %d saved=%d", r.StatusCode, len(mem.vs))
 	}
 	if r, _ := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {good}, "confirm": {"1"}}); r.StatusCode != 303 || len(mem.vs) != 1 || !strings.HasSuffix(r.Header.Get("Location"), "/policy?ok=imported") {

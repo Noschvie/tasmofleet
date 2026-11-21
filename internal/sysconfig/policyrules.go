@@ -130,6 +130,54 @@ func decodeRaw(data []byte) ([]RuleSpec, error) {
 	return specs, nil
 }
 
+// fileRule is one rule as a policy file (the export, an import, POLICY_RULES) writes it: the words of the UI,
+// "level" (required | advisory) and "expected". The stored RuleSpec keeps severity (warn | info) and want, so
+// nothing stored changes; files written before 0.46.1 say Severity and Want, which are only read here, never
+// written. policy.ResolveFileKeys is the one mapping between the two spellings.
+type fileRule struct {
+	ID       string   `json:"id,omitempty"`
+	Name     string   `json:"name,omitempty"`
+	Command  string   `json:"command"`
+	Expected string   `json:"expected"`
+	Note     string   `json:"note,omitempty"`
+	Level    string   `json:"level,omitempty"`
+	Families []string `json:"families,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Devices  []string `json:"devices,omitempty"`
+	Except   []string `json:"except,omitempty"`
+	Disabled bool     `json:"disabled,omitempty"`
+	Severity string   `json:"severity,omitempty"` // read only: the spelling before 0.46.1
+	Want     string   `json:"want,omitempty"`     // read only: the spelling before 0.46.1
+}
+
+// toFile is the file form of a stored rule.
+func toFile(s RuleSpec) fileRule {
+	return fileRule{ID: s.ID, Name: s.Name, Command: s.Command, Expected: s.Want, Note: s.Note, Level: policy.LevelOf(s.Severity),
+		Families: s.Families, Tags: s.Tags, Devices: s.Devices, Except: s.Except, Disabled: s.Disabled}
+}
+
+// decodeFile reads a rule list in the policy file format, strictly, with either spelling of level / severity
+// and expected / want. A rule that gives both spellings with different values is a *RuleError naming the rule.
+// Ids are kept as given.
+func decodeFile(data []byte) ([]RuleSpec, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var in []fileRule
+	if err := dec.Decode(&in); err != nil {
+		return nil, fmt.Errorf("policy rules: %w", err)
+	}
+	var specs []RuleSpec
+	for i, f := range in {
+		sev, want, err := policy.ResolveFileKeys(f.Level, f.Severity, f.Expected, f.Want)
+		if err != nil {
+			return nil, &RuleError{Index: i, Msg: err.Error()}
+		}
+		specs = append(specs, RuleSpec{ID: f.ID, Name: f.Name, Command: f.Command, Want: want, Note: f.Note, Severity: sev,
+			Families: f.Families, Tags: f.Tags, Devices: f.Devices, Except: f.Except, Disabled: f.Disabled})
+	}
+	return specs, nil
+}
+
 // decodeSpecs reads a stored version. Rules without an id (every version
 // before 0.19) get policy.LegacyID of their position, the scheme POLICY_RULES
 // files get too, so a link to a rule survives the upgrade. The stored row is
@@ -139,6 +187,12 @@ func decodeSpecs(data []byte) ([]RuleSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+	return withLegacyIDs(specs), nil
+}
+
+// withLegacyIDs gives every rule without an id policy.LegacyID of its position (a fresh id where an explicit id
+// elsewhere in the list already uses it).
+func withLegacyIDs(specs []RuleSpec) []RuleSpec {
 	taken := make(map[string]bool, len(specs))
 	for _, s := range specs {
 		taken[s.ID] = true
@@ -153,7 +207,7 @@ func decodeSpecs(data []byte) ([]RuleSpec, error) {
 		}
 		specs[i].ID, taken[id] = id, true
 	}
-	return specs, nil
+	return specs
 }
 
 // newRuleID returns "r" plus 10 random lowercase base32 characters, with at
@@ -206,8 +260,13 @@ func (r *Rules) IndexOf(specs []RuleSpec, id string) int {
 	return slices.IndexFunc(specs, func(s RuleSpec) bool { return s.ID == id })
 }
 
+// SameRules is the test Save uses for ErrNoChange, for callers that must tell beforehand whether a save would
+// store a new version (the import preview): position counts, because the order of the rules is their precedence.
+func SameRules(cur, next []RuleSpec) bool { return sameRules(cur, next) }
+
 // sameRules reports whether next is cur without a real edit: equal in every
-// field, where a next rule without an id matches whatever id cur has.
+// field, where a next rule without an id matches whatever id cur has and an
+// empty severity is the default one.
 func sameRules(cur, next []RuleSpec) bool {
 	if len(cur) != len(next) {
 		return false
@@ -218,6 +277,8 @@ func sameRules(cur, next []RuleSpec) bool {
 		}
 		a, b := cur[i], next[i]
 		a.ID, b.ID = "", ""
+		// an empty severity is the default, warn: the export of such a rule says "required"
+		a.Severity, b.Severity = orWarn(a.Severity), orWarn(b.Severity)
 		ja, _ := json.Marshal(a) // a plain struct always encodes
 		jb, _ := json.Marshal(b)
 		if !bytes.Equal(ja, jb) {
@@ -545,30 +606,32 @@ func (r *Rules) Revert(ctx context.Context, actor string, id int64, rec audit.Re
 	return r.save(ctx, actor, "revert to version "+strconv.FormatInt(id, 10), specs, id, rec)
 }
 
-// Export returns the active rules in the POLICY_RULES format.
+// Export returns the active rules in the POLICY_RULES file format, which says "level" and "expected" (see fileRule).
 func (r *Rules) Export(ctx context.Context) ([]byte, error) {
 	st, err := r.State(ctx)
 	if err != nil {
 		return nil, err
 	}
-	b, err := json.MarshalIndent(nonNil(st.Specs), "", "  ")
+	out := make([]fileRule, len(st.Specs))
+	for i, s := range st.Specs {
+		out[i] = toFile(s)
+	}
+	b, err := json.MarshalIndent(out, "", "  ")
 	return append(b, '\n'), err
 }
 
-func nonNil(s []RuleSpec) []RuleSpec {
-	if s == nil {
-		return []RuleSpec{}
-	}
-	return s
-}
-
-// ParseImport reads rules in the POLICY_RULES format (strictly) for the editor.
+// ParseImport reads rules in the POLICY_RULES format (strictly) for the editor, in either spelling of level and
+// expected value (see fileRule).
 func (r *Rules) ParseImport(data []byte) ([]RuleSpec, error) {
 	if len(data) > 256<<10 {
 		return nil, &RuleError{Index: -1, Msg: "the file is too large"}
 	}
-	specs, err := decodeRaw(data) // ids are kept as given; rules without one get theirs when saved
+	specs, err := decodeFile(data) // ids are kept as given; rules without one get theirs when saved
 	if err != nil {
+		var re *RuleError
+		if errors.As(err, &re) {
+			return nil, re
+		}
 		return nil, &RuleError{Index: -1, Msg: strings.TrimPrefix(err.Error(), "policy rules: ")}
 	}
 	if _, err := r.Validate(specs); err != nil {
@@ -588,7 +651,7 @@ func (r *Rules) HasVersions(ctx context.Context) (bool, error) {
 
 // RuleChange is one line of a diff between two rule lists.
 type RuleChange struct {
-	Kind string `json:"kind"` // added, removed, changed
+	Kind string `json:"kind"` // added, removed, changed (ImportPreview also lists unchanged)
 	Rule string `json:"rule"`
 	// Name is the rule's name, or its command when it has none; the history
 	// summaries use it instead of the longer Rule label.
@@ -624,46 +687,89 @@ func ruleLabel(s RuleSpec) string {
 	return s.Command
 }
 
-// DiffSpecs compares two rule lists. Rules with a real id (not a position id)
-// are matched by id, so a renamed rule is "changed", not removed and added; the
-// rest are matched by name (or by command and scope). A changed expected value,
-// scope, severity or note is "changed".
-func DiffSpecs(a, b []RuleSpec) []RuleChange {
-	var out []RuleChange
+// matchRules pairs every rule of a with its rule in b: the index in b, or -1 when b has none. Rules with a real id
+// (not a position id) are matched by id, so a renamed rule is the same rule; the rest are matched by name (or by
+// command and scope), each rule of b at most once.
+func matchRules(a, b []RuleSpec) []int {
+	match := make([]int, len(a))
 	used := make([]bool, len(b))
-	byID := make([]int, len(a)) // index in b of the rule with the same real id, or -1
-	for i, x := range a {
-		byID[i] = -1
+	for i, x := range a { // by real id first, for every rule, so a name match cannot take a rule that has its id
+		match[i] = -1
 		if x.ID == "" || isLegacyID(x.ID) {
 			continue
 		}
-		byID[i] = slices.IndexFunc(b, func(y RuleSpec) bool { return y.ID == x.ID })
-		if byID[i] >= 0 {
-			used[byID[i]] = true
+		if match[i] = slices.IndexFunc(b, func(y RuleSpec) bool { return y.ID == x.ID }); match[i] >= 0 {
+			used[match[i]] = true
 		}
 	}
 	for i, x := range a {
-		match := byID[i]
+		if match[i] >= 0 {
+			continue
+		}
 		for j, y := range b {
-			if match >= 0 {
+			if !used[j] && ruleKey(x) == ruleKey(y) {
+				match[i], used[j] = j, true
 				break
 			}
-			if !used[j] && ruleKey(x) == ruleKey(y) {
-				match = j
-			}
 		}
-		if match < 0 {
+	}
+	return match
+}
+
+// DiffSpecs compares two rule lists. Rules are matched as matchRules says. A changed expected value, scope,
+// severity or note is "changed"; rules that are the same in both lists are not listed.
+func DiffSpecs(a, b []RuleSpec) []RuleChange {
+	var out []RuleChange
+	match := matchRules(a, b)
+	used := make([]bool, len(b))
+	for i, x := range a {
+		m := match[i]
+		if m < 0 {
 			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), Name: ruleName(x), RuleID: x.ID, Detail: "expected " + x.Want})
 			continue
 		}
-		used[match] = true
-		if d, fields := specDelta(x, b[match]); d != "" {
-			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[match]), Name: ruleName(b[match]), RuleID: b[match].ID, Detail: d, Fields: fields})
+		used[m] = true
+		if d, fields := specDelta(x, b[m]); d != "" {
+			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[m]), Name: ruleName(b[m]), RuleID: b[m].ID, Detail: d, Fields: fields})
 		}
 	}
 	for j, y := range b {
 		if !used[j] {
 			out = append(out, RuleChange{Kind: "added", Rule: ruleLabel(y), Name: ruleName(y), RuleID: y.ID, Detail: "expected " + y.Want})
+		}
+	}
+	return out
+}
+
+// ImportPreview is what an import of next (which replaces cur) would do to every rule: one row per rule of next in
+// the file's order, kind "added", "changed" or "unchanged", then one "removed" row for each rule of cur that the
+// file leaves out. The matching is DiffSpecs'; unlike it, rules that stay the same are listed, because an import
+// replaces the whole list and the person must see what it keeps and what it drops.
+func ImportPreview(cur, next []RuleSpec) []RuleChange {
+	match := matchRules(cur, next)
+	from := make([]int, len(next)) // index in cur of each rule of next, or -1
+	for j := range from {
+		from[j] = -1
+	}
+	for i, m := range match {
+		if m >= 0 {
+			from[m] = i
+		}
+	}
+	var out []RuleChange
+	for j, y := range next {
+		c := RuleChange{Kind: "added", Rule: ruleLabel(y), Name: ruleName(y), RuleID: y.ID, Detail: "expected " + y.Want}
+		if i := from[j]; i >= 0 {
+			c.Kind, c.Detail = "unchanged", ""
+			if d, fields := specDelta(cur[i], y); d != "" {
+				c.Kind, c.Detail, c.Fields = "changed", d, fields
+			}
+		}
+		out = append(out, c)
+	}
+	for i, x := range cur {
+		if match[i] < 0 {
+			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), Name: ruleName(x), RuleID: x.ID, Detail: "expected " + x.Want})
 		}
 	}
 	return out
@@ -750,10 +856,11 @@ const importNote = "imported from POLICY_RULES"
 // managed version. It is checked like the variable always was (ParseRules with the
 // queryable rule) and refused if rules were saved already.
 func (r *Rules) ImportLegacy(ctx context.Context, actor string, raw []byte, rec audit.Recorder) (int64, error) {
-	specs, err := decodeSpecs(raw)
+	specs, err := decodeFile(raw) // either spelling; the stored version gets the stored words
 	if err != nil {
 		return 0, err
 	}
+	specs = withLegacyIDs(specs)
 	if has, err := r.HasVersions(ctx); err != nil || has {
 		return 0, errors.Join(err, ErrNoChange)
 	}

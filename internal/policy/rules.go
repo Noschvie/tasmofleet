@@ -64,17 +64,20 @@ type ruleJSON struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
 	Severity string   `json:"severity"`
+	Level    string   `json:"level"`
 	Tags     []string `json:"tags"`
 	Devices  []string `json:"devices"`
 	Command  string   `json:"command"`
 	Want     string   `json:"want"`
+	Expected string   `json:"expected"`
 	Note     string   `json:"note"`
 	Families []string `json:"families"`
 	Except   []string `json:"except"`
 	Disabled bool     `json:"disabled"`
 }
 
-// ParseRules reads the POLICY_RULES JSON array. The array order is the
+// ParseRules reads the POLICY_RULES JSON array. A rule says "level" and "expected" (the words of the UI) or the
+// older "severity" and "want", see ResolveFileKeys. The array order is the
 // precedence of the rules (see Check). A disabled rule is validated like any
 // other, so enabling it later cannot fail. Unknown JSON keys, bad
 // command names, bad families and an empty "want" are errors: a policy that is
@@ -97,6 +100,10 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 	out := make([]Rule, 0, len(in))
 	seen := make(map[string]bool, len(in))
 	for i, j := range in {
+		var err error
+		if j.Severity, j.Want, err = ResolveFileKeys(j.Level, j.Severity, j.Expected, j.Want); err != nil {
+			return nil, fmt.Errorf("policy rules: rule at index %d: %w", i, err)
+		}
 		if j.ID != "" && !RuleIDRe.MatchString(j.ID) {
 			return nil, fmt.Errorf("policy rules: rule at index %d: invalid id %q", i, j.ID)
 		}

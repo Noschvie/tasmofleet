@@ -321,82 +321,97 @@ func numberStep(decimal bool) string {
 func stateIsOn(w string) bool  { return w == "1" || strings.EqualFold(w, "on") }
 func stateIsOff(w string) bool { return w == "0" || strings.EqualFold(w, "off") }
 
-// policyIOPage is GET /policy/io: Export (the rules as JSON) and Import (paste, check, save).
+// policyIOPage is GET /policy/io: the Import / export tab of the policy shell. Export (the rules as JSON, for
+// everyone) and Import (paste, check, replace; admins) are two full-width cards, not a second tab strip; the
+// Import card comes first while a file is being imported, so its result is not below the long export.
 templ policyIOPage(p policyIOView) {
 	<div class="pol-page">
-		@ui.PageHeader("Import / export rules", "JSON, one file for all rules. Importing never changes devices.") {
-			<a class="btn" href={ templ.SafeURL(p.Base + policyPath) }>Back to policy</a>
-		}
-		if p.Admin {
-			@ui.Tabs("Import or export", []ui.Tab{
-				{Label: "Export", Href: p.Base + policyIOPath, Current: !p.Import},
-				{Label: "Import", Href: p.Base + policyIOPath + "?tab=import", Current: p.Import},
-			})
-		} else {
-			@ui.Tabs("Export", []ui.Tab{{Label: "Export", Href: p.Base + policyIOPath, Current: true}})
-		}
-		if !p.Import {
-			<div class="pio-export">
-				<div class="pio-acts">
-					<button type="button" class="btn" data-copy-text={ p.JSON } hidden>Copy</button>
-					<a class="btn btn-primary" href={ templ.SafeURL(p.Base + policyIOPath + "/export") } download="policy-rules.json">Download .json</a>
-				</div>
-				<pre class="pio-json">{ p.JSON }</pre>
-			</div>
-		} else {
-			<div class="pio-import">
-				<form method="post" action={ templ.SafeURL(p.Base + policyIOPath + "/import") } class="pio-form" id="pio-form">
-					<input type="hidden" name="csrf" value={ p.CSRF }/>
-					<label class="ufield">
-						<span class="ufield-label">Paste JSON</span>
-						<textarea name="json" rows="14" maxlength="262144" class="mono" if p.Error != "" {
-	aria-invalid="true"
-	aria-describedby="pio-err"
-}>{ p.Text }</textarea>
-						if p.Error != "" {
-							<span class="ufield-err" id="pio-err" role="alert">{ p.Error }</span>
-						}
-					</label>
-					<div class="pio-check">
-						<button type="submit" class="btn">Check import</button>
-					</div>
-				</form>
-				<section class="pio-preview" aria-labelledby="pio-h">
-					<div class="pio-pv-head">
-						<h2 id="pio-h">Preview</h2>
-						<span class="pio-counts">
-							for _, c := range p.Counts {
-								@ui.Badge(countTone(c.Key), c.Value)
-							}
-						</span>
-					</div>
-					if !p.Checked {
-						<p class="pio-none">Paste the rules and check them: the preview lists what changes before anything is saved.</p>
-					} else if len(p.Rows) == 0 {
-						<p class="pio-none">No difference: the file holds the rules that are saved now.</p>
-					} else {
-						for _, r := range p.Rows {
-							<div class="pio-row">
-								@ui.Badge(r.Tone, r.Kind)
-								<div class="pio-row-t">
-									<span>{ r.Rule }</span>
-									if r.Detail != "" {
-										<span class="pio-row-d">{ r.Detail }</span>
-									}
-								</div>
-							</div>
-						}
+		@policyShell(p.Head) {
+			<div class="pio">
+				if p.Import {
+					@policyImportCard(p)
+					@policyExportCard(p)
+				} else {
+					@policyExportCard(p)
+					if p.Admin {
+						@policyImportCard(p)
 					}
-					if p.Checked {
-						<div class="pio-foot">
-							<span>The file replaces all current rules. The import is saved as a new rule version.</span>
-							<button type="submit" form="pio-form" class="btn btn-primary" name="confirm" value="1">Import { plural(p.Count, "rule") }</button>
-						</div>
-					}
-				</section>
+				}
 			</div>
 		}
 	</div>
+}
+
+templ policyExportCard(p policyIOView) {
+	@ui.Card("Export", "All rules as one JSON file, ready to import here or on another TasmoFleet.") {
+		<div class="pio-acts">
+			<button type="button" class="btn" data-copy-text={ p.JSON } hidden>Copy</button>
+			<a class="btn btn-primary" href={ templ.SafeURL(p.Base + policyIOPath + "/export") } download="policy-rules.json">Download .json</a>
+		</div>
+		<pre class="pio-json">{ p.JSON }</pre>
+	}
+}
+
+templ policyImportCard(p policyIOView) {
+	@ui.Card("Import", "Paste a file, check it, then replace the rules. Importing never changes devices.") {
+		<div class="pio-import">
+			<form method="post" action={ templ.SafeURL(p.Base + policyIOPath + "/import") } class="pio-form" id="pio-form">
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				<label class="ufield">
+					<span class="ufield-label">Paste JSON</span>
+					<textarea name="json" rows="14" maxlength="262144" class="mono" if p.Error != "" {
+	aria-invalid="true"
+	aria-describedby="pio-err pio-legend"
+} else {
+	aria-describedby="pio-legend"
+}>{ p.Text }</textarea>
+					if p.Error != "" {
+						<span class="ufield-err" id="pio-err" role="alert">{ p.Error }</span>
+					}
+				</label>
+				<p class="pio-legend" id="pio-legend"><span class="mono">level</span>: required or advisory · <span class="mono">expected</span>: the value to check for. Files with <span class="mono">severity</span> (warn = required, info = advisory) and <span class="mono">want</span> still import.</p>
+				<div class="pio-check">
+					<button type="submit" class="btn">Check import</button>
+				</div>
+			</form>
+			<section class="pio-preview" aria-labelledby="pio-h">
+				<div class="pio-pv-head">
+					<h3 id="pio-h">Preview</h3>
+					<span class="pio-counts">
+						for _, c := range p.Counts {
+							@ui.Badge(countTone(c.Key), c.Value)
+						}
+					</span>
+				</div>
+				if !p.Checked {
+					<p class="pio-none">Paste the rules and check them: the preview lists every rule and what the import does with it before anything is saved.</p>
+				} else {
+					if !p.Replaces {
+						<p class="pio-none">No difference: the file holds the rules that are saved now.</p>
+					} else if p.OrderOnly {
+						<p class="pio-none">The rules are the same, but their order (which rule wins) or their ids differ.</p>
+					}
+					for _, r := range p.Rows {
+						<div class="pio-row">
+							@ui.Badge(r.Tone, r.Kind)
+							<div class="pio-row-t">
+								<span>{ r.Rule }</span>
+								if r.Detail != "" {
+									<span class="pio-row-d">{ r.Detail }</span>
+								}
+							</div>
+						</div>
+					}
+					if p.Replaces {
+						<div class="pio-foot">
+							@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "The file replaces all current rules.", Text: "A rule that is not in it is removed. This is saved as a new rule version; History can bring the old rules back."})
+							<button type="submit" form="pio-form" class="btn btn-primary" name="confirm" value="1">{ replaceLabel(p.Count) }</button>
+						</div>
+					}
+				}
+			</section>
+		</div>
+	}
 }
 
 // fixPreviewPage is the Make compliant plan as a page (no JavaScript, or values that changed).

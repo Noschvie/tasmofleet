@@ -52,7 +52,7 @@ func TestPolicyImportResultSitsNextToTheFile(t *testing.T) {
 	good := `[{"command":"SetOption0","want":"1"}]`
 	_, body := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {good}})
 	pv := section(t, body, "pio-h")
-	if !strings.Contains(pv, "SetOption0") || !strings.Contains(pv, "Import 1 rule") || !strings.Contains(pv, "1 new") {
+	if !strings.Contains(pv, "SetOption0") || !strings.Contains(pv, "Replace rules with this rule") || !strings.Contains(pv, "1 new") {
 		t.Errorf("the check result is not in the preview:\n%s", body)
 	}
 	r, body := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {`[{"command":"MqttPassword","want":"x"}]`}})

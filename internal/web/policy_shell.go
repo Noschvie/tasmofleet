@@ -8,7 +8,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
-// The header the policy tabs share: page header with Import / Export / New rule, the summary
+// The header the policy tabs share: page header with New rule, the summary
 // (Rules and Deviating devices only: one line of fleet counts and the live check) and the tab row.
 // The counts are policy.FleetTally of the one evaluation; a failed live check leaves them out and
 // says so in the live-check part.
@@ -97,7 +97,8 @@ func (h *handler) policyHead(v view, rep PolicyReport, repErr error) policyHead 
 	return p
 }
 
-// policyTabs lists the tabs of the policy pages. History is the version history of the rules.
+// policyTabs lists the tabs of the policy pages. History is the version history of the rules; Import / export
+// (#1088) is the last one and needs no live evaluation, so it never has a badge.
 // The GPIO templates tab (#327) is there when the service is; its badge (the devices that differ)
 // is only known on its own page, the other pages show the tab without one.
 func (h *handler) policyTabs(base, current string, rules, deviating, templates int) []ui.Tab {
@@ -108,5 +109,7 @@ func (h *handler) policyTabs(base, current string, rules, deviating, templates i
 	if h.d.Templates != nil {
 		tabs = append(tabs, ui.Tab{Label: "GPIO templates", Href: base + policyTemplatesPath, Current: current == "templates", Badge: templates})
 	}
-	return append(tabs, ui.Tab{Label: "History", Href: base + policyHistoryPath, Current: current == "history"})
+	return append(tabs,
+		ui.Tab{Label: "History", Href: base + policyHistoryPath, Current: current == "history"},
+		ui.Tab{Label: "Import / export", Href: base + policyIOPath, Current: current == "io"})
 }

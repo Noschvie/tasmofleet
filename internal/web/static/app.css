@@ -14071,12 +14071,11 @@ button.pol-chip-x {
   font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
-/* import / export */
-.pio-export {
+/* import / export: a tab of the policy shell, two full-width cards */
+.pio {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-10);
-  max-width: 860px;
+  gap: var(--sp-16);
   margin-top: var(--sp-16);
 }
 .pio-acts {
@@ -14101,12 +14100,16 @@ button.pol-chip-x {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: var(--sp-14);
   align-items: start;
-  margin-top: var(--sp-16);
 }
 .pio-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-10);
+}
+.pio-legend {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-2);
 }
 .pio-form textarea {
   min-height: 290px;
@@ -14127,12 +14130,13 @@ button.pol-chip-x {
   padding: var(--sp-12) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
 }
-.pio-pv-head h2 {
+.pio-pv-head h3 {
   margin: 0;
   font: 600 14px var(--font-sans);
 }
 .pio-counts {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .pio-none {
@@ -14151,7 +14155,7 @@ button.pol-chip-x {
 }
 .pio-row .bdg {
   flex: none;
-  width: 56px;
+  width: 84px;
   justify-content: center;
 }
 .pio-row-t {
@@ -14165,13 +14169,14 @@ button.pol-chip-x {
 }
 .pio-foot {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--sp-12);
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-10);
   padding: var(--sp-12) var(--sp-16);
-  font-size: 12.5px;
-  color: var(--color-text-2);
+}
+.pio-foot .banner {
+  align-self: stretch;
+  margin: 0;
 }
 /* Make compliant as a page (no JavaScript) and the started page */
 .pol-fix-grid {
