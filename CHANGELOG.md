@@ -4,6 +4,18 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.45.2 "Rubjerg Knude" (2026-11-21)
+
+### Fixed
+
+- Meaning that was only in a tooltip or only in a colour is now on screen. On the Devices list the update badge says which version ("Update 14.3.0"), a device whose settings differ from the policy says "1 off policy" or "3 off policy", and every status but Online shows its reason as text ("no message for over 11m", "no answer", "login refused", "not heard from yet", "MQTT down · HTTP only"), in the table and on the phone cards. A firmware download that failed says why in a line under the file, on the Firmware page and on the release page. The import plan's Create, Merge and Reject badges carry a glyph, and Reject is a warning instead of a failure. The Actual value of a deviating setting carries a "≠" and "Differs" for screen readers. The transaction progress bar reaches 3:1 against its track in both themes, and done, running and failed differ by shape: a solid bar, stripes, a checker. A tooltip in a table is centred on its badge wherever the previous one stood (#1073)
+- Controls that repeat per row now say which row they belong to, for screen readers: a power switch on the Devices list is named "<device> relay 1" and reports on or off as a switch instead of repeating "Toggle relay 1, currently ON" for every device, the row menus are named "Actions for <name>" and no longer claim a menu role whose arrow keys never worked, the Add and Ignore buttons of Needs attention name their device, each audit Details button names its event and controls its detail row, Use as reference and the pin tables on the GPIO templates page name their device, the rule editor's change note has a visible label, and the username field no longer capitalises or spell-checks. "Keep me signed in" is no longer ticked by default (#1074)
+- Tab rows and filter chips that scroll sideways on a phone fade the side that has more, so "History" on Policy and "Replace device" on a device page can be found; the phone header names the area (Devices, System) instead of cutting the page title mid-word; the setup steps show the current step's label whole; and the device header keeps Restart and Back up with Edit, Replace device and Delete in a menu, and wraps a long hostname (#1079)
+- The Backups card no longer reloads on every device change, so focus and open folds stay; its Runs and Files headers now say "Backups" and "Device files" in text (#1153).
+- On a phone, a user with a second badge (Password change due, Deactivated) in the Users list shows its badges on a line under the name, so the name is no longer squeezed into a few characters and broken inside words (#1182)
+- The offline banner on a device page no longer says that Restart, Back up and Refresh identity "are disabled": it says Restart and Back up wait until the device answers again, because since 0.45.1 those buttons are blocked with a visible reason instead of disabled. Switching and Refresh identity give their own reason, so the banner does not repeat them (#1183)
+- The device list on the page of every bulk action (Back up all now, Restart, Power, Send command) is sorted by name, ignoring case and umlauts, equal names by address, instead of an arbitrary order (#1188, thanks @Noschvie)
+
 ## 0.45.1 "Rubjerg Knude" (2026-11-21)
 
 ### Fixed
