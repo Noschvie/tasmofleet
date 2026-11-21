@@ -6,7 +6,17 @@ package ui
 // PageHeader is the page title with its subtitle line and the page's buttons (children) on the
 // right: h1 22 px, subtitle 13 px.
 templ PageHeader(title, sub string) {
-	@pageHeader(title, sub, false) {
+	@pageHeader(title, sub, false, false) {
+		{ children... }
+	}
+}
+
+// PageHeaderLive is PageHeader for a page that holds the event stream and whose subtitle says
+// how fresh its values are: while html[data-live] reports the stream down, the subtitle adds
+// "Values from HH:MM" (the time live.js already keeps for the status bar). Without a failure
+// the stylesheet hides it, so the subtitle never claims a connection it cannot know.
+templ PageHeaderLive(title, sub string) {
+	@pageHeader(title, sub, false, true) {
 		{ children... }
 	}
 }
@@ -14,12 +24,12 @@ templ PageHeader(title, sub string) {
 // PageHeaderSample is PageHeader for a sample on /styleguide: the title is a div with the h1
 // styling, because the page around the sample already has its own h1 (#515).
 templ PageHeaderSample(title, sub string) {
-	@pageHeader(title, sub, true) {
+	@pageHeader(title, sub, true, false) {
 		{ children... }
 	}
 }
 
-templ pageHeader(title, sub string, sample bool) {
+templ pageHeader(title, sub string, sample, live bool) {
 	<div class="pghead">
 		<div class="pghead-t">
 			if sample {
@@ -28,7 +38,11 @@ templ pageHeader(title, sub string, sample bool) {
 				<h1>{ title }</h1>
 			}
 			if sub != "" {
-				<p class="pghead-sub">{ sub }</p>
+				if live {
+					<p class="pghead-sub">{ sub }<span class="pghead-stale">{ " · Values from " }<time data-live-since>page load</time></span></p>
+				} else {
+					<p class="pghead-sub">{ sub }</p>
+				}
 			}
 		</div>
 		<div class="pghead-acts">

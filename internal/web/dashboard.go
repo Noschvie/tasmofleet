@@ -67,7 +67,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	v := h.view(r, "Dashboard", "dashboard", nil)
 	v.EventSeq = seq
-	v.Live = true // "state streams in live": the body reloads on state changes (TestDashboardIsLive)
+	v.Live = true // the body reloads on state changes (TestDashboardIsLive)
 	facts := h.fleetFacts(r.Context(), actor(r))
 	facts.annotate(rows)
 	h.annotateStability(r.Context(), rows)
@@ -127,7 +127,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		devs[row.Device.ID] = row.Device
 	}
 	d := dashView{Base: v.Base, CSRF: v.CSRF, Total: len(rows), Empty: len(rows) == 0}
-	d.Sub = fmt.Sprintf("%d %s · state streams in live", len(rows), noun(len(rows), "device", "devices"))
+	d.Sub = fmt.Sprintf("%d %s", len(rows), noun(len(rows), "device", "devices"))
 	if v.IsAdmin {
 		d.AddHref = v.Base + "/devices/new"
 		d.ManualHref = v.Base + "/devices/new"

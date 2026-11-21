@@ -309,10 +309,65 @@ func TestLiveStreamOnlyWhenAsked(t *testing.T) {
 	if !strings.Contains(got, `hx-ext="sse" sse-connect="/fleet/events?since=0"`) {
 		t.Fatalf("live page without the stream: %s", got)
 	}
-	for _, want := range []string{"Live updates interrupted.", "Connection to the server lost.", "Retry now", ">Reconnecting…<", ">Offline<"} {
+	for _, want := range []string{"<b>Reconnecting…</b>", "Connection to the server lost.", "Retry now", ">Reconnecting…<", ">Offline<"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("live page lacks %q", want)
 		}
+	}
+}
+
+// Why (#1089): a banner that floats over the page covers the crumbs and the title exactly when the
+// person needs to read them, so the connection banners sit in the page flow of <main>, under the crumbs,
+// like the shell's other banners. In the sticky header they would also keep their space for the whole
+// scroll.
+func TestConnBannersSitInTheFlowOfMain(t *testing.T) {
+	d := admin()
+	d.Live = true
+	got := render(t, d)
+	header := got[strings.Index(got, `<header class="top">`):strings.Index(got, "</header>")]
+	if strings.Contains(header, "conn-banners") {
+		t.Fatal("the connection banners sit in the sticky header, where they float over the page")
+	}
+	main := got[strings.Index(got, `<main id="main">`):strings.Index(got, "</main>")]
+	at := strings.Index(main, `class="conn-banners"`)
+	if at < 0 {
+		t.Fatalf("the connection banners are not in <main>: %s", main)
+	}
+	if strings.Index(main, `aria-label="Breadcrumb"`) > at || at > strings.Index(main, `id="page"`) {
+		t.Fatalf("order must be crumbs, connection banners, content: %s", main)
+	}
+}
+
+// Why (#1089, WCAG 4.1.3 and 2.2.2): the Reconnecting banner is a status region and the Offline banner an
+// alert; a number that changes every second inside either one makes a screen reader read the page to
+// pieces. The regions hold words that change with the state only: no attempt counter at all, and the
+// Offline countdown is aria-hidden (the sighted countdown stays, a static sentence replaces it for the
+// region).
+func TestConnBannersAnnounceStatesNotCountdowns(t *testing.T) {
+	d := admin()
+	d.Live = true
+	got := render(t, d)
+	from := strings.Index(got, `conn-re" role="status"`)
+	mid := strings.Index(got, `conn-off" role="alert"`)
+	if from < 0 || mid < from {
+		t.Fatalf("the two banners are not there: %s", got)
+	}
+	status := got[from:mid]
+	alert := got[mid : mid+strings.Index(got[mid:], "Retry now")]
+	for _, ticking := range []string{"data-live-attempt", "data-live-next"} {
+		if strings.Contains(status, ticking) {
+			t.Errorf("the status banner holds %s, which changes while it is announced", ticking)
+		}
+	}
+	if strings.Count(alert, "data-live-next") != 1 {
+		t.Fatalf("the alert banner must hold exactly one countdown: %s", alert)
+	}
+	hidden := strings.Index(alert, `aria-hidden="true"`)
+	if hidden < 0 || hidden > strings.Index(alert, "data-live-next") {
+		t.Errorf("the alert banner's countdown is announced: %s", alert)
+	}
+	if !strings.Contains(alert, "Retrying automatically.") {
+		t.Errorf("the alert banner has no static sentence for the countdown: %s", alert)
 	}
 }
 

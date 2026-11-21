@@ -42,7 +42,7 @@ test("a broken event stream shows Reconnecting, then Offline, and Live once it i
   const re = page.locator(".conn-banner.conn-re");
   const off = page.locator(".conn-banner.conn-off");
   await expect(re).toBeVisible();
-  await expect(re).toContainText("Live updates interrupted.");
+  await expect(re).toContainText("Reconnecting…");
   await expect(page.locator(".sb-wide .sb-l-re")).toBeVisible();
   await expect(page.locator(".sb-wide .sb-l-ok")).toBeHidden();
   // the extension retries after 0.5, 1, 2, 4 s: the fifth failure in a row is "Offline"
@@ -62,12 +62,13 @@ test("a broken event stream shows Reconnecting, then Offline, and Live once it i
   await expect(page.locator(".sb-wide .sb-l-ok")).toBeVisible();
 });
 
-// Why (v0.11.2, live banner): a stream that drops and comes straight back (a proxy closing it, a
-// server restart) loses nothing worth telling the user about; flashing "Live updates interrupted"
-// for every such drop trains them to ignore it. Only a stream that stays down past the grace period
-// (or several failed reconnects) is news. And when it shows, the banner floats over the page: the
-// table under it must not jump ("no layout jumps").
-test("a quick reconnect is silent and the banner never moves the page", async ({
+// Why (v0.11.2, live banner; #1089): a stream that drops and comes straight back (a proxy closing it, a
+// server restart) loses nothing worth telling the user about; flashing "Reconnecting" for every such
+// drop trains them to ignore it. Only a stream that stays down past the grace period (or several failed
+// reconnects) is news. And when it shows, the banner sits in the page flow: the page below it moves down
+// once when the banner shows and once when it goes (it used to float over the title), and never between
+// Reconnecting and Offline, where the banners share one reserved space.
+test("a quick reconnect is silent; a banner pushes the page down once and never covers the title", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -76,6 +77,7 @@ test("a quick reconnect is silent and the banner never moves the page", async ({
   await page.goto(app.url + "/about");
   await expect.poll(() => liveState(page)).toBe("live");
   const re = page.locator(".conn-banner.conn-re");
+  const off = page.locator(".conn-banner.conn-off");
   const heading = page.locator("#main h1").first();
   const top = async () => (await heading.boundingBox())!.y;
   const before = await top();
@@ -88,29 +90,141 @@ test("a quick reconnect is silent and the banner never moves the page", async ({
         }),
       ),
     );
-  // one drop, back within the grace period: nothing shows
+  const sseOpen = () =>
+    page.evaluate(() =>
+      document.body.dispatchEvent(new CustomEvent("htmx:sseOpen", { bubbles: true })),
+    );
+  // one drop, back within the grace period: nothing shows, nothing moves
   await sseError();
   await page.clock.runFor(10_000);
   await expect(re).toBeHidden();
   expect(await liveState(page)).toBe("live");
-  await page.evaluate(() =>
-    document.body.dispatchEvent(new CustomEvent("htmx:sseOpen", { bubbles: true })),
-  );
+  await sseOpen();
   await page.clock.runFor(20_000);
   await expect(re).toBeHidden();
-  // a drop that lasts past the grace period shows the banner, over the page
+  expect(await top()).toBe(before);
+  // a drop that lasts past the grace period shows the banner above the title, which moves down
   await sseError();
   await page.clock.runFor(16_000);
   await expect(re).toBeVisible();
   expect(await liveState(page)).toBe("reconnecting");
+  const bannerBox = (await re.boundingBox())!;
+  const reconnecting = await top();
+  expect(reconnecting).toBeGreaterThanOrEqual(bannerBox.y + bannerBox.height);
+  // Retry now belongs to the other banner: it must not be reachable while this one shows
+  await expect(off.getByRole("button", { name: "Retry now" })).toBeHidden();
+  // Offline: the other banner takes the same space, the title stays where it is
+  for (let i = 0; i < 4; i++) await sseError();
+  await expect.poll(() => liveState(page)).toBe("offline");
+  await expect(off).toBeVisible();
+  await expect(re).toBeHidden();
+  expect(await top()).toBe(reconnecting);
+  // back: hidden again, the title is where it was before
+  await sseOpen();
+  await expect(off).toBeHidden();
   expect(await top()).toBe(before);
-  // back: hidden again, still no shift
+});
+
+// Why (#1089, WCAG 2.2.2 and 4.1.3): the Offline banner is an alert region; a countdown that changes
+// every second inside it makes a screen reader read it out again every second. The countdown stays on
+// screen but is aria-hidden, so over several seconds of ticking nothing the region announces changes.
+test("the Offline banner's announced text does not tick", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.clock.install();
+  await page.goto(app.url + "/about");
+  await expect.poll(() => liveState(page)).toBe("live");
+  await page.evaluate(() => {
+    for (let i = 0; i < 5; i++)
+      document.body.dispatchEvent(
+        new CustomEvent("htmx:sseError", {
+          bubbles: true,
+          detail: { source: { readyState: 0 } },
+        }),
+      );
+  });
+  await expect.poll(() => liveState(page)).toBe("offline");
+  const countdown = page.locator(".conn-off [data-live-next]");
+  await expect(countdown).toBeVisible();
+  // record every change below the alert that an assistive technology would hear
+  await page.evaluate(() => {
+    const w = window as unknown as { heard: string[] };
+    w.heard = [];
+    const alert = document.querySelector(".conn-off")!;
+    new MutationObserver((list) => {
+      for (const m of list) {
+        const at = m.target instanceof Element ? m.target : m.target.parentElement;
+        if (!at?.closest('[aria-hidden="true"]')) w.heard.push(m.type + " " + (m.target.textContent ?? ""));
+      }
+    }).observe(alert, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+  const shown = async () => countdown.textContent();
+  const first = await shown();
+  await page.clock.runFor(3_000);
+  expect(await shown()).not.toBe(first); // it does tick for the eye
+  expect(await page.evaluate(() => (window as unknown as { heard: string[] }).heard)).toEqual([]);
+  await expect(page.locator(".conn-off")).toContainText("Retrying automatically.");
+});
+
+// Why (#1089): the dashboard's subtitle said "state streams in live" as fixed text, so it claimed a live
+// connection while the banner said the connection was lost. It counts devices only; while the stream is
+// down it adds the time of the last values (the same time the status bar shows), and it is gone again
+// when the stream is back.
+test("the dashboard subtitle stops saying live while the stream is down", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.clock.install();
+  await page.goto(app.url + "/");
+  await expect.poll(() => liveState(page)).toBe("live");
+  const sub = page.locator("#main .pghead-sub");
+  // what the person reads, so the hidden "Values from" part does not count
+  const said = () => sub.innerText();
+  await expect(sub).toContainText(/\d+ devices?/);
+  expect(await said()).not.toMatch(/live/i);
+  expect(await said()).not.toContain("Values from");
+  await page.evaluate(() => {
+    for (let i = 0; i < 3; i++)
+      document.body.dispatchEvent(
+        new CustomEvent("htmx:sseError", { bubbles: true, detail: { source: { readyState: 0 } } }),
+      );
+  });
+  await expect(page.locator("html")).toHaveAttribute("data-live", "reconnecting");
+  await expect(page.locator("#main .pghead-stale")).toBeVisible();
+  expect(await said()).toMatch(/^\d+ devices? · Values from \d\d:\d\d$/);
   await page.evaluate(() =>
     document.body.dispatchEvent(new CustomEvent("htmx:sseOpen", { bubbles: true })),
   );
-  await expect(re).toBeHidden();
-  expect(await top()).toBe(before);
+  await expect(page.locator("html")).toHaveAttribute("data-live", "live");
+  await expect(page.locator("#main .pghead-stale")).toBeHidden();
+  expect(await said()).not.toContain("Values from");
 });
+
+// Why (#1089): the banner floated over the page and covered the title and subtitle at 1280 px and the
+// crumbs, title and subtitle at 375 px, exactly while the person needs to read what is wrong.
+for (const width of [375, 1280]) {
+  test(`dashboard at ${width} px: the connection banner does not cover the page header`, async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.setViewportSize({ width, height: 800 });
+    await page.setExtraHTTPHeaders(admin);
+    await page.clock.install();
+    await page.goto(app.url + "/");
+    await expect.poll(() => liveState(page)).toBe("live");
+    await page.evaluate(() => {
+      for (let i = 0; i < 3; i++)
+        document.body.dispatchEvent(
+          new CustomEvent("htmx:sseError", { bubbles: true, detail: { source: { readyState: 0 } } }),
+        );
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-live", "reconnecting");
+    const banner = (await page.locator(".conn-banner.conn-re").boundingBox())!;
+    const header = (await page.locator("#main .pghead").boundingBox())!;
+    expect(banner.y + banner.height, "the banner ends above the page header").toBeLessThanOrEqual(header.y);
+    const title = (await page.locator("#main h1").boundingBox())!;
+    expect(banner.y + banner.height, "the banner ends above the title").toBeLessThanOrEqual(title.y);
+  });
+}
 
 // Why: the phone menu button is a link to /nav and the user menu is a <details>; without
 // JavaScript both must still get the user to every page and to Sign out.

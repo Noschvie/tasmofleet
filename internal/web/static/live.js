@@ -1,7 +1,8 @@
 // Live connection state (design v2): the top bar's indicator and the two banners. The htmx SSE
 // extension keeps the stream on <body> open; this file listens to its events and sets
 // data-live on <html> ("live", "reconnecting", "offline"); the stylesheet shows the matching
-// label and banner, this file fills in the numbers. Nothing here changes how updates arrive.
+// label and banner, this file fills in the time of the last update and the retry countdown.
+// Nothing here changes how updates arrive.
 (function () {
   "use strict";
   var root = document.documentElement;
@@ -27,18 +28,26 @@
     return (n < 10 ? "0" : "") + n;
   }
 
+  // put writes only a value that changed: an element inside a live region (the banners, #1089) must
+  // not be touched every second just because the timer ran.
+  function put(el, text) {
+    if (el.textContent !== text) {
+      el.textContent = text;
+    }
+  }
+
   function fill() {
     var left = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
     document.querySelectorAll("[data-live-next]").forEach(function (el) {
-      el.textContent = String(left);
+      put(el, String(left));
     });
-    document.querySelectorAll("[data-live-attempt]").forEach(function (el) {
-      el.textContent = String(attempts);
-    });
+    var since = two(lastData.getHours()) + ":" + two(lastData.getMinutes());
+    var iso = lastData.toISOString();
     document.querySelectorAll("[data-live-since]").forEach(function (el) {
-      el.textContent =
-        two(lastData.getHours()) + ":" + two(lastData.getMinutes());
-      el.setAttribute("datetime", lastData.toISOString());
+      put(el, since);
+      if (el.getAttribute("datetime") !== iso) {
+        el.setAttribute("datetime", iso);
+      }
     });
   }
 

@@ -732,7 +732,7 @@ func TestSSEStreamsHealthFragments(t *testing.T) {
 func TestDashboardCountsPerState(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/", "operator", nil)
-	if !strings.Contains(body, "2 devices · state streams in live") || !strings.Contains(body, `aria-label="1 online, 0 offline, 1 unknown"`) {
+	if !strings.Contains(body, `<p class="pghead-sub">2 devices`) || !strings.Contains(body, `aria-label="1 online, 0 offline, 1 unknown"`) {
 		t.Fatalf("dashboard: %s", body)
 	}
 }

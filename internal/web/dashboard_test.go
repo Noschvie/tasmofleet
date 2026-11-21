@@ -277,7 +277,7 @@ func TestDashboardEmptyFleet(t *testing.T) {
 	delete(e.inv.devs, 1)
 	delete(e.inv.devs, 2)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	if !strings.Contains(body, "0 devices · state streams in live") || !strings.Contains(body, "<h2>No devices yet</h2>") {
+	if !strings.Contains(body, `<p class="pghead-sub">0 devices`) || !strings.Contains(body, "<h2>No devices yet</h2>") {
 		t.Fatalf("empty dashboard: %s", body)
 	}
 	for _, want := range []string{`href="/tf/devices/new#card-scan">Scan network`, `href="/tf/devices/new">Add manually`, `href="/tf/devices/new#card-import">Import from TasmoAdmin`} {
@@ -301,9 +301,8 @@ func TestDashboardEmptyFleet(t *testing.T) {
 	}
 }
 
-// Why (design v2, P1, structure deviation S6 resolved): the subtitle says "state streams in live",
-// so the dashboard holds the event stream and reloads its body when a device changes state, a
-// device is added or removed, or a transaction moves.
+// Why (design v2, P1, structure deviation S6 resolved): the dashboard holds the event stream and
+// reloads its body when a device changes state, a device is added or removed, or a transaction moves.
 func TestDashboardIsLive(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/", "operator", nil)
@@ -312,6 +311,26 @@ func TestDashboardIsLive(t *testing.T) {
 	}
 	if !strings.Contains(body, `<div id="dash" hx-get="/tf/" hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">`) {
 		t.Errorf("the dashboard body does not refresh on stream events: %s", body)
+	}
+}
+
+// Why (#1089): the subtitle used to say "state streams in live" as fixed text, so the dashboard kept
+// claiming it while the stream was down. The subtitle now only counts the devices; a second part, shown
+// by the stylesheet only while html[data-live] says the stream is down, names the time of the last
+// values from the same element live.js fills for the status bar (one clock).
+func TestDashboardSubtitleDoesNotClaimLive(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	if strings.Contains(body, "streams in live") {
+		t.Error("the dashboard subtitle still says the state streams in live, whatever the connection does")
+	}
+	sub := body[strings.Index(body, `<p class="pghead-sub">`):]
+	sub = sub[:strings.Index(sub, "</p>")]
+	if !strings.HasPrefix(sub, `<p class="pghead-sub">2 devices`) {
+		t.Errorf("subtitle: %s", sub)
+	}
+	if !strings.Contains(sub, `Values from <time data-live-since>`) {
+		t.Errorf("the subtitle has no place for the time of the last values: %s", sub)
 	}
 }
 

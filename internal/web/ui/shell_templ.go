@@ -156,12 +156,6 @@ func Shell(d ShellData, content templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if d.Live {
-			templ_7745c5c3_Err = connBanners().Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</header>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -180,7 +174,7 @@ func Shell(d ShellData, content templ.Component) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(d.Base + "/events?only=notice").Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 65, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 62, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -202,6 +196,12 @@ func Shell(d ShellData, content templ.Component) templ.Component {
 		templ_7745c5c3_Err = Crumbs(d.Trail(), d.Base).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
+		}
+		if d.Live {
+			templ_7745c5c3_Err = connBanners().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		if d.Flash != "" {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<p class=\"banner tone-ok\" role=\"status\" data-flash><span class=\"banner-dot\"></span><span class=\"banner-text\">")
@@ -1945,8 +1945,12 @@ func crumbSteps(trail []Crumb, base string) templ.Component {
 }
 
 // connBanners are the two connection banners; the stylesheet shows one while data-live on
-// <html> says "reconnecting" or "offline", live.js fills in the numbers. They float just below
-// the sticky header, over the page, so showing or hiding one never moves the content.
+// <html> says "reconnecting" or "offline", live.js fills in the time and the countdown. They sit in
+// the page flow of <main>, under the crumbs like the shell's other banners (#1089): a banner that
+// floated over the page covered the title and the first rows exactly when they matter. The space is
+// reserved only while one shows. Their words change with the state only: a number that ticks inside
+// a live region is read out again every second (WCAG 4.1.3, 2.2.2), so the Offline countdown is
+// aria-hidden and the region carries a static sentence instead.
 func connBanners() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -1964,7 +1968,7 @@ func connBanners() templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 154, "<div class=\"conn-banners\"><div class=\"banner tone-warn conn-banner conn-re\" role=\"status\"><span class=\"banner-dot pulse\"></span><div class=\"banner-text\"><b>Live updates interrupted.</b> Reconnecting (attempt <span data-live-attempt>1</span>, next try in <span data-live-next data-visual-mask>4</span> s). Values may be a few seconds old.</div></div><div class=\"banner tone-danger conn-banner conn-off\" role=\"alert\"><span class=\"banner-dot\"></span><div class=\"banner-text\"><b>Connection to the server lost.</b> Live updates are paused; values shown are from <time data-live-since>the last page load</time>. Retrying in <span data-live-next data-visual-mask>8</span> s.</div><button type=\"button\" class=\"banner-btn\" data-live-retry>Retry now</button></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 154, "<div class=\"conn-banners\"><div class=\"banner tone-warn conn-banner conn-re\" role=\"status\"><span class=\"banner-dot pulse\"></span><div class=\"banner-text\"><b>Reconnecting…</b> Live updates are paused; values may be out of date.</div></div><div class=\"banner tone-danger conn-banner conn-off\" role=\"alert\"><span class=\"banner-dot\"></span><div class=\"banner-text\"><b>Connection to the server lost.</b> Live updates are paused; values shown are from <time data-live-since>the last page load</time>. <span aria-hidden=\"true\">Retrying in <span data-live-next data-visual-mask>8</span> s.</span><span class=\"sr-only\">Retrying automatically.</span></div><button type=\"button\" class=\"banner-btn\" data-live-retry>Retry now</button></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1998,7 +2002,7 @@ func navBadge(n int) templ.Component {
 			var templ_7745c5c3_Var90 string
 			templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(n))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 412, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/shell.templ`, Line: 416, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 			if templ_7745c5c3_Err != nil {
