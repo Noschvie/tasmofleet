@@ -259,6 +259,10 @@ type SessionStore interface {
 	// DeleteUserSessions removes every session whose principal has this
 	// subject ("local:<name>" for local accounts) and returns the count.
 	DeleteUserSessions(ctx context.Context, subject string) (int64, error)
+	// DeleteUserSessionsAs is DeleteUserSessions that applies only if, in the
+	// same statement, by is still an enabled admin at the same password
+	// generation (ErrStaleActor otherwise); the zero Actor imposes no check.
+	DeleteUserSessionsAs(ctx context.Context, subject string, by Actor) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, now time.Time) (int64, error)
 }
 

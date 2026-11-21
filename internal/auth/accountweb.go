@@ -593,9 +593,11 @@ func (s *Service) acting(ci ctxInfo) *Accounts {
 	return s.accounts.As(store.Actor{Username: ci.p.Name, PasswordGen: ci.passwordGen})
 }
 
-// endSessions is POST /users/sessions (form field subject): it signs an SSO
-// user out everywhere. Roles stay with the IdP groups, so this is the one
-// change available for such a user. Exactly the sessions of that subject end.
+// endSessions is POST /users/sessions (form field subject): it signs a user
+// out everywhere. For an SSO user, whose role stays with the IdP groups, this
+// is the one change available. A local user can sign in again at once with the
+// same password (no generation bump, device cookies stay); Deactivate is the
+// revocation. Exactly the sessions of that subject end.
 func (s *Service) endSessions(w http.ResponseWriter, r *http.Request) {
 	ci, ok := s.stepped(w, r)
 	if !ok {
@@ -604,6 +606,10 @@ func (s *Service) endSessions(w http.ResponseWriter, r *http.Request) {
 	subject := r.PostFormValue("subject")
 	if id := r.PostFormValue("session"); id != "" {
 		s.endOneSession(w, r, ci, subject, id)
+		return
+	}
+	if strings.HasPrefix(subject, localSubjectPrefix) {
+		s.endLocalSessions(w, r, ci, subject)
 		return
 	}
 	detail := map[string]string{"subject": subject}
@@ -639,6 +645,49 @@ func (s *Service) endSessions(w http.ResponseWriter, r *http.Request) {
 	detail["sessions"] = strconv.FormatInt(n, 10)
 	s.record(r, ci.p.Subject, "account.sessions.end", "ok", detail)
 	s.renderUsers(w, r, http.StatusOK, "Signed out "+strconv.FormatInt(n, 10)+" session(s). The user can sign in again; roles come from the identity provider.", "")
+}
+
+// endLocalSessions ends every session of one local account. Accounts.
+// RevokeSessions does the deletion on the authority of the acting admin (L6):
+// a local admin demoted, disabled or re-keyed since its page loaded is
+// refused and nothing is deleted. Reservation of the "local:" prefix
+// (reservedSubject) means this branch can never reach an SSO or header
+// subject. All rows of this action carry {subject, sessions}.
+func (s *Service) endLocalSessions(w http.ResponseWriter, r *http.Request, ci ctxInfo, raw string) {
+	name := NormalizeUsername(strings.TrimPrefix(raw, localSubjectPrefix))
+	subject := SubjectOf(name)
+	detail := map[string]string{"subject": subject}
+	if subject == ci.p.Subject {
+		s.record(r, ci.p.Subject, "account.sessions.end", "denied: own account", detail)
+		s.renderUsers(w, r, http.StatusBadRequest, "", "Use Sign out to end your own session.")
+		return
+	}
+	if _, err := s.accounts.Get(r.Context(), name); err != nil {
+		if !errors.Is(err, ErrUserNotFound) {
+			slog.ErrorContext(r.Context(), "end sessions", "err", err)
+			s.record(r, ci.p.Subject, "account.sessions.end", "error", detail)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		s.record(r, ci.p.Subject, "account.sessions.end", "denied: no such user", detail)
+		s.renderUsers(w, r, http.StatusNotFound, "", "No such user.")
+		return
+	}
+	n, err := s.acting(ci).RevokeSessions(r.Context(), name)
+	switch {
+	case errors.Is(err, ErrStaleActor):
+		s.record(r, ci.p.Subject, "account.sessions.end", "denied: acting account changed", detail)
+		s.renderUsers(w, r, http.StatusForbidden, "", "Your account changed while the request ran. Sign in again.")
+		return
+	case err != nil:
+		slog.ErrorContext(r.Context(), "end sessions", "err", err)
+		s.record(r, ci.p.Subject, "account.sessions.end", "error", detail)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	detail["sessions"] = strconv.FormatInt(n, 10)
+	s.record(r, ci.p.Subject, "account.sessions.end", "ok", detail)
+	s.renderUsers(w, r, http.StatusOK, "Signed out "+strconv.FormatInt(n, 10)+" session(s). "+name+" can sign in again with the same password.", "")
 }
 
 func (s *Service) finishAccountAction(w http.ResponseWriter, r *http.Request, ci ctxInfo, action, target, notice string, err error) {

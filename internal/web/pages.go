@@ -346,18 +346,20 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 		add("disable", "Deactivate", g.Disable, ui.DialogData{Title: "Deactivate " + who + "?", Body: who + " is signed out at once and cannot sign in until an admin reactivates the account.", Action: local, Verb: "Deactivate",
 			Fields: []ui.KVRow{{Key: "action", Value: "disable"}}}, true, false)
 	}
-	end := auth.Guard{Allowed: u.Method == auth.MethodSSO && u.Sessions > 0 && !self}
+	end := auth.Guard{Allowed: (u.Method == auth.MethodSSO || u.Method == auth.MethodLocal) && u.Sessions > 0 && !self}
 	switch {
 	case self:
 		end.Reason = "Use Sign out for your own session"
-	case u.Method == auth.MethodLocal:
-		end.Reason = "Deactivate signs a local user out"
 	case u.Method == auth.MethodHeader:
 		end.Reason = endHeaderWhy
 	case u.Sessions == 0:
 		end.Reason = "No active sessions"
 	}
-	add("sessions", "End all sessions", end, ui.DialogData{Title: "End all sessions of " + who + "?", Body: who + " is signed out everywhere and can sign in again; the role still comes from the identity provider.", Action: base + "/users/sessions", Verb: "End sessions",
+	endBody := who + " is signed out everywhere and can sign in again; the role still comes from the identity provider."
+	if u.Method == auth.MethodLocal {
+		endBody = who + " is signed out everywhere and can sign in again with the same password."
+	}
+	add("sessions", "End all sessions", end, ui.DialogData{Title: "End all sessions of " + who + "?", Body: endBody, Action: base + "/users/sessions", Verb: "End sessions",
 		Fields: []ui.KVRow{{Key: "subject", Value: u.Subject}}}, false, false)
 	add("delete", "Delete…", g.Delete, ui.DialogData{Title: "Delete " + who + "?", Body: "The account is removed for good. The audit log keeps its entries.", Action: local, Verb: "Delete",
 		Fields: []ui.KVRow{{Key: "action", Value: "delete"}}}, true, true)

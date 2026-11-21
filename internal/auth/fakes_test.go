@@ -98,6 +98,20 @@ func (f *fakeSessions) DeleteUserSessions(_ context.Context, subject string) (in
 	}
 	return n, nil
 }
+
+// DeleteUserSessionsAs mirrors the store: the rows go only if the actor is
+// still an enabled admin at its generation (same rule as fakeUsers.actorOK).
+func (f *fakeSessions) DeleteUserSessionsAs(ctx context.Context, subject string, by store.Actor) (int64, error) {
+	if by.Username != "" && f.users != nil {
+		f.users.mu.Lock()
+		ok := f.users.actorOK(by)
+		f.users.mu.Unlock()
+		if !ok {
+			return 0, store.ErrStaleActor
+		}
+	}
+	return f.DeleteUserSessions(ctx, subject)
+}
 func (f *fakeSessions) DeleteExpiredSessions(_ context.Context, now time.Time) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { layoutGuards, guardReport, wrappedUserMeta } from "../support/layout";
 import { App, Devenv, freePort, startApp, startDevenv } from "../support/stack";
@@ -102,16 +103,40 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   // Why (N4): the one-time password signs lena in once and makes her choose her own at once
   const lenaCtx = await browser.newContext();
   const lp = await lenaCtx.newPage();
-  await lp.goto(app.url + "/login");
-  await lp.getByLabel("Username").fill("lena");
-  await lp.getByLabel("Password", { exact: true }).fill(otp);
-  await lp.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(lp.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  const signInLena = async (p: Page) => {
+    await p.goto(app.url + "/login");
+    await p.getByLabel("Username").fill("lena");
+    await p.getByLabel("Password", { exact: true }).fill(otp);
+    await p.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(p.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  };
+  await signInLena(lp);
+  const lenaCtx2 = await browser.newContext();
+  const lp2 = await lenaCtx2.newPage();
+  await signInLena(lp2);
 
-  // the admin goes on to lena's page and ends that one session there; the answer stays on her page
+  // the admin goes on to lena's page
   await page.getByRole("link", { name: "Done" }).click();
   await expect(page).toHaveURL(/\/users\/lena$/);
   const lenaHead = page.getByRole("heading", { level: 1, name: /Lena Berg/ });
+  await expect(lenaHead).toBeVisible();
+
+  // Why (#1162): End all sessions reaches a local user too: both of lena's browsers are signed out on
+  // their next request, and the same password signs her in again (Deactivate is the revocation).
+  await page.locator(".ud-acts").getByRole("link", { name: "End all sessions" }).click();
+  const endAll = page.locator("dialog[open]");
+  await expect(endAll).toContainText("Lena Berg is signed out everywhere and can sign in again with the same password.");
+  await endAll.getByRole("button", { name: "End sessions" }).click();
+  await expect(page.getByText("Signed out 2 session(s). lena can sign in again with the same password.")).toBeVisible();
+  for (const p of [lp, lp2]) {
+    await p.goto(app.url + "/account");
+    await expect(p).toHaveURL(/\/login/);
+  }
+  await lenaCtx2.close();
+  await signInLena(lp);
+
+  // the admin ends that one session on her page; the answer stays on her page
+  await page.goto(app.url + "/users/lena");
   await expect(lenaHead).toBeVisible();
   const end = page.locator(".ud-sessions").getByRole("button", { name: "End session" });
   await expect(end).toHaveCount(1);

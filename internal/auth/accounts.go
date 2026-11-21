@@ -316,8 +316,11 @@ func (a *Accounts) List(ctx context.Context) ([]store.LocalUser, error) {
 }
 
 // RevokeSessions ends all sessions of one local user and returns the count.
+// Like every mutation it honours the acting admin (see As): a stale actor is
+// ErrStaleActor and nothing is deleted. Only the sessions go; the password
+// generation and the device cookies stay, so the user can sign in again.
 func (a *Accounts) RevokeSessions(ctx context.Context, name string) (int64, error) {
-	n, err := a.Sessions.DeleteUserSessions(ctx, SubjectOf(NormalizeUsername(name)))
+	n, err := a.Sessions.DeleteUserSessionsAs(ctx, SubjectOf(NormalizeUsername(name)), a.by)
 	if err != nil {
 		return 0, fmt.Errorf("auth: revoke sessions: %w", err)
 	}

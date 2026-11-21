@@ -428,3 +428,59 @@ func TestPasswordChangeDueHasOneNameOnEveryPage(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1162): an admin can end all sessions of a local user (lost phone, shared computer) without
+// deactivating the account. The row menu offers it only while that user has sessions, and the
+// dialog says what happens to a local user: signed out everywhere, same password signs in again.
+// The SSO wording (role comes from the identity provider) would be wrong here.
+func TestUsersMenuOffersEndSessionsForALocalUser(t *testing.T) {
+	d := usersFixture()
+	d.Users[1].Sessions = 2
+	body := renderUsersPage(t, d)
+	ops := menuOf(t, body, "ops")
+	if !strings.Contains(ops, `<span>End all sessions</span></a>`) {
+		t.Errorf("End all sessions is not an enabled item for a user with sessions: %s", ops)
+	}
+	want := "ops is signed out everywhere and can sign in again with the same password."
+	if !strings.Contains(body, want) || strings.Contains(body, "ops is signed out everywhere and can sign in again; the role still comes from the identity provider.") {
+		t.Errorf("the dialog of a local user does not say %q", want)
+	}
+	if !strings.Contains(body, `name="subject" value="local:ops"`) {
+		t.Error("the dialog does not post the subject of the local user")
+	}
+	// Nothing to end: the item stays, blocked, and says so. The own row keeps pointing at Sign out.
+	idle := menuOf(t, renderUsersPage(t, usersFixture()), "ops")
+	if !strings.Contains(idle, `<span class="menu-why">No active sessions</span>`) {
+		t.Errorf("a local user without sessions: %s", idle)
+	}
+	own := menuOf(t, body, "admin")
+	if !strings.Contains(own, `<span class="menu-why">Use Sign out for your own session</span>`) {
+		t.Errorf("own row: %s", own)
+	}
+}
+
+// Why (#1162): the detail page of a local user with sessions has the same enabled button as the
+// row menu, and for one without sessions it says "No active sessions" (not "Deactivate signs a
+// local user out", which was the only thing a local user's page could say before).
+func TestUserDetailOffersEndSessionsForALocalUser(t *testing.T) {
+	user := auth.UserRow{Subject: "local:ops", Name: "ops", Method: auth.MethodLocal, Role: "operator", Sessions: 2}
+	body := userDetailBody(t, auth.UserDetailData{BasePath: "/tf", CSRFToken: "tok", Self: "local:admin", User: user, Guards: allowed})
+	if !strings.Contains(body, `>End all sessions</a>`) {
+		t.Error("End all sessions is not an enabled action")
+	}
+	if buttonTag(body, "End all sessions") != "" {
+		t.Error("End all sessions is blocked for a user with sessions")
+	}
+	if !strings.Contains(body, "ops is signed out everywhere and can sign in again with the same password.") {
+		t.Error("the local dialog body is missing")
+	}
+	user.Sessions = 0
+	body = userDetailBody(t, auth.UserDetailData{BasePath: "/tf", CSRFToken: "tok", Self: "local:admin", User: user, Guards: allowed})
+	bt := buttonTag(body, "End all sessions")
+	if !blockedButton(bt) {
+		t.Fatalf("End all sessions is not blocked without sessions: %q", bt)
+	}
+	if line := elementText(body, describedBy(bt), "</p>"); !strings.Contains(line, "No active sessions") || strings.Contains(line, "Deactivate signs") {
+		t.Errorf("the reason: %q", line)
+	}
+}

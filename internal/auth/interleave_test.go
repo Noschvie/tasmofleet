@@ -51,6 +51,17 @@ func (h *hookedUsers) DeleteLocalUser(ctx context.Context, n string, by store.Ac
 	return h.fakeUsers.DeleteLocalUser(ctx, n, by)
 }
 
+// hookedSessions fires the same hook before sessions are deleted for a user.
+type hookedSessions struct {
+	*fakeSessions
+	h *hookedUsers
+}
+
+func (s *hookedSessions) DeleteUserSessionsAs(ctx context.Context, subject string, by store.Actor) (int64, error) {
+	s.h.fire()
+	return s.fakeSessions.DeleteUserSessionsAs(ctx, subject, by)
+}
+
 func hookedEnv(t *testing.T) (*env, *hookedUsers) {
 	t.Helper()
 	var h *hookedUsers
@@ -58,6 +69,7 @@ func hookedEnv(t *testing.T) (*env, *hookedUsers) {
 		o.Proxy.PublicURL = ""
 		h = &hookedUsers{fakeUsers: o.LocalUsers.(*fakeUsers)}
 		o.LocalUsers = h
+		o.Sessions = &hookedSessions{fakeSessions: o.Sessions.(*fakeSessions), h: h}
 	})
 	opsHash, err := HashPassword(opsPassword)
 	if err != nil {

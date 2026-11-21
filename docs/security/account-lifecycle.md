@@ -6,7 +6,7 @@ CLI. Code: `internal/auth/{accounts,accountweb,local,session,service,stepup,boot
 `internal/store/auth.go`, `cmd/tasmofleet/users.go`. Login rate limiting is
 specified separately in `login-rate-limiting.md`.
 
-Review findings are judged against this document. Every claim (L1 to L15) has
+Review findings are judged against this document. Every claim (L1 to L16) has
 a test.
 
 ## Model
@@ -32,7 +32,7 @@ a test.
 | L3  | The generation a login stores is the one read **before** the password hash was verified, never one read afterwards.                                                                                                                                  |
 | L4  | A device cookie counts as "recognised" only with a valid MAC, a row, the current generation, an age under 180 days and an issue time not before the last password change.                                                                             |
 | L5  | Roles are read from the account on every request; a role change applies at once without ending sessions. Only `operator` and `admin` exist; a zero or unknown role is refused by the store.                                                           |
-| L6  | Every web mutation of an account (create, role, disable, enable, password reset, delete) is applied only if, **in the same SQL statement**, the actor is still an enabled admin at the generation of its session (`ErrStaleActor` otherwise).      |
+| L6  | Every web mutation of an account (create, role, disable, enable, password reset, delete, end all sessions of a local user) is applied only if, **in the same SQL statement**, the actor is still an enabled admin at the generation of its session (`ErrStaleActor` otherwise).      |
 | L7  | The owner's own password change is a compare-and-set on the generation its session was validated against and on `disabled = 0`. A concurrent reset or change by someone else wins; the stale one is refused (409).                                     |
 | L8  | The last enabled admin cannot be demoted, disabled or deleted, from the web or the CLI, even by two writers at the same moment (one conditional statement). A disabled admin does not count.                                                          |
 | L9  | `Add` is a plain `INSERT`: an existing account (role, password) is never overwritten, however many writers race.                                                                                                                                     |
@@ -42,6 +42,7 @@ a test.
 | L13 | A user with `must_change_password` reaches nothing but `/account` (the forced change), `POST /account/password` and `/logout` until the password is changed.                                                                                                                              |
 | L14 | The generated initial admin password is never logged. It is written once to `<DATA_DIR>/initial-admin-password` (0600, `O_EXCL`) and removed after the first change (and at start when the account no longer needs it).                                |
 | L15 | _Removed 2026-10-19 with the direct admin listener (sessions no longer record a listener)._ |
+| L16 | Only an admin, after a step-up, ends all sessions of another local user (`POST /users/sessions`, subject `local:<name>`; never the own account, never a header principal). It is an account mutation: the delete runs through `Accounts.As(actor)` and applies only if, **in the same SQL statement**, the actor is still an enabled admin at its generation (L6). It deletes session rows only: no `password_gen` bump and the device cookie rows stay, so the user signs in again at once with the same password. Deactivate and a password change remain the revocation (L10). |
 
 ## Mechanism
 
@@ -92,7 +93,7 @@ the upgrade end at the upgrade.
 | L3    | `TestLoginInFlightDuringPasswordChangeIsDead`                                                                                                                             |
 | L4    | `TestDeviceCookieCannotBeForgedOrReused`, `TestDeviceCookiesAreRecordedReusedAndRevocableIndividually`                                                                   |
 | L5    | `TestAdminManagesAccounts` (promotion applies to a running session), `store.TestSetLocalUserRejectsRolesOtherThanOperatorAndAdmin`, `TestLoginUsesTheAccountsRole`      |
-| L6    | `store.TestActorMustStillBeAnEnabledAdminAtWriteTime`, `TestAdminActionIsRefusedWhenTheActorChangedMidRequest` (3 ruins x 5 actions)                                     |
+| L6    | `store.TestActorMustStillBeAnEnabledAdminAtWriteTime` (6 mutations, ending sessions among them), `TestAdminActionIsRefusedWhenTheActorChangedMidRequest` (3 ruins x 5 actions), `TestEndLocalSessionsRefusedWhenActorChangedMidRequest`                                     |
 | L7    | `store.TestChangeOwnPasswordIsCompareAndSet`, `TestOwnPasswordChangeLosesAgainstAConcurrentReset`                                                                        |
 | L8    | `store.TestLastAdminRule`, `store.TestConcurrentAdminRemovalLeavesOneAdmin`, `TestLastAdminIsProtected`, `TestCLIProtectsTheLastAdmin`, `TestConcurrentWritersKeepAccountInvariants` |
 | L9    | `store.TestAddLocalUserNeverOverwrites`, `TestConcurrentWritersKeepAccountInvariants`                                                                                    |
@@ -102,6 +103,7 @@ the upgrade end at the upgrade.
 | L13   | `TestStandaloneFirstRun`, `TestStandaloneEndToEnd`                                                                                                                        |
 | L14   | `TestStandaloneFirstRun`, `TestInitialPasswordFileRemovedAtStartupWhenSpent`                                                                                             |
 | L15   | _removed_ |
+| L16   | `TestEndSessionsEndsExactlyOneLocalUser`, `TestEndLocalSessionsRefusedWhenActorChangedMidRequest`, `TestEndLocalSessionsGuards`, `store.TestDeleteUserSessionsAsDeletesForAValidActor` |
 | B6    | `store.TestSessionRefreshTokenIsSealedAtRest`, `store.TestMigration0002KeepsExistingData`                                                                                |
 
 ## Accepted residual risks

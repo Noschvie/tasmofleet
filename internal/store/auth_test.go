@@ -127,6 +127,38 @@ func TestDeleteUserSessions(t *testing.T) {
 	}
 }
 
+// Why (#1162): with a valid acting admin the statement still deletes exactly
+// the subject's rows and reports the count; a subject with no sessions is 0,
+// not an error (the admin is fine, there is just nothing to end).
+func TestDeleteUserSessionsAsDeletesForAValidActor(t *testing.T) {
+	s, _, _ := newStore(t)
+	ctx := t.Context()
+	addUser(t, s, "boss", model.RoleAdmin)
+	addUser(t, s, "other", model.RoleAdmin) // so that boss is not the last admin
+	base := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	for id, sub := range map[string]string{"a1": "local:anna", "a2": "local:anna", "b1": "local:bob"} {
+		must(t, s.CreateSession(ctx, Session{IDHash: id, Principal: model.Principal{Subject: sub}, CSRFToken: "c", CreatedAt: base, LastSeen: base, ExpiresAt: base.Add(time.Hour)}))
+	}
+	boss := Actor{Username: "boss", PasswordGen: 1}
+	if n, err := s.DeleteUserSessionsAs(ctx, "local:anna", boss); err != nil || n != 2 {
+		t.Fatalf("deleted %d, %v", n, err)
+	}
+	if _, err := s.GetSession(ctx, "b1"); err != nil {
+		t.Fatalf("bob's session gone: %v", err)
+	}
+	if n, err := s.DeleteUserSessionsAs(ctx, "local:anna", boss); err != nil || n != 0 {
+		t.Fatalf("nothing left to end: %d, %v", n, err)
+	}
+	// the same call once the actor lost its rights: refused, bob keeps his session
+	must(t, s.SetLocalRole(ctx, "boss", model.RoleOperator, Actor{}))
+	if n, err := s.DeleteUserSessionsAs(ctx, "local:bob", boss); !errors.Is(err, ErrStaleActor) || n != 0 {
+		t.Fatalf("a demoted actor ended sessions: %d, %v", n, err)
+	}
+	if _, err := s.GetSession(ctx, "b1"); err != nil {
+		t.Fatalf("a refused request deleted bob's session: %v", err)
+	}
+}
+
 func TestDeviceCookies(t *testing.T) {
 	s, _, _ := newStore(t)
 	ctx := t.Context()
@@ -408,6 +440,8 @@ func TestActorMustStillBeAnEnabledAdminAtWriteTime(t *testing.T) {
 		addUser(t, s, "boss", model.RoleAdmin)
 		addUser(t, s, "other", model.RoleAdmin)
 		addUser(t, s, "ops", model.RoleOperator)
+		now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+		must(t, s.CreateSession(context.Background(), Session{IDHash: "ops-session", Principal: model.Principal{Subject: "local:ops"}, CSRFToken: "c", CreatedAt: now, LastSeen: now, ExpiresAt: now.Add(time.Hour)}))
 		return s, Actor{Username: "boss", PasswordGen: 1}
 	}
 	mutations := map[string]func(s *SQLite, by Actor) error{
@@ -422,6 +456,11 @@ func TestActorMustStillBeAnEnabledAdminAtWriteTime(t *testing.T) {
 		},
 		"disable": func(s *SQLite, by Actor) error { return s.SetLocalDisabled(context.Background(), "ops", true, by) },
 		"delete":  func(s *SQLite, by Actor) error { return s.DeleteLocalUser(context.Background(), "ops", by) },
+		// #1162: ending the sessions of a local user is an account mutation too.
+		"sessions": func(s *SQLite, by Actor) error {
+			_, err := s.DeleteUserSessionsAs(context.Background(), "local:ops", by)
+			return err
+		},
 	}
 	ruins := map[string]func(s *SQLite){
 		"demoted":          func(s *SQLite) { must(t, s.SetLocalRole(context.Background(), "boss", model.RoleOperator, Actor{})) },
@@ -443,12 +482,15 @@ func TestActorMustStillBeAnEnabledAdminAtWriteTime(t *testing.T) {
 				if _, err := s.GetLocalUser(context.Background(), "new"); !errors.Is(err, ErrNotFound) {
 					t.Fatal("a refused add created the account")
 				}
+				if _, err := s.GetSession(context.Background(), "ops-session"); err != nil {
+					t.Fatalf("a refused change deleted the session: %v", err)
+				}
 			})
 		}
 	}
 	t.Run("valid actor", func(t *testing.T) {
 		s, boss := setup(t)
-		for _, name := range []string{"add", "password", "role", "disable", "delete"} { // delete last
+		for _, name := range []string{"add", "sessions", "password", "role", "disable", "delete"} { // delete last
 			if err := mutations[name](s, boss); err != nil {
 				t.Fatalf("%s by a valid admin: %v", name, err)
 			}

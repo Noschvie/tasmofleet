@@ -197,23 +197,129 @@ func TestEndSessionsHitsExactlyOneSubject(t *testing.T) {
 	}
 }
 
-// Why: End sessions is for SSO users. A forged subject must not end a local
-// account's sessions (that has its own, stronger actions), an unknown one, or
-// the admin's own session (Sign out exists for that).
+// Why: End sessions reaches users whose sessions exist (SSO and local). A
+// forged subject must not end an unknown account's sessions, a header
+// principal's, or the admin's own session (Sign out exists for that).
 func TestEndSessionsRefusesOtherTargets(t *testing.T) {
 	e, b := oidcAdmin(t)
-	local := e.login("admin", testPassword)
 	stepUpOIDC(t, b)
-	for sub, want := range map[string]int{"local:admin": http.StatusNotFound, "nobody": http.StatusNotFound, "sub-alice": http.StatusBadRequest} {
+	for sub, want := range map[string]int{"local:nobody": http.StatusNotFound, "nobody": http.StatusNotFound, "sub-alice": http.StatusBadRequest} {
 		if r := b.post("/users/sessions", url.Values{"subject": {sub}}); r.code != want {
 			t.Errorf("subject %q: %d, want %d", sub, r.code, want)
 		}
 	}
-	if r := local.get("/viewer"); r.code != http.StatusOK {
-		t.Error("a forged subject ended the local admin's session")
-	}
 	if r := b.get("/viewer"); r.code != http.StatusOK {
 		t.Error("an admin ended their own session")
+	}
+	_ = e
+}
+
+func countSessions(e *env, subject string) int {
+	n := 0
+	for _, s := range e.sessions.all() {
+		if s.Principal.Subject == subject {
+			n++
+		}
+	}
+	return n
+}
+
+// Why (#1162): a local user who is signed in on two devices and should be
+// signed out (lost phone, shared computer) had no lever short of Deactivate.
+// Ending sessions must hit exactly that user: neither another user nor the
+// admin's own session, and the user can sign in again at once with the same
+// password, because the password generation and the device cookies stay (that
+// is what separates it from Deactivate).
+func TestEndSessionsEndsExactlyOneLocalUser(t *testing.T) {
+	e, _ := hookedEnv(t)
+	adm := e.login("admin", testPassword)
+	adm.stepUp(testPassword)
+	ops1, ops2 := e.login("ops", opsPassword), e.login("ops", opsPassword)
+	boss := e.login("boss2", testPassword)
+	genBefore := e.users.users["ops"].PasswordGen
+	if countSessions(e, "local:ops") != 2 {
+		t.Fatalf("setup: ops has %d sessions", countSessions(e, "local:ops"))
+	}
+	r := adm.post("/users/sessions", url.Values{"subject": {"local:ops"}})
+	if r.code != http.StatusOK || !strings.Contains(r.body, "Signed out 2 session(s). ops can sign in again with the same password.") {
+		t.Fatalf("end sessions: %d %s", r.code, r.body)
+	}
+	if countSessions(e, "local:ops") != 0 || countSessions(e, "local:boss2") != 1 || countSessions(e, "local:admin") != 1 {
+		t.Fatalf("sessions after: ops %d boss2 %d admin %d", countSessions(e, "local:ops"), countSessions(e, "local:boss2"), countSessions(e, "local:admin"))
+	}
+	for _, b := range []*browser{ops1, ops2} {
+		if r := b.get("/viewer"); r.code == http.StatusOK {
+			t.Error("a session of ops survived")
+		}
+	}
+	for name, b := range map[string]*browser{"boss2": boss, "admin": adm} {
+		if r := b.get("/viewer"); r.code != http.StatusOK {
+			t.Errorf("%s was signed out: %d", name, r.code)
+		}
+	}
+	if a := e.audit.last(); a.Result != "ok" || a.Actor != "local:admin" || !strings.Contains(a.Detail, `"subject":"local:ops"`) || !strings.Contains(a.Detail, `"sessions":"2"`) {
+		t.Errorf("audit %+v", a)
+	}
+	if got := e.users.users["ops"].PasswordGen; got != genBefore {
+		t.Errorf("password generation %d -> %d: ending sessions must not revoke the password", genBefore, got)
+	}
+	if again := e.login("ops", opsPassword); again.get("/viewer").code != http.StatusOK {
+		t.Error("ops cannot sign in again with the same password")
+	}
+}
+
+// Why (#1162, L6): ending sessions is an account mutation. An admin demoted,
+// disabled or re-keyed after its page loaded must not delete anything; the
+// check sits in the same store statement, so no request can slip through.
+func TestEndLocalSessionsRefusedWhenActorChangedMidRequest(t *testing.T) {
+	ruins := map[string]func(m map[string]store.LocalUser){
+		"demoted":          func(m map[string]store.LocalUser) { u := m["admin"]; u.Role = model.RoleOperator; m["admin"] = u },
+		"disabled":         func(m map[string]store.LocalUser) { u := m["admin"]; u.Disabled = true; m["admin"] = u },
+		"password changed": func(m map[string]store.LocalUser) { u := m["admin"]; u.PasswordGen++; m["admin"] = u },
+	}
+	for ruin, doRuin := range ruins {
+		t.Run(ruin, func(t *testing.T) {
+			e, h := hookedEnv(t)
+			adm := e.login("admin", testPassword)
+			adm.stepUp(testPassword)
+			e.login("ops", opsPassword)
+			h.before = func() { e.users.cli(doRuin) }
+			r := adm.post("/users/sessions", url.Values{"subject": {"local:ops"}})
+			if r.code != http.StatusForbidden {
+				t.Fatalf("after the admin was %s: %d, want 403", ruin, r.code)
+			}
+			if countSessions(e, "local:ops") != 1 {
+				t.Fatal("the refused request deleted the sessions")
+			}
+			if a := e.audit.last(); a.Result != "denied: acting account changed" {
+				t.Errorf("audit %+v", a)
+			}
+		})
+	}
+}
+
+// Why (#1162): the guards around the local branch. The own account is refused
+// in every spelling of its subject (a case-folded "local:ADMIN" is the same
+// account), an unknown name is a 404 and deletes nothing, and a missing
+// step-up refuses before anything is looked at.
+func TestEndLocalSessionsGuards(t *testing.T) {
+	e, _ := hookedEnv(t)
+	adm := e.login("admin", testPassword)
+	e.login("ops", opsPassword)
+	if r := adm.post("/users/sessions", url.Values{"subject": {"local:ops"}}); r.code == http.StatusOK || countSessions(e, "local:ops") != 1 {
+		t.Fatalf("without a step-up: %d, ops sessions %d", r.code, countSessions(e, "local:ops"))
+	}
+	adm.stepUp(testPassword)
+	for sub, want := range map[string]int{"local:admin": http.StatusBadRequest, "local:ADMIN": http.StatusBadRequest, "local: Admin ": http.StatusBadRequest, "local:nobody": http.StatusNotFound} {
+		if r := adm.post("/users/sessions", url.Values{"subject": {sub}}); r.code != want {
+			t.Errorf("subject %q: %d, want %d", sub, r.code, want)
+		}
+	}
+	if r := adm.get("/viewer"); r.code != http.StatusOK {
+		t.Error("the admin ended its own session")
+	}
+	if countSessions(e, "local:ops") != 1 {
+		t.Error("a refused request ended ops sessions")
 	}
 }
 

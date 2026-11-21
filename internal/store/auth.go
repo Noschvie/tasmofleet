@@ -115,7 +115,26 @@ func (s *SQLite) DeleteSession(ctx context.Context, idHash string) error {
 }
 
 func (s *SQLite) DeleteUserSessions(ctx context.Context, subject string) (int64, error) {
-	return rowsDeleted(s.db.ExecContext(ctx, "DELETE FROM sessions WHERE subject=?", subject))
+	return s.DeleteUserSessionsAs(ctx, subject, Actor{})
+}
+
+// DeleteUserSessionsAs is DeleteUserSessions on the authority of by: the rows
+// go only if, in the same statement, by is still an enabled admin at the same
+// generation (L6). A statement that matched nothing because the actor went
+// stale is ErrStaleActor; the zero Actor (host CLI, cleanup after a guarded
+// change) imposes no condition.
+func (s *SQLite) DeleteUserSessionsAs(ctx context.Context, subject string, by Actor) (int64, error) {
+	cond, cargs := actorCond(by)
+	n, err := rowsDeleted(s.db.ExecContext(ctx, "DELETE FROM sessions WHERE subject=? AND "+cond, append([]any{subject}, cargs...)...)) //nolint:gosec // G202: cond is a constant fragment; every value is bound
+	if err != nil || n > 0 {
+		return n, err
+	}
+	if stale, err := s.actorStale(ctx, by); err != nil {
+		return 0, err
+	} else if stale {
+		return 0, ErrStaleActor
+	}
+	return 0, nil
 }
 
 // DeleteExpiredSessions removes sessions with expires_at <= now.
