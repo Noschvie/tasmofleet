@@ -448,13 +448,14 @@ templ BrokerACLNotice() {
 		Action: &Btn{Label: BrokerACLAction, Href: BrokerACLDocURL, Target: "_blank", Rel: "noopener noreferrer"}})
 }
 
-// ErrorSummary is the form's banner when the server rejected a field: what to fix, and that
-// nothing was saved.
-templ ErrorSummary(lead string) {
-	<div class="banner tone-danger err-summary" role="alert">
-		<span class="banner-dot"></span>
-		<div class="banner-text"><b>{ lead }</b> Nothing was saved yet.</div>
-	</div>
+// ErrorSummary is the one banner a form shows when the server refused two or more of its inputs: "Fix 2 fields.
+// Nothing was saved yet." The count is the only thing a caller passes, so the wording cannot drift; below 2 it draws
+// nothing, because one refused input carries its own message (and the focus), and the banner would say it twice
+// (design-system.md, Form errors sit at the input).
+templ ErrorSummary(n int) {
+	if n >= 2 {
+		@Banner(BannerData{Tone: ToneDanger, Title: "Fix " + itoa(n) + " fields.", Text: "Nothing was saved yet.", Class: "err-summary", Alert: true})
+	}
 }
 
 // ToastStatic is a toast drawn in the flow (the style guide); toast.js makes the live ones.

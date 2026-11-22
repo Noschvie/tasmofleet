@@ -52,8 +52,8 @@ templ authDoc(f authFrame) {
 }
 
 // loginPage is the sign-in page (screens signin, signin-v-error, signin-v-expired): the session
-// banner, the failed-attempt banner with the attempts left (N11), the local form with "Keep me
-// signed in", and the single sign-on button.
+// banner, the local form with "Keep me signed in" (a wrong sign-in that may be retried shows its error and the
+// attempts left under the password, N11), and the single sign-on button.
 templ loginPage(f authFrame, d auth.LoginData) {
 	@authDoc(f) {
 		if d.Local {
@@ -104,17 +104,24 @@ templ loginHead(d auth.LoginData) {
 	} else if d.Notice != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: d.Notice})
 	}
-	if d.Error != "" {
+	if d.Error != "" && !loginRetry(d) {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: d.Error, Text: attemptsLeftText(d), Alert: true})
 	}
 }
 
-// loginFieldError marks the password field after a failed attempt that may be retried.
+// loginRetry is a wrong sign-in that may be tried again. Its error belongs to the password input and is shown
+// there, once, with the attempts line; an error without a retry (a lockout, an expired one-time password, a failed
+// single sign-on) belongs to no input and stays a banner (#1098).
+func loginRetry(d auth.LoginData) bool {
+	return d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0
+}
+
+// loginFieldError is the password input's error after a wrong sign-in that may be retried: the error and the attempts line.
 func loginFieldError(d auth.LoginData) string {
-	if d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0 {
-		return "Check the password and try again."
+	if !loginRetry(d) {
+		return ""
 	}
-	return ""
+	return d.Error + " " + attemptsLeftText(d)
 }
 
 // attemptsLeftText is the count of attempts before sign-in from here is delayed (N11). It never
@@ -424,12 +431,13 @@ templ usersPage(v usersView) {
 }
 
 // usersBanners are the notices of the users pages: the result of the last change, an error that
-// belongs to no input, and why changes are not possible here.
+// belongs to no input (the role has a control but no place for a message, so its error is a banner too), and why
+// changes are not possible here.
 templ usersBanners(d auth.UsersPageData) {
 	if d.Notice != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: d.Notice})
 	}
-	if d.Error != "" && (d.ErrField == "" || d.ErrField == "current") {
+	if d.Error != "" && (d.ErrField == "" || d.ErrField == "current" || d.ErrField == "role") {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
 	}
 	if d.ViewOnly {
@@ -447,19 +455,12 @@ func roleTone(admin bool) ui.Tone {
 // userAddView is the add-user page (screens useradd, useradd-v-error).
 type userAddView struct {
 	D      auth.UsersPageData
-	Errors int // inputs the server rejected (the summary counts them)
 	StepUp *ui.StepUpData
 }
 
 templ userAddPage(v userAddView) {
 	@ui.PageHeader("Add local user", "For people without an SSO account. They change the password at first sign-in.")
 	@usersBanners(auth.UsersPageData{Notice: v.D.Notice, ViewOnly: v.D.ViewOnly, Error: v.D.Error, ErrField: v.D.ErrField})
-	if v.Errors > 0 {
-		<div class="banner tone-danger err-summary useradd-sum" role="alert">
-			<span class="banner-dot"></span>
-			<div class="banner-text"><b>{ fieldsNeedAttention(v.Errors) }</b> The user wasn’t added yet.</div>
-		</div>
-	}
 	@ui.CardOf(ui.CardData{Tag: "form", Class: "useradd", Attrs: templ.Attributes{"method": "post", "action": templ.SafeURL(v.D.BasePath + "/users")}}) {
 		<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 		@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
@@ -491,13 +492,6 @@ templ userAddPage(v userAddView) {
 	if v.StepUp != nil {
 		@ui.StepUp(*v.StepUp)
 	}
-}
-
-func fieldsNeedAttention(n int) string {
-	if n == 1 {
-		return "1 field needs attention."
-	}
-	return strconv.Itoa(n) + " fields need attention."
 }
 
 // errView is an error page in the shell (screens e404, e403, eoff): the code line, the title,

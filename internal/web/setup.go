@@ -55,8 +55,35 @@ type setupPage struct {
 	Errors          map[string]string
 }
 
-// setupKeys are the settings the setup may change.
-var setupKeys = map[string]bool{"DEVICE_NETWORKS": true, "MQTT_URL": true, "MQTT_USER": true, "MQTT_PASSWORD": true}
+// setupFocusOrder are the settings the setup may change, in the order of their inputs on the page: the first refused
+// one takes the focus.
+var setupFocusOrder = []string{"DEVICE_NETWORKS", "MQTT_URL", "MQTT_USER", "MQTT_PASSWORD"}
+
+// setupKeys are the settings the setup may change; each has an input on the page, where its refusal is shown.
+var setupKeys = func() map[string]bool {
+	m := map[string]bool{}
+	for _, k := range setupFocusOrder {
+		m[k] = true
+	}
+	return m
+}()
+
+// refusedCount is how many refused settings the page shows at an input (the summary's number).
+func (p setupPage) refusedCount() int {
+	n := 0
+	for k := range p.Errors {
+		if setupKeys[k] {
+			n++
+		}
+	}
+	return n
+}
+
+// refusedBanner is the message for a refusal that has no input on this page (a cross-check that names another
+// setting), so it never disappears; "" when every refusal sits at an input.
+func (p setupPage) refusedBanner() string {
+	return refusedStray(p.Errors, func(k string) bool { return setupKeys[k] }, p.refusedCount() >= 2)
+}
 
 func (h *handler) setupData(r *http.Request, posted, errs map[string]string) setupPage {
 	p := setupPage{Base: httpBase(r), CSRF: h.d.Guard.CSRFToken(r), Version: h.d.Version, Host: r.Host,
@@ -151,7 +178,7 @@ func (h *handler) setupMQTTTest(w http.ResponseWriter, r *http.Request) {
 	p := h.setupData(r, setupShown(values, extra), nil)
 	var ve *sysconfig.ValidationError
 	if asValidation(problem, &ve) {
-		p.Errors, p.Error = ve.Fields, "Fix the marked fields."
+		p.Errors = ve.Fields
 		h.setupRender(w, r, http.StatusUnprocessableEntity, p)
 		return
 	}
@@ -167,7 +194,7 @@ func (h *handler) setupMQTTTest(w http.ResponseWriter, r *http.Request) {
 		p.MQTTResult = msg
 		h.setupRender(w, r, http.StatusOK, p)
 	case asValidation(err, &ve):
-		p.Errors, p.Error = ve.Fields, "Fix the marked fields."
+		p.Errors = ve.Fields
 		h.setupRender(w, r, http.StatusUnprocessableEntity, p)
 	default:
 		p.Error = "The connection test could not run (wait a few seconds between tests)."
@@ -190,7 +217,6 @@ func (h *handler) setupFinish(w http.ResponseWriter, r *http.Request) {
 		var ve *sysconfig.ValidationError
 		if asValidation(err, &ve) {
 			p := h.setupData(r, setupShown(values, extra), ve.Fields)
-			p.Error = "Nothing was saved and the setup is not finished. Fix the marked fields."
 			h.setupRender(w, r, http.StatusUnprocessableEntity, p)
 			return
 		}
@@ -232,12 +258,21 @@ func setupScanRanges(state []sysconfig.FieldState) []netip.Prefix {
 
 func asValidation(err error, target **sysconfig.ValidationError) bool { return errors.As(err, target) }
 
-// setupInvalid marks a field the server rejected and points to its message.
+// setupInvalid marks a field the server rejected and points to its message. The first refused input in page order
+// also takes the focus: the refusal is a full page render, and without it a phone shows the top of the page while the
+// refused input sits below the fold.
 func setupInvalid(p setupPage, key string) templ.Attributes {
 	if p.Errors[key] == "" {
 		return templ.Attributes{}
 	}
-	return templ.Attributes{"aria-invalid": "true", "aria-describedby": "err-v." + key}
+	a := templ.Attributes{"aria-invalid": "true", "aria-describedby": "err-v." + key}
+	for _, k := range setupFocusOrder {
+		if p.Errors[k] != "" {
+			a["autofocus"] = k == key
+			break
+		}
+	}
+	return a
 }
 
 func setupSecretHint(stored bool) string {

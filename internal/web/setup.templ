@@ -66,6 +66,10 @@ templ setupView(p setupPage) {
 		if p.Error != "" {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 		}
+		@ui.ErrorSummary(p.refusedCount())
+		if s := p.refusedBanner(); s != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: s, Alert: true})
+		}
 		<form class="setup-form" method="post" action={ templ.SafeURL(p.Base + setupPath + "/finish") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 			<label class="ufield">
@@ -98,13 +102,16 @@ templ setupView(p setupPage) {
 			<div class="setup-broker">
 				<label class="ufield">
 					<span class="ufield-label">MQTT user</span>
-					<input name="v.MQTT_USER" class="mono" value={ p.MQTTUser } maxlength="128" autocomplete="off"/>
+					<input name="v.MQTT_USER" class="mono" value={ p.MQTTUser } maxlength="128" autocomplete="off" { setupInvalid(p, "MQTT_USER")... }/>
 				</label>
 				<label class="ufield">
 					<span class="ufield-label">MQTT password</span>
 					<input type="password" name="v.MQTT_PASSWORD" class="mono" maxlength="128" autocomplete="new-password" placeholder={ setupSecretHint(p.MQTTHasPassword) } { setupInvalid(p, "MQTT_PASSWORD")... }/>
 				</label>
 			</div>
+			if e := p.Errors["MQTT_USER"]; e != "" {
+				<span class="ufield-err" id="err-v.MQTT_USER" role="alert">{ e }</span>
+			}
 			if e := p.Errors["MQTT_PASSWORD"]; e != "" {
 				<span class="ufield-err" id="err-v.MQTT_PASSWORD" role="alert">{ e }</span>
 			}
@@ -149,12 +156,7 @@ templ setupAccountPage(f authFrame, d auth.SetupAccountData) {
 			@setupStepsBar(2)
 			<h1>Create the first admin account</h1>
 			<p class="setup-lead">This account can change everything, including how people sign in. You can connect SSO later.</p>
-			if d.Error != "" && d.ErrField != "" {
-				<div class="banner tone-danger err-summary" role="alert">
-					<span class="banner-dot"></span>
-					<div class="banner-text"><b>1 field needs attention.</b> The account wasn’t created yet.</div>
-				</div>
-			} else if d.Error != "" {
+			if d.Error != "" && d.ErrField == "" {
 				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
 			}
 			<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/setup/account") }>

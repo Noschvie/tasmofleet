@@ -84,7 +84,7 @@ func TestSetupGuidesAFreshInstallAndOnlySuggests(t *testing.T) {
 func TestSetupFinishSavesAndRejectsOtherKeys(t *testing.T) {
 	e, svc, fs := setupHandlerEnv(t)
 	r, body := e.do(t, "POST", "/setup/finish", "admin", url.Values{"csrf": {"tok"}, "v.DEVICE_NETWORKS": {"not-a-cidr"}, "mqtt.host": {"broker.lan"}})
-	if r.StatusCode != 422 || !strings.Contains(body, "Nothing was saved") || fs.done || len(svc.Snapshot().DeviceNetworks) != 0 {
+	if r.StatusCode != 422 || !strings.Contains(body, `id="err-v.DEVICE_NETWORKS"`) || fs.done || len(svc.Snapshot().DeviceNetworks) != 0 {
 		t.Fatalf("invalid: %d, done %v", r.StatusCode, fs.done)
 	}
 	if !strings.Contains(body, `>not-a-cidr</textarea>`) || !strings.Contains(body, `value="broker.lan"`) {
@@ -179,7 +179,7 @@ func TestSetupStepOneKeepsTheTokenHiddenAndFocusesTheError(t *testing.T) {
 	if strings.Count(body, "autofocus") != 1 || !regexp.MustCompile(`name="confirm"[^>]*autofocus`).MatchString(body) {
 		t.Error("the refused field does not get the focus")
 	}
-	if !strings.Contains(body, "The two passwords differ.") || !strings.Contains(body, "1 field needs attention.") || !strings.Contains(body, `value="Maren"`) {
+	if !strings.Contains(body, "The two passwords differ.") || !strings.Contains(body, `value="Maren"`) {
 		t.Error("the error or the typed name is lost")
 	}
 	if !strings.Contains(body, `<li class="is-done">`) || !strings.Contains(body, "Admin account") {

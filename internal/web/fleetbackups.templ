@@ -25,9 +25,7 @@ templ fleetBackupsPage(p sysPage) {
 	if p.Fleet.ACL {
 		@ui.BrokerACLNotice()
 	}
-	if p.Error != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
-	}
+	@sysErrors(p)
 	<div class="syswrap">
 		if p.Fleet.Admin {
 			<form id="sysform" class="syspage bk-page" data-keep-draft="backups" method="post" action={ templ.SafeURL(p.Base + fleetPath) }>

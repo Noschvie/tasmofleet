@@ -341,6 +341,77 @@ func (r sysRow) hasProblem() bool {
 	return slices.ContainsFunc(r.Deps, sysRow.hasProblem)
 }
 
+// refused is the keys of the refused settings that this tab shows at an input, in page order. A locked setting
+// (fixed by the environment) draws no input and no message, so it is not among them: refusedStray words it instead.
+func (t sysTab) refused() []string {
+	var out []string
+	var walk func(rows []sysRow)
+	walk = func(rows []sysRow) {
+		for _, r := range rows {
+			if r.Err != "" && !r.Locked {
+				out = append(out, r.Key)
+			}
+			walk(r.Deps)
+		}
+	}
+	for _, c := range t.Cards {
+		walk(c.Rows)
+	}
+	return out
+}
+
+// refusedShown is the refused settings that this page shows at an input: the rows of the tabs it draws that carry
+// an error. The summary counts them, the tab bar marks the tabs that hold them and the page's own banner words the
+// rest, from this one walk, so they cannot disagree about which message sits where.
+func (p sysPage) refusedShown() map[string]bool {
+	shown := map[string]bool{}
+	for _, t := range p.Tabs {
+		for _, k := range t.refused() {
+			shown[k] = true
+		}
+	}
+	return shown
+}
+
+// markFocus gives the focus to the first refused input of the shown tab in page order, so the browser scrolls it
+// into view after the refusal (a full page render); the save bar then does not say "No unsaved changes" above a
+// page that shows nothing wrong. Controls that carry no description attributes (segments, chips, radio cards) cannot
+// take it: a refusal there still shows its message.
+func (p *sysPage) markFocus() {
+	var mark func(rows []sysRow) bool
+	mark = func(rows []sysRow) bool {
+		for i := range rows {
+			if rows[i].Err != "" && !rows[i].Locked {
+				rows[i].Focus = true
+				return true
+			}
+			if mark(rows[i].Deps) {
+				return true
+			}
+		}
+		return false
+	}
+	for ti := range p.Tabs {
+		if p.Tabs[ti].Slug != p.Active {
+			continue
+		}
+		for ci := range p.Tabs[ti].Cards {
+			if mark(p.Tabs[ti].Cards[ci].Rows) {
+				return
+			}
+		}
+	}
+}
+
+// refusedCount is how many refused settings the page shows at an input (the summary's number).
+func (p sysPage) refusedCount() int { return len(p.refusedShown()) }
+
+// refusedBanner is the message for the refused settings that have no input on this page, or "".
+func (p sysPage) refusedBanner() string {
+	shown := p.refusedShown()
+	return refusedStray(p.Refused, func(k string) bool { return shown[k] }, len(shown) >= 2)
+}
+
 // sysCopy is what the page says about a setting: a short label and help (one line, at most 72
 // characters), the longer text behind the info button, the width class and the switch it depends on.
 type sysCopy struct {

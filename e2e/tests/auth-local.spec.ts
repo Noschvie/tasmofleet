@@ -44,12 +44,15 @@ test("local sign-in works and wrong passwords are refused", { tag: "@core" }, as
   await page.getByLabel("Username").fill("breakglass");
   await page.getByLabel("Password").fill("wrong-password-xx");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("alert")).toContainText("Wrong username or password");
+  // one error, under the password field (#1098), not a banner as well
+  await expect(page.locator(".ufield-err")).toContainText("Wrong username or password");
+  await expect(page.locator(".banner.tone-danger")).toHaveCount(0);
   // UX review #38: the name stays, the cursor is in the password field
-  await expect(page.getByLabel("Username")).toHaveValue("breakglass");
-  await expect(page.getByLabel("Password")).toBeFocused();
-  await page.getByLabel("Username").fill("breakglass");
-  await page.getByLabel("Password").fill("e2e-fake-password-1");
+  // (by name: the password's label also holds its error text, which says "username")
+  await expect(page.locator('input[name="username"]')).toHaveValue("breakglass");
+  await expect(page.locator('input[name="password"]')).toBeFocused();
+  await page.locator('input[name="username"]').fill("breakglass");
+  await page.locator('input[name="password"]').fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
   await openMenu(page, "System");

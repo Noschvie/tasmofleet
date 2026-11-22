@@ -77,7 +77,9 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
   await page.locator('input[name="confirm"]').fill(pw + "x");
   await page.getByRole("button", { name: "Create account and continue" }).click();
   // a refused form keeps the link usable and focuses the refused field
-  await expect(page.getByText("1 field needs attention.")).toBeVisible();
+  // one refused field shows its own message and no summary banner (#1098)
+  await expect(page.locator(".ufield-err")).toHaveCount(1);
+  await expect(page.locator(".err-summary")).toHaveCount(0);
   await expect(page.locator('input[name="confirm"]')).toBeFocused();
   await page.locator('input[name="password"]').fill(pw);
   await page.locator('input[name="confirm"]').fill(pw);

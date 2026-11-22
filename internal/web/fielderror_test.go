@@ -106,8 +106,8 @@ func TestUsersCreateFormKeepsInputAndShowsFieldError(t *testing.T) {
 	if !regexp.MustCompile(`<input type="radio" name="role" value="admin" checked>`).MatchString(body) {
 		t.Error("the chosen role was lost")
 	}
-	if !strings.Contains(body, "1 field needs attention.") {
-		t.Error("no error summary above the form")
+	if summaries(body) != 0 {
+		t.Error("one refused input needs no summary above the form (#1098)")
 	}
 	d.ErrField, d.Error = "", ""
 	fresh := renderAccountPage(t, pages, func(w http.ResponseWriter, r *http.Request) { pages.Users(w, r, http.StatusOK, d) })

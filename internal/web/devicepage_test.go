@@ -333,7 +333,7 @@ func TestEditFormKeepsTheSavedNameInTheHeader(t *testing.T) {
 	if resp.StatusCode != 422 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{`<h1>Edit device</h1><p class="pghead-sub">kitchen</p>`, `<a href="/tf/devices/1">kitchen</a>`, "1 field needs attention.", "Nothing was saved yet.", `aria-invalid="true" aria-describedby="err-port" autofocus`, `name="name" value="" required`, ">Delete device…</a>"} {
+	for _, want := range []string{`<h1>Edit device</h1><p class="pghead-sub">kitchen</p>`, `<a href="/tf/devices/1">kitchen</a>`, `aria-invalid="true" aria-describedby="err-port" autofocus`, `name="name" value="" required`, ">Delete device…</a>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("edit form lacks %q", want)
 		}

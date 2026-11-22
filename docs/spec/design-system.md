@@ -294,7 +294,9 @@ Rule (maintainer, #419): a card is as wide as its content needs, and a page fill
 
 Label above (`500 12.5px`, text-2), the control (34 px, radius 7, strong border), then the help line (`400 12px`, text-3) or, when the server rejected the value, the error (`400 12px`, danger-fg) instead of the help. A rejected input carries `aria-invalid` and `aria-describedby` pointing at its message; validation stays on the server. Mono fields for addresses and ports. Forms lay out in a grid of 260 px columns (`gap 14px 18px`); the style guide sample is at most 820 px wide, the add-user form 760 px.
 
-Component: `ui.Field(FieldData{...})`, `ui.SelectField`, `ui.ErrorSummary`.
+Component: `ui.Field(FieldData{...})`, `ui.SelectField`, `ui.ErrorSummary(n)`.
+
+`ui.ErrorSummary(n)` takes the number of inputs the server rejected, never a text: from 2 up it is the danger banner "Fix N fields." with "Nothing was saved yet.", below 2 it draws nothing, because one rejected input has its own message and the focus (the style guide sample shows two). A page counts the messages it shows at an input of any tab of its form, so the number cannot say more than the page shows; System settings marks every tab that holds one with a count badge, and the first refused input of the shown tab takes the focus (#1098).
 
 A setting that has a stored value shows "Reset to default" after its label, in words on every field width (never a bare glyph), as a 24 px high target (a checkbox in a label: `clear.KEY`). Ticked, the control reads "Undo" (named "Undo reset to default" for a screen reader) and the field already shows the default; a second click brings the old value back. The control keeps the width of "Reset to default" in both states, so the row does not move when it is ticked. On a narrow field that shares its row with another one, a label row that cannot hold label, info button and the words wraps, and the control sits on its own line under a one-line label (the rule hangs on the control being there, never on its state). Typing in the field unticks it. The info button (ⓘ) after a label is drawn 16 px with a 24 px hit box (44 px on phones).
 
@@ -559,16 +561,20 @@ same ring until the page arrives.
   and only shrinks, like the card-widths list. Cards are all through `ui.CardOf` (#1092); the buttons of the
   shell, the device pages, the backups pages and the policy pages are through `ui.Button` and the system
   settings badge through `ui.BadgeOf`. The blocks left are the other button groups (updates, firmware,
-  accounts, system, add devices and the style guide's toast demo), `#1098 error summaries` (the two hand-written error summaries of the account pages and the first-run setup) and `#1097 status badge`. No banner of any other page is hand-written (#1091).
+  accounts, system, add devices and the style guide's toast demo), and `#1097 status badge`. No banner of any page is hand-written (#1091), and no form summary (#1098).
 - **Folds.** `details.fold` holds something secondary and is closed at every width unless it has
   `open` (account and user editing, a rule's Unjudged devices).
   The system container settings are no fold any more (#350). The phone-only `details.m-fold` of the
   first design port is gone (#329).
 - **Form errors sit at the input.** A handler that rejects a value sets the input's name
   (`ErrField`) next to a human sentence (`Error`). `ui.Field` (and a page's own inputs) mark that
-  input (`aria-invalid`, `aria-describedby` to the sentence right after it), the focus goes there,
-  and the page leaves its banner out, so the message appears once. Errors that belong to no input (rate limit,
-  stale page, a failed device call) stay in the banner with no `ErrField`. Go error chains
+  input (`aria-invalid`, `aria-describedby` to the sentence right after it), the focus goes there
+  (on a form of many settings, the first refused input in page order), and the page leaves its banner out, so the message appears once. One refused input shows only its own
+  message; two or more also show `ui.ErrorSummary(n)` ("Fix 2 fields. Nothing was saved yet."), which draws
+  nothing below 2, so no page words a summary itself (`TestNoPageWordsAFormSummaryItself`). The sign-in
+  of a wrong password that may be tried again is one such input: the message and the attempts line sit under
+  Password, with no banner. Errors that belong to no input (rate limit, lockout, stale page, a failed device
+  call, a setting the page has no input for) stay in the banner with no `ErrField`. Go error chains
   (`auth: ...`, `tasmota: ... HTTP 404`) never reach the browser: a small mapping per area turns
   them into copy (`auth.inputProblem`, `formProblem`, `ruleProblem`, `deviceProblem`), the details
   go to the log. Row forms that repeat per row keep their errors in the banner. `fielderror_test.go`

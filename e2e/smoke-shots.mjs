@@ -64,7 +64,7 @@ async function main() {
     await form.locator('input[name="password"]').fill(password);
     const [answer] = await Promise.all([page.waitForNavigation(), form.getByRole("button", { name: "Sign in" }).click()]);
     if (new URL(page.url()).pathname.startsWith(`${basePath}/login`)) {
-      const text = (await page.getByRole("alert").first().innerText({ timeout: 2_000 }).catch(() => "")).replace(/\s+/g, " ").trim();
+      const text = (await page.locator('[role="alert"], .ufield-err').first().innerText({ timeout: 2_000 }).catch(() => "")).replace(/\s+/g, " ").trim();
       throw new StepError(`sign-in: refused (HTTP ${answer?.status() ?? "?"}${text ? `: ${text}` : ""}); not retried`);
     }
     signedIn = true;

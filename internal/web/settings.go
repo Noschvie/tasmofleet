@@ -29,6 +29,7 @@ type settingsRow struct {
 	Value, Orig  string
 	Err          string
 	NotReporting bool // the device did not report a value
+	Focus        bool // the first refused input of the form in page order: it takes the focus
 }
 
 // settingsGroup is one card of the form.
@@ -158,7 +159,41 @@ func buildGroups(orig, cur map[string]string, errs map[string]string) []settings
 		}
 		out = append(out, grp)
 	}
+	focusFirstRefused(out)
 	return out
+}
+
+// focusFirstRefused gives the focus to the first refused input in page order, so the browser scrolls it into view
+// after the refusal (a full page render). The form draws the cards column by column (devicetabs.templ), so that is
+// the order searched, not the order of the list.
+func focusFirstRefused(groups []settingsGroup) {
+	for col := 0; col < 3; col++ {
+		for gi := range groups {
+			if groups[gi].Col != col {
+				continue
+			}
+			for ri := range groups[gi].Rows {
+				if groups[gi].Rows[ri].Err != "" {
+					groups[gi].Rows[ri].Focus = true
+					return
+				}
+			}
+		}
+	}
+}
+
+// settingsErrorCount is how many settings of the form carry an error message (the summary's number). Every
+// field sits in a card (TestSettingsCardsCoverEveryField), so it is the number of settings the device refused.
+func settingsErrorCount(groups []settingsGroup) int {
+	n := 0
+	for _, g := range groups {
+		for _, r := range g.Rows {
+			if r.Err != "" {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 func (h *handler) registerSettings(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
@@ -380,7 +415,7 @@ func (h *handler) settingsApply(w http.ResponseWriter, r *http.Request) {
 	var ve *settings.ValidationError
 	switch {
 	case errors.As(err, &ve):
-		rerender(http.StatusUnprocessableEntity, "Some values are invalid. Nothing was sent to the device.", ve.Fields, true)
+		rerender(http.StatusUnprocessableEntity, "", ve.Fields, true) // each message sits at its input; the form's summary counts them
 	case errors.Is(err, settings.ErrUnknownField):
 		http.Error(w, "unknown field", http.StatusBadRequest)
 	case errors.Is(err, devlock.ErrBusy):

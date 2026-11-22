@@ -55,6 +55,7 @@ type sysRow struct {
 	Posted        string // what the admin typed, shown again after an error
 	Err           string
 	InRestartCard bool     // the card header carries the Restart badge for all of its settings
+	Focus         bool     // the first refused input of the shown tab: it takes the focus (markFocus)
 	Deps          []sysRow // settings that only matter while this switch is on (see sysFieldCopy.Dep)
 }
 
@@ -99,6 +100,7 @@ type sysPage struct {
 	Skipped      map[string]string
 	Pending      []string // keys that wait for a restart
 	Error        string
+	Refused      map[string]string // the settings the server refused, by key, and why (a refused save); the page shows them at their inputs
 	NeedStepUp   bool
 	StepUp       ui.StepUpData
 	CannotStepUp bool
@@ -132,7 +134,7 @@ func (h *handler) sysStepUp(r *http.Request) sysconfig.StepUp {
 
 func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[string]string) sysPage {
 	svc := h.d.SysConfig
-	p := sysPage{Base: httpBase(r), CSRF: h.d.Guard.CSRFToken(r), ReadOnly: svc.ReadOnly(), Skipped: svc.Skipped()}
+	p := sysPage{Base: httpBase(r), CSRF: h.d.Guard.CSRFToken(r), ReadOnly: svc.ReadOnly(), Skipped: svc.Skipped(), Refused: errs}
 	rows := map[string]sysRow{}
 	discoveryOn, hasMQTTPassword := false, false
 	for _, st := range svc.State() {
@@ -199,6 +201,7 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	if !slices.ContainsFunc(p.Tabs, func(t sysTab) bool { return t.Slug == p.Active }) && len(p.Tabs) > 0 {
 		p.Active = p.Tabs[0].Slug
 	}
+	p.markFocus()
 	return p
 }
 
@@ -539,6 +542,31 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	h.sysOutcome(w, r, shown(), err, func() { redirect(w, r, back) })
 }
 
+// refusedStray words the refused settings that no input of the page shows (shown says which do), so a message never
+// disappears: a setting that this page does not edit (PUBLIC_URL for single sign-on) says where to change it, one on
+// another page or tab is named by its label. It starts with "Nothing was saved." unless the form's summary says that
+// already. It is "" when every refusal sits at an input.
+func refusedStray(refused map[string]string, shown func(key string) bool, summarised bool) string {
+	var parts []string
+	for _, k := range sortedKeys(refused) {
+		if shown(k) {
+			continue
+		}
+		if f, editable := sysconfig.Lookup(k); editable {
+			parts = append(parts, f.Label+": "+refused[k])
+		} else {
+			parts = append(parts, sysEnvName(k)+": "+refused[k]+" (set it in the container configuration).")
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if !summarised {
+		parts = append([]string{"Nothing was saved."}, parts...)
+	}
+	return strings.Join(parts, " ")
+}
+
 // sysOutcome renders the answer to Apply or TestMQTT errors, or calls done.
 func (h *handler) sysOutcome(w http.ResponseWriter, r *http.Request, posted map[string]string, err error, done func()) {
 	var ve *sysconfig.ValidationError
@@ -547,15 +575,9 @@ func (h *handler) sysOutcome(w http.ResponseWriter, r *http.Request, posted map[
 	case err == nil:
 		done()
 	case errors.As(err, &ve):
+		// The messages sit at their inputs (the page counts them for the summary); one for a setting this page
+		// shows no input for is the page's own banner (sysErrors).
 		p := h.sysData(r, posted, ve.Fields)
-		p.Error = "Nothing was saved. Fix the marked fields."
-		// A message about a setting this page does not edit (for instance PUBLIC_URL
-		// for single sign-on) has no field to sit at: say it in the summary.
-		for _, k := range sortedKeys(ve.Fields) {
-			if _, editable := sysconfig.Lookup(k); !editable {
-				p.Error += " " + sysEnvName(k) + ": " + ve.Fields[k] + " (set it in the container configuration)."
-			}
-		}
 		h.sysRender(w, r, http.StatusUnprocessableEntity, p)
 	case errors.Is(err, sysconfig.ErrLocked):
 		p := h.sysData(r, nil, nil)
@@ -889,7 +911,7 @@ func (h *handler) storedMQTTURL() string {
 func sysTabLinks(p sysPage) []ui.Tab {
 	out := make([]ui.Tab, 0, len(p.Tabs))
 	for _, t := range p.Tabs {
-		out = append(out, ui.Tab{Label: t.Label, Href: p.Base + sysTabPath(t.Slug), Current: t.Slug == p.Active})
+		out = append(out, ui.Tab{Label: t.Label, Href: p.Base + sysTabPath(t.Slug), Current: t.Slug == p.Active, Badge: len(t.refused())})
 	}
 	return out
 }
@@ -932,7 +954,7 @@ func sysAuthModeWords(mode string) string {
 // rejected it, else the help line.
 func sysDescribe(row sysRow) templ.Attributes {
 	if row.Err != "" {
-		return templ.Attributes{"aria-invalid": "true", "aria-describedby": ui.SettingErrID(row.Key)}
+		return templ.Attributes{"aria-invalid": "true", "aria-describedby": ui.SettingErrID(row.Key), "autofocus": row.Focus}
 	}
 	if sysFieldCopy(row.Key).Help != "" {
 		return templ.Attributes{"aria-describedby": ui.SettingHelpID(row.Key)}
@@ -1050,4 +1072,13 @@ func sysDefault(row sysRow) string {
 		return v
 	}
 	return def
+}
+
+// sysTabOptionLabel is the tab's name in the phone section picker, with the number of refused settings it holds (the
+// tab bar shows it as a badge).
+func sysTabOptionLabel(t sysTab) string {
+	if n := len(t.refused()); n > 0 {
+		return t.Label + " (" + strconv.Itoa(n) + ")"
+	}
+	return t.Label
 }

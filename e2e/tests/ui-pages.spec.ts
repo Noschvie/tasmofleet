@@ -382,8 +382,10 @@ for (const m of modes) {
     await page.getByLabel("Password").fill("wrong-password-xx");
     await page.getByRole("button", { name: "Sign in" }).click();
     await look("login-error");
-    await page.getByLabel("Username").fill("breakglass");
-    await page.getByLabel("Password").fill(password);
+    // the error sits under Password and is part of that input's accessible name, so a label
+    // match on "Username" would hit both inputs: address the fields by name
+    await page.locator('input[name="username"]').fill("breakglass");
+    await page.locator('input[name="password"]').fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     await page.goto(local.url + "/account");

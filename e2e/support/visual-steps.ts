@@ -224,7 +224,7 @@ async function signIn(page: Page, user: string, password: string, reuse = true, 
     await page.waitForURL((u) => !/\/login(\/local)?$/.test(u.pathname), { timeout: 10_000 }).catch(async () => {
       throw new Error(`sign-in as ${user} stayed on ${page.url()}: ${(await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 200)}`);
     });
-  else await page.getByRole("alert").first().waitFor({ timeout: 10_000 });
+  else await page.locator(".ufield-err, [role=alert]").first().waitFor({ timeout: 10_000 });
   if (reuse) writeFileSync(sessionFile(page), JSON.stringify({ ...savedSessions(page), [key]: await page.context().cookies() }));
 }
 
@@ -345,7 +345,7 @@ const customSteps: Record<string, (page: Page, vars: StepVars) => Promise<void>>
     await page.locator('input[name="password"]').fill("short");
     await page.locator('input[name="confirm"]').fill("shorter");
     await page.getByRole("button", { name: "Add user" }).click();
-    await page.getByRole("alert").first().waitFor({ timeout: 10_000 });
+    await page.locator(".ufield-err").first().waitFor({ timeout: 10_000 });
   },
   "signin-stepped-up": steppedUp,
   // N4: Reset password on the user's page (the step-up is done): the one-time password page

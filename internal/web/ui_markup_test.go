@@ -66,10 +66,6 @@ var markupExemptions = []markupBlock{
 	{Name: "#1092 buttons: style guide", Files: map[string]map[string]int{
 		"styleguide.templ": {"btn": 3},
 	}},
-	{Name: "#1098 error summaries", Files: map[string]map[string]int{
-		"accountpages.templ": {"banner": 1},
-		"setup.templ":        {"banner": 1},
-	}},
 	{Name: "#1097 status badge", Files: map[string]map[string]int{
 		"cells.templ": {"bdg": 2},
 	}},

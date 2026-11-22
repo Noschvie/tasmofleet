@@ -10,6 +10,19 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
+// sysErrors is what the settings pages say about a refused save, in one place: the page's own error, the summary when
+// two or more settings failed (each message sits at its input), and one banner for a refusal that has no input on this
+// page. One refused setting shows only its input's message.
+templ sysErrors(p sysPage) {
+	if p.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+	}
+	@ui.ErrorSummary(p.refusedCount())
+	if s := p.refusedBanner(); s != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: s, Alert: true})
+	}
+}
+
 // sysSettingsPage is System settings: the page header, eight tabs (all in one form, shown one at a
 // time), a grid of cards per tab and one save bar. The danger zone and the container list sit
 // after the form. The fields are the real settings of sysconfig.
@@ -19,14 +32,12 @@ templ sysSettingsPage(p sysPage) {
 		<span>Section</span>
 		<select aria-label="Settings section">
 			for _, tab := range p.Tabs {
-				<option value={ tab.Slug } selected?={ tab.Slug == p.Active }>{ tab.Label }</option>
+				<option value={ tab.Slug } selected?={ tab.Slug == p.Active }>{ sysTabOptionLabel(tab) }</option>
 			}
 		</select>
 	</label>
 	@ui.Tabs("Settings sections", sysTabLinks(p))
-	if p.Error != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
-	}
+	@sysErrors(p)
 	if len(p.Pending) > 0 {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "Restart required.", Text: "The stored value of " + strings.Join(p.Pending, ", ") + " applies after the next restart of the container."})
 	}
@@ -92,9 +103,7 @@ templ sysSettingsPage(p sysPage) {
 // snapshot tab of sysLayout, the same fields and the same save as on the Settings page.
 templ snapshotsPage(p sysPage) {
 	@ui.PageHeader("Snapshots", "Copies of TasmoFleet’s own database. Device backups are a separate thing.")
-	if p.Error != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
-	}
+	@sysErrors(p)
 	if p.DB != nil && p.DB.Warn != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.DB.Warn, Alert: true})
 	}

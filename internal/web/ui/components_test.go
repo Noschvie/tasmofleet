@@ -73,7 +73,6 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"RowMenu":          RowMenu(h, []MenuItem{{Label: h, Href: "/x"}, {Label: h, Disabled: true, Why: h}}, false),
 		"Banner":           Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h}}),
 		"BannerProps":      Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Class: h, ID: h, Pulse: true, Flash: true, Attrs: templ.Attributes{"data-x": h}, Action: &Btn{Label: h, Dialog: h, Attrs: templ.Attributes{"hx-post": h, "data-y": h}}}),
-		"ErrorSum":         ErrorSummary(h),
 		"BannerLink":       Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h, Href: "/x", Target: "_blank", Rel: "noopener"}}),
 		"Toast":            ToastStatic(ToastData{Tone: ToneDanger, Text: h, Action: h}),
 		"Field":            Field(FieldData{Label: h, Name: "n", Value: h, Placeholder: h, Error: h}),

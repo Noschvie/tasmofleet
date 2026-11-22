@@ -168,8 +168,8 @@ func authDoc(f authFrame) templ.Component {
 }
 
 // loginPage is the sign-in page (screens signin, signin-v-error, signin-v-expired): the session
-// banner, the failed-attempt banner with the attempts left (N11), the local form with "Keep me
-// signed in", and the single sign-on button.
+// banner, the local form with "Keep me signed in" (a wrong sign-in that may be retried shows its error and the
+// attempts left under the password, N11), and the single sign-on button.
 func loginPage(f authFrame, d auth.LoginData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -352,7 +352,7 @@ func loginHead(d auth.LoginData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if d.Error != "" {
+		if d.Error != "" && !loginRetry(d) {
 			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: d.Error, Text: attemptsLeftText(d), Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -362,12 +362,19 @@ func loginHead(d auth.LoginData) templ.Component {
 	})
 }
 
-// loginFieldError marks the password field after a failed attempt that may be retried.
+// loginRetry is a wrong sign-in that may be tried again. Its error belongs to the password input and is shown
+// there, once, with the attempts line; an error without a retry (a lockout, an expired one-time password, a failed
+// single sign-on) belongs to no input and stays a banner (#1098).
+func loginRetry(d auth.LoginData) bool {
+	return d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0
+}
+
+// loginFieldError is the password input's error after a wrong sign-in that may be retried: the error and the attempts line.
 func loginFieldError(d auth.LoginData) string {
-	if d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0 {
-		return "Check the password and try again."
+	if !loginRetry(d) {
+		return ""
 	}
-	return ""
+	return d.Error + " " + attemptsLeftText(d)
 }
 
 // attemptsLeftText is the count of attempts before sign-in from here is delayed (N11). It never
@@ -430,7 +437,7 @@ func forcedPasswordPage(f authFrame, d auth.PasswordPageData) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(d.Self)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 140, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 147, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -453,7 +460,7 @@ func forcedPasswordPage(f authFrame, d auth.PasswordPageData) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(d.BasePath + "/account/password")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 147, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 154, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 			if templ_7745c5c3_Err != nil {
@@ -466,7 +473,7 @@ func forcedPasswordPage(f authFrame, d auth.PasswordPageData) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templruntime.NewAttributeExpression(d.CSRFToken).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 148, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 155, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 			if templ_7745c5c3_Err != nil {
@@ -495,7 +502,7 @@ func forcedPasswordPage(f authFrame, d auth.PasswordPageData) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(auth.PasswordMinLength))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 153, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 160, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -553,7 +560,7 @@ func signOutForm(base, csrf string) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(base + "/logout")).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 166, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 173, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -566,7 +573,7 @@ func signOutForm(base, csrf string) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templruntime.NewAttributeExpression(csrf).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 167, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 174, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -614,7 +621,7 @@ func signOutCard(base, csrf string) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(base + "/logout")).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 175, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 182, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
@@ -627,7 +634,7 @@ func signOutCard(base, csrf string) templ.Component {
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templruntime.NewAttributeExpression(csrf).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 176, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 183, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 		if templ_7745c5c3_Err != nil {
@@ -706,7 +713,7 @@ func messagePage(f authFrame, d auth.MessageData) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(d.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 188, Col: 15}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 195, Col: 15}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -719,7 +726,7 @@ func messagePage(f authFrame, d auth.MessageData) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(d.Text)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 189, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 196, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -835,7 +842,7 @@ func stalePage(f authFrame, base, reload string) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(staleTitle)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 222, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 229, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
@@ -976,7 +983,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var39 string
 				templ_7745c5c3_Var39, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/account/profile")).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 269, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 276, Col: 100}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 				if templ_7745c5c3_Err != nil {
@@ -989,7 +996,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var40 string
 				templ_7745c5c3_Var40, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.D.CSRFToken).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 270, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 277, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 				if templ_7745c5c3_Err != nil {
@@ -1034,7 +1041,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/account/name")).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 280, Col: 97}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 287, Col: 97}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 				if templ_7745c5c3_Err != nil {
@@ -1047,7 +1054,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.D.CSRFToken).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 281, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 288, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 				if templ_7745c5c3_Err != nil {
@@ -1092,7 +1099,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var44 string
 				templ_7745c5c3_Var44, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/account/password")).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 290, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 297, Col: 100}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 				if templ_7745c5c3_Err != nil {
@@ -1105,7 +1112,7 @@ func accountPage(v accountView) templ.Component {
 				var templ_7745c5c3_Var45 string
 				templ_7745c5c3_Var45, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.D.CSRFToken).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 291, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 298, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 				if templ_7745c5c3_Err != nil {
@@ -1231,7 +1238,7 @@ func usersPage(v usersView) templ.Component {
 				var templ_7745c5c3_Var48 string
 				templ_7745c5c3_Var48, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/users/new")).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 353, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 360, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 				if templ_7745c5c3_Err != nil {
@@ -1332,7 +1339,7 @@ func usersPage(v usersView) templ.Component {
 					var templ_7745c5c3_Var53 string
 					templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(u.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 365, Col: 44}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 372, Col: 44}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 					if templ_7745c5c3_Err != nil {
@@ -1360,7 +1367,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var54 string
 						templ_7745c5c3_Var54, templ_7745c5c3_Err = templruntime.NewAttributeExpression(u.SubTitle).Resolve(ctx)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 370, Col: 69}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 377, Col: 69}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 						if templ_7745c5c3_Err != nil {
@@ -1378,7 +1385,7 @@ func usersPage(v usersView) templ.Component {
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(u.Sub)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 370, Col: 81}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 377, Col: 81}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
 					if templ_7745c5c3_Err != nil {
@@ -1418,7 +1425,7 @@ func usersPage(v usersView) templ.Component {
 					var templ_7745c5c3_Var56 string
 					templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(u.Source)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 386, Col: 38}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 393, Col: 38}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 					if templ_7745c5c3_Err != nil {
@@ -1436,7 +1443,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var57 string
 						templ_7745c5c3_Var57, templ_7745c5c3_Err = templruntime.NewAttributeExpression(u.LastAt).Resolve(ctx)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 388, Col: 54}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 395, Col: 54}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 						if templ_7745c5c3_Err != nil {
@@ -1454,7 +1461,7 @@ func usersPage(v usersView) templ.Component {
 							var templ_7745c5c3_Var58 string
 							templ_7745c5c3_Var58, templ_7745c5c3_Err = templruntime.NewAttributeExpression(ui.StampDay.Key).Resolve(ctx)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 388, Col: 97}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 395, Col: 97}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var58)
 							if templ_7745c5c3_Err != nil {
@@ -1472,7 +1479,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var59 string
 						templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(u.Last)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 388, Col: 110}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 395, Col: 110}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 						if templ_7745c5c3_Err != nil {
@@ -1485,7 +1492,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var60 string
 						templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + u.Sessions)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 388, Col: 140}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 395, Col: 140}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 						if templ_7745c5c3_Err != nil {
@@ -1503,7 +1510,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var61 string
 						templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(u.Last + " · " + u.Sessions)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 390, Col: 59}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 397, Col: 59}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
 						if templ_7745c5c3_Err != nil {
@@ -1522,7 +1529,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var62 string
 						templ_7745c5c3_Var62, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(u.Detail)).ResolveURL(ctx)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 393, Col: 50}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 400, Col: 50}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 						if templ_7745c5c3_Err != nil {
@@ -1535,7 +1542,7 @@ func usersPage(v usersView) templ.Component {
 						var templ_7745c5c3_Var63 string
 						templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(" of " + u.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 393, Col: 99}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 400, Col: 99}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 						if templ_7745c5c3_Err != nil {
@@ -1605,7 +1612,7 @@ func usersPage(v usersView) templ.Component {
 					var templ_7745c5c3_Var66 string
 					templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(plural(v.Admins, "user"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 404, Col: 137}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 411, Col: 137}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 					if templ_7745c5c3_Err != nil {
@@ -1626,7 +1633,7 @@ func usersPage(v usersView) templ.Component {
 					var templ_7745c5c3_Var67 string
 					templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(plural(v.Operators, "user"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 405, Col: 145}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 412, Col: 145}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 					if templ_7745c5c3_Err != nil {
@@ -1695,7 +1702,8 @@ func usersPage(v usersView) templ.Component {
 }
 
 // usersBanners are the notices of the users pages: the result of the last change, an error that
-// belongs to no input, and why changes are not possible here.
+// belongs to no input (the role has a control but no place for a message, so its error is a banner too), and why
+// changes are not possible here.
 func usersBanners(d auth.UsersPageData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -1719,7 +1727,7 @@ func usersBanners(d auth.UsersPageData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if d.Error != "" && (d.ErrField == "" || d.ErrField == "current") {
+		if d.Error != "" && (d.ErrField == "" || d.ErrField == "current" || d.ErrField == "role") {
 			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -1745,7 +1753,6 @@ func roleTone(admin bool) ui.Tone {
 // userAddView is the add-user page (screens useradd, useradd-v-error).
 type userAddView struct {
 	D      auth.UsersPageData
-	Errors int // inputs the server rejected (the summary counts them)
 	StepUp *ui.StepUpData
 }
 
@@ -1774,26 +1781,7 @@ func userAddPage(v userAddView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if v.Errors > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<div class=\"banner tone-danger err-summary useradd-sum\" role=\"alert\"><span class=\"banner-dot\"></span><div class=\"banner-text\"><b>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var71 string
-			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(fieldsNeedAttention(v.Errors))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 460, Col: 62}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "</b> The user wasn’t added yet.</div></div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
-		templ_7745c5c3_Var72 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var71 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -1805,20 +1793,20 @@ func userAddPage(v userAddView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<input type=\"hidden\" name=\"csrf\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<input type=\"hidden\" name=\"csrf\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var73 string
-			templ_7745c5c3_Var73, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.D.CSRFToken).Resolve(ctx)
+			var templ_7745c5c3_Var72 string
+			templ_7745c5c3_Var72, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.D.CSRFToken).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 464, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 465, Col: 56}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1834,7 +1822,7 @@ func userAddPage(v userAddView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<div class=\"ufield\"><span class=\"ufield-label\">Role</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "<div class=\"ufield\"><span class=\"ufield-label\">Role</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1842,7 +1830,7 @@ func userAddPage(v userAddView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "</div><div class=\"useradd-mode\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "</div><div class=\"useradd-mode\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1853,7 +1841,7 @@ func userAddPage(v userAddView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "</div><div class=\"useradd-pw\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "</div><div class=\"useradd-pw\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1865,77 +1853,77 @@ func userAddPage(v userAddView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 102, "</div><div class=\"useradd-foot\"><a class=\"btn\" href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "</div><div class=\"useradd-foot\"><a class=\"btn\" href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var74 string
-			templ_7745c5c3_Var74, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/users")).ResolveURL(ctx)
+			var templ_7745c5c3_Var73 string
+			templ_7745c5c3_Var73, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/users")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 483, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 484, Col: 63}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 103, "\">Cancel</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "\">Cancel</a> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if v.StepUp != nil {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, "<a class=\"btn btn-primary\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 102, "<a class=\"btn btn-primary\" href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var74 string
+				templ_7745c5c3_Var74, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/users")).ResolveURL(ctx)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 486, Col: 76}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 103, "\" data-dialog=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var75 string
-				templ_7745c5c3_Var75, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.D.BasePath + "/users")).ResolveURL(ctx)
+				templ_7745c5c3_Var75, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.StepUp.ID).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 485, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 486, Col: 104}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var75)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 105, "\" data-dialog=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var76 string
-				templ_7745c5c3_Var76, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.StepUp.ID).Resolve(ctx)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/accountpages.templ`, Line: 485, Col: 104}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 106, "\">Add user</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, "\">Add user</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "<button type=\"submit\" class=\"btn btn-primary\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 105, "<button type=\"submit\" class=\"btn btn-primary\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if v.D.ViewOnly {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, " disabled")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 106, " disabled")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 109, ">Add user</button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, ">Add user</button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 110, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.CardOf(ui.CardData{Tag: "form", Class: "useradd", Attrs: templ.Attributes{"method": "post", "action": templ.SafeURL(v.D.BasePath + "/users")}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var72), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.CardOf(ui.CardData{Tag: "form", Class: "useradd", Attrs: templ.Attributes{"method": "post", "action": templ.SafeURL(v.D.BasePath + "/users")}}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var71), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1947,13 +1935,6 @@ func userAddPage(v userAddView) templ.Component {
 		}
 		return nil
 	})
-}
-
-func fieldsNeedAttention(n int) string {
-	if n == 1 {
-		return "1 field needs attention."
-	}
-	return strconv.Itoa(n) + " fields need attention."
 }
 
 // errView is an error page in the shell (screens e404, e403, eoff): the code line, the title,

@@ -72,11 +72,9 @@ func fleetBackupsPage(p sysPage) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if p.Error != "" {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
+		templ_7745c5c3_Err = sysErrors(p).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"syswrap\">")
 		if templ_7745c5c3_Err != nil {
@@ -90,7 +88,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + fleetPath)).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 33, Col: 128}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 31, Col: 128}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 			if templ_7745c5c3_Err != nil {
@@ -103,7 +101,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 34, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 32, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
@@ -151,7 +149,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + "/devices/bulk/backup")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 47, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 45, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
@@ -164,7 +162,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 48, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 46, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -177,7 +175,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + "/devices/bulk/backup")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 50, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 48, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
@@ -190,7 +188,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 51, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 49, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -208,7 +206,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templruntime.NewAttributeExpression(strconv.FormatInt(int64(id), 10)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 53, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 51, Col: 75}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 				if templ_7745c5c3_Err != nil {
@@ -227,7 +225,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templruntime.NewAttributeExpression(strconv.FormatInt(int64(id), 10)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 56, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 54, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 				if templ_7745c5c3_Err != nil {
@@ -251,7 +249,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + fleetPath)).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 61, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 59, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 			if templ_7745c5c3_Err != nil {
@@ -264,7 +262,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 62, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 60, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 			if templ_7745c5c3_Err != nil {
@@ -282,7 +280,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + orphansDeletePath)).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 65, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 63, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
@@ -359,7 +357,7 @@ func fleetStacks(p sysPage) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templruntime.NewAttributeExpression("sec-" + tab.Slug).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 86, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 84, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 			if templ_7745c5c3_Err != nil {
@@ -372,7 +370,7 @@ func fleetStacks(p sysPage) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templruntime.NewAttributeExpression(tab.Slug).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 86, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 84, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 			if templ_7745c5c3_Err != nil {
@@ -581,7 +579,7 @@ func fleetMissed(v fleetView) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(v.Now, v.Missed))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 143, Col: 219}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 141, Col: 219}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -651,7 +649,7 @@ func fleetNoSchedule(v fleetView) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(v.Now, v.Run.StartedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 156, Col: 127}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 154, Col: 127}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -664,7 +662,7 @@ func fleetNoSchedule(v fleetView) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(v.LastLine())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 156, Col: 154}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 154, Col: 154}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
@@ -723,7 +721,7 @@ func fleetRunSum(label string, n int, href, note string) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(note)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 168, Col: 36}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 166, Col: 36}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -800,7 +798,7 @@ func fleetRunSums(v fleetView) templ.Component {
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(v.Now, v.Run.StartedAt))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 180, Col: 153}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 178, Col: 153}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 		if templ_7745c5c3_Err != nil {
@@ -852,7 +850,7 @@ func fleetWhy(w whyText) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(w.Reason)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 191, Col: 12}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 189, Col: 12}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -862,7 +860,7 @@ func fleetWhy(w whyText) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(w.Reason + " since ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 193, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 191, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -887,7 +885,7 @@ func fleetWhy(w whyText) templ.Component {
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templruntime.NewAttributeExpression(w.SinceFull).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 193, Col: 94}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 191, Col: 94}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 				if templ_7745c5c3_Err != nil {
@@ -914,7 +912,7 @@ func fleetWhy(w whyText) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(w.SinceText)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 193, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 191, Col: 110}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
@@ -989,7 +987,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templruntime.NewAttributeExpression("card-" + c.ID).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 214, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 212, Col: 21}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -1002,7 +1000,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.LiveHref()).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 217, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 215, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -1015,7 +1013,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templruntime.NewAttributeExpression("#card-" + c.ID + " > *").Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 221, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 219, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 			if templ_7745c5c3_Err != nil {
@@ -1028,7 +1026,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.LiveOOB()).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 222, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 220, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 			if templ_7745c5c3_Err != nil {
@@ -1055,7 +1053,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 		var templ_7745c5c3_Var43 string
 		templ_7745c5c3_Var43, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.Sig).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 225, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 223, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 		if templ_7745c5c3_Err != nil {
@@ -1068,7 +1066,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(c.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 228, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 226, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
@@ -1122,7 +1120,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var46 string
 			templ_7745c5c3_Var46, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(ch.Href)).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 243, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 241, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 			if templ_7745c5c3_Err != nil {
@@ -1145,7 +1143,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(ch.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 243, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 241, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -1158,7 +1156,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(ch.N))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 243, Col: 146}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 241, Col: 146}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
@@ -1181,7 +1179,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(v.PWNote())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 249, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 247, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {
@@ -1195,7 +1193,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var50 string
 				templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 251, Col: 11}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 249, Col: 11}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 				if templ_7745c5c3_Err != nil {
@@ -1208,7 +1206,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var51 string
 				templ_7745c5c3_Var51, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.PWHref)).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 251, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 249, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 				if templ_7745c5c3_Err != nil {
@@ -1277,7 +1275,7 @@ func fleetDevices(p sysPage, c sysCard) templ.Component {
 		var templ_7745c5c3_Var52 string
 		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(v.FootNote())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 288, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 286, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 		if templ_7745c5c3_Err != nil {
@@ -1315,7 +1313,7 @@ func fleetSortTh(v fleetView, col, label string) templ.Component {
 		var templ_7745c5c3_Var54 string
 		templ_7745c5c3_Var54, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.AriaSort(col)).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 294, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 292, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 		if templ_7745c5c3_Err != nil {
@@ -1354,7 +1352,7 @@ func fleetSortTh(v fleetView, col, label string) templ.Component {
 			var templ_7745c5c3_Var57 string
 			templ_7745c5c3_Var57, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.SortHref(col))).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 294, Col: 102}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 292, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 			if templ_7745c5c3_Err != nil {
@@ -1381,7 +1379,7 @@ func fleetSortTh(v fleetView, col, label string) templ.Component {
 		var templ_7745c5c3_Var58 string
 		templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 294, Col: 112}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 292, Col: 112}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 		if templ_7745c5c3_Err != nil {
@@ -1424,7 +1422,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var60 string
 			templ_7745c5c3_Var60, templ_7745c5c3_Err = templruntime.NewAttributeExpression(strconv.FormatInt(int64(r.ID), 10)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 300, Col: 147}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 298, Col: 147}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 			if templ_7745c5c3_Err != nil {
@@ -1437,7 +1435,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var61 string
 			templ_7745c5c3_Var61, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Select " + r.Name).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 300, Col: 181}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 298, Col: 181}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 			if templ_7745c5c3_Err != nil {
@@ -1455,7 +1453,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templruntime.NewAttributeExpression(r.Name).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 302, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 300, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 		if templ_7745c5c3_Err != nil {
@@ -1468,7 +1466,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(r.DeviceHref)).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 302, Col: 124}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 300, Col: 124}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 		if templ_7745c5c3_Err != nil {
@@ -1489,7 +1487,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 		var templ_7745c5c3_Var64 string
 		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs("#" + strconv.FormatInt(int64(r.ID), 10))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 302, Col: 225}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 300, Col: 225}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 		if templ_7745c5c3_Err != nil {
@@ -1524,7 +1522,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 				var templ_7745c5c3_Var65 string
 				templ_7745c5c3_Var65, templ_7745c5c3_Err = templruntime.NewAttributeExpression(ui.StampText(r.Newest, ui.StampTitle)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 307, Col: 99}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 305, Col: 99}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var65)
 				if templ_7745c5c3_Err != nil {
@@ -1551,7 +1549,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var66 string
 			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(v.Now, r.Newest))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 307, Col: 136}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 305, Col: 136}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 			if templ_7745c5c3_Err != nil {
@@ -1564,7 +1562,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var67 string
 			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + r.Ago)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 308, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 306, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 			if templ_7745c5c3_Err != nil {
@@ -1582,7 +1580,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 		var templ_7745c5c3_Var68 string
 		templ_7745c5c3_Var68, templ_7745c5c3_Err = templruntime.NewAttributeExpression(r.RunsTitle).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 311, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 309, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 		if templ_7745c5c3_Err != nil {
@@ -1605,7 +1603,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var69 string
 			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(r.Runs))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 315, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 313, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 			if templ_7745c5c3_Err != nil {
@@ -1618,7 +1616,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var70 string
 			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(" " + noun(r.Runs, "backup", "backups"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 315, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 313, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 			if templ_7745c5c3_Err != nil {
@@ -1642,7 +1640,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var71 string
 			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(r.Files)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 321, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 319, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 			if templ_7745c5c3_Err != nil {
@@ -1675,7 +1673,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var72 string
 			templ_7745c5c3_Var72, templ_7745c5c3_Err = templruntime.NewAttributeExpression(r.ResultTitle()).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 328, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 326, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 			if templ_7745c5c3_Err != nil {
@@ -1708,7 +1706,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var73 string
 			templ_7745c5c3_Var73, templ_7745c5c3_Err = templruntime.NewAttributeExpression(r.Why.Plain()).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 334, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 332, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
 			if templ_7745c5c3_Err != nil {
@@ -1721,7 +1719,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var74 string
 			templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 335, Col: 11}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 333, Col: 11}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 			if templ_7745c5c3_Err != nil {
@@ -1743,7 +1741,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 				var templ_7745c5c3_Var75 string
 				templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(" · ")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 338, Col: 15}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 336, Col: 15}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 				if templ_7745c5c3_Err != nil {
@@ -1770,7 +1768,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var76 string
 			templ_7745c5c3_Var76, templ_7745c5c3_Err = templruntime.NewAttributeExpression(r.Why.Plain()).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 344, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 342, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 			if templ_7745c5c3_Err != nil {
@@ -1783,7 +1781,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 			var templ_7745c5c3_Var77 string
 			templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 344, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 342, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 			if templ_7745c5c3_Err != nil {
@@ -1853,7 +1851,7 @@ func setPasswordLink(href, name string) templ.Component {
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(href)).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 363, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 361, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 		if templ_7745c5c3_Err != nil {
@@ -1866,7 +1864,7 @@ func setPasswordLink(href, name string) templ.Component {
 		var templ_7745c5c3_Var80 string
 		templ_7745c5c3_Var80, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Set the MQTT password of " + name).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 363, Col: 96}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 361, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var80)
 		if templ_7745c5c3_Err != nil {
@@ -1946,7 +1944,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var83 string
 			templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.JoinStringErrs("Pruned at the next run (" + strconv.Itoa(v.PruneRuns) + ")")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 384, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 382, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var83))
 			if templ_7745c5c3_Err != nil {
@@ -1964,7 +1962,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var84 string
 				templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(v.Keep)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 386, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 384, Col: 66}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 				if templ_7745c5c3_Err != nil {
@@ -1982,7 +1980,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var85 string
 				templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinStringErrs(plural(v.PruneRuns, "backup") + " of " + plural(len(v.Prune), "device") + " · " + v.PruneSize + " beyond the limit of " + v.Keep + ". Each device loses its oldest backups when its next one is taken. Kept backups are never pruned.")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 390, Col: 238}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 388, Col: 238}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 				if templ_7745c5c3_Err != nil {
@@ -2005,7 +2003,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var86 string
 				templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(v.Prune)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 397, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 395, Col: 68}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 				if templ_7745c5c3_Err != nil {
@@ -2023,7 +2021,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 					var templ_7745c5c3_Var87 string
 					templ_7745c5c3_Var87, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(pr.Href)).ResolveURL(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 403, Col: 41}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 401, Col: 41}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 					if templ_7745c5c3_Err != nil {
@@ -2036,7 +2034,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 					var templ_7745c5c3_Var88 string
 					templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(pr.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 403, Col: 76}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 401, Col: 76}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 					if templ_7745c5c3_Err != nil {
@@ -2059,7 +2057,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 					var templ_7745c5c3_Var89 string
 					templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(plural(pr.Runs, "backup") + " · oldest ")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 408, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 406, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 					if templ_7745c5c3_Err != nil {
@@ -2094,7 +2092,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 					var templ_7745c5c3_Var90 string
 					templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(pr.Oldest, ui.StampShort))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 408, Col: 177}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 406, Col: 177}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 					if templ_7745c5c3_Err != nil {
@@ -2107,7 +2105,7 @@ func fleetStorage(p sysPage, c sysCard) templ.Component {
 					var templ_7745c5c3_Var91 string
 					templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + pr.Size)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 408, Col: 204}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 406, Col: 204}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 					if templ_7745c5c3_Err != nil {
@@ -2160,7 +2158,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var93 string
 		templ_7745c5c3_Var93, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + pruneNowPath)).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 423, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 421, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var93)
 		if templ_7745c5c3_Err != nil {
@@ -2173,7 +2171,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var94 string
 		templ_7745c5c3_Var94, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 424, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 422, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var94)
 		if templ_7745c5c3_Err != nil {
@@ -2191,7 +2189,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var95 string
 			templ_7745c5c3_Var95, templ_7745c5c3_Err = templruntime.NewAttributeExpression(strconv.FormatInt(int64(run.ID), 10)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 427, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 425, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var95)
 			if templ_7745c5c3_Err != nil {
@@ -2209,7 +2207,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var96 string
 		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(plural(len(v.PruneNow), "backup"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 429, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 427, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 		if templ_7745c5c3_Err != nil {
@@ -2222,7 +2220,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var97 string
 		templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(plural(len(v.PruneNow), "backup") + " of " + plural(v.PruneNowDevices, "device") + ", " + v.PruneNowSize + " in all")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 430, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 428, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 		if templ_7745c5c3_Err != nil {
@@ -2235,7 +2233,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var98 string
 		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(pruneNowRules)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 430, Col: 217}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 428, Col: 217}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 		if templ_7745c5c3_Err != nil {
@@ -2248,7 +2246,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var99 string
 		templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(pruneLeftOutText(v.PruneLeftOut))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 430, Col: 254}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 428, Col: 254}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 		if templ_7745c5c3_Err != nil {
@@ -2266,7 +2264,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(run.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 433, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 431, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 			if templ_7745c5c3_Err != nil {
@@ -2305,7 +2303,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var101 string
 			templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(run.Taken, ui.StampShort))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 433, Col: 147}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 431, Col: 147}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var101))
 			if templ_7745c5c3_Err != nil {
@@ -2318,7 +2316,7 @@ func fleetPruneDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var102 string
 			templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + humanBytes(run.Bytes))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 433, Col: 188}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 431, Col: 188}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 			if templ_7745c5c3_Err != nil {
@@ -2375,7 +2373,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var104 string
 		templ_7745c5c3_Var104, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + unrefDeletePath)).ResolveURL(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 448, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 446, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var104)
 		if templ_7745c5c3_Err != nil {
@@ -2388,7 +2386,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var105 string
 		templ_7745c5c3_Var105, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.CSRF).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 449, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 447, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var105)
 		if templ_7745c5c3_Err != nil {
@@ -2406,7 +2404,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var106 string
 			templ_7745c5c3_Var106, templ_7745c5c3_Err = templruntime.NewAttributeExpression(f.Path).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 452, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 450, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var106)
 			if templ_7745c5c3_Err != nil {
@@ -2424,7 +2422,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var107 string
 		templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(plural(len(st.Unreferenced), "unreferenced file"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 454, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 452, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 		if templ_7745c5c3_Err != nil {
@@ -2437,7 +2435,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 		var templ_7745c5c3_Var108 string
 		templ_7745c5c3_Var108, templ_7745c5c3_Err = templ.JoinStringErrs(plural(len(st.Unreferenced), "file") + ", " + st.UnrefSize + " in all")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 455, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 453, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var108))
 		if templ_7745c5c3_Err != nil {
@@ -2455,7 +2453,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var109 string
 			templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 458, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 456, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 			if templ_7745c5c3_Err != nil {
@@ -2468,7 +2466,7 @@ func fleetUnrefDialog(p sysPage) templ.Component {
 			var templ_7745c5c3_Var110 string
 			templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(f.Size)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 458, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 456, Col: 73}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 			if templ_7745c5c3_Err != nil {
@@ -2583,7 +2581,7 @@ func fleetSchedule(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var115 string
 				templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(fleetSentence(p.Fleet.Plan))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 478, Col: 37}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 476, Col: 37}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 				if templ_7745c5c3_Err != nil {
@@ -2606,7 +2604,7 @@ func fleetSchedule(p sysPage, c sysCard) templ.Component {
 			var templ_7745c5c3_Var116 string
 			templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.JoinStringErrs(fleetScheduleLine(c))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 482, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 480, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var116))
 			if templ_7745c5c3_Err != nil {
@@ -2692,7 +2690,7 @@ func fleetScheduleReadOnly(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var119 string
 				templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(fleetScheduleLabel(row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 504, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 502, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 				if templ_7745c5c3_Err != nil {
@@ -2705,7 +2703,7 @@ func fleetScheduleReadOnly(p sysPage, c sysCard) templ.Component {
 				var templ_7745c5c3_Var120 string
 				templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(fleetScheduleValue(row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 505, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 503, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 				if templ_7745c5c3_Err != nil {
@@ -2812,7 +2810,7 @@ func sysScheduleNote(zone string, on bool, now, next time.Time) templ.Component 
 		var templ_7745c5c3_Var123 string
 		templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.JoinStringErrs(zone)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 551, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 549, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var123))
 		if templ_7745c5c3_Err != nil {
@@ -2826,7 +2824,7 @@ func sysScheduleNote(zone string, on bool, now, next time.Time) templ.Component 
 			var templ_7745c5c3_Var124 string
 			templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinStringErrs(" Next run ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 553, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 551, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 			if templ_7745c5c3_Err != nil {
@@ -2861,7 +2859,7 @@ func sysScheduleNote(zone string, on bool, now, next time.Time) templ.Component 
 			var templ_7745c5c3_Var125 string
 			templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(now, next))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 553, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/fleetbackups.templ`, Line: 551, Col: 93}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var125))
 			if templ_7745c5c3_Err != nil {

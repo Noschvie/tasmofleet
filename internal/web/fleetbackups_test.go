@@ -273,7 +273,7 @@ func TestFleetBackupsSaveReturnsToThePage(t *testing.T) {
 	}
 	// a refused value keeps the person on this page
 	r, body := e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"nope"}})
-	if r.StatusCode == 303 || !strings.Contains(body, "Nothing was saved") || !strings.Contains(body, `id="card-devices"`) {
+	if r.StatusCode == 303 || !strings.Contains(inputTag(t, body, "v.BACKUP_KEEP"), `aria-invalid="true"`) || !strings.Contains(body, `id="card-devices"`) {
 		t.Errorf("a refused save answers on the Backups page: %d", r.StatusCode)
 	}
 }

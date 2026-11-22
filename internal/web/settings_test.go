@@ -195,7 +195,7 @@ func TestSettingsValidationErrorsRerender(t *testing.T) {
 	fs := &fakeSettings{applyEr: &settings.ValidationError{Fields: map[string]string{"TelePeriod": "0 (off) or 10 to 3600 seconds"}}}
 	e := withSettings(t, fs)
 	resp, body := e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "5"))
-	if resp.StatusCode != 422 || !strings.Contains(body, "10 to 3600") || !strings.Contains(body, "Nothing was sent") {
+	if resp.StatusCode != 422 || !strings.Contains(body, "10 to 3600") {
 		t.Fatalf("status %d body %s", resp.StatusCode, body)
 	}
 	if !strings.Contains(body, `value="5"`) {

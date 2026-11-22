@@ -6585,10 +6585,6 @@ body.page-auth main {
   }
 }
 /* add-user form: two columns of fields, the password choice across, the buttons at the foot */
-.useradd-sum {
-  max-width: 760px;
-  margin-bottom: var(--sp-14);
-}
 form.useradd {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
@@ -12113,6 +12109,12 @@ input:focus-visible + .swtrack {
 }
 .sbar[hidden] {
   display: none;
+}
+/* a refused input takes the focus: keep it clear of the sticky save bar when the browser scrolls it into view */
+.sysform input,
+.sysform select,
+.sysform textarea {
+  scroll-margin-bottom: calc(var(--sb-h) + 5rem);
 }
 .sbar-state {
   font-size: 13px;

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -177,10 +178,11 @@ templ styleguidePage(v sgView) {
 			</div>
 		}
 		@sgSec("forms") {
-			@ui.ErrorSummary("Fix 1 field:")
+			@ui.ErrorSummary(2)
 			<div class="sg-form">
 				@ui.Field(ui.FieldData{Label: "Name", Name: "sg-name", Value: "Balcony Windowsill", Wide: true, Help: "Shown in lists and in the device's own web page."})
 				@ui.Field(ui.FieldData{Label: "Address", Name: "sg-addr", Value: "192.168.20.300", Mono: true, Error: "Enter an IP address or a hostname."})
+				@ui.Field(ui.FieldData{Label: "HTTP port", Name: "sg-port", Type: "number", Value: "99999", Mono: true, Error: "Use a port number between 1 and 65535, or leave it empty for 80."})
 				@ui.Field(ui.FieldData{Label: "Web password", Name: "sg-pw", Type: "password", Placeholder: "Unchanged", Help: "Leave empty to keep the stored password."})
 				@ui.SelectField("Devices at a time", "sg-batch", []ui.Option{{Value: "1", Label: "1"}, {Value: "5", Label: "5", Checked: true}, {Value: "10", Label: "10"}})
 			</div>
@@ -278,9 +280,8 @@ templ styleguidePage(v sgView) {
 		@sgSec("auth") {
 			@ui.AuthCard(v.Base, "1.4.2", "fleet.lab.home") {
 				<div class="h1-sample">Sign in</div>
-				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Wrong username or password.", Text: "2 attempts left before this account is locked for 15 minutes.", Alert: true})
 				@ui.Field(ui.FieldData{Label: "Username", Name: "sg-user", Value: "maren", Autocomplete: "off"})
-				@ui.Field(ui.FieldData{Label: "Password", Name: "sg-pass", Type: "password", Error: "Check the password and try again.", Autocomplete: "off"})
+				@ui.Field(ui.FieldData{Label: "Password", Name: "sg-pass", Type: "password", Error: "Wrong username or password. " + attemptsLeftText(auth.LoginData{ShowAttemptsLeft: true, AttemptsLeft: 2}), Autocomplete: "off"})
 				@ui.Check("sg-remember", "Keep me signed in", "", false, false)
 				@ui.Button(ui.Btn{Label: "Sign in", Kind: "primary"})
 			}

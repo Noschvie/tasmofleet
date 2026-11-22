@@ -71,9 +71,10 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
       await page.getByLabel("Username").fill("admin");
       await page.getByLabel("Password").fill(initial);
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.getByRole("alert")).toContainText("Wrong username or password");
-      await page.getByLabel("Username").fill("admin");
-      await page.getByLabel("Password").fill(newPassword);
+      await expect(page.locator(".ufield-err")).toContainText("Wrong username or password");
+      // by name: the password's label also holds its error text, which says "username"
+      await page.locator('input[name="username"]').fill("admin");
+      await page.locator('input[name="password"]').fill(newPassword);
       await page.getByRole("button", { name: "Sign in" }).click();
       await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     });

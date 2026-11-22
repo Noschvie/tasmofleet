@@ -37,6 +37,7 @@ templ settingsTab(p settingsPage, base, csrf string) {
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 	}
+	@ui.ErrorSummary(settingsErrorCount(p.Groups))
 	if p.Notice != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Notice})
 	}
@@ -210,7 +211,7 @@ templ settingField(row settingsRow, want string) {
 		<label class="ufield-label" for={ "f-" + row.Field.Key }>{ row.Label }</label>
 		switch row.Field.Kind {
 			case settings.KindSelect:
-				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" }>
+				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" } autofocus?={ row.Focus }>
 					if row.NotReporting {
 						<option value="" selected>(unchanged: not reported)</option>
 					}
@@ -219,7 +220,7 @@ templ settingField(row settingsRow, want string) {
 					}
 				</select>
 			case settings.KindToggle:
-				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" }>
+				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" } autofocus?={ row.Focus }>
 					if row.NotReporting {
 						<option value="" selected>(unchanged: not reported)</option>
 					}
@@ -227,7 +228,7 @@ templ settingField(row settingsRow, want string) {
 					<option value="1" selected?={ row.Value == "1" }>1 (on)</option>
 				</select>
 			case settings.KindPassword:
-				<input id={ "f-" + row.Field.Key } type="password" name={ row.Field.Key } autocomplete="new-password" placeholder="unchanged" maxlength="64" aria-invalid?={ row.Err != "" }/>
+				<input id={ "f-" + row.Field.Key } type="password" name={ row.Field.Key } autocomplete="new-password" placeholder="unchanged" maxlength="64" aria-invalid?={ row.Err != "" } autofocus?={ row.Focus }/>
 			default:
 				<input
 					id={ "f-" + row.Field.Key }
@@ -238,7 +239,7 @@ templ settingField(row settingsRow, want string) {
 					if row.NotReporting {
 						placeholder="not reported"
 					}
-					aria-invalid?={ row.Err != "" }
+					aria-invalid?={ row.Err != "" } autofocus?={ row.Focus }
 				/>
 		}
 		if row.Err != "" {
@@ -320,12 +321,8 @@ templ driftPage(p driftView) {
 // about the device, never its own settings.
 templ editPage(f deviceForm, base, csrf string) {
 	@ui.PageHeader("Edit device", f.Stored)
-	if f.Error != "" {
-		if f.ErrField != "" {
-			@ui.ErrorSummary("1 field needs attention.")
-		} else {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
-		}
+	if f.Error != "" && f.ErrField == "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
 	}
 	<form class="devform devform-edit" method="post" action={ templ.SafeURL(base + devPath(f.Device.ID, "")) }>
 		<input type="hidden" name="csrf" value={ csrf }/>

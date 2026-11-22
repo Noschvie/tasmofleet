@@ -139,9 +139,6 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request, status int, d auth
 		v := p.h.view(r, "Add local user", "users", nil)
 		v.Crumbs = []ui.Crumb{{Label: "Add local user"}}
 		a := userAddView{D: d, StepUp: stepUpOf(d, p.h.d.Clock.Now(), "Adding a user")}
-		if d.ErrField != "" && d.Error != "" {
-			a.Errors = 1
-		}
 		p.h.show(w, r, status, "useradd", v, userAddPage(a))
 		return
 	}

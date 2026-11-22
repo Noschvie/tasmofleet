@@ -10,6 +10,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
+	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -647,7 +648,7 @@ func styleguidePage(v sgView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = ui.ErrorSummary("Fix 1 field:").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.ErrorSummary(2).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -660,6 +661,10 @@ func styleguidePage(v sgView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = ui.Field(ui.FieldData{Label: "Address", Name: "sg-addr", Value: "192.168.20.300", Mono: true, Error: "Enter an IP address or a hostname."}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = ui.Field(ui.FieldData{Label: "HTTP port", Name: "sg-port", Type: "number", Value: "99999", Mono: true, Error: "Use a port number between 1 and 65535, or leave it empty for 80."}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1133,15 +1138,11 @@ func styleguidePage(v sgView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Wrong username or password.", Text: "2 attempts left before this account is locked for 15 minutes.", Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 				templ_7745c5c3_Err = ui.Field(ui.FieldData{Label: "Username", Name: "sg-user", Value: "maren", Autocomplete: "off"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Field(ui.FieldData{Label: "Password", Name: "sg-pass", Type: "password", Error: "Check the password and try again.", Autocomplete: "off"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Field(ui.FieldData{Label: "Password", Name: "sg-pass", Type: "password", Error: "Wrong username or password. " + attemptsLeftText(auth.LoginData{ShowAttemptsLeft: true, AttemptsLeft: 2}), Autocomplete: "off"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
