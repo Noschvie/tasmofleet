@@ -112,7 +112,8 @@ func (t Tone) class() string {
 }
 
 // Btn is a button or a link that looks like one. Kind is "" (default), "primary", "danger"
-// (outlined), "danger-solid", "ghost" or "link" (text only). With Href it is a link (it only
+// (outlined), "danger-solid", "danger-link" (text in the danger colour: a row's Delete), "ghost" or "link" (text
+// only). Tall is the large size of a sign-in or start button. With Href it is a link (it only
 // navigates, or opens the dialog named by Dialog); without it a button of Type (default
 // "button"). Name and Value make it a submit button that sends a value (console chips).
 //
@@ -125,10 +126,15 @@ type Btn struct {
 	Dialog                  string // id of the dialog dialog.js opens instead of following Href
 	Rel, Target             string // rel and target of a link (a pager's "prev" and "next"; an external link's "noopener noreferrer" and "_blank")
 	Mask                    bool   // text the pixel comparison cannot reproduce (a version): data-visual-mask
-	Small, Disabled         bool
-	Current                 bool   // the one a row of them is on (a pager's page size): aria-current="page", the accent tint
-	Aria                    string // accessible name when the label is a glyph (icon button "⋯")
-	Icon                    bool   // square icon button
+	Small, Tall, Disabled   bool   // Small and Tall are the two sizes besides the default: a button is at most one of them
+	// ID is the element's id (a link a script or a test finds). Form is the id of the form a submit button belongs to
+	// when it stands outside it. FormAction is the address a submit button posts to instead of its form's, and
+	// NoValidate skips the form's own validation for that post (a single sign-on button beside a required password).
+	ID, Form, FormAction string
+	NoValidate           bool
+	Current              bool   // the one a row of them is on (a pager's page size): aria-current="page", the accent tint
+	Aria                 string // accessible name when the label is a glyph (icon button "⋯")
+	Icon                 bool   // square icon button
 	// DisabledReason is the visible reason the button cannot act now; it makes the blocked variant, which drops
 	// Href, Dialog, Name, Value and Type. ReasonID is the id of the element that holds it: the button's own line
 	// (ReasonShared false, drawn under it) or a line the page shows already (ReasonShared true, several buttons
@@ -145,6 +151,9 @@ func (b Btn) classes() string {
 	if b.Small {
 		c += " btn-sm"
 	}
+	if b.Tall {
+		c += " btn-tall"
+	}
 	if b.Icon {
 		c += " btn-icon"
 	}
@@ -159,6 +168,47 @@ func (b Btn) buttonType() string {
 		return "button"
 	}
 	return b.Type
+}
+
+// BadgeData is a badge that needs more than a tone and a word: a class of its own (the page's selector), a hint, a
+// link, the large size or an id. Every field is text or a flag, never markup, and the output is deterministic
+// (live.js memoises swapped fragments as strings). Badge(tone, label) is the short form.
+type BadgeData struct {
+	Tone  Tone
+	Label string
+	Class string // classes after the tone's ("dv-upd"); the badge keeps bdg and t-<tone>
+	Title string // the hint on hover, for a short label with a longer meaning
+	Href  string // makes the badge a link (a running download's progress page)
+	Large bool   // bdg-lg: the badge beside a page title
+	ID    string // the badge's id, for a live update or a test that finds it
+}
+
+func (b BadgeData) classes() string {
+	c := "bdg " + b.Tone.class()
+	if b.Large {
+		c += " bdg-lg"
+	}
+	if b.Class != "" {
+		c += " " + b.Class
+	}
+	return c
+}
+
+// CopyData is a button that copies text to the clipboard (static/copy.js). Text is the value, From the selector of
+// an element whose text is copied instead (a secret shown once must not be in the markup twice); one of them is set.
+// The button is hidden in the markup and copy.js shows it, so without JavaScript the page has no dead button.
+type CopyData struct {
+	Label string // "Copy" when empty
+	Text  string
+	From  string
+	Aria  string // the accessible name when "Copy" alone does not say what is copied
+}
+
+func (c CopyData) label() string {
+	if c.Label == "" {
+		return "Copy"
+	}
+	return c.Label
 }
 
 // BannerData is an inline banner: a dot, a bold lead, the text and an optional action.

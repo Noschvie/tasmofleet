@@ -548,12 +548,16 @@ func setupView(p setupPage) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "><span>Scan these networks for Tasmota devices when I finish<span class=\"ucheck-text\">Ranges up to /22 (1024 addresses) each.</span></span></label> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "><span>Scan these networks for Tasmota devices when I finish<span class=\"ucheck-text\">Ranges up to /22 (1024 addresses) each.</span></span></label>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<button type=\"submit\" class=\"btn btn-primary btn-tall\">Finish setup</button></form>")
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Finish setup", Kind: "primary", Tall: true, Type: "submit"}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -741,7 +745,11 @@ func setupAccountPage(f authFrame, d auth.SetupAccountData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<button type=\"submit\" class=\"btn btn-primary btn-tall\">Create account and continue</button></form>")
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Create account and continue", Kind: "primary", Tall: true, Type: "submit"}).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

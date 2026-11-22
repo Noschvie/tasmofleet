@@ -49,6 +49,12 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"Button":           Button(Btn{Label: h, Aria: h}),
 		"ButtonLink":       Button(Btn{Label: h, Href: "/x", Dialog: h}),
 		"Badge":            Badge(Tone(h), h),
+		"BadgeOf":          BadgeOf(BadgeData{Tone: Tone(h), Label: h, Class: h, Title: h, ID: h, Large: true}),
+		"BadgeOfLink":      BadgeOf(BadgeData{Tone: ToneAccent, Label: h, Class: h, Title: h, ID: h, Href: h}),
+		"CopyText":         CopyButton(CopyData{Label: h, Text: h, Aria: h}),
+		"CopyFrom":         CopyButton(CopyData{Label: h, From: h, Aria: h}),
+		"ButtonAttrs":      Button(Btn{Label: h, Type: "submit", ID: h, Form: h, FormAction: h, NoValidate: true, Tall: true}),
+		"ButtonLinkID":     Button(Btn{Label: h, Href: "/x", ID: h, Tall: true}),
 		"StatusDot":        StatusDot(ToneOK, h),
 		"Avatar":           Avatar(h, h),
 		"Card":             Card(h, h),
@@ -504,5 +510,76 @@ func TestBtnDisabledWithoutReasonStaysNative(t *testing.T) {
 	got := comp(t, Button(Btn{Label: "Save", Disabled: true}))
 	if !strings.Contains(got, "disabled") || strings.Contains(got, "aria-disabled") {
 		t.Errorf("plain disabled: %s", got)
+	}
+}
+
+// Why (#1092): a page that wants a badge with its own class, a hint, a link or the large size used to write the
+// markup by hand, because Badge(tone, label) takes neither. BadgeOf is the one place that markup lives, so it must
+// keep what the pages' selectors and the live swaps rely on: bdg and t-<tone> first, the page's class after, a fixed
+// order (live.js memoises a swapped fragment as a string), the id before the class.
+func TestBadgeOfKeepsTheClassesAPageSelectsOn(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		b    BadgeData
+		want string
+	}{
+		{"tone and label", BadgeData{Tone: ToneOK, Label: "Cached"}, `<span class="bdg t-ok">Cached</span>`},
+		{"class and title", BadgeData{Tone: ToneWarn, Label: "3 off policy", Class: "dv-devs", Title: "Differs from the policy"}, `<span class="bdg t-warn dv-devs" title="Differs from the policy">3 off policy</span>`},
+		{"large with an id", BadgeData{Tone: ToneNeutral, Label: "Completed", Large: true, ID: "txn-state"}, `<span id="txn-state" class="bdg t-neutral bdg-lg">Completed</span>`},
+		{"large and class", BadgeData{Tone: ToneOK, Label: "Done", Large: true, Class: "bk-state"}, `<span class="bdg t-ok bdg-lg bk-state">Done</span>`},
+		{"link", BadgeData{Tone: ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: "/firmware/prefetch/7"}, `<a class="bdg t-accent fw-fetching" href="/firmware/prefetch/7">Fetching…</a>`},
+		{"unknown tone", BadgeData{Tone: "t-bogus", Label: "x"}, `<span class="bdg t-neutral">x</span>`},
+	} {
+		if got := comp(t, BadgeOf(tc.b)); got != tc.want {
+			t.Errorf("%s: got %s, want %s", tc.name, got, tc.want)
+		}
+	}
+	if got := comp(t, BadgeOf(BadgeData{Tone: ToneOK, Label: "x", Href: "javascript:alert(1)"})); strings.Contains(got, "javascript:") {
+		t.Errorf("a badge link must not carry a script URL: %s", got)
+	}
+}
+
+// Why (#1092): the Copy button was written by hand five times, once as a primary. One component keeps it small, hidden
+// until copy.js shows it (so a page without JavaScript has no dead button), and with exactly one source: the value, or
+// the element whose text is copied (a one-time password must not be in the markup twice).
+func TestCopyButtonIsHiddenAndHasOneSource(t *testing.T) {
+	if got, want := comp(t, CopyButton(CopyData{Text: "45"})), `<button type="button" class="btn btn-sm" data-copy-text="45" hidden>Copy</button>`; got != want {
+		t.Errorf("text: got %s, want %s", got, want)
+	}
+	if got, want := comp(t, CopyButton(CopyData{Text: "abc", Aria: "Copy the SHA-256 of x.bin"})), `<button type="button" class="btn btn-sm" data-copy-text="abc" aria-label="Copy the SHA-256 of x.bin" hidden>Copy</button>`; got != want {
+		t.Errorf("aria: got %s, want %s", got, want)
+	}
+	got := comp(t, CopyButton(CopyData{From: "#otp-value", Text: "secret"}))
+	if want := `<button type="button" class="btn btn-sm" data-copy-from="#otp-value" hidden>Copy</button>`; got != want {
+		t.Errorf("from: got %s, want %s", got, want)
+	}
+	if strings.Contains(got, "secret") {
+		t.Errorf("a value copied from an element must not be in the markup: %s", got)
+	}
+}
+
+// Why (#1092): the tall size and the danger link are Btn options now, and the typed attributes the tall buttons need
+// (the sign-in link's id, a start button outside its form, the single sign-on post that skips validation) are fields,
+// so those buttons stop being hand-written.
+func TestBtnTallDangerLinkAndFormAttributes(t *testing.T) {
+	if got := comp(t, Button(Btn{Label: "Sign in", Kind: "primary", Tall: true, Type: "submit"})); !strings.HasPrefix(got, `<button type="submit" class="btn btn-primary btn-tall">`) {
+		t.Errorf("tall: %s", got)
+	}
+	if got := comp(t, Button(Btn{Label: "Delete", Kind: "danger-link", Href: "/x"})); !strings.HasPrefix(got, `<a class="btn btn-danger-link" href="/x">`) {
+		t.Errorf("danger link: %s", got)
+	}
+	got := comp(t, Button(Btn{Label: "Start", Kind: "primary", Tall: true, Type: "submit", ID: "start-go", Form: "start"}))
+	if want := `<button type="submit" class="btn btn-primary btn-tall" id="start-go" form="start">Start</button>`; got != want {
+		t.Errorf("form button: got %s, want %s", got, want)
+	}
+	got = comp(t, Button(Btn{Label: "SSO", Type: "submit", FormAction: "/auth/oidc", NoValidate: true}))
+	if want := `<button type="submit" class="btn" formaction="/auth/oidc" formnovalidate>SSO</button>`; got != want {
+		t.Errorf("formaction: got %s, want %s", got, want)
+	}
+	if got := comp(t, Button(Btn{Label: "SSO", Href: "/sso", ID: "sso", Tall: true})); got != `<a class="btn btn-tall" href="/sso" id="sso">SSO</a>` {
+		t.Errorf("link with id: %s", got)
+	}
+	if got := comp(t, Button(Btn{Label: "Plain"})); strings.Contains(got, "form") || strings.Contains(got, "id=") || strings.Contains(got, "tall") {
+		t.Errorf("a plain button carries none of the new attributes: %s", got)
 	}
 }

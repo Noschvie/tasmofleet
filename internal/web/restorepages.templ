@@ -167,7 +167,7 @@ templ restoreFileList(rows []fileRowView) {
 				<span class="bk-fl-path">{ r.Name }</span>
 				<span class="bk-fl-tags">
 					if r.PrivateKey {
-						<span class="bdg t-warn" title={ privateKeyTip }>Private key</span>
+						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: "Private key", Title: privateKeyTip})
 					}
 					if r.State != "" {
 						@ui.Badge(r.Tone, r.State)

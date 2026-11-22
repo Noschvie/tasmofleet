@@ -119,7 +119,7 @@ templ bulkScopePage(v bulkScopeView) {
 					}
 			}
 			<div class="bk-sum">{ v.Summary() }</div>
-			<button type="submit" class="btn btn-primary btn-tall" disabled?={ v.Error != "" }>{ v.Verb() }</button>
+			@ui.Button(ui.Btn{Label: v.Verb(), Kind: "primary", Tall: true, Type: "submit", Disabled: v.Error != ""})
 			<a class="btn" href={ templ.SafeURL(v.Base + "/devices") }>Cancel</a>
 		</aside>
 	</form>
@@ -171,7 +171,7 @@ templ bulkResultPage(v bulkResultView) {
 				<div class="bk-titlerow">
 					<h1>{ v.Title() }</h1>
 					{{ tone, state := v.State() }}
-					<span class={ "bdg", "bk-state", "t-" + string(tone) }>{ state }</span>
+					@ui.BadgeOf(ui.BadgeData{Tone: tone, Label: state, Class: "bk-state"})
 				</div>
 				<p class="pghead-sub">
 					if v.Running {

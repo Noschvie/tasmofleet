@@ -241,7 +241,7 @@ func TestNotStartedTransactionPage(t *testing.T) {
 			t.Errorf("the page lacks %q in: %s", want, text)
 		}
 	}
-	if n := strings.Count(body, `t-warn">Not started<`); n < 3 { // the transaction and two devices
+	if n := len(regexp.MustCompile(`t-warn(?: bdg-lg)?">Not started<`).FindAllString(body, -1)); n < 3 { // the transaction (large) and two devices
 		t.Errorf("%d \"Not started\" badges in the warn tone, want the transaction and both devices", n)
 	}
 	if strings.Contains(body, "Retry failed") || strings.Contains(body, "/transactions/8/retry") || strings.Contains(body, "Log ·") {

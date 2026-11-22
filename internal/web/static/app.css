@@ -4758,6 +4758,17 @@ html[data-live="offline"] .pghead-stale {
   background: none;
   color: var(--color-accent-hover);
 }
+/* a row's Delete when the row has no other button: the link's metrics in the danger colour */
+.btn.btn-danger-link,
+.btn.btn-danger-link:hover,
+.btn.btn-danger-link:active {
+  height: auto;
+  min-height: var(--ctl-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-danger-fg);
+}
 .btn.btn-sm {
   height: var(--ctl-sm);
 }

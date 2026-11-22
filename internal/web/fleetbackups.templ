@@ -318,7 +318,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 				case r.Files != "":
 					<span class="bk-files-ok" title="The files of the device are stored with the backup">{ r.Files }</span>
 				case r.FilesBadge != "":
-					<span class="bdg t-neutral" title={ fleetSentence(r.FilesWhy) }>{ r.FilesBadge }</span>
+					@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneNeutral, Label: r.FilesBadge, Title: fleetSentence(r.FilesWhy)})
 				default:
 					<span class="muted">-</span>
 			}
@@ -400,7 +400,7 @@ templ fleetStorage(p sysPage, c sysCard) {
 								<div class="sys-orphan-title">
 									<a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a>
 									if pr.LeftOut != "" {
-										<span class="bdg t-neutral" title={ "Prune now leaves it alone: " + pr.LeftOut }>Left out</span>
+										@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneNeutral, Label: "Left out", Title: "Prune now leaves it alone: " + pr.LeftOut})
 									}
 								</div>
 								<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>

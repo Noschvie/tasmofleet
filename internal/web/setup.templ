@@ -125,7 +125,7 @@ templ setupView(p setupPage) {
 			if p.CanScan {
 				<label class="ucheck"><input type="checkbox" name="scan" value="1" checked?={ p.Scan }/><span>Scan these networks for Tasmota devices when I finish<span class="ucheck-text">Ranges up to /22 (1024 addresses) each.</span></span></label>
 			}
-			<button type="submit" class="btn btn-primary btn-tall">Finish setup</button>
+			@ui.Button(ui.Btn{Label: "Finish setup", Kind: "primary", Tall: true, Type: "submit"})
 		</form>
 	}
 }
@@ -169,7 +169,7 @@ templ setupAccountPage(f authFrame, d auth.SetupAccountData) {
 				@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: d.Email, Autocomplete: "email", Error: fieldErr(d.ErrField, "email", d.Error), Autofocus: focus(d.ErrField, "email", false)})
 				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters.", Error: fieldErr(d.ErrField, "password", d.Error), Autofocus: focus(d.ErrField, "password", false)})
 				@ui.Field(ui.FieldData{Label: "Repeat password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "confirm", d.Error), Autofocus: focus(d.ErrField, "confirm", false)})
-				<button type="submit" class="btn btn-primary btn-tall">Create account and continue</button>
+				@ui.Button(ui.Btn{Label: "Create account and continue", Kind: "primary", Tall: true, Type: "submit"})
 			</form>
 		}
 	}

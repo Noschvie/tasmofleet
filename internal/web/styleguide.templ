@@ -115,6 +115,19 @@ templ styleguidePage(v sgView) {
 				@ui.Button(ui.Btn{Label: "⋯", Icon: true, Kind: "ghost", Small: true, Aria: "Actions"})
 				@ui.Button(ui.Btn{Label: "Link", Kind: "link"})
 			}
+			<p class="sg-label">Tall: the sign-in and the update start buttons</p>
+			@ui.ButtonRow() {
+				@ui.Button(ui.Btn{Label: "Back", Tall: true})
+				@ui.Button(ui.Btn{Label: "Sign in", Kind: "primary", Tall: true})
+			}
+			<p class="sg-label">Danger link: a row's Delete when the row has no other button</p>
+			@ui.ButtonRow() {
+				@ui.Button(ui.Btn{Label: "Delete", Kind: "danger-link"})
+			}
+			<p class="sg-label">Copy: small, shown once the page has its script</p>
+			@ui.ButtonRow() {
+				@ui.CopyButton(ui.CopyData{Text: "tasmofleet"})
+			}
 			<p class="sg-label">Blocked: cannot act now, says why as text (Tab reaches it)</p>
 			@ui.ButtonRow() {
 				@ui.Button(ui.Btn{Label: "Restart", DisabledReason: "The device is offline.", ReasonID: "sg-blocked-why"})
@@ -130,6 +143,11 @@ templ styleguidePage(v sgView) {
 				@ui.Badge(ui.ToneNeutral, "Disabled")
 				@ui.Badge(ui.ToneAccent, "You")
 				@ui.Badge(ui.ToneWarn, passwordChangeDue)
+			</div>
+			<div class="sg-row">
+				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: "2 off policy", Title: "Settings of this device that differ from the policy"})
+				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Fetching…", Href: v.Base + "/styleguide"})
+				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneOK, Label: "Completed", Large: true})
 			</div>
 			<div class="sg-row">
 				@ui.BadgeMark(ui.ToneOK, markCreate, "Create")

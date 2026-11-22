@@ -146,7 +146,7 @@ templ txnBody(p txnPage) {
 		<div class="pghead-t">
 			<div class="upd-h1">
 				<h1>{ p.Title }</h1>
-				<span id="txn-state" class={ "bdg", "bdg-lg", "t-" + string(p.StateTone) }>{ p.State }</span>
+				@ui.BadgeOf(ui.BadgeData{Tone: p.StateTone, Label: p.State, Large: true, ID: "txn-state"})
 			</div>
 			if p.Sched != nil {
 				<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · @schedSub(p.Sched)</p>
@@ -566,7 +566,7 @@ templ updateNewPage(f updateForm, csrf string) {
 						<li>Wait for each device to come back and confirm the version</li>
 					</ol>
 					<p class="upd-hint" role="status" data-push-hint hidden></p>
-					<button type="submit" class="btn btn-primary btn-tall">Review update</button>
+					@ui.Button(ui.Btn{Label: "Review update", Kind: "primary", Tall: true, Type: "submit"})
 				</section>
 			}
 		}
@@ -731,9 +731,9 @@ templ updatePreviewPage(p previewPage, csrf string) {
 			</dl>
 			<p class="upd-rule" data-starts-rule data-late={ strconv.Itoa(p.When.LateMinutes()) } hidden?={ !p.When.ShowRule() }><b>If TasmoFleet is down at <span data-clock>{ p.When.RuleClock() }</span>,</b> the update starts as soon as TasmoFleet is back, but only until <span data-deadline>{ p.When.RuleDeadline() }</span> ({ strconv.Itoa(p.When.LateMinutes()) } minutes after the start time). If TasmoFleet is back later than that, the update is not started at all and TasmoFleet sends a notification. Devices are checked again when the update starts.</p>
 			<div class="upd-go">
-				<button type="submit" class="btn btn-tall" form="change">Back</button>
+				@ui.Button(ui.Btn{Label: "Back", Tall: true, Type: "submit", Form: "change"})
 				if len(p.IDs) > 0 {
-					<button type="submit" class="btn btn-primary btn-tall" form="start" data-go>{ p.When.ButtonText() }</button>
+					@ui.Button(ui.Btn{Label: p.When.ButtonText(), Kind: "primary", Tall: true, Type: "submit", Form: "start", ID: "start-go"})
 				}
 			</div>
 			if len(p.IDs) == 0 && p.ChoosingBuilds()+p.ChoosingLanguages() == 0 && len(p.StepIDs()) > 0 {

@@ -46,7 +46,8 @@ templ noticePage(base, title string, m messageData) {
 type retryRow struct {
 	ID                 string
 	Name, Target       string
-	Tone, State, Hint  string
+	Tone               ui.Tone
+	State, Hint        string
 	Reason, ReasonTip string
 }
 
@@ -88,7 +89,7 @@ templ retryPageView(p retryView) {
 								<td data-label="Device" class="p1">{ r.Name }<input type="hidden" name="id" value={ r.ID }/></td>
 								<td data-label="Target" class="s">{ r.Target }</td>
 								<td data-label="Last result" class="p2">
-									<span class={ "bdg", r.Tone } title={ r.Hint }>{ r.State }</span>
+									@ui.BadgeOf(ui.BadgeData{Tone: r.Tone, Label: r.State, Title: r.Hint})
 									if r.Reason != "" {
 										{ " " }
 										<small class="muted keep"><span class="reason" title={ r.ReasonTip }>{ r.Reason }</span></small>

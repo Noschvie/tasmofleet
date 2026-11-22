@@ -177,7 +177,7 @@ templ fwPrefetchStatus(pv prefetchView) {
 							@ui.Badge(ui.ToneOK, "cached")
 						}
 					case firmware.PrefetchFailed:
-						<span class="bdg t-danger" title={ safeErr(it.Err) }>failed: { safeErr(it.Err) }</span>
+						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneDanger, Label: "failed: " + safeErr(it.Err), Title: safeErr(it.Err)})
 					case firmware.PrefetchFetching:
 						@ui.Badge(ui.ToneAccent, "fetching")
 					default:

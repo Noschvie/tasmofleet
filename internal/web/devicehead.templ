@@ -572,7 +572,7 @@ templ identityID(id model.DeviceID) {
 			<dt>TasmoFleet ID</dt>
 			<dd class="mono ukv-copy" data-visual-mask>
 				{ strconv.FormatInt(int64(id), 10) }
-				<button type="button" class="btn btn-sm" data-copy-text={ strconv.FormatInt(int64(id), 10) } aria-label="Copy the TasmoFleet ID" hidden>Copy</button>
+				@ui.CopyButton(ui.CopyData{Text: strconv.FormatInt(int64(id), 10), Aria: "Copy the TasmoFleet ID"})
 			</dd>
 		</div>
 	</dl>
@@ -609,7 +609,7 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 	<section id="stability" class={ "devcard", "stab-card", ui.StackRank(1) } aria-labelledby="dc-stab" { attrs... }>
 		<div class="stab-head">
 			<h2 id="dc-stab">Stability</h2>
-			<span class={ "bdg", c.badgeTone() }>{ c.badgeLabel() }</span>
+			@ui.Badge(c.badgeTone(), c.badgeLabel())
 			if c.Stale {
 				@staleLabel(false)
 			}

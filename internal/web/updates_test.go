@@ -1005,7 +1005,7 @@ func TestPreviewOffersTheSettingsMigrationStepAsItsOwnPreview(t *testing.T) {
 	// that no device can be updated (the step can update them).
 	o.items[5] = ota.PreviewItem{DeviceID: 5, Decision: "refuse", StepRelease: fwselect.StepRelease, Reason: fwselect.ErrSettingsMigration.Error()}
 	_, body = e.do(t, "POST", "/updates/preview", "operator", url.Values{"id": {"4", "5"}, "release": {"16.1.0"}, "policy": {"only-newer"}})
-	if !strings.Contains(body, "These devices take Tasmota 16.0.0 first: preview it above.") || strings.Contains(body, `form="start" data-go`) ||
+	if !strings.Contains(body, "These devices take Tasmota 16.0.0 first: preview it above.") || strings.Contains(body, `id="start-go"`) ||
 		strings.Contains(body, "No device can be updated") {
 		t.Fatalf("a page with only step devices: %s", body)
 	}

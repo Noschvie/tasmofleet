@@ -174,7 +174,7 @@ templ otpPage(o otpView) {
 	<section class="ucard otp-card" aria-label="One-time password">
 		<div class="otp-value">
 			<output id="otp-value" class="mono" data-visual-mask>{ o.D.Password }</output>
-			<button type="button" class="btn btn-primary" data-copy-from="#otp-value" hidden>Copy</button>
+			@ui.CopyButton(ui.CopyData{From: "#otp-value"})
 		</div>
 		@ui.KV([]ui.KVRow{{Key: "Username", Value: o.D.User, Mono: true}, {Key: "Expires", Value: o.Expires, Mask: true}})
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "Once you leave this page the password can’t be shown again. Reset it to get a new one."})

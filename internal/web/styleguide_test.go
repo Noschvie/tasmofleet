@@ -57,6 +57,27 @@ func TestStyleguideShowsStatesAndOpenOverlays(t *testing.T) {
 	}
 }
 
+// Why (#1092): the tall size, the danger link, the Copy button and the badge with a hint, a link and the large size
+// are what the pages used to write by hand. They are Btn and badge options only if the style guide shows them, so a
+// reviewer sees the look the pages must not copy.
+func TestStyleguideShowsTheTallButtonTheDangerLinkAndTheBadgeForms(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/styleguide", "operator", nil)
+	for name, want := range map[string]string{
+		"tall button":       `class="btn btn-tall"`,
+		"tall primary":      `class="btn btn-primary btn-tall"`,
+		"danger link":       `class="btn btn-danger-link"`,
+		"copy button":       `class="btn btn-sm" data-copy-text="tasmofleet" hidden>Copy</button>`,
+		"badge with a hint": `<span class="bdg t-warn" title="Settings of this device that differ from the policy">2 off policy</span>`,
+		"badge link":        `<a class="bdg t-accent" href=`,
+		"large badge":       `class="bdg t-ok bdg-lg"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("%s: missing %q", name, want)
+		}
+	}
+}
+
 // Why: the style guide's static examples must not be mistaken for a live open
 // menu by the scripts (they would close it, suppress tooltips or stop the
 // table refresh); data-static is their opt-out.

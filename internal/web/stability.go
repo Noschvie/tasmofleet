@@ -77,17 +77,20 @@ func stabProblem(r *stability.Result) *stability.Result {
 	return r
 }
 
-// stabTone is the tone class of a level's badge.
-func stabTone(l stability.Level) string {
+// stabLevelTone is the tone of a level's badge.
+func stabLevelTone(l stability.Level) ui.Tone {
 	switch l {
 	case stability.BootLoop:
-		return "t-danger"
+		return ui.ToneDanger
 	case stability.WeakWiFi:
-		return "t-warn"
+		return ui.ToneWarn
 	case stability.Stable:
 	}
-	return "t-ok"
+	return ui.ToneOK
 }
+
+// stabTone is the class form of stabLevelTone.
+func stabTone(l stability.Level) string { return toneClass(stabLevelTone(l)) }
 
 func times(n int) string {
 	if n == 1 {
@@ -198,11 +201,11 @@ func (c stabCard) badgeLabel() string {
 	return c.Level.Label()
 }
 
-func (c stabCard) badgeTone() string {
+func (c stabCard) badgeTone() ui.Tone {
 	if c.NoData {
-		return "t-neutral"
+		return ui.ToneNeutral
 	}
-	return stabTone(c.Level)
+	return stabLevelTone(c.Level)
 }
 
 // signalWord: how good a reading is. The edges are the ones of the Wi-Fi tile's bar.

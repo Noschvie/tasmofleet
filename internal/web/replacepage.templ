@@ -188,7 +188,7 @@ templ replaceFilesRow(f *replaceFiles) {
 				@ui.Soft(n.Name)
 				if n.PrivateKey {
 					{ " " }
-					<span class="bdg t-warn" title={ privateKeyTip }>Private key</span>
+					@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: "Private key", Title: privateKeyTip})
 				}
 			}
 		</span>

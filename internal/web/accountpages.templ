@@ -64,16 +64,16 @@ templ loginPage(f authFrame, d auth.LoginData) {
 				@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", NoAutocapitalize: true, NoSpellcheck: true, Autofocus: d.SSO == "" && d.Username == ""})
 				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "current-password", Error: loginFieldError(d), Autofocus: d.Username != ""})
 				@ui.Check("remember", "Keep me signed in on this device", "", d.Remember, false)
-				<button type="submit" class="btn btn-primary btn-tall">Sign in</button>
+				@ui.Button(ui.Btn{Label: "Sign in", Kind: "primary", Tall: true, Type: "submit"})
 			</form>
 			if d.SSO != "" {
 				<div class="or-rule">or</div>
-				<a class="btn btn-tall" id="sso" href={ templ.SafeURL(ssoHref(d)) }>{ ssoLabel(d.SSO) }</a>
+				@ui.Button(ui.Btn{Label: ssoLabel(d.SSO), Tall: true, ID: "sso", Href: ssoHref(d)})
 			}
 		} else {
 			@loginHead(d)
 			if d.SSO != "" {
-				<a class="btn btn-primary btn-tall" id="sso" href={ templ.SafeURL(ssoHref(d)) }>{ ssoLabel(d.SSO) }</a>
+				@ui.Button(ui.Btn{Label: ssoLabel(d.SSO), Kind: "primary", Tall: true, ID: "sso", Href: ssoHref(d)})
 			} else {
 				<p class="auth-text">Sign-in is disabled.</p>
 			}
@@ -154,7 +154,7 @@ templ forcedPasswordPage(f authFrame, d auth.PasswordPageData) {
 				<li>Different from the temporary password</li>
 				<li>Both entries match</li>
 			</ul>
-			<button type="submit" class="btn btn-primary btn-tall">Save and continue</button>
+			@ui.Button(ui.Btn{Label: "Save and continue", Kind: "primary", Tall: true, Type: "submit"})
 		</form>
 		@signOutForm(d.BasePath, d.CSRFToken)
 	}
@@ -375,7 +375,7 @@ templ usersPage(v usersView) {
 					if u.Role != "" {
 						@ui.Badge(roleTone(u.Admin), u.Role)
 					} else {
-						<span class="bdg t-neutral" title="Not seen since roles were recorded">Role unknown</span>
+						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneNeutral, Label: "Role unknown", Title: "Not seen since roles were recorded"})
 					}
 					if u.Deactivated {
 						@ui.Badge(ui.ToneNeutral, "Deactivated")

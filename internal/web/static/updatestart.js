@@ -27,7 +27,7 @@
   var NIGHT = 3; // Tonight 03:00: the same hour as the server's
   var starts = document.querySelector("[data-starts]");
   var rule = document.querySelector("[data-starts-rule]");
-  var go = document.querySelector("[data-go]");
+  var go = document.getElementById("start-go");
   var err = document.getElementById("when-err");
   var hidden = document.querySelector("[data-start-at]");
   var tz = when.querySelector("[data-tz]");

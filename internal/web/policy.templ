@@ -345,7 +345,7 @@ templ policyIOPage(p policyIOView) {
 templ policyExportCard(p policyIOView) {
 	@ui.Card("Export", "All rules as one JSON file, ready to import here or on another TasmoFleet.") {
 		<div class="pio-acts">
-			<button type="button" class="btn" data-copy-text={ p.JSON } hidden>Copy</button>
+			@ui.CopyButton(ui.CopyData{Text: p.JSON})
 			<a class="btn btn-primary" href={ templ.SafeURL(p.Base + policyIOPath + "/export") } download="policy-rules.json">Download .json</a>
 		</div>
 		<pre class="pio-json">{ p.JSON }</pre>

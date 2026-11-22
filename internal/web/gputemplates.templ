@@ -59,7 +59,7 @@ templ gtGroupCard(p gtView, g gtGroup, rank string) {
 	<section class={ "scard", rank, "gt-card" } aria-label={ g.Title }>
 		<div class="sch">
 			<div>
-				<h2>{ g.Title } <span class="bdg t-neutral">{ g.Chip }</span> <span class="gt-n">{ g.Count }</span></h2>
+				<h2>{ g.Title } @ui.Badge(ui.ToneNeutral, g.Chip) <span class="gt-n">{ g.Count }</span></h2>
 				<p class="cnote">
 					if g.Note.Choose != "" {
 						<b class="gt-choose">{ g.Note.Choose }</b>
@@ -209,7 +209,7 @@ templ gtOneDevice(p gtView, rank string) {
 			<div class="gt-fold-in">
 				<ul class="gt-list">
 					for _, d := range p.OneDevice {
-						<li><span>{ d.Title }</span> <span class="bdg t-neutral">{ d.Chip }</span><a class="mono" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a></li>
+						<li><span>{ d.Title }</span> @ui.Badge(ui.ToneNeutral, d.Chip)<a class="mono" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a></li>
 					}
 				</ul>
 			</div>

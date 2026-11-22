@@ -1821,7 +1821,7 @@ func (h *handler) retryViewOf(v view, page retryPage) retryView {
 	for _, d := range page.Devices {
 		rv.Rows = append(rv.Rows, retryRow{
 			ID: devID(d.Job.DeviceID), Name: d.Device, Target: d.Job.Target(),
-			Tone: uiToneClass(d.Job.State), State: label(d.Job.State), Hint: h.hint(d.Job.State),
+			Tone: stateTone(d.Job.State), State: label(d.Job.State), Hint: h.hint(d.Job.State),
 			Reason: humanReason(d.Job.LastError), ReasonTip: tip(d.Job.LastError),
 		})
 	}

@@ -178,10 +178,10 @@ templ relFiles(v view, p releasePage) {
 					case f.Cached:
 						@ui.Badge(ui.ToneOK, "Cached")
 					case p.Fetching[p.Version+"/"+f.Name]:
-						<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
+						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: v.Base + "/firmware/prefetch/" + p.Run})
 					case why != "":
 						<span class="fw-file-fail">
-							<span class="bdg t-danger">Download failed</span>
+							@ui.Badge(ui.ToneDanger, "Download failed")
 							if v.IsAdmin {
 								@relFetchButton(v, p.Version, f.Name, "Retry")
 							}

@@ -368,10 +368,10 @@ templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
 			case f.Cached:
 				@ui.Badge(ui.ToneOK, "Cached")
 			case p.Fetching[r.Version+"/"+f.Name]:
-				<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
+				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: v.Base + "/firmware/prefetch/" + p.Run})
 			case why != "":
 				<span class="fw-file-fail">
-					<span class="bdg t-danger">Download failed</span>
+					@ui.Badge(ui.ToneDanger, "Download failed")
 					if v.IsAdmin {
 						@fwFetchButton(v, r.Version, f.Name, "Retry")
 					}
@@ -666,7 +666,7 @@ templ fwDeleteDialog(v view, p firmwarePage, a artifactView) {
 			}
 			<div class="udlg-changes">
 				<div><span>Frees</span><span class="mono">{ sizeNoWrap(a.Size) }</span></div>
-				<div><span>Checksum</span><span class="mono fw-sum"><code title={ a.SHA256 }>{ shortHash(a.SHA256) }</code><button type="button" class="btn btn-sm" data-copy-text={ a.SHA256 } aria-label={ "Copy the SHA-256 of " + a.Filename } hidden>Copy</button></span></div>
+				<div><span>Checksum</span><span class="mono fw-sum"><code title={ a.SHA256 }>{ shortHash(a.SHA256) }</code>@ui.CopyButton(ui.CopyData{Text: a.SHA256, Aria: "Copy the SHA-256 of " + a.Filename})</span></div>
 			</div>
 			<div class="udlg-foot">
 				<button type="button" class="btn" data-close>Cancel</button>

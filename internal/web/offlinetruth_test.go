@@ -9,6 +9,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/stability"
 	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The tests of #1082: a device page says one true thing about a device that is offline or never answered. Device 1
@@ -327,7 +328,7 @@ func TestStabilityCardOfAnOfflineDeviceSaysLastReported(t *testing.T) {
 // count is a dash: "0 in 24 h" says the device was quiet, and nobody was watching.
 func TestStabilityCardOfADeviceThatNeverAnsweredHasNoVerdict(t *testing.T) {
 	c := stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, model.Health{}, "", stabState{NoData: true})
-	if c.badgeLabel() != "No data" || c.badgeTone() != "t-neutral" {
+	if c.badgeLabel() != "No data" || c.badgeTone() != ui.ToneNeutral {
 		t.Errorf("badge %q %q", c.badgeLabel(), c.badgeTone())
 	}
 	for _, r := range c.Rows {
@@ -336,7 +337,7 @@ func TestStabilityCardOfADeviceThatNeverAnsweredHasNoVerdict(t *testing.T) {
 		}
 	}
 	c = stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, model.Health{}, "", stabState{})
-	if c.badgeLabel() != "Stable" || c.badgeTone() != "t-ok" {
+	if c.badgeLabel() != "Stable" || c.badgeTone() != ui.ToneOK {
 		t.Errorf("a device with data keeps its verdict: %q %q", c.badgeLabel(), c.badgeTone())
 	}
 }

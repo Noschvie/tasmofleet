@@ -60,6 +60,9 @@ templ Button(b Btn) {
 		<a
 			class={ b.classes() }
 			href={ templ.SafeURL(b.Href) }
+			if b.ID != "" {
+				id={ b.ID }
+			}
 			if b.Dialog != "" {
 				data-dialog={ b.Dialog }
 			}
@@ -86,6 +89,18 @@ templ Button(b Btn) {
 		<button
 			type={ b.buttonType() }
 			class={ b.classes() }
+			if b.ID != "" {
+				id={ b.ID }
+			}
+			if b.Form != "" {
+				form={ b.Form }
+			}
+			if b.FormAction != "" {
+				formaction={ templ.SafeURL(b.FormAction) }
+			}
+			if b.NoValidate {
+				formnovalidate
+			}
 			if b.Name != "" {
 				name={ b.Name }
 				value={ b.Value }
@@ -144,6 +159,50 @@ templ ButtonRow() {
 // Badge is a small tinted label: state, result, counter.
 templ Badge(tone Tone, label string) {
 	<span class={ "bdg", tone.class() }>{ label }</span>
+}
+
+// BadgeOf is a Badge that needs more than a tone and a word (BadgeData): extra classes, a hint, a link, the large
+// size or an id. The classes come in a fixed order (bdg, t-<tone>, bdg-lg, then Class), so the output is the same every time.
+templ BadgeOf(b BadgeData) {
+	if b.Href != "" {
+		<a
+			if b.ID != "" {
+				id={ b.ID }
+			}
+			class={ b.classes() }
+			href={ templ.URL(b.Href) }
+			if b.Title != "" {
+				title={ b.Title }
+			}
+		>{ b.Label }</a>
+	} else {
+		<span
+			if b.ID != "" {
+				id={ b.ID }
+			}
+			class={ b.classes() }
+			if b.Title != "" {
+				title={ b.Title }
+			}
+		>{ b.Label }</span>
+	}
+}
+
+// CopyButton is the small button that copies a value (CopyData). It is hidden until static/copy.js shows it.
+templ CopyButton(c CopyData) {
+	<button
+		type="button"
+		class="btn btn-sm"
+		if c.From != "" {
+			data-copy-from={ c.From }
+		} else {
+			data-copy-text={ c.Text }
+		}
+		if c.Aria != "" {
+			aria-label={ c.Aria }
+		}
+		hidden
+	>{ c.label() }</button>
 }
 
 // BadgeMark is a Badge with a glyph before its word (Create +, Merge ⇄, Reject –): a second cue besides the colour. The
@@ -654,9 +713,9 @@ templ StepUp(s StepUpData) {
 			</div>
 			<p class="udlg-body"><b>{ s.What }</b> is an admin action. Sign in again to continue; you won’t be asked again for 5 minutes.</p>
 			if s.IdP != "" && s.IdPHref != "" {
-				<button type="submit" class="btn btn-primary btn-tall" formaction={ templ.SafeURL(s.IdPHref) } formnovalidate>Re-authenticate with { s.IdP }</button>
+				@Button(Btn{Label: "Re-authenticate with " + s.IdP, Kind: "primary", Tall: true, Type: "submit", FormAction: s.IdPHref, NoValidate: true})
 			} else if s.IdP != "" {
-				<button type="submit" class="btn btn-primary btn-tall" formnovalidate>Re-authenticate with { s.IdP }</button>
+				@Button(Btn{Label: "Re-authenticate with " + s.IdP, Kind: "primary", Tall: true, Type: "submit", NoValidate: true})
 			}
 			if s.IdP != "" && s.Local {
 				<div class="or-rule">or use your local password</div>

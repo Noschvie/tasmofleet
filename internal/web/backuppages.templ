@@ -238,7 +238,7 @@ templ filesFold(f *filesView) {
 						if len(r.Tags) > 0 {
 							<span class="bk-fl-tags">
 								for _, t := range r.Tags {
-									<span class={ "bdg", "t-" + string(t.Tone) } if t.Title != "" { title={ t.Title } }>{ t.Text }</span>
+									@ui.BadgeOf(ui.BadgeData{Tone: t.Tone, Label: t.Text, Title: t.Title})
 								}
 							</span>
 						}

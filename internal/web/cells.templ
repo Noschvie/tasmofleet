@@ -171,7 +171,7 @@ templ (h *handler) deviceRows(d rowsData) {
 				@stabBadge(row.Stab)
 				if row.Deviations > 0 {
 					{ " " }
-					<span class="bdg t-warn dv-devs" title="Settings of this device that differ from the policy">{ ui.OffPolicy(row.Deviations) }</span>
+					@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: ui.OffPolicy(row.Deviations), Class: "dv-devs", Title: "Settings of this device that differ from the policy"})
 				}
 			</td>
 			<td data-label="MQTT · HTTP" class="nowrap s m-hide" sse-swap={ "reach-" + devID(row.Device.ID) }>
@@ -182,7 +182,7 @@ templ (h *handler) deviceRows(d rowsData) {
 					<span class="dv-mono" title={ firmwareTitle(row.Device.Identity) }>{ v }</span>
 					if row.Outdated {
 						{ " " }
-						<span class="bdg t-accent dv-upd" title="A newer stable release is available">{ "Update " + row.UpdateTo }</span>
+						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Update " + row.UpdateTo, Class: "dv-upd", Title: "A newer stable release is available"})
 					}
 				} else {
 					<span class="muted">Unknown</span>
@@ -272,6 +272,6 @@ templ listNotice(n notice) {
 templ stabBadge(r *stability.Result) {
 	if sp := stabProblem(r); sp != nil {
 		{ " " }
-		<span class={ "bdg", stabTone(sp.Level), "dv-unst" } title={ stabBadgeTitle(*sp) }>{ sp.Level.Label() }</span>
+		@ui.BadgeOf(ui.BadgeData{Tone: stabLevelTone(sp.Level), Label: sp.Level.Label(), Class: "dv-unst", Title: stabBadgeTitle(*sp)})
 	}
 }

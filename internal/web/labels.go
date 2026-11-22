@@ -10,6 +10,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
 	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // labels is the one place where machine values (health states, job states,
@@ -499,18 +500,21 @@ func testNote(label, msg string) testNoteView {
 	return testNoteView{Label: label, Msg: msg, Failed: strings.HasPrefix(msg, "failed")}
 }
 
-// uiToneClass is the design v2 tone class (ui.Tone) of a state: t-ok, t-warn, t-danger or t-neutral.
-func uiToneClass(v any) string {
+// stateTone is the design system tone (ui.Tone) of a state: ok, warn, danger or neutral.
+func stateTone(v any) ui.Tone {
 	switch tone(v) {
 	case "ok":
-		return "t-ok"
+		return ui.ToneOK
 	case "warn":
-		return "t-warn"
+		return ui.ToneWarn
 	case "bad":
-		return "t-danger"
+		return ui.ToneDanger
 	}
-	return "t-neutral"
+	return ui.ToneNeutral
 }
+
+// uiToneClass is the class form of stateTone: t-ok, t-warn, t-danger or t-neutral.
+func uiToneClass(v any) string { return toneClass(stateTone(v)) }
 
 // chipLabel is a chip family as people write it: "esp32c3" is "ESP32-C3", "esp8266" "ESP8266".
 func chipLabel(f model.ChipFamily) string {
