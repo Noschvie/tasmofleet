@@ -327,6 +327,10 @@ type TxnData struct {
 	OK, Failed, Active, Total       int
 	// Stopped devices were never started (a template transaction stops after the first failure); drawn grey.
 	Stopped int
+	// StartedText is "when it started" under the summary; empty draws none. When Started is set, StartedText is the
+	// fallback text of that instant (StampDay) and time.js shows it in the browser's zone.
+	StartedText string
+	Started     time.Time
 }
 
 // TxnRowData is one row of the transaction history.

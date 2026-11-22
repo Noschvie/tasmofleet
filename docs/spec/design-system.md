@@ -320,7 +320,7 @@ Also: [desktop, dark](../design/styleguide/tiles-desktop-dark.png) · [phone, li
 
 ### Attention list and transactions
 
-"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with a dot, the reason and ›. The transaction card shows id, title, state badge, the progress (done, failed, running; each state has its own shape, see Steps and progress) and a summary; history rows show id, title, result badge and age. A row's progress is a mini bar with the percentage.
+"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with a dot, the reason and ›. The transaction card is for a transaction that is still at work (#1199): it shows id, title, state badge on the right, the progress (done, failed, running; each state has its own shape, see Steps and progress), a summary and when it started ("started Today 17:20", a `<time>` day stamp; the word is outside the element). A finished transaction (completed, failed, cancelled, mixed, not started) is a compact row: id, title, result badge on the right and the time it ran. The dashboard lists four entries: every active transaction as a card first, then the finished ones as rows; the state decides, never the position, and the dashboard switches on its own re-fetch when a transaction ends. A row's progress is a mini bar with the percentage.
 
 Component: `ui.AttentionList`, `ui.TxnCard`, `ui.TxnRow`, `ui.SegBar`, `ui.MiniBar`.
 

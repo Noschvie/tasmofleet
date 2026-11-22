@@ -5401,11 +5401,20 @@ a.att-row:hover {
   color: var(--color-text-2);
 }
 .txn-title {
+  flex: 1;
+  min-width: 140px;
   font-weight: 600;
 }
 .txn-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-10);
   font-size: 12.5px;
   color: var(--color-text-2);
+}
+.txn-sum .txn-when {
+  margin-left: auto;
 }
 .seg-bar {
   display: block;

@@ -69,7 +69,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"Power":            PowerSwitch(h, true, false),
 		"StatTile":         StatTile(StatTileData{Label: h, Value: h, Hint: h, Href: "/x"}),
 		"Attention":        AttentionList([]AttProposal{{Name: h, Text: h, Primary: h, Secondary: h, PrimaryAction: "/a", SecondaryAction: "/b"}}, []AttItem{{Name: h, Text: h, Href: "/x"}}, h),
-		"TxnCard":          TxnCard(TxnData{ID: h, Title: h, State: h, Summary: h, Href: "/x", OK: 1, Total: 1}),
+		"TxnCard":          TxnCard(TxnData{ID: h, Title: h, State: h, Summary: h, StartedText: h, Href: "/x", OK: 1, Total: 1}),
 		"TxnRow":           TxnRow(TxnRowData{ID: h, Title: h, Result: h, When: h, Href: "/x"}),
 		"Dialog":           Dialog(DialogData{ID: "d", Title: h, Body: h, Command: h, Changes: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Verb: h}),
 		"StepUp":           StepUp(StepUpData{ID: "s", Name: h, Sub: h, What: h, IdP: h, IdPHref: "/x", Local: true, Action: "/x", CSRF: h, Error: h}),
@@ -99,6 +99,28 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		if !strings.Contains(out, "&lt;") { // the avatar shows only the initials, still escaped
 			t.Errorf("%s: the hostile text is not shown as text: %.200s", name, out)
 		}
+	}
+}
+
+// Why (#1199): the card says when a transaction started. With an instant the time is a <time> element that
+// time.js repaints in the browser's zone ("started" stays outside it, so a bare day stamp remains);
+// without one (the style guide sample) the text stands alone. Without any text the card draws no time.
+func TestTxnCardStartedTime(t *testing.T) {
+	base := TxnData{ID: "TX-0001", Title: "t", State: "Running", Summary: "s", Href: "/x", Total: 1}
+	at := time.Date(2026, 11, 22, 17, 20, 0, 0, time.UTC)
+	timed := base
+	timed.Started, timed.StartedText = at, "Today 17:20"
+	out := comp(t, TxnCard(timed))
+	if want := `<span class="txn-when">started <time data-ts="day" datetime="2026-11-22T17:20:00Z">Today 17:20</time></span>`; !strings.Contains(out, want) {
+		t.Errorf("want %s in %s", want, out)
+	}
+	plain := base
+	plain.StartedText = "2 days ago"
+	if out := comp(t, TxnCard(plain)); !strings.Contains(out, `<span class="txn-when">started 2 days ago</span>`) || strings.Contains(out, "<time") {
+		t.Errorf("the fallback text alone: %s", out)
+	}
+	if out := comp(t, TxnCard(base)); strings.Contains(out, "txn-when") {
+		t.Errorf("a card without a start time draws one: %s", out)
 	}
 }
 

@@ -563,14 +563,26 @@ templ MiniBar(pct int) {
 	</span>
 }
 
-// TxnCard is the current transaction: id, title, state, progress and summary; a link to it.
+// TxnCard is a transaction that is still at work: id, title, state, progress, summary and when it started; a link to it.
 templ TxnCard(t TxnData) {
 	<a class="txn-card" href={ templ.SafeURL(t.Href) }>
 		<span class="txn-head"><span class="txn-id">{ t.ID }</span><span class="txn-title">{ t.Title }</span>
 			@Badge(t.StateTone, t.State)
 		</span>
 		@SegBar(t)
-		<span class="txn-sum">{ t.Summary }</span>
+		<span class="txn-sum">
+			<span>{ t.Summary }</span>
+			if t.StartedText != "" {
+				<span class="txn-when">
+					started
+					if t.Started.IsZero() {
+						{ t.StartedText }
+					} else {
+						<time { StampAttrs(t.Started, StampDay)... }>{ t.StartedText }</time>
+					}
+				</span>
+			}
+		</span>
 	</a>
 }
 

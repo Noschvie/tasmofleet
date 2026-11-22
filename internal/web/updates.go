@@ -1602,21 +1602,16 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		href := p.Base + "/transactions/" + bid(t.ID)
 		res, tone := txResult(t.Done, t.Running, t.Queued, t.Failed, t.Canceled)
 		res, tone = schedResult(res, tone, schedCounts{Total: t.Total, Planned: t.Planned, Running: t.Running, Queued: t.Queued, NotStarted: t.NotStarted, Early: t.Early})
+		at := txBeganAt(t, began[t.ID])
 		if t.Running+t.Queued > 0 {
+			// The card says when it started with the instant its history row below shows.
 			p.Running = append(p.Running, ui.TxnData{ID: txID(t.ID), Title: t.Title, State: res, StateTone: tone, Summary: t.RunSummary(),
-				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total})
+				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Started: at, StartedText: ui.StampDayText(now, at)})
 		}
 		row := txHistRow{ID: txID(t.ID), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
-			By: h.pr.Text(t.By), When: ui.StampDayText(now, t.Started), At: t.Started.Format(time.RFC3339), Href: href}
+			By: h.pr.Text(t.By), When: ui.StampDayText(now, at), At: at.Format(time.RFC3339), Href: href}
 		if !t.StartAt.IsZero() {
-			// A planned update is dated by its planned start, not by the day somebody planned it; once it began, by
-			// the moment it began. A batch with a plan that never began ("was due") keeps the planned time, which
-			// is what that label says; the real start would read "was due" at the wrong hour.
-			at := t.StartAt
-			if b := began[t.ID]; !b.IsZero() && t.NotStarted+t.Early == 0 {
-				at = b
-			}
-			row.Due, row.When, row.At = at, ui.StampDayText(now, at), at.Format(time.RFC3339)
+			row.Due = at
 			if t.NotStarted+t.Early > 0 {
 				row.WhenLabel = "was due "
 			} else {
@@ -1629,6 +1624,21 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 	v.Live = true
 	p.CSRF = v.CSRF
 	h.show(w, r, http.StatusOK, "transactions", v, transactionsPage(p))
+}
+
+// txBeganAt is the instant a transaction is dated by: the moment it was created, or, for a planned update, its
+// planned start, not the day somebody planned it; once it began, the moment it began (began, zero when unknown: the
+// dashboard has no job events). A batch with a plan that never began ("was due") keeps the planned time, which is
+// what that label says; the real start would read "was due" at the wrong hour (#825). The one rule of the
+// Transactions history and of the dashboard.
+func txBeganAt(t txView, began time.Time) time.Time {
+	if t.StartAt.IsZero() {
+		return t.Started
+	}
+	if !began.IsZero() && t.NotStarted+t.Early == 0 {
+		return began
+	}
+	return t.StartAt
 }
 
 // RunSummary is the line under a running transaction's bar: "5 of 12 done · 1 failed · 3 in progress".

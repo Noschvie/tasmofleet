@@ -27,8 +27,8 @@ const (
 	// dashProposalsMax is how many discovery proposals it lists; the "New devices found" tile
 	// leads to all of them.
 	dashProposalsMax = 5
-	// dashTxnRows is how many transactions follow the card as rows.
-	dashTxnRows = 3
+	// dashTxnMax is how many transactions the dashboard lists: the active ones as cards, then the finished ones as rows.
+	dashTxnMax = 4
 )
 
 // dashView is what the dashboard page draws.
@@ -42,9 +42,10 @@ type dashView struct {
 	OK, Off, Unk       int // the health bar
 	Props              []ui.AttProposal
 	Items              []ui.AttItem
-	// TxnCard is shown when updates are on or transactions exist; Card is the newest one.
+	// TxnCard is shown when updates are on or transactions exist; Cards are the transactions still at work,
+	// Rows the finished ones (#1199).
 	TxnCard bool
-	Card    *ui.TxnData
+	Cards   []ui.TxnData
 	Rows    []ui.TxnRowData
 	Plans   ui.PlanSummary // the plans waiting for their start (#707); N 0 shows nothing
 	// Empty: no devices. The page then shows only the empty state, with these ways to add
@@ -148,13 +149,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow(), h.brokerACLOpen())
 	d.TxnCard = v.Features.Transactions || len(txs) > 0 || plans.N > 0
 	d.Plans = plans
-	if len(txs) > 0 {
-		c := dashTxnCard(v.Base, txs[0])
-		d.Card = &c
-		for _, t := range txs[1:min(len(txs), 1+dashTxnRows)] {
-			d.Rows = append(d.Rows, dashTxnRow(v.Base, now, t))
-		}
-	}
+	d.Cards, d.Rows = dashTxnEntries(v.Base, now, txs)
 	h.show(w, r, http.StatusOK, "dashboard", v, dashboardPage(d))
 }
 
@@ -386,7 +381,29 @@ func toneOf(t string) ui.Tone {
 	return ui.ToneNeutral
 }
 
-func dashTxnCard(base string, t txView) ui.TxnData {
+// dashTxnActive is the one rule for a card: the transaction still has jobs at work or waiting (the rule dashResult
+// words as "Running").
+func dashTxnActive(t txView) bool { return t.Running+t.Queued > 0 }
+
+// dashTxnEntries picks what the transactions card lists, newest first, dashTxnMax entries in all: every transaction
+// that is still at work is a card with its progress, then the finished ones fill the rest as compact rows (#1199).
+// The state decides, never the position: the newest transaction may already be over, and an older one still run.
+func dashTxnEntries(base string, now time.Time, txs []txView) (cards []ui.TxnData, rows []ui.TxnRowData) {
+	for _, t := range txs {
+		if dashTxnActive(t) && len(cards) < dashTxnMax {
+			cards = append(cards, dashTxnCard(base, now, t))
+		}
+	}
+	for _, t := range txs {
+		if !dashTxnActive(t) && len(cards)+len(rows) < dashTxnMax {
+			rows = append(rows, dashTxnRow(base, now, t))
+		}
+	}
+	return cards, rows
+}
+
+// dashTxnCard is a transaction that is still at work: its progress and when it began.
+func dashTxnCard(base string, now time.Time, t txView) ui.TxnData {
 	parts := []string{fmt.Sprintf("%d of %d done", t.Done, t.Total)}
 	for _, x := range []struct {
 		n    int
@@ -396,12 +413,10 @@ func dashTxnCard(base string, t txView) ui.TxnData {
 			parts = append(parts, fmt.Sprintf("%d %s", x.n, x.word))
 		}
 	}
-	state, tone := t.Outcome, toneOf(t.Tone)
-	if t.Running+t.Queued == 0 {
-		state, tone = dashResult(t)
-	}
-	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: state, StateTone: tone, Summary: strings.Join(parts, " · "),
-		OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Href: fmt.Sprintf("%s/transactions/%d", base, t.ID)}
+	at := txBeganAt(t, time.Time{})
+	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: t.Outcome, StateTone: toneOf(t.Tone), Summary: strings.Join(parts, " · "),
+		OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Href: fmt.Sprintf("%s/transactions/%d", base, t.ID),
+		Started: at, StartedText: ui.StampDayText(now, at)}
 }
 
 // dashResult is a transaction's result in the prototype's words: Completed, Cancelled, Failed,
@@ -435,7 +450,8 @@ func dashResult(t txView) (string, ui.Tone) {
 
 func dashTxnRow(base string, now time.Time, t txView) ui.TxnRowData {
 	res, tone := dashResult(t)
-	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampDayText(now, t.Started), WhenAt: t.Started,
+	at := txBeganAt(t, time.Time{})
+	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampDayText(now, at), WhenAt: at,
 		Href: fmt.Sprintf("%s/transactions/%d", base, t.ID)}
 }
 

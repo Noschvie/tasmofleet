@@ -392,7 +392,8 @@ func TestUpdateSubmitIsAudited(t *testing.T) {
 // Why : the dashboard's transactions listed one row per device, so #4 showed five times
 // while it ran. A transaction is one row: number, target, how its devices stand, who started it. The
 // target is the release alone: the build variant differs per device and made the same release read
-// "16.1.0" in one row and "16.1.0 tasmota" in the next.
+// "16.1.0" in one row and "16.1.0 tasmota" in the next. Both are finished, so both are rows (#1199): the
+// result words, not the card's counts.
 func TestDashboardListsOneRowPerTransaction(t *testing.T) {
 	job := func(id model.JobID, batch model.BatchID, st model.JobState, variant string) model.Job {
 		return model.Job{ID: id, BatchID: batch, DeviceID: 1, State: st, TargetRelease: "16.1.0", TargetVariant: variant, CreatedBy: "adam"}
@@ -410,7 +411,7 @@ func TestDashboardListsOneRowPerTransaction(t *testing.T) {
 	if n := strings.Count(body, `href="/tf/transactions/4"`); n != 1 {
 		t.Errorf("transaction 4 appears %d times, want one row", n)
 	}
-	for _, want := range []string{"2 of 3 done · 1 failed", "Update to Tasmota 16.1.0", ">Completed<"} {
+	for _, want := range []string{">2 done · 1 failed<", "Update to Tasmota 16.1.0", ">Completed<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

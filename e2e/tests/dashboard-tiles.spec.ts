@@ -125,3 +125,34 @@ test("the No backup tile opens the chip and drops when a backup is taken, withou
   await expect(page).toHaveURL(/\/devices\/backups\?filter=none/);
   await expect(page.locator(".bk-table tbody tr")).toHaveCount(total - 1);
 });
+
+// Why (#1199): the expanded card with its progress is for a transaction that is still at work. A finished one, here a
+// read-only Status 2 sent to one simulated device, is one compact row with the time it ran. The transaction is found by
+// its id, because other specs may start transactions on the same fleet; no live swap is waited for: the page is loaded
+// after the transaction ended.
+test("a finished transaction is a compact row with a time on the dashboard, not the progress card", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices");
+  const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
+  await expect(row.getByText("Online", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await row.getByRole("checkbox").check();
+  await page.locator("[data-bulkbar]").getByRole("button", { name: /Send command/ }).click();
+  await page.getByRole("textbox", { name: "Command" }).fill("Status 2");
+  await page.getByRole("button", { name: "Send to 1 device" }).click();
+  await page.getByRole("button", { name: "Send to 1 device" }).click();
+  await expect(page).toHaveURL(/\/devices\/bulk\/result\/\d+/);
+  const batch = page.url().match(/bulk\/result\/(\d+)/)![1];
+  await page.goto(`${app.url}/transactions/${batch}`);
+  await expect(page.locator("#txn-state")).toHaveText("Completed", { timeout: 60_000 });
+
+  await page.goto(app.url + "/");
+  const mine = page.locator(`a[href$="/transactions/${batch}"]`);
+  await expect(mine).toHaveCount(1);
+  await expect(mine).toHaveClass(/txn-row/);
+  await expect(mine.locator(".txn-when time")).toHaveAttribute("datetime", /^\d{4}-\d\d-\d\dT/);
+  await expect(page.locator(`a.txn-card[href$="/transactions/${batch}"]`)).toHaveCount(0);
+});

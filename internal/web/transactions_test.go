@@ -195,6 +195,23 @@ func TestTransactionsListRunningCardAndHistory(t *testing.T) {
 	}
 }
 
+// Why (#1199): the running card says when the transaction started, and says it with the same instant as its
+// history row, so the planned-start rule (#825) lives in one place and the two never differ.
+func TestTransactionsRunningCardShowsStart(t *testing.T) {
+	e, _, j, _ := setupOTA(t)
+	at := time.Now().Add(-25 * time.Minute)
+	j.jobs = []model.Job{{ID: 3, BatchID: 5, DeviceID: 2, State: model.JobQueued, TargetRelease: "16.1.0", CreatedAt: at}}
+	_, page := e.do(t, "GET", "/transactions", "operator", nil)
+	card := between(page, `class="txn-card"`, "</a>")
+	stamp := `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`
+	if !strings.Contains(card, "started "+stamp) {
+		t.Errorf("the running card does not say when it started: %s", card)
+	}
+	if n := strings.Count(between(page, `<main id="main">`, "</main>"), `datetime="`+at.UTC().Format(time.RFC3339)+`"`); n != 2 {
+		t.Errorf("the card and the history row show %d times the instant, want both", n)
+	}
+}
+
 func TestTxnWording(t *testing.T) {
 	if got := txID(143); got != "TX-0143" {
 		t.Errorf("txID = %q", got)

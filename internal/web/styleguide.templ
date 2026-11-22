@@ -200,7 +200,7 @@ templ styleguidePage(v sgView) {
 					@ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Tone: ui.ToneDanger, Name: "Garage Door Sensor", Text: "Offline for 3 h", Href: v.Base + "/styleguide"}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF)
 				}
 				@ui.ListCard("Transactions", "History", v.Base+"/styleguide") {
-					@ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"})
+					@ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", StartedText: "Today 17:20", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"})
 					@ui.TxnRow(ui.TxnRowData{ID: "TX-0147", Title: "Tasmota 14.2.0 for 6 devices", Result: "Succeeded", Tone: ui.ToneOK, When: "2 days ago", Href: v.Base + "/styleguide"})
 					@ui.TxnRow(ui.TxnRowData{ID: "TX-0146", Title: "Tasmota 14.2.0 for 3 devices", Result: "1 failed", Tone: ui.ToneDanger, When: "5 days ago", Href: v.Base + "/styleguide"})
 					<div class="att-row">

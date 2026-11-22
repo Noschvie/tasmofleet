@@ -267,6 +267,111 @@ func TestDashboardTransactionsCard(t *testing.T) {
 	}
 }
 
+// dashTxnJob is a job of batch b for the dashboard's transaction tests; created is when the batch was created.
+func dashTxnJob(id model.JobID, b model.BatchID, st model.JobState, created time.Time) model.Job {
+	return model.Job{ID: id, BatchID: b, DeviceID: 1, State: st, TargetRelease: "16.1.0", CreatedBy: "adam", CreatedAt: created}
+}
+
+// txnPart is the dashboard's transactions card.
+func txnPart(body string) string { return between(body, `<h2>Transactions</h2>`, `</section>`) }
+
+// Why (#1199): the expanded card with its progress bar is for a transaction that is still at work. A
+// finished one (here the newest, all Succeeded) is one compact row with its result and the time it
+// ran, like the older ones; before, the newest transaction was the card whatever its state and had no time.
+func TestDashboardFinishedNewestTransactionIsARow(t *testing.T) {
+	at := time.Now().Add(-90 * time.Minute)
+	e := setupWith(t, func(d *Deps) {
+		d.Jobs = &fakeJobs{jobs: []model.Job{dashTxnJob(2, 2, model.JobSucceeded, at), dashTxnJob(1, 1, model.JobSucceeded, at.Add(-time.Hour))}}
+	})
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	card := txnPart(body)
+	if strings.Contains(card, "txn-card") || strings.Contains(card, "seg-bar") {
+		t.Errorf("a finished transaction is drawn as the progress card: %s", card)
+	}
+	row := between(card, `<a class="att-row txn-row" href="/tf/transactions/2">`, `</a>`)
+	for _, want := range []string{"TX-0002", ">Completed<", `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`} {
+		if !strings.Contains(row, want) {
+			t.Errorf("the newest transaction's row lacks %q: %s", want, card)
+		}
+	}
+}
+
+// Why (#1199): a transaction that is running keeps its card with the progress, and the card says when it
+// started ("started" outside the <time>, which time.js repaints as a day stamp in the browser's zone).
+// A plan that began is dated by its planned start (the one rule of the Transactions history), not by
+// the day somebody planned it.
+func TestDashboardActiveTransactionCardShowsStart(t *testing.T) {
+	created := time.Now().Add(-48 * time.Hour)
+	planned := time.Now().Add(-20 * time.Minute)
+	e := setupWith(t, func(d *Deps) {
+		run := dashTxnJob(2, 2, model.JobAwaitReboot, created)
+		run.StartAt = planned
+		d.Jobs = &fakeJobs{jobs: []model.Job{run, dashTxnJob(1, 1, model.JobSucceeded, created)}}
+	})
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	card := between(txnPart(body), `<a class="txn-card" href="/tf/transactions/2">`, `</a>`)
+	if card == "" || !strings.Contains(card, "seg-bar") {
+		t.Fatalf("a running transaction is not the progress card: %s", txnPart(body))
+	}
+	want := `<span class="txn-when">started <time data-ts="day" datetime="` + planned.UTC().Format(time.RFC3339) + `">`
+	if !strings.Contains(card, want) {
+		t.Errorf("the card does not say when the plan started (want %q): %s", want, card)
+	}
+}
+
+// Why (#1199): the dashboard has four entries, and every active transaction is a card, even one older than a
+// finished one, so a running transaction is never hidden behind a row; the finished ones fill what is left.
+func TestDashboardActiveCardsThenFinishedRows(t *testing.T) {
+	now := time.Now()
+	e := setupWith(t, func(d *Deps) {
+		d.Jobs = &fakeJobs{jobs: []model.Job{ // newest first
+			dashTxnJob(5, 5, model.JobSucceeded, now), dashTxnJob(4, 4, model.JobQueued, now), dashTxnJob(3, 3, model.JobFailed, now),
+			dashTxnJob(2, 2, model.JobSucceeded, now), dashTxnJob(1, 1, model.JobAwaitReboot, now),
+		}}
+	})
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	card := txnPart(body)
+	if n, r := strings.Count(card, `class="txn-card"`), strings.Count(card, `class="att-row txn-row"`); n != 2 || r != 2 {
+		t.Fatalf("want 2 cards and 2 rows, got %d and %d: %s", n, r, card)
+	}
+	i4, i1, i5, i3 := strings.Index(card, "TX-0004"), strings.Index(card, "TX-0001"), strings.Index(card, "TX-0005"), strings.Index(card, "TX-0003")
+	if i4 < 0 || i1 < i4 || i5 < i1 || i3 < i5 || strings.Contains(card, "TX-0002") {
+		t.Errorf("want the active ones (4, 1) first, then the newest finished (5, 3), and not 2: %s", card)
+	}
+}
+
+// Why (#1199): with nothing at work, which is the usual fleet, the transactions are four plain rows and no card.
+func TestDashboardFinishedOnlyIsFourRows(t *testing.T) {
+	now := time.Now()
+	e := setupWith(t, func(d *Deps) {
+		d.Jobs = &fakeJobs{jobs: []model.Job{
+			dashTxnJob(5, 5, model.JobSucceeded, now), dashTxnJob(4, 4, model.JobFailed, now), dashTxnJob(3, 3, model.JobCancelled, now),
+			dashTxnJob(2, 2, model.JobSucceeded, now), dashTxnJob(1, 1, model.JobSucceeded, now),
+		}}
+	})
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	card := txnPart(body)
+	if n, r := strings.Count(card, `class="txn-card"`), strings.Count(card, `class="att-row txn-row"`); n != 0 || r != 4 {
+		t.Errorf("want no card and 4 rows, got %d and %d: %s", n, r, card)
+	}
+}
+
+// Why (#1199): a transaction that ends turns from the card into a row on its own. The dashboard re-fetches
+// itself on every job event (TestDashboardIsLive), so the GET after the last job finished is the switch.
+func TestDashboardTransactionTurnsIntoRowWhenItEnds(t *testing.T) {
+	fj := &fakeJobs{jobs: []model.Job{dashTxnJob(1, 1, model.JobQueued, time.Now())}}
+	e := setupWith(t, func(d *Deps) { d.Jobs = fj })
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	if card := txnPart(body); !strings.Contains(card, `class="txn-card"`) || strings.Contains(card, "txn-row") {
+		t.Fatalf("a waiting transaction is not the card: %s", card)
+	}
+	fj.jobs[0].State = model.JobSucceeded
+	_, body = e.do(t, "GET", "/", "operator", nil)
+	if card := txnPart(body); strings.Contains(card, "txn-card") || !strings.Contains(card, `class="att-row txn-row"`) {
+		t.Errorf("a finished transaction is still the card: %s", card)
+	}
+}
+
 // Why (design v2, P1, dashboard-empty): a fleet without devices shows only the empty state with
 // the three ways to add devices (admins), not six zero tiles and empty lists.
 func TestDashboardEmptyFleet(t *testing.T) {

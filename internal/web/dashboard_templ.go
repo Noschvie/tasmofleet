@@ -235,22 +235,23 @@ func dashboardPage(d dashView) templ.Component {
 									return templ_7745c5c3_Err
 								}
 							}
+							for _, c := range d.Cards {
+								templ_7745c5c3_Err = ui.TxnCard(c).Render(ctx, templ_7745c5c3_Buffer)
+								if templ_7745c5c3_Err != nil {
+									return templ_7745c5c3_Err
+								}
+							}
+							for _, r := range d.Rows {
+								templ_7745c5c3_Err = ui.TxnRow(r).Render(ctx, templ_7745c5c3_Buffer)
+								if templ_7745c5c3_Err != nil {
+									return templ_7745c5c3_Err
+								}
+							}
 							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, " ")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							if d.Card != nil {
-								templ_7745c5c3_Err = ui.TxnCard(*d.Card).Render(ctx, templ_7745c5c3_Buffer)
-								if templ_7745c5c3_Err != nil {
-									return templ_7745c5c3_Err
-								}
-								for _, r := range d.Rows {
-									templ_7745c5c3_Err = ui.TxnRow(r).Render(ctx, templ_7745c5c3_Buffer)
-									if templ_7745c5c3_Err != nil {
-										return templ_7745c5c3_Err
-									}
-								}
-							} else if d.Plans.N == 0 {
+							if len(d.Cards) == 0 && len(d.Rows) == 0 && d.Plans.N == 0 {
 								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<p class=\"dash-none\">No transactions yet. Updates you start show up here.</p>")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err

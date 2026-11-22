@@ -49,12 +49,13 @@ templ dashboardPage(d dashView) {
 							if d.Plans.N > 0 {
 								@ui.PlanLine(d.Plans)
 							}
-							if d.Card != nil {
-								@ui.TxnCard(*d.Card)
-								for _, r := range d.Rows {
-									@ui.TxnRow(r)
-								}
-							} else if d.Plans.N == 0 {
+							for _, c := range d.Cards {
+								@ui.TxnCard(c)
+							}
+							for _, r := range d.Rows {
+								@ui.TxnRow(r)
+							}
+							if len(d.Cards) == 0 && len(d.Rows) == 0 && d.Plans.N == 0 {
 								<p class="dash-none">No transactions yet. Updates you start show up here.</p>
 							}
 						}

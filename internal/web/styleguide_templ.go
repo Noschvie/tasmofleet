@@ -700,7 +700,7 @@ func styleguidePage(v sgView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", StartedText: "Today 17:20", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
