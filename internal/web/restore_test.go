@@ -330,7 +330,7 @@ func TestDriftShowsRealChangesIgnoresUptimeAndThrottles(t *testing.T) {
 	}
 	driftMu.Unlock()
 	resp, body = e.do(t, "GET", "/devices/1/drift", "operator", nil)
-	if resp.StatusCode != 429 || bk.liveN != 1 || !strings.Contains(body, `class="banner tone-neutral" role="status"><span class="banner-dot"></span><div class="banner-text">The device was queried a moment ago`) {
+	if resp.StatusCode != 429 || bk.liveN != 1 || !strings.Contains(body, `class="banner tone-neutral" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">The device was queried a moment ago`) {
 		t.Errorf("throttle notice must be the neutral info: %d %s", resp.StatusCode, body)
 	}
 }

@@ -524,3 +524,42 @@ func between(s, from, to string) string {
 	before, _, _ := strings.Cut(after, to)
 	return before
 }
+
+// Why (#1091, #1089): live.js and the shell-v2 spec find the connection banners by their data-live-* spans, their
+// classes and roles, and a state change must not reword them. They are ui.Banner now, and the one markup that
+// matters for the page is unchanged: every span, the aria-hidden countdown, the sr-only sentence, the Reconnecting
+// dot that pulses, the one action Retry now with the attribute live.js listens on. The only difference to the markup
+// before the conversion is aria-hidden on the decorative dot (a dot is no content a screen reader should meet).
+func TestConnBannersKeepTheirMarkupThroughBanner(t *testing.T) {
+	want := `<div class="conn-banners">` +
+		`<div class="banner tone-warn conn-banner conn-re" role="status"><span class="banner-dot pulse" aria-hidden="true"></span>` +
+		`<div class="banner-text"><b>Reconnecting…</b> Live updates are paused; values may be out of date.</div></div>` +
+		`<div class="banner tone-danger conn-banner conn-off" role="alert"><span class="banner-dot" aria-hidden="true"></span>` +
+		`<div class="banner-text"><b>Connection to the server lost.</b> Live updates are paused; values shown are from <time data-live-since>the last page load</time>. ` +
+		`<span aria-hidden="true">Retrying in <span data-live-next data-visual-mask>8</span> s.</span><span class="sr-only">Retrying automatically.</span></div>` +
+		`<button type="button" class="banner-btn" data-live-retry>Retry now</button></div></div>`
+	var b strings.Builder
+	if err := connBanners().Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	if b.String() != want {
+		t.Errorf("the connection banners changed:\n got %s\nwant %s", b.String(), want)
+	}
+}
+
+// Why (#1091): the flash and the setup notice are banners like every other, so they carry the same dot, the same text
+// block and the same roles; the flash keeps data-flash, which toast.js turns into a toast and the shell-css spec looks
+// for, and the setup notice keeps its one link in the text.
+func TestShellFlashAndSetupNoticeAreBanners(t *testing.T) {
+	d := admin()
+	d.Flash, d.Banner, d.Nav = "Saved.", "No device networks.", "devices"
+	got := render(t, d)
+	for _, want := range []string{
+		`<div class="banner tone-ok" role="status" data-flash><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Saved.</div></div>`,
+		`<div class="banner tone-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No device networks. <a href="/setup">Open the setup</a></div></div>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the shell lacks %q", want)
+		}
+	}
+}

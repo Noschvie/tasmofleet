@@ -33,7 +33,7 @@ const aclSentence = "Any client on it can read device passwords and backups."
 // aclNoticeHTML is the notice as every page must render it: ui.Banner in tone warn (never danger), the shared lead in
 // bold, the one sentence in regular weight, and exactly one action, the guide in a new tab without the opener.
 func aclNoticeHTML() string {
-	return `<div class="banner tone-warn" role="status"><span class="banner-dot"></span><div class="banner-text"><b>` + ui.BrokerACLLead + `</b> ` +
+	return `<div class="banner tone-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text"><b>` + ui.BrokerACLLead + `</b> ` +
 		aclSentence + `</div><a class="banner-btn" href="` + ui.BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer">Set up the ACL ` +
 		`<span class="sr-only">(opens in a new tab)</span></a></div>`
 }

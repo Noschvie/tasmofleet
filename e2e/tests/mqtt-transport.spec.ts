@@ -127,12 +127,12 @@ test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {
     await page.goto(app.url + "/policy");
     await page.getByRole("button", { name: "Run now" }).click();
     await expect(page.locator(".banner", { hasText: /deviates? from a required rule/ })).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "Make compliant…" }).click();
-    const dlg = page.locator("dialog#dlg-fix");
-    await expect(dlg).toBeVisible();
+    // the banner's one action, Show, leads to the Deviating devices tab, where Make compliant is (#1091)
+    await page.goto(app.url + "/policy/deviations");
+    await page.getByRole("button", { name: /^Make compliant…/ }).click();
     // The devices take the DeviceName they report after a while, so the plan is not matched by name.
-    await expect(dlg.locator(".udlg-changes > div").first()).toContainText("PowerOnState 2");
-    await dlg.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
+    await expect(page.locator(".pol-fix-cmd .mono").first()).toHaveText("PowerOnState 2");
+    await page.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
     await expect(page).toHaveURL(/\/transactions\/\d+/);
     await expect(page.locator(".upd-dev").getByText("Verified", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 240_000, intervals: [5_000] });

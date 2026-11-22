@@ -59,6 +59,13 @@ templ styleguidePage(v sgView) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Tasmota 14.3.0 is available.", Text: "Released 6 Oct 2026 · 19 devices can update.", Action: &ui.Btn{Label: "Release notes"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "3 devices still run Tasmota 13.4.0.", Text: "That release no longer gets security fixes.", Action: &ui.Btn{Label: "Plan update"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Couldn't save MQTT settings.", Text: "The broker refused the username or password.", Action: &ui.Btn{Label: "Retry"}, Alert: true})
+			@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Title: "Deactivated.", Text: "Can’t sign in; all sessions were ended.", Action: &ui.Btn{Label: "Reactivate", Href: "#"}})
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Rules overlap."}) {
+				<ul class="banner-list">
+					<li>“Keep SaveData off” and “Power saving” both set SaveData. “Keep SaveData off” is higher in the list, so it wins for 3 devices they share.</li>
+					<li>“Keep SaveData off” and “Default sleep” both expect the same SaveData. “Default sleep” is redundant on 1 device they share.</li>
+				</ul>
+			}
 			@ui.BrokerACLNotice()
 		}
 		@ui.CardOf(ui.CardData{Title: sgTitle("toasts"), Sub: "Bottom right, newest last. Success fades after 4.5 s; failures stay until dismissed.", Class: "sg-sec", ID: "sg-toasts", LabelledBy: "sg-toasts-h"}) {

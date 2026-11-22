@@ -18,11 +18,13 @@ templ policyPage(p policyView) {
 					@policyAlert(p)
 				}
 				if len(p.Conflicts) > 0 {
-					<div class="pol-confs">
-						for _, c := range p.Conflicts {
-							<div class="pol-conf" role="note"><span class="pol-conf-dot" aria-hidden="true"></span><span>{ c }</span></div>
-						}
-					</div>
+					@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Rules overlap."}) {
+						<ul class="banner-list">
+							for _, c := range p.Conflicts {
+								<li>{ c }</li>
+							}
+						</ul>
+					}
 				}
 				<p class="pol-none">
 					if p.Admin {
@@ -32,15 +34,6 @@ templ policyPage(p policyView) {
 					}
 				</p>
 			}
-		}
-		if p.Fix != nil {
-			@ui.Dialog(ui.DialogData{
-				ID: "dlg-fix", Title: "Make " + plural(p.Fix.Ready, "device") + " compliant",
-				Body:    fixDialogBody(p.Fix),
-				Changes: p.Fix.Changes, Action: p.Base + "/policy/fix/apply", CSRF: p.CSRF, Fields: p.Fix.Fields,
-				Verb: "Run " + plural(p.Fix.Commands, "change"),
-				Alt:  fixDialogAlt(p.Fix), AltAction: p.Base + "/policy/fix",
-			})
 		}
 		if p.Admin {
 			for _, r := range p.Rows {
@@ -184,23 +177,12 @@ templ policyRowOp(p policyView, r ruleRow, path, move, back, label string) {
 	</form>
 }
 
-// policyAlert is the banner of devices that deviate from a Required rule. Show opens the Deviating
-// devices tab; Make compliant opens the plan for all of them.
+// policyAlert is the banner of devices that deviate from a Required rule. Show opens the Deviating devices tab, where
+// Make compliant is (the banner has one action, the design system's rule, #1091).
 templ policyAlert(p policyView) {
-	<div class="banner tone-warn" role="status">
-		<span class="banner-dot"></span>
-		<div class="banner-text">
-			{ p.Alert.Text }<span class="mono">{ p.Alert.Devices }</span> ({ p.Alert.Rules })
-		</div>
-		<a class="banner-btn" href={ templ.SafeURL(p.Base + policyPath + "/deviations") }>Show</a>
-		if p.Fix != nil {
-			<form method="post" action={ templ.SafeURL(p.Base + "/policy/fix") } class="pol-inline">
-				<input type="hidden" name="csrf" value={ p.CSRF }/>
-				<input type="hidden" name="all" value="1"/>
-				<button type="submit" class="banner-btn" data-dialog="dlg-fix">Make compliant…</button>
-			</form>
-		}
-	</div>
+	@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Alert.Text, Action: &ui.Btn{Label: "Show", Href: p.Base + policyPath + "/deviations"}}) {
+		<span class="mono">{ p.Alert.Devices }</span>{ " (" + p.Alert.Rules + ")" }
+	}
 }
 
 // policyEmpty is the empty state. Admins get New rule and the first templates, each a link to a

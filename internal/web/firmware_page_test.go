@@ -294,7 +294,7 @@ func TestFirmwareCheckNow(t *testing.T) {
 		t.Errorf("operator check = %d", r.StatusCode)
 	}
 	r, body := e.do(t, "POST", "/firmware/refresh", "admin", nil)
-	if r.StatusCode != 200 || !strings.Contains(body, `data-flash><span class="banner-dot"></span><span class="banner-text">No release newer than 16.1.0</span>`) {
+	if r.StatusCode != 200 || !strings.Contains(body, `data-flash><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No release newer than 16.1.0</div>`) {
 		t.Errorf("check without news = %d:\n%s", r.StatusCode, body)
 	}
 	fw.refreshed = newer

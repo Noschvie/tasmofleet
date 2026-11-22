@@ -34,17 +34,13 @@ templ sysSettingsPage(p sysPage) {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Text: "This account cannot confirm its identity. Settings that need a confirmation (" + strings.Join(sysEnvNames(p.StepUpKeys), ", ") + ") cannot be confirmed from this session and must be set in the container configuration."})
 	}
 	if len(p.Skipped) > 0 {
-		<div class="banner tone-warn" role="status">
-			<span class="banner-dot"></span>
-			<div class="banner-text">
-				<b>Stored values that are ignored.</b>
-				<ul class="sys-skipped">
-					for _, k := range sortedKeys(p.Skipped) {
-						<li><code>{ k }</code>: { p.Skipped[k] }</li>
-					}
-				</ul>
-			</div>
-		</div>
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "Stored values that are ignored."}) {
+			<ul class="banner-list">
+				for _, k := range sortedKeys(p.Skipped) {
+					<li><code>{ k }</code>{ ": " + p.Skipped[k] }</li>
+				}
+			</ul>
+		}
 	}
 	<div class="syswrap">
 	<form id="sysform" class="syspage" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysTabPath(p.Active)) }>

@@ -161,16 +161,13 @@ templ discBanners(p discView) {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 	}
 	if p.Unverified != nil {
-		<form class="banner tone-danger add-confirm" role="alert" method="post" action={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(p.Unverified.ProposalID, 10) + "/accept") }>
+		<form method="post" action={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(p.Unverified.ProposalID, 10) + "/accept") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 			<input type="hidden" name="version" value={ p.Unverified.Version }/>
 			<input type="hidden" name="token" value={ p.Unverified.Token }/>
-			<span class="banner-dot"></span>
-			<div class="banner-text">
-				Could not verify that <code>{ p.Unverified.Target }</code> is the same device as { p.Unverified.Name } (MAC). The stored web password will be sent there, possibly to a different host.
-			</div>
-			<button type="submit" class="btn btn-danger-solid">Update address anyway</button>
-			<a class="btn" href={ templ.SafeURL(p.Base + "/devices/new") }>Cancel</a>
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Class: "add-confirm", Text: "Could not verify that ", Action: &ui.Btn{Label: "Update address anyway", Type: "submit"}}) {
+				<code>{ p.Unverified.Target }</code>{ " is the same device as " + p.Unverified.Name + " (MAC). The stored web password will be sent there, possibly to a different host. You can also " }<a href={ templ.SafeURL(p.Base + "/devices/new") }>go back</a>{ "." }
+			}
 		</form>
 	}
 }

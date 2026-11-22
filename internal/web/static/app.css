@@ -4512,10 +4512,15 @@ nav.crumbs a {
 .banner-text b {
   font-weight: 600;
 }
-.banner-actions {
-  display: flex;
-  gap: var(--sp-8);
-  flex-wrap: wrap;
+.banner-list {
+  margin: var(--sp-4) 0 0;
+  padding-left: var(--sp-18);
+}
+.banner:has(.banner-list) {
+  align-items: flex-start; /* a banner with a list: the dot and the action stand at the lead, not at the middle of the list */
+}
+.banner:has(.banner-list) .banner-dot {
+  margin-top: 5px;
 }
 .banner-text a {
   color: inherit;
@@ -12398,10 +12403,6 @@ input:focus-visible + .swtrack {
   font-size: 12.5px;
   color: var(--color-text-2);
 }
-.sys-skipped {
-  margin: var(--sp-4) 0 0;
-  padding-left: var(--sp-18);
-}
 .sys-container table {
   margin-top: var(--sp-8);
 }
@@ -12678,10 +12679,6 @@ a.sys-sum:hover {
   .audit-filters .btn {
     grid-column: 1 / -1;
   }
-}
-.audit-choices {
-  margin: var(--sp-4) 0 0;
-  padding-left: var(--sp-18);
 }
 .audit-card {
   background: var(--color-surface);
@@ -13588,35 +13585,6 @@ main.bare {
   background: var(--color-danger);
   animation: none;
 }
-.pol-confs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: var(--sp-12);
-}
-.pol-conf {
-  display: flex;
-  gap: var(--sp-10);
-  align-items: center;
-  flex-wrap: wrap;
-  padding: var(--sp-10) var(--sp-12);
-  border-radius: 8px;
-  border: var(--hair-w) solid var(--color-accent);
-  background: var(--color-accent-bg);
-  color: var(--color-accent-fg);
-  font-size: 13px;
-}
-.pol-conf > span:last-child {
-  flex: 1;
-  min-width: 200px;
-}
-.pol-conf-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--color-accent);
-}
 /* overview: the live-check tile's buttons, the rule table (handle, dragged row, setting column,
    compliance bar beside its numbers) */
 .uempty + .pol-tpls {
@@ -14241,6 +14209,7 @@ button.pol-chip-x {
   flex-direction: column;
   gap: 2px;
   font-size: 13px;
+  overflow-wrap: anywhere; /* a long value (an OtaUrl) wraps inside the card and does not widen the page */
 }
 .pol-fix-note,
 .pol-fix-hint,

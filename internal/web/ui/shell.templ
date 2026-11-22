@@ -68,10 +68,12 @@ templ Shell(d ShellData, content templ.Component) {
 					@connBanners()
 				}
 				if d.Flash != "" {
-					<p class="banner tone-ok" role="status" data-flash><span class="banner-dot"></span><span class="banner-text">{ d.Flash }</span></p>
+					@Banner(BannerData{Tone: ToneOK, Text: d.Flash, Flash: true})
 				}
 				if d.Nav != "setup" && d.Banner != "" {
-					<p class="banner tone-warn" role="status"><span class="banner-dot"></span><span class="banner-text">{ d.Banner } <a href={ templ.SafeURL(d.Base + "/setup") }>Open the setup</a></span></p>
+					@Banner(BannerData{Tone: ToneWarn, Text: d.Banner + " "}) {
+						<a href={ templ.SafeURL(d.Base + "/setup") }>Open the setup</a>
+					}
 				}
 				@content
 			</main>
@@ -398,15 +400,13 @@ templ crumbSteps(trail []Crumb, base string) {
 // aria-hidden and the region carries a static sentence instead.
 templ connBanners() {
 	<div class="conn-banners">
-		<div class="banner tone-warn conn-banner conn-re" role="status">
-			<span class="banner-dot pulse"></span>
-			<div class="banner-text"><b>Reconnecting…</b> Live updates are paused; values may be out of date.</div>
-		</div>
-		<div class="banner tone-danger conn-banner conn-off" role="alert">
-			<span class="banner-dot"></span>
-			<div class="banner-text"><b>Connection to the server lost.</b> Live updates are paused; values shown are from <time data-live-since>the last page load</time>. <span aria-hidden="true">Retrying in <span data-live-next data-visual-mask>8</span> s.</span><span class="sr-only">Retrying automatically.</span></div>
-			<button type="button" class="banner-btn" data-live-retry>Retry now</button>
-		</div>
+		@Banner(BannerData{Tone: ToneWarn, Title: "Reconnecting…", Text: "Live updates are paused; values may be out of date.", Class: "conn-banner conn-re", Pulse: true})
+		@Banner(BannerData{
+			Tone: ToneDanger, Title: "Connection to the server lost.", Text: "Live updates are paused; values shown are from ", Alert: true, Class: "conn-banner conn-off",
+			Action: &Btn{Label: "Retry now", Attrs: templ.Attributes{"data-live-retry": true}},
+		}) {
+			<time data-live-since>the last page load</time>{ ". " }<span aria-hidden="true">Retrying in <span data-live-next data-visual-mask>8</span> s.</span><span class="sr-only">Retrying automatically.</span>
+		}
 	</div>
 }
 

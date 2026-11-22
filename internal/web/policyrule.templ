@@ -98,15 +98,11 @@ templ rulePageTempl(p rulePageView) {
 			@ui.Banner(ui.BannerData{Tone: p.BannerTone, Text: p.Banner, Alert: p.BannerTone == ui.ToneDanger})
 		}
 		if p.Cooldown {
-			<div class="banner tone-accent" role="status" data-cooldown>
-				<span class="banner-dot"></span>
-				<div class="banner-text">
-					{ "Devices of this rule that were read less than " + liveCooldownText() + " ago were not read again." }
-					if !p.CooldownUntil.IsZero() {
-						{ " All of them can be read again from " }<time { ui.StampAttrs(p.CooldownUntil, ui.StampDay)... }>{ ui.StampDayText(p.Now, p.CooldownUntil) }</time>{ "." }
-					}
-				</div>
-			</div>
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "Devices of this rule that were read less than " + liveCooldownText() + " ago were not read again.", Attrs: templ.Attributes{"data-cooldown": true}}) {
+				if !p.CooldownUntil.IsZero() {
+					{ " All of them can be read again from " }<time { ui.StampAttrs(p.CooldownUntil, ui.StampDay)... }>{ ui.StampDayText(p.Now, p.CooldownUntil) }</time>{ "." }
+				}
+			}
 		}
 		@ruleSource(p.Source, false)
 		<div class="devlive">

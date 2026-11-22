@@ -166,7 +166,7 @@ func TestProbeAnswersWithTheWholeIdentityCard(t *testing.T) {
 	e := setup(t)
 	e.pr.err = tasmota.ErrTimeout
 	_, body := e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
-	for _, want := range []string{`<section id="identity"`, `role="alert"><span class="banner-dot"></span><div class="banner-text">Identity not refreshed. The device took too long`, `>Refresh identity</button>`} {
+	for _, want := range []string{`<section id="identity"`, `role="alert"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Identity not refreshed. The device took too long`, `>Refresh identity</button>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("failed probe lacks %q:\n%s", want, body)
 		}
@@ -177,7 +177,7 @@ func TestProbeAnswersWithTheWholeIdentityCard(t *testing.T) {
 	e.pr.err = nil
 	e.inv.devs[1] = model.Device{ID: 1, Name: "kitchen", Address: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:ff", Identity: model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota32"}}
 	_, body = e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
-	for _, want := range []string{`role="status"><span class="banner-dot"></span><div class="banner-text">Identity refreshed.</div>`, "aa:bb:cc:dd:ee:ff", "16.1.0", `>Refresh identity</button>`} {
+	for _, want := range []string{`role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Identity refreshed.</div>`, "aa:bb:cc:dd:ee:ff", "16.1.0", `>Refresh identity</button>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("refreshed card lacks %q:\n%s", want, body)
 		}

@@ -470,43 +470,6 @@ func (h *handler) fixRender(w http.ResponseWriter, r *http.Request, status int, 
 	h.show(w, r, status, "policy_fix", v, fixPreviewPage(v.Base, v.CSRF, p))
 }
 
-// fixDialogOf is the plan behind "Make compliant (N)…" on the policy page: every device with
-// a Required deviation read live. nil when there is nothing to change. Advisory deviations are
-// not in it; "Choose Advisory rows…" opens the preview where they can be ticked.
-func (h *handler) fixDialogOf(ctx context.Context, rep PolicyReport) *fixDialog {
-	sel := fixSel{Picks: map[fixPair]bool{}}
-	seen := map[model.DeviceID]bool{}
-	for _, f := range rep.Findings {
-		if !f.Unknown && !advisory(f) && !seen[f.DeviceID] {
-			seen[f.DeviceID] = true
-			sel.IDs = append(sel.IDs, f.DeviceID)
-		}
-	}
-	rows := h.fixRows(ctx, rep, sel)
-	p := fixPageOf(rows, false)
-	if p.Ready == 0 {
-		return nil
-	}
-	d := &fixDialog{Ready: p.Ready, Commands: p.Commands, Fields: append([]ui.KVRow{{Key: "digest", Value: p.Digest}}, p.Fields...)}
-	for _, row := range rows {
-		if len(row.Options) > 0 {
-			d.Advisory = true
-		}
-		if !row.runs() {
-			continue
-		}
-		if row.CRWarn != "" {
-			d.CRFull++
-		}
-		var cmds []string
-		for _, c := range row.Cmds {
-			cmds = append(cmds, c.Text)
-		}
-		d.Changes = append(d.Changes, ui.KVRow{Key: row.Device.Name, Value: strings.Join(cmds, "; ")})
-	}
-	return d
-}
-
 func (h *handler) refusalText(r *http.Request, skipped []ota.Refusal) string {
 	var b strings.Builder
 	for _, x := range skipped {

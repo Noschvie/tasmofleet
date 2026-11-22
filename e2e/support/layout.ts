@@ -1237,3 +1237,32 @@ export async function expectTableGuards(page: Page, name: string, freeText: stri
   const red = withKnownIssues(name, ["s", "r"], found);
   expect(red.length, guardReport(name, red)).toBe(0);
 }
+
+/**
+ * bannerProblems checks the two rules of the design system's Inline banners on the page as it stands (#1091):
+ * a banner keeps its 820 px reading width (the check measures at a 1280 px viewport, where a banner that
+ * ignores the rule runs as wide as the page), and it holds at most one action (a button or a .banner-btn). A
+ * second answer of a banner is a link in its text or a button on the page. Hidden banners (the connection banners
+ * while the stream is up) are not on screen and are skipped.
+ */
+export async function bannerProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const seen = (e: Element) => !e.closest("[hidden]") && !e.closest("dialog:not([open])") && getComputedStyle(e).visibility !== "hidden" && e.getBoundingClientRect().width > 0;
+    for (const b of document.querySelectorAll(".banner")) {
+      if (!seen(b)) continue;
+      const name = `.banner${[...b.classList].filter((c) => c !== "banner").map((c) => "." + c).join("")} "${(b.textContent ?? "").trim().slice(0, 40)}"`;
+      const w = Math.round(b.getBoundingClientRect().width);
+      if (w > 820) out.push(`${name} is ${w}px wide, the reading width is 820px`);
+      const actions = [...b.querySelectorAll("button, .banner-btn")].filter((e) => !e.closest("[hidden]"));
+      if (actions.length > 1) out.push(`${name} has ${actions.length} actions (${actions.map((a) => (a.textContent ?? "").trim()).join(", ")}), at most one`);
+    }
+    return out;
+  });
+}
+
+/** expectBannerRules fails when a banner of the page is wider than 820 px or has more than one action. */
+export async function expectBannerRules(page: Page, name: string): Promise<void> {
+  const problems = await bannerProblems(page);
+  expect(problems, `${name}: ${problems.join("; ")}`).toEqual([]);
+}

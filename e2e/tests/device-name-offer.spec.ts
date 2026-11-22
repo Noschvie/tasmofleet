@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { expectNoOverflow } from "../support/layout";
+import { expectBannerRules, expectNoOverflow } from "../support/layout";
 import {
   App,
   Devenv,
@@ -93,6 +93,12 @@ for (const width of [375, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await handNamed(page, shotDevice || Object.keys(env.devices)[2], "Modbus Lüftung alt");
       shotDevice = "Modbus Lüftung alt"; // the link name of the next screenshot run
+      // the banner has the one action; Keep stands in the Device name row of the Identity card (#1091)
+      await expect(page.locator(".name-offer").locator("button, .banner-btn")).toHaveCount(1);
+      await expect(page.locator(".name-offer").getByRole("button", { name: "Use device name" })).toBeVisible();
+      const nameRow = page.locator("#identity .ukv-row").filter({ has: page.locator("dt", { hasText: /^Device name$/ }) });
+      await expect(nameRow.getByRole("button", { name: "Keep", exact: true })).toBeVisible();
+      await expectBannerRules(page, "device page with the name notice");
       await expectNoOverflow(page, "device page with the name notice");
       if (!shots) return;
       mkdirSync(shots, { recursive: true });

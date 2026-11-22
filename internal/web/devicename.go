@@ -12,6 +12,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/inventory"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // DeviceNames records the admin's "Keep" against a device's DeviceName (store.SQLite). Optional:
@@ -50,6 +51,29 @@ func nameOffer(d model.Device) string {
 func nameVals(name string) string {
 	b, _ := json.Marshal(map[string]string{"name": name}) // a map of strings cannot fail
 	return string(b)
+}
+
+// useNameAction is the offer banner's one action, "Use device name": an htmx post that swaps the Identity card, which
+// then shows the stored name and no offer. Only an admin answers (nil for the others: the banner says the name, no more).
+func (c identCard) useNameAction() *ui.Btn {
+	if !c.CanAnswer {
+		return nil
+	}
+	return &ui.Btn{Label: "Use device name", Attrs: c.answerAttrs("/name/adopt")}
+}
+
+// keepNameAction is "Keep", the other answer. It is no second action of the banner (the design system allows one): it
+// sits in the Device name row of the card, beside the stored name it keeps, while the offer stands, and only where Keep
+// can be saved (KeepOK). nil when there is nothing to answer or the viewer cannot.
+func (c identCard) keepNameAction() *ui.Btn {
+	if c.NameOffer == "" || !c.CanAnswer || !c.KeepOK {
+		return nil
+	}
+	return &ui.Btn{Label: "Keep", Kind: "link", Attrs: c.answerAttrs("/name/keep")}
+}
+
+func (c identCard) answerAttrs(path string) templ.Attributes {
+	return templ.Attributes{"hx-post": c.Base + devPath(c.ID, path), "hx-vals": nameVals(c.NameOffer), "hx-target": "#identity", "hx-swap": "outerHTML", "hx-disabled-elt": "this"}
 }
 
 const nameStale = "The device reports another name now. Check it below."

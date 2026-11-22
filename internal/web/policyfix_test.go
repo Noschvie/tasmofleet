@@ -198,21 +198,19 @@ func TestPolicyFixIsAdminOnly(t *testing.T) {
 		}
 	}
 	_, op := e.do(t, "GET", "/policy", "operator", nil)
-	_, adm := e.do(t, "GET", "/policy", "admin", nil)
-	if strings.Contains(op, "Make compliant") || strings.Contains(op, "dlg-fix") {
+	if strings.Contains(op, "Make compliant") {
 		t.Error("operators must not be offered the action")
 	}
-	// The admin's banner offers Make compliant; its dialog counts the devices that get commands
-	// (kitchen and cellar: attic's value is only known from a backup), lists the commands and
-	// applies exactly the reviewed plan (digest and devices).
-	for _, want := range []string{"Make compliant…", "Make 2 devices compliant", `data-dialog="dlg-fix"`, `name="all" value="1"`, `name="device" value="1"`, `name="device" value="3"`,
-		`name="digest"`, "PowerOnState 0; SetOption0 0", "Run 3 changes"} {
-		if !strings.Contains(adm, want) {
-			t.Errorf("admin page misses %q", want)
-		}
+	// The overview no longer opens Make compliant itself (#1091): its banner has the one action Show, and Make compliant
+	// is on the Deviating devices tab, for admins only.
+	_, adm := e.do(t, "GET", "/policy", "admin", nil)
+	if strings.Contains(adm, "Make compliant") || strings.Contains(adm, "dlg-fix") {
+		t.Error("the overview banner has one action; Make compliant lives on the Deviating devices tab")
 	}
-	if strings.Contains(adm, `name="device" value="2"`) {
-		t.Error("attic deviates only in a backup: Make compliant must not include it")
+	_, opDev := e.do(t, "GET", "/policy/deviations", "operator", nil)
+	_, admDev := e.do(t, "GET", "/policy/deviations", "admin", nil)
+	if strings.Contains(opDev, "Make compliant") || !strings.Contains(admDev, "Make compliant…") {
+		t.Errorf("Make compliant on the Deviating devices tab: admin yes (%v), operator no (%v)", strings.Contains(admDev, "Make compliant…"), strings.Contains(opDev, "Make compliant"))
 	}
 	if len(fix.reqs) != 0 {
 		t.Fatal("nothing may be submitted by refused requests")
@@ -327,23 +325,25 @@ func TestPolicyFixAdvisoryIsWrittenOnlyWhenPicked(t *testing.T) {
 	}
 }
 
-// Why: the overview banner's dialog is the second entry point. It lists the Required plan only, says
-// the Advisory ones are chosen on the preview, and offers that way (a second submit button to the
-// same route); the Make compliant dialog of a fleet without hints offers nothing extra.
-func TestPolicyFixBannerDialogOffersTheAdvisoryChoice(t *testing.T) {
-	e := advisoryEnv(t, &fakeFix{})
+// Why (#1091, DS-007): a banner has at most one action (design-system.md, Inline banners). The overview's deviation
+// banner offered Show and Make compliant…, two buttons in one banner; it keeps Show, which opens the Deviating devices
+// tab, where the picked rows and Make compliant are. The dialog that only the second button opened is gone with it:
+// it would be a plan computed on every load for a button nobody can press.
+func TestPolicyOverviewDeviationBannerHasOneAction(t *testing.T) {
+	e := fixEnv(t, &fakeFix{}, nil)
 	_, page := e.do(t, "GET", "/policy", "admin", nil)
-	for _, want := range []string{"Choose Advisory rows…", `formaction="/tf/policy/fix"`, "Advisory ones only when you choose them", "PowerOnState 0"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("dialog misses %q", want)
-		}
+	i := strings.Index(page, "deviate from a required rule")
+	if i < 0 {
+		t.Fatalf("no deviation banner on the overview:\n%s", page)
 	}
-	if strings.Contains(page, "SetOption0 0") {
-		t.Error("an Advisory command is never preselected in the dialog")
+	start := strings.LastIndex(page[:i], `<div class="banner `)
+	end := start + strings.Index(page[start:], `</a></div>`) + len(`</a></div>`)
+	banner := page[start:end]
+	if n := strings.Count(banner, "banner-btn"); n != 1 || !strings.Contains(banner, `href="/tf/policy/deviations">Show</a>`) {
+		t.Errorf("the banner has %d actions, want exactly Show to the Deviating devices tab:\n%s", n, banner)
 	}
-	plain := fixEnv(t, &fakeFix{}, nil)
-	if _, page = plain.do(t, "GET", "/policy", "admin", nil); strings.Contains(page, "Choose Advisory rows") {
-		t.Error("no hint to choose, no extra button")
+	if strings.Contains(page, "dlg-fix") || strings.Contains(page, "<button type=\"submit\" class=\"banner-btn\"") {
+		t.Error("the overview carries no Make compliant dialog or button")
 	}
 }
 

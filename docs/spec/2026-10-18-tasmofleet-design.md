@@ -409,7 +409,8 @@ data directory (TasmoAdmin lesson A4).
   topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
   `Tasmota`). A name the user chose differs from these and is kept (#52); the Identity card then
   shows the notice "Name on the device: X" (#125) while `device_name` differs from `name`, is not
-  Tasmota's default `Tasmota` and is not equal to `device_name_kept`. Admins can answer it: "Use device
+  Tasmota's default `Tasmota` and is not equal to `device_name_kept`. Admins can answer it: the banner's one action is "Use device
+  name" (a banner has one action, #1091) and "Keep" is a button in the Device name row of the card while the offer stands; "Use device
   name" sets the name through `Inventory.UpdateIf` (compare-and-set, audited as `device.update`), "Keep"
   stores the declined name in `device_name_kept` (migration 0030, audited as `device.name_kept`), so the
   notice returns only when the device reports another name. An answer for a name the device no longer
@@ -2228,7 +2229,7 @@ Import or export has its own page, `/policy/io`), then the rule table in stored 
 `/policy/rules/{id}`, Disabled chip), setting, applies to with the device count, Required or Advisory, a
 compliance bar from `policy.Tally` read by rule id, and the row menu (Edit, Duplicate, Enable or Disable,
 Move up, Move down, Delete). A disabled rule says Disabled and is not checked (its text is not drawn at reduced opacity, #1071). A banner names the devices that
-break a Required rule, with Show and Make compliant. Every list operation names its rule by id and the
+break a Required rule, with the one action Show (to Deviating devices, where Make compliant is, #1091); rules that overlap are one accent banner with the conflicts as a list. Every list operation names its rule by id and the
 version the person saw (stale: 409); the drag posts positions plus the version. Unknown query
 parameters are ignored: the old `?edit=`, `?new=` and `?v=` no longer open an editor or a diff.
 The empty page offers New rule and the first templates (admins), or says an admin can add rules.

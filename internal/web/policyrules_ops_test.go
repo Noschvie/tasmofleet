@@ -359,6 +359,19 @@ func TestPolicyPageConflictBanner(t *testing.T) {
 			t.Errorf("conflicts banner lacks %q", want)
 		}
 	}
+	// Why (#1091, A5-006): the conflict notes were a third banner-like look (.pol-conf, one box per conflict). They are
+	// one accent banner of the one component, the conflicts as its list: one dot, one lead, not one box per line.
+	if strings.Contains(body, "pol-conf") {
+		t.Error("the conflict notes still use their own look (pol-conf)")
+	}
+	i := strings.Index(body, `<div class="banner tone-accent" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text"><b>Rules overlap.</b>`)
+	if i < 0 {
+		t.Fatalf("no accent banner with the lead Rules overlap.:\n%s", body)
+	}
+	end := i + strings.Index(body[i:], "</ul>")
+	if n := strings.Count(body[i:end], "<li>"); n != 2 || strings.Count(body, `class="banner tone-accent"`) != 1 {
+		t.Errorf("want one accent banner holding the 2 conflicts as list items, got %d items", n)
+	}
 }
 
 // Why: the empty state is the way to start: an admin gets New rule and the first templates, each a

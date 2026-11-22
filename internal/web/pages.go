@@ -557,6 +557,15 @@ type userDetailView struct {
 	StepUp       *ui.StepUpData
 }
 
+// reactivateAction is the deactivated banner's one button, a link that opens the Reactivate dialog; nil when the
+// viewer cannot reactivate the account.
+func (v userDetailView) reactivateAction() *ui.Btn {
+	if v.Reactivate == nil {
+		return nil
+	}
+	return &ui.Btn{Label: "Reactivate", Href: v.Reactivate.Href, Dialog: v.Reactivate.Dialog}
+}
+
 // udReasonID is the id of the n-th line that says why an action button of the user page is disabled.
 func udReasonID(n int) string { return "ud-why-" + strconv.Itoa(n) }
 

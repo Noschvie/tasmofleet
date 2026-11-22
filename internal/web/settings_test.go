@@ -217,7 +217,7 @@ func TestSettingsNothingChangedIsNeutralAndKeepsTheDeviceState(t *testing.T) {
 	if resp.StatusCode != 200 || len(fs.applyIn) != 0 {
 		t.Fatalf("status %d applied %v", resp.StatusCode, fs.applyIn)
 	}
-	if !strings.Contains(body, `role="status"><span class="banner-dot"></span><div class="banner-text">Nothing changed.`) || strings.Contains(body, `role="alert"><span class="banner-dot"></span><div class="banner-text">Nothing changed`) {
+	if !strings.Contains(body, `role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Nothing changed.`) || strings.Contains(body, `role="alert"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Nothing changed`) {
 		t.Errorf("Nothing changed must be the neutral notice: %s", body)
 	}
 	for _, name := range []string{"SetOption3", "PowerOnState"} {

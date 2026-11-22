@@ -238,13 +238,9 @@ templ txnBody(p txnPage) {
 		}
 	</div>
 	if p.Sched != nil && p.Sched.Kind == "notstarted" {
-		<div class="banner tone-warn" role="status">
-			<span class="banner-dot"></span>
-			<div class="banner-text">
-				<b>Not started.</b>
-				TasmoFleet was down at the planned start (<time { ui.StampAttrs(p.Sched.Start, ui.StampStart)... }>{ ui.StampText(p.Sched.Start, ui.StampStart) }</time>) and was not back within { strconv.Itoa(p.Sched.Minutes) } minutes. It came back at <time { ui.StampAttrs(p.Sched.BackAt, p.Sched.BackFmt())... }>{ ui.StampText(p.Sched.BackAt, p.Sched.BackFmt()) }</time>. No device was changed, and this update will not start later.
-			</div>
-		</div>
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "Not started.", Text: "TasmoFleet was down at the planned start ("}) {
+			<time { ui.StampAttrs(p.Sched.Start, ui.StampStart)... }>{ ui.StampText(p.Sched.Start, ui.StampStart) }</time>{ ") and was not back within " + strconv.Itoa(p.Sched.Minutes) + " minutes. It came back at " }<time { ui.StampAttrs(p.Sched.BackAt, p.Sched.BackFmt())... }>{ ui.StampText(p.Sched.BackAt, p.Sched.BackFmt()) }</time>{ ". No device was changed, and this update will not start later." }
+		}
 	}
 	if p.Sched != nil && p.Sched.Kind == "waiting" {
 		@schedWhen(p.Sched)

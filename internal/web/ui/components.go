@@ -147,9 +147,19 @@ type Btn struct {
 	// carries no action. The label may be followed by children (an icon, a count).
 	Class string
 	Attrs templ.Attributes
+	// banner makes the button a banner's action (Banner sets it, no page does): the class banner-btn instead of btn
+	// and its kind, size and icon classes, which a banner action has none of.
+	banner bool
 }
 
 func (b Btn) classes() string {
+	if b.banner {
+		c := "banner-btn"
+		if b.Class != "" {
+			c += " " + b.Class
+		}
+		return c
+	}
 	c := "btn"
 	if b.Kind != "" {
 		c += " btn-" + b.Kind
@@ -251,7 +261,9 @@ func (c CopyData) label() string {
 	return c.Label
 }
 
-// BannerData is an inline banner: a dot, a bold lead, the text and an optional action.
+// BannerData is an inline banner: a dot, a bold lead, the text and at most one action. Rich text (a list, a link, a
+// time) follows Text as the templ children of Banner; the action is one Btn, never a second field, because the design
+// system allows one (Inline banners): the other answer is a link in the text or a button on the page.
 type BannerData struct {
 	Tone        Tone
 	Title, Text string
@@ -263,6 +275,31 @@ type BannerData struct {
 	Action      *Btn
 	Alert       bool   // role=alert (a failure the user has to act on) instead of role=status
 	ID          string // the banner's id, for a control that aria-describedby points at it (#1072)
+	// Class is the page's own class after the tone's ("cmd-check", "name-offer"): the hook a page's selector or test
+	// finds the banner by. Attrs are the attributes a script needs and no field covers (data-cooldown); see pageAttrs
+	// for what is refused. Pulse makes the dot pulse (a state that is still changing: Reconnecting), Flash marks the
+	// banner as the answer to the last action (data-flash), which a page's script or test finds.
+	Class string
+	Attrs templ.Attributes
+	Pulse bool
+	Flash bool
+}
+
+func (b BannerData) classes() string {
+	c := "banner tone-" + string(b.Tone)
+	if b.Class != "" {
+		c += " " + b.Class
+	}
+	return c
+}
+
+func (b BannerData) attrs() templ.Attributes { return pageAttrs(b.Attrs) }
+
+// action is the banner's action as the button it is rendered with.
+func (b BannerData) action() Btn {
+	a := *b.Action
+	a.banner = true
+	return a
 }
 
 // The broker ACL notice (#840, #1078): the page that explains the access control list (the long explanation lives
@@ -297,12 +334,15 @@ type StatTileData struct {
 // (addresses, versions, ids).
 type KVRow struct {
 	Key, Value string
-	Mono       bool
-	Mask       bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
-	Wide       bool      // a long value: on a phone it takes the whole row of a compact card (Identity)
-	Soft       bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
-	At         time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
-	Stamp      StampFmt  // how time.js shows At; the zero value is StampShort
+	// Action is the one button that belongs to this row's value (Keep beside a device name that is on offer): it
+	// follows the value inside the same cell.
+	Action *Btn
+	Mono   bool
+	Mask   bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
+	Wide   bool      // a long value: on a phone it takes the whole row of a compact card (Identity)
+	Soft   bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
+	At     time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
+	Stamp  StampFmt  // how time.js shows At; the zero value is StampShort
 }
 
 // Tab is one tab of a tab row. Tabs are links (each tab its own route). A disabled tab says why.

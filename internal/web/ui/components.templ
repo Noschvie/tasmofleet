@@ -314,17 +314,26 @@ templ KV(rows []KVRow) {
 			<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
 				<dt>{ r.Key }</dt>
 				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
-					if !r.At.IsZero() {
-						<time { StampAttrs(r.At, r.stampOf())... }>{ r.Value }</time>
-					} else if r.Soft {
-						@Soft(r.Value)
-					} else {
-						{ r.Value }
+					@kvValue(r)
+					if r.Action != nil {
+						{ " " }
+						@Button(*r.Action)
 					}
 				</dd>
 			</div>
 		}
 	</dl>
+}
+
+// kvValue is the value of a row: a time, a soft-wrapped name or plain text.
+templ kvValue(r KVRow) {
+	if !r.At.IsZero() {
+		<time { StampAttrs(r.At, r.stampOf())... }>{ r.Value }</time>
+	} else if r.Soft {
+		@Soft(r.Value)
+	} else {
+		{ r.Value }
+	}
 }
 
 // Tabs is a row of underline tabs; on a phone the row scrolls sideways.
@@ -391,10 +400,11 @@ templ rowMenu(label string, items []MenuItem, up, static bool) {
 	</details>
 }
 
-// Banner is an inline banner above the page content: it stays until its cause is gone.
+// Banner is an inline banner above the page content: it stays until its cause is gone. The children follow Text
+// inside the same text block (a list, a link, a time); the one action, if any, is the banner's button.
 templ Banner(b BannerData) {
 	<div
-		class={ "banner", "tone-" + string(b.Tone) }
+		class={ b.classes() }
 		if b.ID != "" {
 			id={ b.ID }
 		}
@@ -403,8 +413,12 @@ templ Banner(b BannerData) {
 		} else {
 			role="status"
 		}
+		if b.Flash {
+			data-flash
+		}
+		{ b.attrs()... }
 	>
-		<span class="banner-dot"></span>
+		<span class={ "banner-dot", templ.KV("pulse", b.Pulse) } aria-hidden="true"></span>
 		<div class="banner-text">
 			if !b.TitleAt.IsZero() {
 				<b>{ b.Title }<time data-visual-mask { StampAttrs(b.TitleAt, StampDay)... }>{ b.TitleAtText }</time>{ b.TitleAfter }</b>
@@ -412,26 +426,13 @@ templ Banner(b BannerData) {
 				<b>{ b.Title }</b>
 			}
 			{ b.Text }
+			{ children... }
 		</div>
 		if b.Action != nil {
-			if b.Action.Href != "" {
-				<a
-					class="banner-btn"
-					href={ templ.SafeURL(b.Action.Href) }
-					if b.Action.Target != "" {
-						target={ b.Action.Target }
-					}
-					if b.Action.Rel != "" {
-						rel={ b.Action.Rel }
-					}
-				>
-					{ b.Action.Label }
-					if b.Action.Target == "_blank" {
-						<span class="sr-only"> (opens in a new tab)</span>
-					}
-				</a>
-			} else {
-				<button type={ b.Action.buttonType() } class="banner-btn">{ b.Action.Label }</button>
+			@Button(b.action()) {
+				if b.Action.Href != "" && b.Action.Target == "_blank" {
+					{ " " }<span class="sr-only">(opens in a new tab)</span>
+				}
 			}
 		}
 	</div>

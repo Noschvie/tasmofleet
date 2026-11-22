@@ -141,16 +141,6 @@ type ruleRow struct {
 	Invalid string
 }
 
-// fixDialog is "Make compliant (N)…": the reviewed plan the dialog applies.
-type fixDialog struct {
-	Ready    int
-	Commands int
-	Changes  []ui.KVRow
-	Fields   []ui.KVRow
-	Advisory bool // some selected device also has Advisory deviations to choose from
-	CRFull   int  // devices whose settings text area cannot take the plan's text values (#289)
-}
-
 // devAlert is the banner of a Required rule that devices deviate from.
 type devAlert struct {
 	Text    string
@@ -169,7 +159,6 @@ type policyView struct {
 	Conflicts []string
 	Banner    string
 	Alert     *devAlert
-	Fix       *fixDialog
 	Templates []ruleTemplate
 }
 
@@ -281,9 +270,6 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 	p.Head.Tabs = h.policyTabs(v.Base, "rules", len(st.Specs), p.Head.Fleet.Deviating, 0)
 	if repErr == nil {
 		p.Alert = requiredAlert(rep, st.Specs)
-		if p.Admin && h.d.PolicyFix != nil {
-			p.Fix = h.fixDialogOf(ctx, rep)
-		}
 	}
 	if !p.HasRules && editable {
 		// The empty state offers the ready-made templates (a blank want, such as a server, a place or a
@@ -568,26 +554,4 @@ func countTone(kind string) ui.Tone {
 		return ui.ToneNeutral
 	}
 	return ui.ToneAccent
-}
-
-// fixDialogBody is the text of the Make compliant dialog.
-func fixDialogBody(f *fixDialog) string {
-	s := "Required deviations are included"
-	if f.Advisory {
-		s += "; Advisory ones only when you choose them"
-	}
-	s += ". These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone."
-	if f.CRFull > 0 {
-		s += " " + plural(f.CRFull, "device") + " may not have room in the settings text area for these text values; the preview names them."
-	}
-	return s
-}
-
-// fixDialogAlt is the dialog's second button: the preview with a box per Advisory deviation. "" when
-// no selected device has one.
-func fixDialogAlt(f *fixDialog) string {
-	if f.Advisory {
-		return "Choose Advisory rows…"
-	}
-	return ""
 }

@@ -61,26 +61,14 @@ var markupExemptions = []markupBlock{
 		"syssettings.templ": {"btn": 28},
 	}},
 	{Name: "#1092 buttons: add devices", Files: map[string]map[string]int{
-		"adddevices.templ": {"btn": 44},
+		"adddevices.templ": {"btn": 42},
 	}},
 	{Name: "#1092 buttons: style guide", Files: map[string]map[string]int{
 		"styleguide.templ": {"btn": 3},
 	}},
-	{Name: "#1091 banners", Files: map[string]map[string]int{
-		"accountpages.templ":    {"banner": 1},
-		"adddevices.templ":      {"banner": 1},
-		"audit.templ":           {"banner": 1},
-		"bulk.templ":            {"banner": 1},
-		"devicehead.templ":      {"banner": 2},
-		"gputemplates.templ":    {"banner": 1},
-		"policy.templ":          {"banner": 2},
-		"policy_overview.templ": {"banner": 1},
-		"policy_shell.templ":    {"banner": 1},
-		"policyrule.templ":      {"banner": 1},
-		"setup.templ":           {"banner": 1},
-		"syssettings.templ":     {"banner": 1},
-		"transactions.templ":    {"banner": 1},
-		"userdetail.templ":      {"banner": 1},
+	{Name: "#1098 error summaries", Files: map[string]map[string]int{
+		"accountpages.templ": {"banner": 1},
+		"setup.templ":        {"banner": 1},
 	}},
 	{Name: "#1097 status badge", Files: map[string]map[string]int{
 		"cells.templ": {"bdg": 2},

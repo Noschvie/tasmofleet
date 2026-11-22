@@ -92,25 +92,26 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await expect(page.locator("[data-tile='deviate'] .dev-tile-v")).not.toHaveText("0");
   await shot("preview-flags");
 
-  // The same on the policy overview, for the Make compliant steps below: its banner names the deviation.
+  // The same on the policy overview: its banner names the deviation and has the one action Show, which leads to the
+  // Deviating devices tab, where Make compliant is (#1091: a banner has one action).
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
-  await expect(page.locator(".banner", { hasText: "deviate from a required rule" })).toBeVisible({ timeout: 60_000 });
+  const alert = page.locator(".banner", { hasText: "deviate from a required rule" });
+  await expect(alert).toBeVisible({ timeout: 60_000 });
+  await expect(alert.getByRole("link", { name: "Show", exact: true })).toHaveAttribute("href", /\/policy\/deviations$/);
 
   // Operators see the rule but have no way to change it or to fix.
   await page.setExtraHTTPHeaders(operator);
-  await page.goto(app.url + "/policy");
+  await page.goto(app.url + "/policy/deviations");
   await expect(page.getByRole("button", { name: /Make compliant/ })).toHaveCount(0);
   expect((await page.request.post(app.url + "/policy/rules/save", { headers: operator, form: { csrf: "x", command: "Sleep", want: "1" } })).status()).toBe(403);
 
   // Make compliant sends exactly the reviewed command and ends compliant.
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/policy");
-  await page.getByRole("button", { name: "Make compliant…" }).click();
-  const dlg = page.locator("dialog#dlg-fix");
-  await expect(dlg).toBeVisible();
-  await expect(dlg).toContainText("LedState 3");
-  await dlg.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
+  await page.goto(app.url + "/policy/deviations"); // the live read of the overview's Run now is kept
+  await page.getByRole("button", { name: /^Make compliant…/ }).click();
+  await expect(page.locator(".pol-fix-cmd .mono").filter({ hasText: "LedState 3" }).first()).toBeVisible();
+  await page.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+/);
   // the device checked below: the first card to finish says nothing about its job (each read-back asks its identity, #947)
   await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Verified", { exact: true })).toBeVisible({ timeout: 60_000 });

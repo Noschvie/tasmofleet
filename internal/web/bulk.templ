@@ -155,7 +155,7 @@ templ bulkCheck(name, text, help string, checked, disabled bool) {
 // few seconds as a fallback) until it is finished.
 templ bulkResultPage(v bulkResultView) {
 	if v.Toast != "" {
-		<p class={ "banner", "tone-" + v.ToastTone() } role="status" data-flash><span class="banner-dot"></span><span class="banner-text">{ v.Toast }</span></p>
+		@ui.Banner(ui.BannerData{Tone: ui.Tone(v.ToastTone()), Text: v.Toast, Flash: true})
 	}
 	<div
 		id="bk-result"

@@ -385,6 +385,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	}
 	c := identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating, Off: off,
 		NameOffer: nameOffer(d), CanAnswer: v.IsAdmin, KeepOK: h.d.DeviceNames != nil}
+	c.Rows[0].Action = c.keepNameAction() // the Device name row: Keep stands beside the name it keeps (#1091)
 	c.FWR, c.Reading = statusFWRRows(d.Identity), tasmoFleetReading(d.Identity, build)
 	c.FWRRead = d.Identity.FWR.Read()
 	c.CRWarn = crWarning(d.Identity.FWR, h.crWarnPercent())

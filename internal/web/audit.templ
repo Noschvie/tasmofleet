@@ -30,17 +30,13 @@ templ auditView(base string, p auditPage) {
 		}
 	</form>
 	if len(p.Choices) > 0 {
-		<div class="banner tone-warn" role="status">
-			<span class="banner-dot"></span>
-			<div class="banner-text">
-				<b>Several users match “{ p.Actor }”.</b> Choose one:
-				<ul class="audit-choices">
-					for _, c := range p.Choices {
-						<li><a href={ templ.SafeURL(base + "/audit?actor=" + url.QueryEscape(c.Value) + "&since=" + url.QueryEscape(p.Since)) }>{ c.Label }</a></li>
-					}
-				</ul>
-			</div>
-		</div>
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "Several users match “" + p.Actor + "”.", Text: "Choose one:"}) {
+			<ul class="banner-list">
+				for _, c := range p.Choices {
+					<li><a href={ templ.SafeURL(base + "/audit?actor=" + url.QueryEscape(c.Value) + "&since=" + url.QueryEscape(p.Since)) }>{ c.Label }</a></li>
+				}
+			</ul>
+		}
 	}
 	if len(p.Events) > 0 {
 		<section class="audit-card" aria-label="Events">

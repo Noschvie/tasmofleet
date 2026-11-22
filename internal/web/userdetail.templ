@@ -56,13 +56,7 @@ templ userDetailPage(v userDetailView) {
 	}
 	@usersBanners(auth.UsersPageData{Notice: v.D.Notice, Error: v.D.Error, ErrField: v.D.ErrField, ViewOnly: v.D.ViewOnly})
 	if v.D.User.Disabled {
-		<div class="banner tone-neutral ud-off" role="status">
-			<span class="banner-dot"></span>
-			<div class="banner-text"><b>Deactivated.</b> Can’t sign in; all sessions were ended.</div>
-			if v.Reactivate != nil {
-				<a class="banner-btn" href={ templ.SafeURL(v.Reactivate.Href) } data-dialog={ v.Reactivate.Dialog }>Reactivate</a>
-			}
-		</div>
+		@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Title: "Deactivated.", Text: "Can’t sign in; all sessions were ended.", Class: "ud-off", Action: v.reactivateAction()})
 	}
 	if v.Info != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: v.Info, ID: udInfoID})

@@ -128,7 +128,9 @@ test("phone: the make compliant plan stays inside the screen", async ({ page }) 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
-  await page.locator("form:has(button[data-dialog=dlg-fix])").evaluate((f: HTMLFormElement) => f.submit()); // the no-JS post
+  await expect(page.locator(".banner", { hasText: "deviate from a required rule" })).toBeVisible({ timeout: 60_000 });
+  await page.goto(app.url + "/policy/deviations"); // Make compliant is here, not in the overview's banner (#1091)
+  await page.getByRole("button", { name: /^Make compliant…/ }).click();
   await expect(page.locator(".pol-fix-card").first()).toBeVisible({ timeout: 15_000 });
   for (const b of await page.locator(".pol-fix-card, .pol-fix-foot").all()) {
     const r = (await b.boundingBox())!;

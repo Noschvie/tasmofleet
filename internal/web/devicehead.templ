@@ -10,18 +10,9 @@ import (
 // nameOfferNotice says what the device calls itself while the stored name differs (#125). The
 // stored name is never overwritten; "Use device name" adopts it, "Keep" declines exactly this name.
 templ nameOfferNotice(c identCard) {
-	<div class="banner tone-warn name-offer" role="status">
-		<span class="banner-dot"></span>
-		<div class="banner-text">Name on the device: <b>{ c.NameOffer }</b></div>
-		if c.CanAnswer {
-			<div class="banner-actions">
-				<button type="button" class="banner-btn" hx-post={ c.Base + devPath(c.ID, "/name/adopt") } hx-vals={ nameVals(c.NameOffer) } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this">Use device name</button>
-				if c.KeepOK {
-					<button type="button" class="banner-btn" hx-post={ c.Base + devPath(c.ID, "/name/keep") } hx-vals={ nameVals(c.NameOffer) } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this">Keep</button>
-				}
-			</div>
-		}
-	</div>
+	@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "Name on the device: ", Class: "name-offer", Action: c.useNameAction()}) {
+		<b>{ c.NameOffer }</b>
+	}
 }
 
 // deviceHeader is the header of every device tab (prototype screen "device"): the name with the
@@ -528,24 +519,20 @@ templ identityCard(c identCard) {
 // identityTopicHint says that MQTT writes to the device are held back by a topic collision (#1047), with the other
 // device as a link and, for admins, "+N more" as a link to the Topic check card. The markup is ui.Banner's.
 templ identityTopicHint(t topicHint) {
-	<div class="banner tone-warn" role="status" id="topic-hint">
-		<span class="banner-dot"></span>
-		<div class="banner-text">
-			{ t.Lead + t.Before }
-			if t.Other != "" {
-				<a href={ templ.SafeURL(t.OtherAt) }>{ t.Other }</a>{ t.After + "." }
+	@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, ID: "topic-hint", Text: t.Lead + t.Before}) {
+		if t.Other != "" {
+			<a href={ templ.SafeURL(t.OtherAt) }>{ t.Other }</a>{ t.After + "." }
+		} else {
+			{ t.After + "." }
+		}
+		if t.More > 0 {
+			if t.MoreHref != "" {
+				{ " " }<a href={ templ.SafeURL(t.MoreHref) }>{ "+" + strconv.Itoa(t.More) + " more" }</a>
 			} else {
-				{ t.After + "." }
+				{ " +" + strconv.Itoa(t.More) + " more" }
 			}
-			if t.More > 0 {
-				if t.MoreHref != "" {
-					{ " " }<a href={ templ.SafeURL(t.MoreHref) }>{ "+" + strconv.Itoa(t.More) + " more" }</a>
-				} else {
-					{ " +" + strconv.Itoa(t.More) + " more" }
-				}
-			}
-		</div>
-	</div>
+		}
+	}
 }
 
 // identityID is the first row of the Identity card (#1004): the number every log line names the

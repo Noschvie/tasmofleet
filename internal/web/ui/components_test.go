@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"io"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -67,9 +68,11 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"Card":             Card(h, h),
 		"ListCard":         ListCard(h, h, "/x"),
 		"KV":               KV([]KVRow{{Key: h, Value: h, Mono: true}}),
+		"KVAction":         KV([]KVRow{{Key: h, Value: h, Action: &Btn{Label: h, Kind: "link", Attrs: templ.Attributes{"hx-post": h}}}}),
 		"Tabs":             Tabs(h, []Tab{{Label: h, Href: "/x"}, {Label: h, Reason: h}}),
 		"RowMenu":          RowMenu(h, []MenuItem{{Label: h, Href: "/x"}, {Label: h, Disabled: true, Why: h}}, false),
 		"Banner":           Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h}}),
+		"BannerProps":      Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Class: h, ID: h, Pulse: true, Flash: true, Attrs: templ.Attributes{"data-x": h}, Action: &Btn{Label: h, Dialog: h, Attrs: templ.Attributes{"hx-post": h, "data-y": h}}}),
 		"ErrorSum":         ErrorSummary(h),
 		"BannerLink":       Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h, Href: "/x", Target: "_blank", Rel: "noopener"}}),
 		"Toast":            ToastStatic(ToastData{Tone: ToneDanger, Text: h, Action: h}),
@@ -480,6 +483,69 @@ func TestBannerLeadCanCarryATimeStamp(t *testing.T) {
 	}
 	if got := comp(t, Banner(BannerData{Tone: ToneWarn, Title: "Lead.", Text: "Text."})); strings.Contains(got, "<time") {
 		t.Errorf("a lead without an instant renders a time: %s", got)
+	}
+}
+
+// Why (#1091, DS-007, DS-009): pages wrote their banners by hand because ui.Banner could not hold what they needed (a
+// list, a link or a time in the text, a hook class, a data attribute, a pulsing dot, an action that opens a dialog or
+// posts with htmx), and a hand-written banner is where a second action and a missing aria-hidden crept in. The banner
+// takes children after its text, a class, attributes, the pulse and the flash mark; its one action is a full ui.Button
+// (the dialog and the attributes arrive), and there is no way to give it a second one. The decorative dot is hidden
+// from a screen reader.
+func TestBannerProps(t *testing.T) {
+	withKids := comp(t, templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		kids := templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+			_, err := io.WriteString(w, `<ul class="banner-list"><li>one</li></ul>`)
+			return err
+		})
+		return Banner(BannerData{
+			Tone: ToneAccent, Title: "Lead.", Text: "Text ", Class: "cmd-check x", ID: "b1", Pulse: true, Flash: true,
+			Attrs:  templ.Attributes{"data-cooldown": true, "class": "evil", "style": "x", "onclick": "x"},
+			Action: &Btn{Label: "Open", Href: "/x", Dialog: "dlg", Attrs: templ.Attributes{"hx-post": "/p", "data-live-retry": true}},
+		}).Render(templ.WithChildren(ctx, kids), w)
+	}))
+	for _, want := range []string{
+		`<div class="banner tone-accent cmd-check x" id="b1" role="status" data-flash data-cooldown>`,
+		`<span class="banner-dot pulse" aria-hidden="true"></span>`,
+		`<div class="banner-text"><b>Lead.</b> Text <ul class="banner-list"><li>one</li></ul></div>`,
+		`<a class="banner-btn" href="/x" data-dialog="dlg" data-live-retry hx-post="/p">Open</a>`,
+	} {
+		if !strings.Contains(withKids, want) {
+			t.Errorf("banner lacks %q:\n%s", want, withKids)
+		}
+	}
+	for _, bad := range []string{"evil", "style=", "onclick"} {
+		if strings.Contains(withKids, bad) {
+			t.Errorf("the banner renders what pageAttrs refuses (%q): %s", bad, withKids)
+		}
+	}
+	if plain := comp(t, Banner(BannerData{Tone: ToneWarn, Text: "T."})); !strings.Contains(plain, `<span class="banner-dot" aria-hidden="true"></span>`) || strings.Contains(plain, "pulse") || strings.Contains(plain, "data-flash") {
+		t.Errorf("a plain banner has a still dot and no flash mark: %s", plain)
+	}
+	// One action: the struct has exactly one button field. A second one would bring back the two-button banners that
+	// the design system forbids; the other answer of such a banner is a link in its text or a button on the page.
+	n := 0
+	rt := reflect.TypeOf(BannerData{})
+	for i := 0; i < rt.NumField(); i++ {
+		if rt.Field(i).Type == reflect.TypeOf((*Btn)(nil)) || rt.Field(i).Type == reflect.TypeOf([]Btn(nil)) || rt.Field(i).Type == reflect.TypeOf([]*Btn(nil)) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("BannerData has %d action fields, the design system allows exactly one", n)
+	}
+}
+
+// Why (#1091): the one action of the name offer ("Use device name") needs the answer's other half, Keep, somewhere
+// else on the page: a row of a card may carry one button beside its value, so Keep sits next to the stored name it
+// keeps. A row without an action renders as before, byte for byte (cards are compared by live.js as strings).
+func TestKVRowActionFollowsTheValue(t *testing.T) {
+	got := comp(t, KV([]KVRow{{Key: "Device name", Value: "lamp", Mono: true, Action: &Btn{Label: "Keep", Kind: "link", Attrs: templ.Attributes{"hx-post": "/k"}}}, {Key: "Host", Value: "h"}}))
+	if want := `<dd class="mono">lamp <button type="button" class="btn btn-link" hx-post="/k">Keep</button></dd>`; !strings.Contains(got, want) {
+		t.Errorf("the row lacks %q:\n%s", want, got)
+	}
+	if want := `<dd class="">h</dd>`; !strings.Contains(got, want) {
+		t.Errorf("a row without an action changed: %s", got)
 	}
 }
 

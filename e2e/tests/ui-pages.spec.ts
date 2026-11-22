@@ -264,21 +264,19 @@ for (const m of modes) {
     await expect(page.locator("dialog[open]")).toHaveCount(0);
     await page.goto(app.url + "/policy");
     await look("policy");
-    // a live check, the rule menu, the Make compliant dialog and its page without JavaScript
+    // a live check, the rule menu and the Make compliant plan
     await page.getByRole("button", { name: "Run now" }).click();
     await expect(page.locator("#live-tile")).toContainText(/ago|just now/, { timeout: 60_000 });
     await look("policy-checked");
     await page.getByLabel(/^Actions for/).first().click();
     await look("policy-rulemenu");
     await page.keyboard.press("Escape");
-    const fix = page.getByRole("button", { name: "Make compliant…" });
+    // Make compliant is on the Deviating devices tab (the overview's banner has the one action Show, #1091): its plan page
+    await page.goto(app.url + "/policy/deviations");
+    const fix = page.getByRole("button", { name: /^Make compliant…/ });
     if (await fix.count()) {
       await fix.click();
-      await expect(page.locator("dialog#dlg-fix")).toBeVisible();
-      await look("policy-fix-dialog"); // the page behind it must not shift
-      await page.keyboard.press("Escape");
-      await page.locator("form:has(button[data-dialog=dlg-fix])").evaluate((f: HTMLFormElement) => f.submit());
-      await expect(page.getByRole("heading", { name: /^Make \d+ devices? compliant$/, level: 1 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /^Make (\d+ devices?|.+) compliant$/, level: 1 })).toBeVisible();
       await look("policy-fix");
     }
     await page.goto(app.url + "/devices/new");

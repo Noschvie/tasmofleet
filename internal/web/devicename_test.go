@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -55,6 +56,43 @@ func TestDevicePageOffersTheDeviceNameWhenItDiffersFromAHandSetName(t *testing.T
 	_, body = e.do(t, "GET", "/devices/1", "operator", nil)
 	if !strings.Contains(body, `Name on the device:`) || strings.Contains(body, `>Use device name</button>`) || strings.Contains(body, `>Keep</button>`) {
 		t.Errorf("operator sees the notice without the buttons, got:\n%s", body)
+	}
+}
+
+// Why (#1091, DS-007): the offer is one banner with one action. "Use device name" and "Keep" were two buttons in a
+// banner; the design system allows one, so Keep moved to the Device name row of the card, next to the stored name it
+// keeps, and shows exactly while the offer stands and Keep can be saved. Without a Keep store the row has none and
+// the banner still offers the one action; an operator sees the notice and no button at all.
+func TestNameOfferBannerHasOneActionAndKeepSitsInTheNameRow(t *testing.T) {
+	e := nameSetup(t)
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	i := strings.Index(body, `class="banner tone-warn name-offer"`)
+	if i < 0 {
+		t.Fatalf("no name offer banner:\n%s", body)
+	}
+	banner := body[i : i+strings.Index(body[i:], `</button></div>`)+len(`</button></div>`)]
+	if n := strings.Count(banner, "<button"); n != 1 || !strings.Contains(banner, `>Use device name</button>`) || strings.Contains(banner, ">Keep<") {
+		t.Errorf("the banner has %d buttons, want the one Use device name:\n%s", n, banner)
+	}
+	row := regexp.MustCompile(`<dt>Device name</dt><dd class="mono">[^<]*<button [^>]*hx-post="/tf/devices/1/name/keep"[^>]*>Keep</button></dd>`)
+	if !row.MatchString(body) {
+		t.Errorf("Keep is not in the Device name row of the Identity card:\n%s", body)
+	}
+	if n := strings.Count(body, ">Keep</button>"); n != 1 {
+		t.Errorf("Keep appears %d times, want once", n)
+	}
+	// no Keep store: the offer stays (Use device name), the row has no button
+	none := setupWith(t, func(d *Deps) {})
+	none.inv.devs[1] = e.inv.devs[1]
+	if _, b := none.do(t, "GET", "/devices/1", "admin", nil); !strings.Contains(b, ">Use device name</button>") || strings.Contains(b, ">Keep</button>") {
+		t.Errorf("without a Keep store: one action, no Keep:\n%s", b)
+	}
+	// Keep goes with the offer: when the name was kept, neither the banner nor the button stands
+	d := e.inv.devs[1]
+	d.KeptDeviceName = d.DeviceName
+	e.inv.devs[1] = d
+	if _, b := e.do(t, "GET", "/devices/1", "admin", nil); strings.Contains(b, ">Keep</button>") || strings.Contains(b, "name-offer") {
+		t.Errorf("a kept name leaves no offer and no Keep:\n%s", b)
 	}
 }
 

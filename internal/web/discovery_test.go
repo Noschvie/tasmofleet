@@ -390,6 +390,22 @@ func TestUpdateAddressOfCredentialedDeviceAsksAgainWhenMACIsUnproven(t *testing.
 	if r.StatusCode != 200 || !strings.Contains(body, "Could not verify that") || !strings.Contains(body, "10.0.0.51:80") || len(fd.accepted) != 0 {
 		t.Fatalf("status %d accepted %v: %s", r.StatusCode, fd.accepted, body)
 	}
+	// Why (#1091, DS-009): the confirmation is one danger banner inside the form that posts it, with one action (the
+	// submit); the way back is a link in the text, not a second button, and the hidden fields travel with the submit.
+	i := strings.Index(body, `<form method="post" action="/tf/discovery/proposals/2/accept">`)
+	j := strings.Index(body[max(i, 0):], "</form>")
+	if i < 0 || j < 0 {
+		t.Fatalf("no confirmation form: %s", body)
+	}
+	form := body[i : i+j]
+	for _, want := range []string{`name="csrf"`, `name="version" value="v2"`, `name="token"`, `<div class="banner tone-danger add-confirm" role="alert">`, `<button type="submit" class="banner-btn">Update address anyway</button>`, `<a href="/tf/devices/new">go back</a>`} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the confirmation lacks %q:\n%s", want, form)
+		}
+	}
+	if strings.Count(form, "<button")+strings.Count(form, `class="btn`) != 1 {
+		t.Errorf("the confirmation has more than the one action:\n%s", form)
+	}
 	token := confirmToken(t, body)
 	if r, _ := e.do(t, "POST", "/discovery/proposals/2/accept", "admin", url.Values{"version": {"other"}, "token": {token}}); r.StatusCode != 409 || len(fd.accepted) != 0 {
 		t.Fatalf("a token for another version must not work: %d", r.StatusCode)

@@ -32,18 +32,14 @@ templ policyShell(h policyHead) {
 // policyCooldownNote says which devices Run now left alone because they were read recently, and from when each
 // can be read again (#989): without it a rule on such a device looks like the check did nothing.
 templ policyCooldownNote(h policyHead) {
-	<div class="banner tone-accent" role="status" data-cooldown>
-		<span class="banner-dot"></span>
-		<div class="banner-text">
-			{ "Read less than " + liveCooldownText() + " ago, not read again: " }
-			for _, c := range h.Cooldown {
-				{ c.Name + " (from " }<time { ui.StampAttrs(c.Until, ui.StampDay)... }>{ ui.StampDayText(h.Now, c.Until) }</time>{ ")" + c.Sep }
-			}
-			if h.CooldownMore > 0 {
-				{ "and " + plural(h.CooldownMore, "more device") }
-			}
-		</div>
-	</div>
+	@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "Read less than " + liveCooldownText() + " ago, not read again: ", Attrs: templ.Attributes{"data-cooldown": true}}) {
+		for _, c := range h.Cooldown {
+			{ c.Name + " (from " }<time { ui.StampAttrs(c.Until, ui.StampDay)... }>{ ui.StampDayText(h.Now, c.Until) }</time>{ ")" + c.Sep }
+		}
+		if h.CooldownMore > 0 {
+			{ "and " + plural(h.CooldownMore, "more device") }
+		}
+	}
 }
 
 // policySummary is the one block under the title of Rules and Deviating devices: the fleet counts

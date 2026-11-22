@@ -234,10 +234,7 @@ templ gpioPreviewPage(p gtPreview) {
 			<div class="pol-fix-foot">@ui.Button(ui.Btn{Label: "Back to GPIO templates", Href: p.Base + p.Cancel})</div>
 			@gtExcluded(p)
 		} else {
-			<div class="banner tone-warn" role="status">
-				<span class="banner-dot"></span>
-				<div class="banner-text"><b>{ p.Count } { restartVerb(p.N) }.</b> { p.Restart }</div>
-			</div>
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: p.Count + " " + restartVerb(p.N) + ".", Text: p.Restart})
 			@ui.CardStacks(3) {
 				@ui.CardStack(2) {
 					for i, r := range p.Rows {
