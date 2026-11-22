@@ -44,13 +44,13 @@ func txListSub(p txListView) string {
 templ txList(p txListView) {
 	<div id="txlist" class="upd">
 		if len(p.History) == 0 && len(p.Scheduled) == 0 {
-			<section class="ucard">
+			@ui.Card("", "") {
 				@ui.Empty("No transactions yet", "Updates you start show up here.") {
 					if p.CanStart {
 						@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: p.Base + "/updates/new"})
 					}
 				}
-			</section>
+			}
 		} else {
 			for _, t := range p.Running {
 				<div class="upd-run">
@@ -250,7 +250,7 @@ templ txnBody(p txnPage) {
 		@schedWhen(p.Sched)
 	}
 	if !p.Waiting || p.Failed > 0 {
-		<section id="batch-summary" class="ucard upd-prog" aria-label="Progress">
+		@ui.CardOf(ui.CardData{ID: "batch-summary", Class: "upd-prog", Aria: "Progress"}) {
 			@ui.SegBar(p.Bar)
 			<div class="upd-counts" role="status">
 				if p.NeverRan && p.Sched != nil && p.Sched.Kind == "notstarted" {
@@ -298,10 +298,10 @@ templ txnBody(p txnPage) {
 					}
 				</p>
 			}
-		</section>
+		}
 	}
 	if p.Sched != nil && p.Sched.Kind == "notstarted" {
-		<section class="ucard upd-prog" aria-labelledby="notif-h">
+		@ui.CardOf(ui.CardData{Class: "upd-prog", LabelledBy: "notif-h"}) {
 			<div class="upd-when-card">
 				<h2 id="notif-h">Notification</h2>
 				<div class="upd-notif">
@@ -310,7 +310,7 @@ templ txnBody(p txnPage) {
 					<small>Sent once TasmoFleet was back, <time { ui.StampAttrs(p.Sched.BackAt, ui.StampDay)... }>{ ui.StampDayText(p.Sched.BackAt, p.Sched.BackAt) }</time>, when "Update job finished" is switched on in System, Notifications.</small>
 				</div>
 			</div>
-		</section>
+		}
 	}
 	if p.Template {
 		<div class="gt-txn">
@@ -439,13 +439,13 @@ templ schedSub(s *txnSched) {
 // schedWhen is the card of a plan that waits: its start, the rule for a start that TasmoFleet misses (the words of
 // the update preview) and what can be done until then.
 templ schedWhen(s *txnSched) {
-	<section class="ucard upd-prog" aria-label="When">
+	@ui.CardOf(ui.CardData{Class: "upd-prog", Aria: "When"}) {
 		<div class="upd-when-card">
 			<p class="upd-when-big"><span>Starts <time { ui.StampAttrs(s.Start, ui.StampStart)... }>{ ui.StampText(s.Start, ui.StampStart) }</time></span> <small>· { s.In }</small></p>
 			<p class="upd-rule"><b>If TasmoFleet is down at <time { ui.StampAttrs(s.Start, ui.StampClock)... }>{ ui.StampText(s.Start, ui.StampClock) }</time>,</b> the update starts as soon as TasmoFleet is back, but only until <time { ui.StampAttrs(s.Deadline(), ui.StampClock)... }>{ ui.StampText(s.Deadline(), ui.StampClock) }</time> ({ strconv.Itoa(s.Minutes) } minutes after the start time). If TasmoFleet is back later than that, the update is not started at all and TasmoFleet sends a notification. Devices are checked again when the update starts.</p>
 		</div>
 		<p class="upd-prog-note">Until it starts you can cancel it here. A running update cannot be changed this way.</p>
-	</section>
+	}
 }
 
 // updateNewPage is /updates/new: 1 · Devices and 3 · Options in the wide stack, 2 · Release and the
@@ -509,8 +509,7 @@ templ updateNewPage(f updateForm, csrf string) {
 						</div>
 					}
 				</section>
-				<section class={ ui.StackRank(3), "ucard", "upd-opts" } aria-labelledby="opt-h">
-					<h2 id="opt-h">3 · Options</h2>
+				@ui.CardOf(ui.CardData{Title: "3 · Options", Rank: 3, Class: "upd-opts", LabelledBy: "opt-h"}) {
 					<input type="hidden" name="backup_shown" value="1"/>
 					<label class="upd-opt"><input type="checkbox" name="backup" value="1" checked?={ !f.SkipBackup }/>Back up each device before flashing</label>
 					<label class="upd-opt">
@@ -533,11 +532,10 @@ templ updateNewPage(f updateForm, csrf string) {
 						Variant override
 						<input name="variant" value={ f.Variant } placeholder="keep the detected variant"/>
 					</label>
-				</section>
+				}
 			}
 			@ui.CardStack(1) {
-				<section class={ ui.StackRank(2), "ucard", "upd-rel" } aria-labelledby="rel-h">
-					<h2 id="rel-h">2 · Release</h2>
+				@ui.CardOf(ui.CardData{Title: "2 · Release", Rank: 2, Class: "upd-rel", LabelledBy: "rel-h"}) {
 					for _, o := range f.RelOpts {
 						@relOption(o)
 					}
@@ -552,9 +550,8 @@ templ updateNewPage(f updateForm, csrf string) {
 					if len(f.RelOpts) == 0 {
 						<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
 					}
-				</section>
-				<section class={ ui.StackRank(4), "ucard", "upd-aside" } aria-labelledby="plan-h">
-					<h2 id="plan-h">Plan</h2>
+				}
+				@ui.CardOf(ui.CardData{Title: "Plan", Rank: 4, Class: "upd-aside", LabelledBy: "plan-h"}) {
 					<dl class="upd-facts">
 						<dt>Devices</dt><dd data-plan-devices>{ strconv.Itoa(f.SelectedN()) }</dd>
 						<dt>Firmware files</dt><dd data-plan-files>{ strconv.Itoa(f.FileCount()) }</dd>
@@ -567,7 +564,7 @@ templ updateNewPage(f updateForm, csrf string) {
 					</ol>
 					<p class="upd-hint" role="status" data-push-hint hidden></p>
 					@ui.Button(ui.Btn{Label: "Review update", Kind: "primary", Tall: true, Type: "submit"})
-				</section>
+				}
 			}
 		}
 	</form>
@@ -683,8 +680,7 @@ templ updatePreviewPage(p previewPage, csrf string) {
 		</section>
 		@whenCard(p.When)
 		</div>
-		<aside class="ucard upd-aside upd-what" aria-labelledby="what-h">
-			<h2 id="what-h">What happens</h2>
+		@ui.CardOf(ui.CardData{Title: "What happens", Tag: "aside", Class: "upd-aside upd-what", LabelledBy: "what-h"}) {
 			<dl class="upd-facts upd-facts-wide">
 				<dt>Target</dt><dd><b>{ p.ReleaseText }</b></dd>
 				<dt>Starts</dt>
@@ -747,7 +743,7 @@ templ updatePreviewPage(p previewPage, csrf string) {
 			} else if len(p.IDs) == 0 {
 				<p class="upd-hint">No device can be updated with these settings.</p>
 			}
-		</aside>
+		}
 	</div>
 	<form id="start" method="post" action={ templ.SafeURL(p.Base + "/updates") }>
 		@previewFields(p, csrf, p.IDs, true)
@@ -781,12 +777,7 @@ templ updatePreviewPage(p previewPage, csrf string) {
 // and the fields of Other time. Its inputs belong to the form "start", so they travel with Start update.
 // static/updatestart.js recomputes the picks in the browser's zone and keeps the plan's "Starts" row in step.
 templ whenCard(w whenState) {
-	<section class="ucard upd-when" aria-labelledby="when-h"
-		if w.Preset() != "" {
-			data-preset={ w.Preset() }
-		}
-	>
-		<h2 id="when-h">5 · When</h2>
+	@ui.CardOf(ui.CardData{Title: "5 · When", Class: "upd-when", LabelledBy: "when-h", Attrs: w.cardAttrs()}) {
 		<fieldset class="rcards">
 			<legend class="sr-only">When does the update start?</legend>
 			<label class="rcard"><input type="radio" name="when" id="when-now" value="now" form="start" checked?={ !w.At }/><span class="rcard-body"><b>Start now</b><span>The update starts as soon as you press Start update.</span></span></label>
@@ -815,7 +806,7 @@ templ whenCard(w whenState) {
 			<p class="upd-err" id="when-err" role="alert" data-now={ w.Now.Format("2006-01-02T15:04:05Z07:00") } hidden?={ !w.Invalid() }>{ w.Err }</p>
 			<p class="upd-tz" data-tz>Times are in the server's time zone ({ w.ZoneText() }).</p>
 		</div>
-	</section>
+	}
 }
 
 // previewFields carry the choice of the preview to the start or back to the picker. A build that comes

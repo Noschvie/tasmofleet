@@ -204,6 +204,25 @@ func (c identCard) whyText() string {
 	return ""
 }
 
+// probeAttrs are the htmx and script attributes of Refresh identity. While it cannot act (whyText) it carries
+// aria-disabled and hx-disable: htmx never binds the probe, so the markup sends nothing by click, Enter or Space, not
+// only while the click guard of select.js runs first; live.js lifts both when the device is back.
+func (c identCard) probeAttrs() templ.Attributes {
+	a := templ.Attributes{
+		"hx-post":           c.Base + devPath(c.ID, "/probe"),
+		"hx-target":         "#identity",
+		"hx-swap":           "outerHTML",
+		"hx-disabled-elt":   "this",
+		"data-needs-device": true,
+		"aria-describedby":  "ident-why",
+	}
+	if c.whyText() != "" {
+		a["aria-disabled"] = "true"
+		a["hx-disable"] = true
+	}
+	return a
+}
+
 // identSig is a short fingerprint of what the Identity card shows from the stored device. It leaves out the answer of
 // a Refresh identity (Notice, Error), which only that answer carries, and the dimming and the reason the button is
 // disabled (Off, Why), which live.js follows from the live region: neither is a reason to swap the card.

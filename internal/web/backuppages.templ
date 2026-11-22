@@ -40,13 +40,13 @@ templ backupsTab(p backupsView) {
 				// no button that cannot act: the page says why nothing can be taken now (#1072)
 				@ui.Empty("Can’t back up yet", backupsBlockedText(p.Blocked)) {
 					if p.CanEdit && backupsNeedsAnswer(p.Blocked) {
-						<a class="btn" href={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/edit") }>Edit</a>
+						@ui.Button(ui.Btn{Label: "Edit", Href: p.Base + "/devices/" + devStr(p.DeviceID) + "/edit"})
 					}
 				}
 			} else {
 				@ui.Empty("No backups yet", backupsEmptyText(p)) {
 					if p.CanBackup {
-						<button type="submit" form="bk-now" class="btn btn-primary">Back up now</button>
+						@ui.Button(ui.Btn{Label: "Back up now", Kind: "primary", Type: "submit", Form: "bk-now"})
 					}
 				}
 			}
@@ -63,30 +63,30 @@ templ backupsTab(p backupsView) {
 					}
 				</div>
 				if p.CanDelete && len(p.Prune) > 0 {
-					<a class="btn" href={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/prune") } data-dialog="dlg-prune">Prune now…</a>
+					@ui.Button(ui.Btn{Label: "Prune now…", Href: p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/prune", Dialog: "dlg-prune"})
 				}
 				<span class="bk-total">{ p.Total }</span>
 				if p.CanBackup && p.Blocked != "" {
 					@ui.Button(ui.Btn{Label: "Back up now", DisabledReason: p.Blocked, ReasonID: p.BlockedBy, ReasonShared: true})
 				} else if p.CanBackup {
-					<button type="submit" form="bk-now" class="btn">Back up now</button>
+					@ui.Button(ui.Btn{Label: "Back up now", Type: "submit", Form: "bk-now"})
 				}
 			</div>
 			@backupStatus()
 			<form id="bk-sel" method="get" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/diff") }>
 				<div class="bk-selbar" data-bulkbar hidden role="region" aria-label="Selected backups">
 					<span class="bk-selcount"><span data-bar-count>0</span> selected</span>
-					<button type="submit" class="btn btn-primary btn-sm" data-needs-pair>Compare</button>
+					@ui.Button(ui.Btn{Label: "Compare", Kind: "primary", Small: true, Type: "submit", Attrs: templ.Attributes{"data-needs-pair": true}})
 					if p.CanDelete {
-						<button type="submit" class="btn btn-sm bk-seldel" formaction={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete") }>Delete selected</button>
+						@ui.Button(ui.Btn{Label: "Delete selected", Small: true, Type: "submit", Class: "bk-seldel", FormAction: p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete"})
 					}
 				</div>
 				<noscript>
 					<div class="bk-selbar" role="region" aria-label="Selected backups">
 						<span class="bk-selcount">Tick two backups to compare them</span>
-						<button type="submit" class="btn btn-primary btn-sm">Compare</button>
+						@ui.Button(ui.Btn{Label: "Compare", Kind: "primary", Small: true, Type: "submit"})
 						if p.CanDelete {
-							<button type="submit" class="btn btn-sm bk-seldel" formaction={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete") }>Delete selected</button>
+							@ui.Button(ui.Btn{Label: "Delete selected", Small: true, Type: "submit", Class: "bk-seldel", FormAction: p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete"})
 						}
 					</div>
 				</noscript>
@@ -182,38 +182,30 @@ templ backupRowItem(p backupsView, b backupRow) {
 		<div class="bk-acts">
 			if b.Failed {
 				if p.CanBackup {
-					<button type="submit" form="bk-now" class="btn" disabled?={ p.Blocked != "" }>Retry</button>
+					@ui.Button(ui.Btn{Label: "Retry", Type: "submit", Form: "bk-now", Disabled: p.Blocked != ""})
 				}
 			} else {
 				if p.CanKeep {
 					if b.Kept {
-						<button type="submit" form="bk-keep" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/keep") } name="kept" value="0" class="btn bk-keep is-kept" aria-pressed="true" title="Kept: the retention never prunes it. Click to release it.">
+						@ui.Button(ui.Btn{Type: "submit", Form: "bk-keep", FormAction: p.Base + "/backups/" + bkStr(b.ID) + "/keep", Name: "kept", Value: "0", Class: "bk-keep is-kept", Attrs: templ.Attributes{"aria-pressed": "true", "title": "Kept: the retention never prunes it. Click to release it."}}) {
 							<span class="bk-pin" aria-hidden="true"></span>Kept
-						</button>
+						}
 					} else {
-						<button type="submit" form="bk-keep" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/keep") } name="kept" value="1" class="btn bk-keep" aria-pressed="false" title="Keep this backup: the retention never prunes it.">
+						@ui.Button(ui.Btn{Type: "submit", Form: "bk-keep", FormAction: p.Base + "/backups/" + bkStr(b.ID) + "/keep", Name: "kept", Value: "1", Class: "bk-keep", Attrs: templ.Attributes{"aria-pressed": "false", "title": "Keep this backup: the retention never prunes it."}}) {
 							<span class="bk-pin" aria-hidden="true"></span>Keep
-						</button>
+						}
 					}
 				}
 				if b.Download != "" {
-					<a class="btn" href={ templ.SafeURL(b.Download) } title={ downloadHelp(b) }>Download</a>
+					@ui.Button(ui.Btn{Label: "Download", Href: b.Download, Attrs: templ.Attributes{"title": downloadHelp(b)}})
 				}
 				if b.Restore != "" && p.RestoreBlocked != "" {
-					<button type="button" class="btn" disabled title={ p.RestoreBlocked } aria-disabled="true" aria-describedby="bk-restore-why">Restore…</button>
+					@ui.Button(ui.Btn{Label: "Restore…", Disabled: true, Attrs: templ.Attributes{"title": p.RestoreBlocked, "aria-disabled": "true", "aria-describedby": "bk-restore-why"}})
 				} else if b.Restore != "" {
-					<a class="btn" href={ templ.SafeURL(b.Restore) }>Restore…</a>
+					@ui.Button(ui.Btn{Label: "Restore…", Href: b.Restore})
 				}
 				if b.DeleteText != "" {
-					<a
-						class="btn btn-danger bk-del"
-						href={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/delete") }
-						data-dialog="dlg-bkdel"
-						data-dlg-title="Delete this backup?"
-						data-dlg-text={ b.DeleteText } data-dlg-at={ ui.StampISO(b.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(b.Taken, ui.StampDateTimeSec) }
-						data-dlg-action={ p.Base + "/backups/" + bkStr(b.ID) + "/delete" }
-						data-dlg-verb="Delete backup"
-					>Delete</a>
+					@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: p.Base + "/backups/" + bkStr(b.ID) + "/delete", Dialog: "dlg-bkdel", Class: "bk-del", Attrs: backupDeleteAttrs(p, b)})
 				}
 			}
 		</div>
@@ -252,7 +244,7 @@ templ filesFold(f *filesView) {
 			<p class="bk-fl-note">{ f.Note }</p>
 			if f.Download != "" {
 				<div class="bk-fl-acts">
-					<a class="btn btn-sm" href={ templ.SafeURL(f.Download) } title="Download the files archive (admins only, recorded in the audit log)">Download files (.tar)</a>
+					@ui.Button(ui.Btn{Label: "Download files (.tar)", Small: true, Href: f.Download, Attrs: templ.Attributes{"title": "Download the files archive (admins only, recorded in the audit log)"}})
 				</div>
 			}
 		}
@@ -268,8 +260,8 @@ templ backupDeleteDialog(p backupsView) {
 			<h2 id="dlg-bkdel-h" data-fill="title">Delete this backup?</h2>
 			<p class="udlg-body" data-fill="text"></p>
 			<div class="udlg-foot">
-				<button type="button" class="btn" data-close>Cancel</button>
-				<button type="submit" class="btn btn-danger-solid" data-fill="verb">Delete backup</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true}})
+				@ui.Button(ui.Btn{Label: "Delete backup", Kind: "danger-solid", Type: "submit", Attrs: templ.Attributes{"data-fill": "verb"}})
 			</div>
 		</form>
 	</dialog>
@@ -293,8 +285,8 @@ templ pruneDialog(p backupsView) {
 				}
 			</div>
 			<div class="udlg-foot">
-				<button type="button" class="btn" data-close>Cancel</button>
-				<button type="submit" class="btn btn-danger-solid">Prune { plural(len(p.Prune), "backup") }</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true}})
+				@ui.Button(ui.Btn{Label: "Prune " + plural(len(p.Prune), "backup"), Kind: "danger-solid", Type: "submit"})
 			</div>
 		</form>
 	</dialog>

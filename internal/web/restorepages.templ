@@ -37,7 +37,7 @@ templ restoreConfirm(c restoreConfirmView) {
 					}
 				}
 				@ui.CardStack(1) {
-					<section class="ucard rs-what">
+					@ui.CardOf(ui.CardData{Class: "rs-what"}) {
 						<h2>What happens</h2>
 						<ol class="rs-steps-text">
 							for _, t := range c.StepsText {
@@ -73,15 +73,15 @@ templ restoreConfirm(c restoreConfirmView) {
 								<p class="ufield-err" id="rs-ack-err" role="alert">{ needConfirm }</p>
 							}
 							<div class="rs-acts">
-								<a class="btn" href={ templ.SafeURL(c.CancelHref) }>Cancel</a>
-								<button type="submit" class="btn btn-primary">Restore and restart</button>
+								@ui.Button(ui.Btn{Label: "Cancel", Href: c.CancelHref})
+								@ui.Button(ui.Btn{Label: "Restore and restart", Kind: "primary", Type: "submit"})
 							</div>
 						</form>
-					</section>
+					}
 				}
 			}
 		} else {
-			<div class="rs-acts"><a class="btn" href={ templ.SafeURL(c.CancelHref) }>Back to backups</a></div>
+			<div class="rs-acts">@ui.Button(ui.Btn{Label: "Back to backups", Href: c.CancelHref})</div>
 		}
 	</div>
 }
@@ -143,16 +143,16 @@ templ restoreStatusBody(v restoreJobView) {
 				<span class="rs-leave">You can leave this page; the job continues and is listed on the device's Backups tab.</span>
 			}
 			if v.RollbackHref != "" {
-				<a class="btn" href={ templ.SafeURL(v.RollbackHref) }>{ v.RollbackText }</a>
+				@ui.Button(ui.Btn{Label: v.RollbackText, Href: v.RollbackHref})
 			}
 			if v.RetryHref != "" {
-				<a class="btn btn-primary" href={ templ.SafeURL(v.RetryHref) }>Retry restore</a>
+				@ui.Button(ui.Btn{Label: "Retry restore", Kind: "primary", Href: v.RetryHref})
 			}
 			if v.DeviceHref != "" {
-				<a class="btn" href={ templ.SafeURL(v.DeviceHref) }>Open the device</a>
+				@ui.Button(ui.Btn{Label: "Open the device", Href: v.DeviceHref})
 			}
 			if !v.Running && !v.Failed {
-				<a class="btn btn-primary" href={ templ.SafeURL(v.BackHref) }>Back to backups</a>
+				@ui.Button(ui.Btn{Label: "Back to backups", Kind: "primary", Href: v.BackHref})
 			}
 		</div>
 	</div>

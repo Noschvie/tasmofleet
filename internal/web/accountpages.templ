@@ -286,8 +286,7 @@ templ accountPage(v accountView) {
 			}
 		}
 		if v.D.Local {
-			<section class="ucard acct-pw" aria-labelledby="acct-pw-h">
-				<h2 id="acct-pw-h">Change password</h2>
+			@ui.CardOf(ui.CardData{Title: "Change password", Class: "acct-pw", LabelledBy: "acct-pw-h"}) {
 				<form class="acct-form" method="post" action={ templ.SafeURL(v.D.BasePath + "/account/password") }>
 					<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 					@ui.Field(ui.FieldData{Label: "Current password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(v.D.ErrField, "current", v.D.Error), Autofocus: focus(v.D.ErrField, "current", true)})
@@ -295,7 +294,7 @@ templ accountPage(v accountView) {
 					@ui.Field(ui.FieldData{Label: "Repeat new password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(v.D.ErrField, "confirm", v.D.Error), Autofocus: focus(v.D.ErrField, "confirm", false)})
 					<button type="submit" class="btn btn-primary acct-submit">Change password</button>
 				</form>
-			</section>
+			}
 		}
 	</div>
 }
@@ -400,20 +399,18 @@ templ usersPage(v usersView) {
 	</section>
 	}
 	@ui.CardStack(1) {
-		<section class="ucard users-roles" aria-labelledby="users-roles-h">
-			<h2 id="users-roles-h">Roles</h2>
+		@ui.CardOf(ui.CardData{Title: "Roles", Class: "users-roles", LabelledBy: "users-roles-h"}) {
 			<ul class="roles-list">
 				<li>@ui.Badge(ui.ToneAccent, "Admin")<span>Change everything, including users.</span><span class="roles-n">{ plural(v.Admins, "user") }</span></li>
 				<li>@ui.Badge(ui.ToneNeutral, "Operator")<span>Switch, restart and back up devices.</span><span class="roles-n">{ plural(v.Operators, "user") }</span></li>
 			</ul>
-		</section>
-		<section class="ucard users-safe" aria-labelledby="users-safe-h">
-			<h2 id="users-safe-h">Safeguards</h2>
+		}
+		@ui.CardOf(ui.CardData{Title: "Safeguards", Class: "users-safe", LabelledBy: "users-safe-h"}) {
 			<ul class="safe-list">
 				<li>Admin actions ask you to confirm it’s you once every 5 minutes.</li>
 				<li>Nobody can deactivate, delete or demote themselves or the last active admin.</li>
 			</ul>
-		</section>
+		}
 	}
 	}
 	for _, u := range v.Rows {
@@ -463,7 +460,7 @@ templ userAddPage(v userAddView) {
 			<div class="banner-text"><b>{ fieldsNeedAttention(v.Errors) }</b> The user wasn’t added yet.</div>
 		</div>
 	}
-	<form class="ucard useradd" method="post" action={ templ.SafeURL(v.D.BasePath + "/users") }>
+	@ui.CardOf(ui.CardData{Tag: "form", Class: "useradd", Attrs: templ.Attributes{"method": "post", "action": templ.SafeURL(v.D.BasePath + "/users")}}) {
 		<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 		@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
 		@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: v.D.Username, Mono: true, Autocomplete: "off", NoAutocapitalize: true, NoSpellcheck: true, Error: fieldErr(v.D.ErrField, "username", v.D.Error), Autofocus: focus(v.D.ErrField, "username", false)})
@@ -490,7 +487,7 @@ templ userAddPage(v userAddView) {
 				<button type="submit" class="btn btn-primary" disabled?={ v.D.ViewOnly }>Add user</button>
 			}
 		</div>
-	</form>
+	}
 	if v.StepUp != nil {
 		@ui.StepUp(*v.StepUp)
 	}

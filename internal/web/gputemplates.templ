@@ -14,7 +14,7 @@ templ policyTemplatesPage(p gtView) {
 				}
 				<form method="post" action={ templ.SafeURL(p.Base + policyTemplatesPath + "/read") } class="pol-inline">
 					<input type="hidden" name="csrf" value={ p.CSRF }/>
-					<button type="submit" class="btn btn-sm">Read again</button>
+					@ui.Button(ui.Btn{Label: "Read again", Small: true, Type: "submit"})
 				</form>
 			</div>
 			@gtAgeLine(p)
@@ -72,7 +72,7 @@ templ gtGroupCard(p gtView, g gtGroup, rank string) {
 			</div>
 			if g.Apply != nil {
 				<div class="cbd">
-					<button type="submit" form={ g.Apply.FormID } class="btn btn-sm btn-primary">Apply reference to { itoa(g.Apply.N) }…</button>
+					@ui.Button(ui.Btn{Label: "Apply reference to " + itoa(g.Apply.N) + "…", Kind: "primary", Small: true, Type: "submit", Form: g.Apply.FormID})
 				</div>
 			}
 		</div>
@@ -179,7 +179,7 @@ templ gtNotJudged(p gtView, rank string) {
 					for _, id := range p.BackupIDs {
 						<input type="hidden" name="id" value={ devStr(id) }/>
 					}
-					<button type="submit" class="btn btn-sm">Back up these { itoa(len(p.BackupIDs)) }</button>
+					@ui.Button(ui.Btn{Label: "Back up these " + itoa(len(p.BackupIDs)), Small: true, Type: "submit"})
 				</form>
 			}
 		</div>
@@ -231,7 +231,7 @@ templ gpioPreviewPage(p gtPreview) {
 		}
 		if p.N == 0 {
 			@ui.Empty("Nothing to apply.", "No selected device can be sent the template: they already match, or cannot take it.")
-			<div class="pol-fix-foot"><a class="btn" href={ templ.SafeURL(p.Base + p.Cancel) }>Back to GPIO templates</a></div>
+			<div class="pol-fix-foot">@ui.Button(ui.Btn{Label: "Back to GPIO templates", Href: p.Base + p.Cancel})</div>
 			@gtExcluded(p)
 		} else {
 			<div class="banner tone-warn" role="status">
@@ -257,8 +257,8 @@ templ gpioPreviewPage(p gtPreview) {
 					<input type="hidden" name={ f.Key } value={ f.Value }/>
 				}
 				<label class="gt-confirm"><input type="checkbox" name="confirm" value="1" required/> I checked the changes; { p.Count } may restart now.</label>
-				<a class="btn" href={ templ.SafeURL(p.Base + p.Cancel) }>Cancel</a>
-				<button type="submit" class="btn btn-primary">Back up, apply and restart { p.Count }</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Href: p.Base + p.Cancel})
+				@ui.Button(ui.Btn{Label: "Back up, apply and restart " + p.Count, Kind: "primary", Type: "submit"})
 			</form>
 		}
 	</div>
@@ -361,8 +361,8 @@ templ gtExcluded(p gtPreview) {
 templ gpioStartedPage(base string, s fixStarted) {
 	<div class="pol-page">
 		@ui.PageHeader("Apply GPIO template", "Transaction "+txID(s.Batch)+" was started.") {
-			<a class="btn btn-primary" href={ templ.SafeURL(base + "/transactions/" + vstr(int64(s.Batch))) }>Open the transaction</a>
-			<a class="btn" href={ templ.SafeURL(base + policyTemplatesPath) }>Back to GPIO templates</a>
+			@ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))})
+			@ui.Button(ui.Btn{Label: "Back to GPIO templates", Href: base + policyTemplatesPath})
 		}
 		@ui.Card("Left out", "These devices were not included.") {
 			<ul class="pol-fix-left">

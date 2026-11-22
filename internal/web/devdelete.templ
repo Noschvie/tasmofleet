@@ -62,8 +62,8 @@ templ deviceDeletePage(p devDeleteView) {
 				<p class="ufield-err" id="dd-ack-err" role="alert">{ needConfirm }</p>
 			}
 			<div class="dd-acts">
-				<a class="btn" href={ templ.SafeURL(p.CancelHref) }>Cancel</a>
-				<button type="submit" class="btn btn-danger-solid dd-go" disabled?={ p.Hold != nil }>Delete device</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Href: p.CancelHref})
+				@ui.Button(ui.Btn{Label: "Delete device", Kind: "danger-solid", Type: "submit", Class: "dd-go", Disabled: p.Hold != nil})
 			</div>
 		</form>
 	</div>

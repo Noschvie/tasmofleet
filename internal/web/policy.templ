@@ -346,7 +346,7 @@ templ policyExportCard(p policyIOView) {
 	@ui.Card("Export", "All rules as one JSON file, ready to import here or on another TasmoFleet.") {
 		<div class="pio-acts">
 			@ui.CopyButton(ui.CopyData{Text: p.JSON})
-			<a class="btn btn-primary" href={ templ.SafeURL(p.Base + policyIOPath + "/export") } download="policy-rules.json">Download .json</a>
+			@ui.Button(ui.Btn{Label: "Download .json", Kind: "primary", Href: p.Base + policyIOPath + "/export", Attrs: templ.Attributes{"download": "policy-rules.json"}})
 		</div>
 		<pre class="pio-json">{ p.JSON }</pre>
 	}
@@ -371,7 +371,7 @@ templ policyImportCard(p policyIOView) {
 				</label>
 				<p class="pio-legend" id="pio-legend"><span class="mono">level</span>: required or advisory · <span class="mono">expected</span>: the value to check for. Files with <span class="mono">severity</span> (warn = required, info = advisory) and <span class="mono">want</span> still import.</p>
 				<div class="pio-check">
-					<button type="submit" class="btn">Check import</button>
+					@ui.Button(ui.Btn{Label: "Check import", Type: "submit"})
 				</div>
 			</form>
 			<section class="pio-preview" aria-labelledby="pio-h">
@@ -405,7 +405,7 @@ templ policyImportCard(p policyIOView) {
 					if p.Replaces {
 						<div class="pio-foot">
 							@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "The file replaces all current rules.", Text: "A rule that is not in it is removed. This is saved as a new rule version; History can bring the old rules back."})
-							<button type="submit" form="pio-form" class="btn btn-primary" name="confirm" value="1">{ replaceLabel(p.Count) }</button>
+							@ui.Button(ui.Btn{Label: replaceLabel(p.Count), Kind: "primary", Type: "submit", Form: "pio-form", Name: "confirm", Value: "1"})
 						</div>
 					}
 				}
@@ -423,12 +423,12 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 		}
 		if len(p.Rows) == 0 {
 			@ui.Empty("No device selected", "Pick a rule that flags devices on the policy page.") {
-				<a class="btn" href={ templ.SafeURL(base + policyPath) }>Back to policy</a>
+				@ui.Button(ui.Btn{Label: "Back to policy", Href: base + policyPath})
 			}
 		} else {
 			<div class="pol-fix-grid">
 				for _, row := range p.Rows {
-					<section class="ucard pol-fix-card">
+					@ui.CardOf(ui.CardData{Class: "pol-fix-card"}) {
 						<h2><a href={ templ.SafeURL(base + "/devices/" + devStr(row.Device.ID)) }>{ row.Device.Name }</a></h2>
 						for _, c := range row.Cmds {
 							<div class="pol-fix-cmd">
@@ -461,7 +461,7 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 								}
 							</fieldset>
 						}
-					</section>
+					}
 				}
 			</div>
 			if hasFixOptions(p) {
@@ -486,13 +486,13 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 				for _, f := range p.Fields {
 					<input type="hidden" name={ f.Key } value={ f.Value }/>
 				}
-				<a class="btn" href={ templ.SafeURL(base + p.back()) }>Cancel</a>
+				@ui.Button(ui.Btn{Label: "Cancel", Href: base + p.back()})
 				if hasFixOptions(p) {
 					<span class="pol-none" data-plan-stale hidden>Update plan to include ticked rows</span>
-					<button type="submit" class="btn" form="fix-select" data-plan-update>Update plan</button>
+					@ui.Button(ui.Btn{Label: "Update plan", Type: "submit", Form: "fix-select", Attrs: templ.Attributes{"data-plan-update": true}})
 				}
 				if len(p.IDs) > 0 {
-					<button type="submit" class="btn btn-primary" data-plan-run>Run { plural(p.Commands, "change") }</button>
+					@ui.Button(ui.Btn{Label: "Run " + plural(p.Commands, "change"), Kind: "primary", Type: "submit", Attrs: templ.Attributes{"data-plan-run": true}})
 				}
 			</form>
 		}
@@ -505,8 +505,8 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 templ fixStartedPage(base string, s fixStarted) {
 	<div class="pol-page">
 		@ui.PageHeader("Make compliant", "Transaction #"+vstr(int64(s.Batch))+" was started.") {
-			<a class="btn btn-primary" href={ templ.SafeURL(base + "/transactions/" + vstr(int64(s.Batch))) }>Open the transaction</a>
-			<a class="btn" href={ templ.SafeURL(base + policyPath) }>Back to policy</a>
+			@ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))})
+			@ui.Button(ui.Btn{Label: "Back to policy", Href: base + policyPath})
 		}
 		if len(s.Skipped) > 0 {
 			@ui.Card("Left out", "These devices were not included.") {

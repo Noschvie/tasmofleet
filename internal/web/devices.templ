@@ -151,7 +151,7 @@ templ devicesContent(v view, p devicesPage) {
 						}
 					</select>
 				</label>
-				<noscript><button type="submit" class="btn">Filter</button></noscript>
+				<noscript>@ui.Button(ui.Btn{Label: "Filter", Type: "submit"})</noscript>
 			</form>
 			if v.Features.DeviceCmd {
 				<form id="picker" method="post" action={ templ.SafeURL(v.Base + "/devices/bulk/power") }>
@@ -172,8 +172,8 @@ templ devicesContent(v view, p devicesPage) {
 				<h2 id="dlg-row-h" data-fill="title"></h2>
 				<p class="udlg-body" data-fill="text"></p>
 				<div class="udlg-foot">
-					<button type="button" class="btn" data-close data-fill="dismiss">Cancel</button>
-					<button type="submit" class="btn btn-primary" data-fill="verb"></button>
+					@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true, "data-fill": "dismiss"}})
+					@ui.Button(ui.Btn{Kind: "primary", Type: "submit", Attrs: templ.Attributes{"data-fill": "verb"}})
 				</div>
 			</form>
 		</dialog>
@@ -219,7 +219,9 @@ templ bulkBar(v view) {
 		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" id="bulk-note" data-bar-note hidden></span></span>
 		<div class="bulk-acts">
 			if v.Features.Updates {
-				<button type="submit" data-needs-device class="btn btn-primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>
+				@ui.Button(ui.Btn{Kind: "primary", Type: "submit", FormAction: v.Base + "/updates/new", Attrs: templ.Attributes{"data-needs-device": true}}) {
+					<span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span>
+				}
 			}
 			if v.Features.BulkCommand && v.IsAdmin {
 				<button type="submit" data-needs-device formaction={ templ.SafeURL(v.Base + "/devices/bulk/command") }><span class="bulk-lg">Send command</span><span class="bulk-sm">Command</span></button>

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/hellwand/tasmofleet/internal/firmware"
 	"github.com/hellwand/tasmofleet/internal/httpx"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -289,6 +291,20 @@ type prefetchView struct {
 	Running             bool
 	Done, Failed, Total int
 	Percent             int
+}
+
+// cardAttrs are the stream attributes of the prefetch card: while a run is going it opens the event stream and
+// swaps itself with the next state; the last state has none, so the browser closes the connection.
+func (v prefetchView) cardAttrs() templ.Attributes {
+	if !v.Running {
+		return nil
+	}
+	return templ.Attributes{
+		"hx-ext":      "sse",
+		"sse-connect": v.Base + "/firmware/prefetch/" + v.Run.ID + "/stream",
+		"sse-swap":    "prefetch",
+		"hx-swap":     "outerHTML",
+	}
 }
 
 func (h *handler) prefetchView(r *http.Request, run firmware.PrefetchRun) prefetchView {

@@ -148,7 +148,7 @@ templ policyRow(p policyView, i int, r ruleRow) {
 // reorder without JavaScript or on a phone) and Delete….
 templ policyRowMenu(p policyView, r ruleRow) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", r.Last && !r.First) }>
-		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + r.Name }>⋯</summary>
+		@ui.MenuButton("Actions for "+r.Name, "")
 		<div class="rowmenu-body menu-panel">
 			<a class="menu-item" href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }><span>Edit</span></a>
 			<a class="menu-item" href={ templ.SafeURL(p.Base + rulesPath + "/duplicate?id=" + r.ID) }><span>Duplicate</span></a>
@@ -208,7 +208,7 @@ templ policyAlert(p policyView) {
 templ policyEmpty(p policyView) {
 	if p.Admin {
 		@ui.Empty("No policy rules yet", "Start with a template. You can change every field afterwards.") {
-			<a class="btn btn-primary" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>New rule</a>
+			@ui.Button(ui.Btn{Label: "New rule", Kind: "primary", Href: p.Base + rulesPath + "/new"})
 		}
 		if len(p.Templates) > 0 {
 			<div class="pol-tpls">

@@ -28,7 +28,7 @@ templ comparePage(p compareView) {
 			<input type="checkbox" name="all" value="1" checked?={ p.All }/>
 			<span>Show all { plural(p.NAll, "setting") }</span>
 		</label>
-		<noscript><button type="submit" class="btn">Compare</button></noscript>
+		<noscript>@ui.Button(ui.Btn{Label: "Compare", Type: "submit"})</noscript>
 	</form>
 	if p.Hiding {
 		<p class="cmp-note">Rules and scripts are shown to admins only.</p>
@@ -41,9 +41,9 @@ templ comparePage(p compareView) {
 	<div class="cmp-foot">
 		<span>Restoring writes the older backup back to the device.</span>
 		<div class="btn-row">
-			<a class="btn" href={ templ.SafeURL(p.BackHref) }>Back to backups</a>
+			@ui.Button(ui.Btn{Label: "Back to backups", Href: p.BackHref})
 			if p.RestoreHref != "" {
-				<a class="btn btn-primary" href={ templ.SafeURL(p.RestoreHref) }>Restore this backup…</a>
+				@ui.Button(ui.Btn{Label: "Restore this backup…", Kind: "primary", Href: p.RestoreHref})
 			}
 		</div>
 	</div>
@@ -54,7 +54,7 @@ templ comparePage(p compareView) {
 templ compareUndecoded(device, backHref, base string) {
 	@ui.PageHeader("Compare backups", device)
 	@ui.Empty("Nothing to compare yet", "Comparing needs two decoded backups. A backup is decoded when the decoder is installed and not older than the firmware; About shows its version.") {
-		<a class="btn" href={ templ.SafeURL(backHref) }>Back to backups</a>
-		<a class="btn" href={ templ.SafeURL(base + "/about") }>About</a>
+		@ui.Button(ui.Btn{Label: "Back to backups", Href: backHref})
+		@ui.Button(ui.Btn{Label: "About", Href: base + "/about"})
 	}
 }

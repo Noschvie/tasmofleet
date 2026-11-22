@@ -79,6 +79,20 @@ type restoreRow struct {
 	Tone                       ui.Tone
 }
 
+// backupDeleteAttrs are the data-dlg-* values dialog.js copies into the delete dialog: what it asks, which backup,
+// the instant and the post address.
+func backupDeleteAttrs(p backupsView, b backupRow) templ.Attributes {
+	return templ.Attributes{
+		"data-dlg-title":  "Delete this backup?",
+		"data-dlg-text":   b.DeleteText,
+		"data-dlg-at":     ui.StampISO(b.Taken),
+		"data-dlg-ts":     ui.StampDateTimeSec.Key,
+		"data-dlg-shown":  ui.StampText(b.Taken, ui.StampDateTimeSec),
+		"data-dlg-action": p.Base + "/backups/" + bkStr(b.ID) + "/delete",
+		"data-dlg-verb":   "Delete backup",
+	}
+}
+
 func bkStr(id model.BackupID) string  { return strconv.FormatInt(int64(id), 10) }
 func devStr(id model.DeviceID) string { return strconv.FormatInt(int64(id), 10) }
 

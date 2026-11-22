@@ -118,8 +118,8 @@ func TestRefreshIdentityIsBlockedWithItsReasonAsText(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{} })
 	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now()}
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
-	btn := sliceBetween(page, `hx-post="/tf/devices/1/probe"`, ">Refresh identity<")
-	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || !strings.Contains(btn, "data-needs-device") ||
+	btn := buttonTag(page, "Refresh identity")
+	if !strings.Contains(btn, `hx-post="/tf/devices/1/probe"`) || !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || !strings.Contains(btn, "data-needs-device") ||
 		!slices.Contains(strings.Fields(btn), "hx-disable") {
 		t.Errorf("offline: %s", btn)
 	}

@@ -14,8 +14,7 @@ import (
 templ consolePage(data consoleData, c ui.ConsoleData, csrf string) {
 	@deviceHeader(data.Tabs)
 	if data.Confirm {
-		<section class="ucard devconfirm" aria-labelledby="confirm-h">
-			<h2 id="confirm-h">Confirm</h2>
+		@ui.CardOf(ui.CardData{Title: "Confirm", Class: "devconfirm", LabelledBy: "confirm-h"}) {
 			<p role="status">Confirm sending <code>{ data.Shown }</code> to { data.Device.Name }. { data.Consequence }</p>
 			if data.ACLNotice {
 				@ui.BrokerACLNotice()
@@ -24,9 +23,9 @@ templ consolePage(data consoleData, c ui.ConsoleData, csrf string) {
 				<input type="hidden" name="csrf" value={ csrf }/>
 				<input type="hidden" name="token" value={ data.Token }/>
 				@ui.Button(ui.Btn{Label: "Cancel", Href: c.Action})
-				<button type="submit" class="btn btn-danger-solid">Confirm and send</button>
+				@ui.Button(ui.Btn{Label: "Confirm and send", Kind: "danger-solid", Type: "submit"})
 			</form>
-		</section>
+		}
 	}
 	@ui.Console(c)
 }
@@ -197,8 +196,8 @@ templ settingsBodyInner(p settingsPage, base, csrf string) {
 			}
 			<div class="devform-foot">
 				<span class="devform-count">Applied immediately and saved to the device once. <span data-changed-count aria-live="polite"></span></span>
-				<button type="reset" class="btn">Reset</button>
-				<button type="submit" class="btn btn-primary">Save to device</button>
+				@ui.Button(ui.Btn{Label: "Reset", Type: "reset"})
+				@ui.Button(ui.Btn{Label: "Save to device", Kind: "primary", Type: "submit"})
 			</div>
 		</form>
 	}
@@ -365,7 +364,7 @@ templ editPage(f deviceForm, base, csrf string) {
 			@ui.Button(ui.Btn{Label: "Delete device…", Kind: "danger", Href: base + devPath(f.Device.ID, "/delete")})
 			<span class="devform-sp"></span>
 			@ui.Button(ui.Btn{Label: "Cancel", Href: base + devPath(f.Device.ID, "")})
-			<button type="submit" class="btn btn-primary">Save changes</button>
+			@ui.Button(ui.Btn{Label: "Save changes", Kind: "primary", Type: "submit"})
 		</div>
 	</form>
 }

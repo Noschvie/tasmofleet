@@ -141,6 +141,12 @@ type Btn struct {
 	// may name the same one).
 	DisabledReason, ReasonID string
 	ReasonShared             bool
+	// Class is the page's own class after the button's ("dd-go", "bk-del"): the hook a page's selector or test finds
+	// the button by. Attrs are the attributes a script or htmx needs and no typed field covers (hx-*, data-*, title,
+	// download, aria-pressed, aria-describedby): see pageAttrs for what is refused. A blocked button drops Attrs, it
+	// carries no action. The label may be followed by children (an icon, a count).
+	Class string
+	Attrs templ.Attributes
 }
 
 func (b Btn) classes() string {
@@ -160,8 +166,38 @@ func (b Btn) classes() string {
 	if b.Current {
 		c += " btn-current"
 	}
+	if b.Class != "" {
+		c += " " + b.Class
+	}
 	return c
 }
+
+// pageAttrs is what a page may add to a component as Attrs, in a fixed order (templ sorts the keys, so the output
+// is the same every time and live.js can memoise a swapped fragment). A key a typed field of the component writes
+// already (class, id, href, type, name, value, the form and dialog attributes, the aria names) would appear twice,
+// style is blocked by the CSP and on* is inline script: those are dropped, never rendered. An empty result is nil.
+func pageAttrs(a templ.Attributes) templ.Attributes {
+	var out templ.Attributes
+	for k, v := range a {
+		key := strings.ToLower(k)
+		if pageAttrRefused[key] || strings.HasPrefix(key, "on") {
+			continue
+		}
+		if out == nil {
+			out = templ.Attributes{}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+var pageAttrRefused = map[string]bool{
+	"class": true, "style": true, "id": true, "href": true, "type": true, "name": true, "value": true,
+	"form": true, "formaction": true, "formnovalidate": true, "disabled": true, "data-dialog": true,
+	"target": true, "rel": true, "aria-label": true, "aria-labelledby": true, "aria-current": true,
+}
+
+func (b Btn) attrs() templ.Attributes { return pageAttrs(b.Attrs) }
 
 func (b Btn) buttonType() string {
 	if b.Type == "" {
@@ -181,7 +217,11 @@ type BadgeData struct {
 	Href  string // makes the badge a link (a running download's progress page)
 	Large bool   // bdg-lg: the badge beside a page title
 	ID    string // the badge's id, for a live update or a test that finds it
+	// Attrs are the attributes a script needs and no field covers (data-push-this, hidden); see pageAttrs.
+	Attrs templ.Attributes
 }
+
+func (b BadgeData) attrs() templ.Attributes { return pageAttrs(b.Attrs) }
 
 func (b BadgeData) classes() string {
 	c := "bdg " + b.Tone.class()
@@ -568,3 +608,45 @@ func (r KVRow) stampOf() StampFmt {
 	}
 	return r.Stamp
 }
+
+// CardData is a card that needs more than a title and a line: its place in the phone stack, a class of its own, an id,
+// another element, the heading a label names, or attributes of a live swap. Every field is text, a number or a flag,
+// never markup; the card's body is the children.
+type CardData struct {
+	Title, Sub string
+	// ID is the card's id (a link target, a swap target). Class is the page's own class ("fw-sel"); Rank is the phone
+	// stack place (StackRank), 0 for none. The classes come out as rank, ucard, then Class, always in that order.
+	ID, Class string
+	Rank      int
+	// Tag is the element: "section" (also for "" and anything unknown), "article", "aside", "form" or "div". A fixed
+	// set, never free text. A card that is an element of a live swap keeps its element (div), a card that is a
+	// complementary column is an aside, a card that is a form is a form (its method and action go in Attrs).
+	Tag string
+	// LabelledBy is the id of the card's heading: with a Title the h2 gets it, without one the heading is in the
+	// children (a heading with markup, several headings) and the id names that. Aria is an aria-label for a card
+	// that has no visible heading.
+	LabelledBy, Aria string
+	Attrs            templ.Attributes // see pageAttrs
+}
+
+func (c CardData) classes() string {
+	var parts []string
+	if r := StackRank(c.Rank); r != "" {
+		parts = append(parts, r)
+	}
+	parts = append(parts, "ucard")
+	if c.Class != "" {
+		parts = append(parts, c.Class)
+	}
+	return strings.Join(parts, " ")
+}
+
+func (c CardData) tag() string {
+	switch c.Tag {
+	case "article", "aside", "form", "div":
+		return c.Tag
+	}
+	return "section"
+}
+
+func (c CardData) attrs() templ.Attributes { return pageAttrs(c.Attrs) }

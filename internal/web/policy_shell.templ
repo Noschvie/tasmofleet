@@ -9,12 +9,12 @@ templ policyShell(h policyHead) {
 	@ui.PageHeader("Policy", policySub) {
 		if !h.Show {
 			if h.Admin {
-				<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath + "?tab=import") }>Import…</a>
+				@ui.Button(ui.Btn{Label: "Import…", Href: h.Base + policyIOPath + "?tab=import"})
 			}
-			<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath) }>Export</a>
+			@ui.Button(ui.Btn{Label: "Export", Href: h.Base + policyIOPath})
 		}
 		if h.Admin {
-			<a class="btn btn-primary" href={ templ.SafeURL(h.Base + rulesPath + "/new") }>New rule</a>
+			@ui.Button(ui.Btn{Label: "New rule", Kind: "primary", Href: h.Base + rulesPath + "/new"})
 		}
 	}
 	if h.Show {
@@ -110,6 +110,6 @@ templ policyLiveForm(h policyHead, action, label string) {
 		if h.Back != "" && action == "/policy/live" {
 			<input type="hidden" name="back" value={ h.Back }/>
 		}
-		<button type="submit" class="btn btn-sm">{ label }</button>
+		@ui.Button(ui.Btn{Label: label, Small: true, Type: "submit"})
 	</form>
 }

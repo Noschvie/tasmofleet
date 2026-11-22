@@ -95,10 +95,9 @@ templ firmwareContent(v view, p firmwarePage) {
 					@fwReleaseCard(v, p, *sel)
 				}
 				if p.ShowUpload && v.IsAdmin && p.CanUpload {
-					<section class={ ui.StackRank(5), "ucard", "fw-upload-card" } id="upload" aria-labelledby="fw-up-h">
-						<h2 id="fw-up-h">Upload custom firmware</h2>
+					@ui.CardOf(ui.CardData{Title: "Upload custom firmware", Rank: 5, Class: "fw-upload-card", ID: "upload", LabelledBy: "fw-up-h"}) {
 						@fwUploadForm(v, false)
-					</section>
+					}
 				}
 				if v.IsAdmin && p.CanUpload {
 					<section class={ ui.StackRank(4), "ulist", "fw-upcard" } aria-labelledby="fw-custom-h">
@@ -264,7 +263,7 @@ func selectedIfNewest(p firmwarePage) string {
 
 // fwReleaseCard is the selected release: notes, Update, and the files this fleet needs.
 templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
-	<section class={ ui.StackRank(2), "ucard", "fw-sel" } id="release" aria-labelledby="fw-sel-h">
+	@ui.CardOf(ui.CardData{Rank: 2, Class: "fw-sel", ID: "release", LabelledBy: "fw-sel-h"}) {
 		<div class="fw-sel-head">
 			<div>
 				<h2 id="fw-sel-h">Tasmota { r.Version }</h2>
@@ -336,7 +335,7 @@ templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
 				}
 			</p>
 		}
-	</section>
+	}
 }
 
 // fwRelLinks leads to the release page (N6): its whole notes, and every release between the

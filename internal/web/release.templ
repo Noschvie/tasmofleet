@@ -91,9 +91,9 @@ templ releaseContent(v view, p releasePage) {
 			} else {
 				@ui.CardStacks(3) {
 					@ui.CardStack(2) {
-						<article class={ ui.StackRank(1), "ucard", "rel-notes" } aria-label="Release notes">
+						@ui.CardOf(ui.CardData{Tag: "article", Rank: 1, Class: "rel-notes", Aria: "Release notes"}) {
 							@relNotes(p)
-						</article>
+						}
 					}
 					@ui.CardStack(1) {
 						@relFiles(v, p)
@@ -243,7 +243,7 @@ templ relSince(v view, p releasePage) {
 		}
 		<div class="rel-since">
 			for _, b := range p.Between {
-				<section class="ucard rel-srel" aria-labelledby={ "rel-s-" + b.Version }>
+				@ui.CardOf(ui.CardData{Class: "rel-srel", LabelledBy: "rel-s-" + b.Version}) {
 					<div class="rel-shead">
 						<a class="rel-sv" id={ "rel-s-" + b.Version } href={ templ.SafeURL(relURL(v.Base, b.Version, false)) }>{ b.Version }</a>
 						if !b.Published.IsZero() {
@@ -270,7 +270,7 @@ templ relSince(v view, p releasePage) {
 					if len(b.Rows) == 0 {
 						<p class="rel-empty">No release notes from the configured sources.</p>
 					}
-				</section>
+				}
 			}
 		</div>
 	}

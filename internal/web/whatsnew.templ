@@ -68,8 +68,7 @@ templ whatsNewPage(p whatsNewView) {
 			}
 		}
 		@ui.CardStack(1) {
-			<section class="ucard wn-you r1" aria-labelledby="wn-you-h">
-				<h2 id="wn-you-h">You are on { p.Installed }</h2>
+			@ui.CardOf(ui.CardData{Title: "You are on " + p.Installed, Rank: 1, Class: "wn-you", LabelledBy: "wn-you-h"}) {
 				if c := p.current(); c != nil && (c.Name != "" || c.Date != "") {
 					<p class="wn-you-sub">
 						if c.Name != "" {
@@ -89,9 +88,8 @@ templ whatsNewPage(p whatsNewView) {
 					}
 					@ui.Button(ui.Btn{Label: "Full changelog", Href: sourceURL + "/blob/main/CHANGELOG.md", Target: "_blank", Rel: "noopener noreferrer"})
 				</div>
-			</section>
-			<section class="ucard wn-jump r2" aria-labelledby="wn-jump-h">
-				<h2 id="wn-jump-h">Jump to a release</h2>
+			}
+			@ui.CardOf(ui.CardData{Title: "Jump to a release", Rank: 2, Class: "wn-jump", LabelledBy: "wn-jump-h"}) {
 				<ul class="wn-jump-l">
 					for _, r := range jumpNewest(p.Releases) {
 						<li><a href={ templ.SafeURL("#v" + r.Version) }>{ r.Version }</a></li>
@@ -107,7 +105,7 @@ templ whatsNewPage(p whatsNewView) {
 						</ul>
 					</details>
 				}
-			</section>
+			}
 		}
 		}
 		</div>

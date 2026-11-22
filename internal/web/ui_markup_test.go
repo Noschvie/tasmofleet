@@ -42,33 +42,6 @@ type markupBlock struct {
 // markupExemptions: the hand-written component markup that still stands. Delete an entry the moment its file
 // converts; the owning issue deletes its whole block.
 var markupExemptions = []markupBlock{
-	{Name: "#1092 buttons: device", Files: map[string]map[string]int{
-		"cells.templ":       {"btn": 1},
-		"devdelete.templ":   {"btn": 2},
-		"deviceconn.templ":  {"btn": 5},
-		"devicehead.templ":  {"btn": 5},
-		"devicetabs.templ":  {"btn": 4},
-		"replacepage.templ": {"btn": 4},
-	}},
-	{Name: "#1092 buttons: backups", Files: map[string]map[string]int{
-		"backuppages.templ":  {"btn": 20},
-		"comparepage.templ":  {"btn": 5},
-		"fleetbackups.templ": {"btn": 7},
-		"restorepages.templ": {"btn": 7},
-	}},
-	{Name: "#1092 buttons: policy", Files: map[string]map[string]int{
-		"gputemplates.templ":    {"btn": 8},
-		"policy.templ":          {"btn": 9},
-		"policy_overview.templ": {"btn": 2},
-		"policy_shell.templ":    {"btn": 4},
-		"policydev.templ":       {"btn": 4},
-		"policyhistory.templ":   {"btn": 4},
-		"policyrule.templ":      {"btn": 11},
-	}},
-	{Name: "#1092 buttons: shell", Files: map[string]map[string]int{
-		"bulk.templ":    {"btn": 4},
-		"devices.templ": {"btn": 4},
-	}},
 	{Name: "#1092 buttons: updates", Files: map[string]map[string]int{
 		"transactions.templ": {"btn": 16},
 	}},
@@ -93,22 +66,6 @@ var markupExemptions = []markupBlock{
 	{Name: "#1092 buttons: style guide", Files: map[string]map[string]int{
 		"styleguide.templ": {"btn": 3},
 	}},
-	{Name: "#1092 cards", Files: map[string]map[string]int{
-		"accountpages.templ":    {"ucard": 4},
-		"devicetabs.templ":      {"ucard": 1},
-		"firmware.templ":        {"ucard": 2},
-		"firmware_manage.templ": {"ucard": 3},
-		"messagepage.templ":     {"ucard": 2},
-		"policy.templ":          {"ucard": 1},
-		"release.templ":         {"ucard": 2},
-		"replacepage.templ":     {"ucard": 3},
-		"restorepages.templ":    {"ucard": 1},
-		"styleguide.templ":      {"ucard": 4},
-		"syssettings.templ":     {"ucard": 1},
-		"transactions.templ":    {"ucard": 9},
-		"userdetail.templ":      {"ucard": 2},
-		"whatsnew.templ":        {"ucard": 2},
-	}},
 	{Name: "#1091 banners", Files: map[string]map[string]int{
 		"accountpages.templ":    {"banner": 1},
 		"adddevices.templ":      {"banner": 1},
@@ -127,9 +84,6 @@ var markupExemptions = []markupBlock{
 	}},
 	{Name: "#1097 status badge", Files: map[string]map[string]int{
 		"cells.templ": {"bdg": 2},
-	}},
-	{Name: "#1092 badges: system settings (part 2)", Files: map[string]map[string]int{
-		"syssettings.templ": {"bdg": 1},
 	}},
 }
 

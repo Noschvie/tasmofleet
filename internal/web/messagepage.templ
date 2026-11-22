@@ -7,7 +7,7 @@ import "github.com/hellwand/tasmofleet/internal/web/ui"
 // one card with the sentence, the devices left out and the ways on.
 templ noticePage(base, title string, m messageData) {
 	@ui.PageHeader(title, "")
-	<section class="ucard confirm-card">
+	@ui.CardOf(ui.CardData{Class: "confirm-card"}) {
 		<p>
 			if m.LinkLead {
 				<a href={ templ.SafeURL(base + m.Link) }>{ m.LinkText }</a>{ " " + m.Text }
@@ -39,7 +39,7 @@ templ noticePage(base, title string, m messageData) {
 				}
 			}
 		}
-	</section>
+	}
 }
 
 // retryRow is a device of the retry page with its last result.
@@ -72,8 +72,7 @@ templ retryPageView(p retryView) {
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the transaction", Href: p.Base + "/transactions/" + p.Batch}})
 	} else {
-		<section class="ucard confirm-card" aria-labelledby="retry-h">
-			<h2 id="retry-h">Retry</h2>
+		@ui.CardOf(ui.CardData{Title: "Retry", Class: "confirm-card", LabelledBy: "retry-h"}) {
 			<form method="post" action={ templ.SafeURL(p.Base + "/transactions/" + p.Batch + "/retry") } class="stack wide">
 				<input type="hidden" name="csrf" value={ p.CSRF }/>
 				if p.Consequence != "" {
@@ -104,6 +103,6 @@ templ retryPageView(p retryView) {
 					<button type="submit" class="btn btn-primary">Start retry of { p.Count }</button>
 				</div>
 			</form>
-		</section>
+		}
 	}
 }

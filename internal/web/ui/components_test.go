@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -54,6 +55,12 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"CopyText":         CopyButton(CopyData{Label: h, Text: h, Aria: h}),
 		"CopyFrom":         CopyButton(CopyData{Label: h, From: h, Aria: h}),
 		"ButtonAttrs":      Button(Btn{Label: h, Type: "submit", ID: h, Form: h, FormAction: h, NoValidate: true, Tall: true}),
+		"ButtonPage":       Button(Btn{Label: h, Type: "submit", Class: h, Attrs: templ.Attributes{"data-x": h, "title": h, "hx-post": h}}),
+		"ButtonLinkPage":   Button(Btn{Label: h, Href: "/x", Class: h, Attrs: templ.Attributes{"data-x": h, "download": h}}),
+		"BadgeOfAttrs":     BadgeOf(BadgeData{Tone: ToneOK, Label: h, Attrs: templ.Attributes{"data-x": h}}),
+		"MenuButton":       MenuButton(h, h),
+		"CardOf":           CardOf(CardData{Title: h, Sub: h, ID: h, Class: h, Rank: 2, Tag: h, LabelledBy: h, Aria: h, Attrs: templ.Attributes{"data-x": h}}),
+		"CardOfForm":       CardOf(CardData{Title: h, Tag: "form", Aria: h, Attrs: templ.Attributes{"action": templ.SafeURL(h), "method": h}}),
 		"ButtonLinkID":     Button(Btn{Label: h, Href: "/x", ID: h, Tall: true}),
 		"StatusDot":        StatusDot(ToneOK, h),
 		"Avatar":           Avatar(h, h),
@@ -581,5 +588,127 @@ func TestBtnTallDangerLinkAndFormAttributes(t *testing.T) {
 	}
 	if got := comp(t, Button(Btn{Label: "Plain"})); strings.Contains(got, "form") || strings.Contains(got, "id=") || strings.Contains(got, "tall") {
 		t.Errorf("a plain button carries none of the new attributes: %s", got)
+	}
+}
+
+// withChildren renders c with one child component that writes html as it is (test markup, trusted).
+func withChildren(t *testing.T, c templ.Component, html string) string {
+	t.Helper()
+	child := templ.ComponentFunc(func(_ context.Context, w io.Writer) error {
+		_, err := io.WriteString(w, html)
+		return err
+	})
+	var b strings.Builder
+	if err := c.Render(templ.WithChildren(context.Background(), child), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// Why (#1092): the device, backups, policy and shell pages wrote about a hundred buttons by hand because Button had no
+// place for what they need: a class of the page's own (the selector or test that finds the button), the script and
+// htmx attributes (data-close, hx-post, aria-pressed, download, title), and content after the label (a count, an icon).
+// Without them a page copies the markup again, and the copy drifts from the component. The keys of Attrs come out
+// sorted and after the typed attributes, so the string is the same every time (live.js memoises swapped fragments).
+func TestButtonKeepsPageHooks(t *testing.T) {
+	link := Button(Btn{Label: "Delete", Kind: "danger", Href: "/x", Dialog: "dlg", Class: "bk-del", Attrs: templ.Attributes{"title": "Hint", "data-dlg-verb": "Delete backup"}})
+	if got, want := comp(t, link), `<a class="btn btn-danger bk-del" href="/x" data-dialog="dlg" data-dlg-verb="Delete backup" title="Hint">Delete</a>`; got != want {
+		t.Errorf("link: got %s, want %s", got, want)
+	}
+	btn := Button(Btn{Label: "Back up selected", Type: "submit", Form: "picker", Disabled: true, Class: "x", Attrs: templ.Attributes{"data-needs-selection": true, "aria-describedby": "why", "hx-disable": false}})
+	if got, want := withChildren(t, btn, "<span data-select-suffix></span>"), `<button type="submit" class="btn x" form="picker" disabled aria-describedby="why" data-needs-selection>Back up selected<span data-select-suffix></span></button>`; got != want {
+		t.Errorf("button: got %s, want %s", got, want)
+	}
+	if got, want := withChildren(t, Button(Btn{Type: "submit", Name: "kept", Value: "1"}), `<span class="bk-pin"></span>Keep`), `<button type="submit" class="btn" name="kept" value="1"><span class="bk-pin"></span>Keep</button>`; got != want {
+		t.Errorf("children without a label: got %s, want %s", got, want)
+	}
+	// The blocked variant carries no action (#1072): the class stays (the look), the page's attributes do not, or a
+	// blocked button would act again through hx-post or data-dialog.
+	got := comp(t, Button(Btn{Label: "Restore", DisabledReason: "No backup yet", ReasonID: "why", Class: "bk-restore", Href: "/r", Attrs: templ.Attributes{"hx-post": "/r", "data-close": true, "data-fill": "verb"}}))
+	if !strings.Contains(got, `class="btn bk-restore"`) || strings.Contains(got, "hx-post") || strings.Contains(got, "data-close") || strings.Contains(got, "data-fill") || strings.Contains(got, "/r") {
+		t.Errorf("blocked: keeps the class, drops the page's attributes and the address: %s", got)
+	}
+}
+
+// Why (#1092): Attrs is the door for what no typed field covers, so it must not become a second way to write what the
+// fields write (a duplicate class, id or href would be two values in one tag, and the browser takes the first), nor a
+// way around the CSP (style, on* are inline code). Those keys are dropped, whatever their case, and the rest stays.
+func TestPageAttrsRefuseWhatTheComponentOwns(t *testing.T) {
+	bad := templ.Attributes{"class": "evil", "style": "color:red", "onclick": "x()", "ONMOUSEOVER": "x()", "id": "evil", "href": "/evil", "type": "reset", "data-dialog": "evil", "formaction": "/evil", "aria-label": "evil", "hx-get": "/ok"}
+	for name, c := range map[string]templ.Component{
+		"link":   Button(Btn{Label: "x", Href: "/x", Attrs: bad}),
+		"button": Button(Btn{Label: "x", Type: "submit", Attrs: bad}),
+		"badge":  BadgeOf(BadgeData{Tone: ToneOK, Label: "x", Attrs: bad}),
+		"card":   CardOf(CardData{Title: "x", Attrs: bad}),
+	} {
+		got := comp(t, c)
+		for _, banned := range []string{"evil", "style=", "onclick", "onmouseover", "ONMOUSEOVER"} {
+			if strings.Contains(got, banned) {
+				t.Errorf("%s: Attrs wrote %q: %s", name, banned, got)
+			}
+		}
+		if !strings.Contains(got, `hx-get="/ok"`) {
+			t.Errorf("%s: an allowed key is dropped too: %s", name, got)
+		}
+	}
+}
+
+// Why (#1092): the system settings badge that the push script finds (data-push-this) and hides until it has an answer
+// was written by hand because BadgeOf had no way to carry those attributes.
+func TestBadgeOfAttrs(t *testing.T) {
+	got := comp(t, BadgeOf(BadgeData{Tone: ToneAccent, Label: "This browser", Attrs: templ.Attributes{"hidden": true, "data-push-this": true}}))
+	if want := `<span class="bdg t-accent" data-push-this hidden>This browser</span>`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+// Why (#1092): the "⋯" button of a row menu was written by hand in three places because only RowMenu could draw it,
+// and RowMenu draws a list of links. names_test pins the attribute order (class, aria-label, title); the title only
+// appears when it is set, so RowMenu's own output does not change.
+func TestMenuButton(t *testing.T) {
+	if got, want := comp(t, MenuButton("Actions for Lamp", "")), `<summary class="btn btn-ghost btn-icon icon" aria-label="Actions for Lamp">⋯</summary>`; got != want {
+		t.Errorf("no title: got %s, want %s", got, want)
+	}
+	if got, want := comp(t, MenuButton("Actions for Lamp", "Actions for Lamp")), `<summary class="btn btn-ghost btn-icon icon" aria-label="Actions for Lamp" title="Actions for Lamp">⋯</summary>`; got != want {
+		t.Errorf("title: got %s, want %s", got, want)
+	}
+	if got := comp(t, RowMenu("Actions", []MenuItem{{Label: "a", Href: "/x"}}, false)); !strings.Contains(got, `<summary class="btn btn-ghost btn-icon icon" aria-label="Actions">⋯</summary>`) {
+		t.Errorf("RowMenu draws the same button: %s", got)
+	}
+}
+
+// Why (#1092): the 37 hand-written cards needed what Card lacked (a phone stack place, a class, an id, another
+// element, an h2 that a label names, attributes of a live swap). CardOf is the one place that writes the card, so it
+// must keep the order the page CSS and the class-string tests rely on (rank, ucard, the page's class), a fixed set of
+// elements (a tag from data would be markup), and the h2 id that aria-labelledby points at. Card(title, sub) is the
+// short form and renders what it always did: the golden string is the part a change of CardOf can break; the
+// cases with new fields are new API and only fail on a revert when they compare a zero value.
+func TestCardOf(t *testing.T) {
+	if got, want := comp(t, Card("T", "S")), `<section class="ucard"><h2>T</h2><p class="ucard-sub">S</p></section>`; got != want {
+		t.Errorf("Card: got %s, want %s", got, want)
+	}
+	if got, want := comp(t, Card("", "")), `<section class="ucard"></section>`; got != want {
+		t.Errorf("Card without text: got %s, want %s", got, want)
+	}
+	if got, want := comp(t, CardOf(CardData{Title: "Tasmota 15", Rank: 2, Class: "fw-sel", ID: "release", LabelledBy: "fw-sel-h"})), `<section class="r2 ucard fw-sel" id="release" aria-labelledby="fw-sel-h"><h2 id="fw-sel-h">Tasmota 15</h2></section>`; got != want {
+		t.Errorf("rank, class, id and h2 id: got %s, want %s", got, want)
+	}
+	if got, want := withChildren(t, CardOf(CardData{Class: "confirm-card", LabelledBy: "confirm-h"}), `<h2 id="confirm-h">Delete</h2>`), `<section class="ucard confirm-card" aria-labelledby="confirm-h"><h2 id="confirm-h">Delete</h2></section>`; got != want {
+		t.Errorf("heading in the children: got %s, want %s", got, want)
+	}
+	for tag, want := range map[string]string{"": "section", "section": "section", "article": "article", "aside": "aside", "form": "form", "div": "div", "script": "section", "SECTION": "section", `x" onload="y`: "section"} {
+		if got := comp(t, CardOf(CardData{Tag: tag, Aria: "A"})); !strings.HasPrefix(got, "<"+want+" ") || !strings.HasSuffix(got, "</"+want+">") {
+			t.Errorf("Tag %q: got %s, want a %s", tag, got, want)
+		}
+	}
+	form := comp(t, CardOf(CardData{Tag: "form", Class: "useradd", Attrs: templ.Attributes{"method": "post", "action": templ.SafeURL("/tf/users")}}))
+	if want := `<form class="ucard useradd" action="/tf/users" method="post"></form>`; form != want {
+		t.Errorf("form card: got %s, want %s", form, want)
+	}
+	if got, want := comp(t, CardOf(CardData{Tag: "div", ID: "prefetch", Class: "fw-prefetch", Attrs: templ.Attributes{"hx-swap": "outerHTML", "sse-swap": "prefetch"}})), `<div class="ucard fw-prefetch" id="prefetch" hx-swap="outerHTML" sse-swap="prefetch"></div>`; got != want {
+		t.Errorf("live card: got %s, want %s", got, want)
+	}
+	if got, want := comp(t, CardOf(CardData{Tag: "article", Rank: 1, Class: "rel-notes", Aria: "Release notes"})), `<article class="r1 ucard rel-notes" aria-label="Release notes"></article>`; got != want {
+		t.Errorf("article: got %s, want %s", got, want)
 	}
 }

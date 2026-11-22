@@ -66,16 +66,16 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 							if a.Test && a.TestWhy == "" && c.PWTest != "" {
 								<form method="post" action={ templ.SafeURL(c.PWTest) }>
 									<input type="hidden" name="csrf" value={ c.CSRF }/>
-									<button type="submit" class="btn btn-link">{ a.TestLabel }</button>
+									@ui.Button(ui.Btn{Label: a.TestLabel, Kind: "link", Type: "submit"})
 								</form>
 							} else if a.Test {
-								<button type="button" class="btn btn-link" disabled aria-describedby="pw-test-why">{ a.TestLabel }</button>
+								@ui.Button(ui.Btn{Label: a.TestLabel, Kind: "link", Disabled: true, Attrs: templ.Attributes{"aria-describedby": "pw-test-why"}})
 							}
 							if a.Change && c.PWChange != "" {
-								<a class="btn btn-link" href={ templ.SafeURL(c.PWChange) }>{ a.ChangeLabel }</a>
+								@ui.Button(ui.Btn{Label: a.ChangeLabel, Kind: "link", Href: c.PWChange})
 							}
 							if a.UseBroker && c.PWBroker != "" {
-								<a class="btn btn-link" href={ templ.SafeURL(c.PWBroker) }>Use the broker password…</a>
+								@ui.Button(ui.Btn{Label: "Use the broker password…", Kind: "link", Href: c.PWBroker})
 							}
 						</div>
 						if a.ACL {
@@ -88,7 +88,7 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 					if r.Forget && c.Forget != "" {
 						<form method="post" action={ templ.SafeURL(c.Forget) }>
 							<input type="hidden" name="csrf" value={ c.CSRF }/>
-							<button type="submit" class="btn btn-link">Forget</button>
+							@ui.Button(ui.Btn{Label: "Forget", Kind: "link", Type: "submit"})
 						</form>
 					}
 				</dd>

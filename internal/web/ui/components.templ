@@ -52,7 +52,7 @@ templ pageHeader(title, sub string, sample, live bool) {
 }
 
 // Button is a button, or a link styled as one (Btn). A button with a DisabledReason is the blocked variant
-// (blockedButton).
+// (blockedButton). The children follow the label (an icon, a count).
 templ Button(b Btn) {
 	if b.DisabledReason != "" {
 		@blockedButton(b)
@@ -84,7 +84,8 @@ templ Button(b Btn) {
 			if b.Disabled {
 				aria-disabled="true"
 			}
-		>{ b.Label }</a>
+			{ b.attrs()... }
+		>{ b.Label }{ children... }</a>
 	} else {
 		<button
 			type={ b.buttonType() }
@@ -115,7 +116,8 @@ templ Button(b Btn) {
 				aria-current="page"
 			}
 			disabled?={ b.Disabled }
-		>{ b.Label }</button>
+			{ b.attrs()... }
+		>{ b.Label }{ children... }</button>
 	}
 }
 
@@ -174,6 +176,7 @@ templ BadgeOf(b BadgeData) {
 			if b.Title != "" {
 				title={ b.Title }
 			}
+			{ b.attrs()... }
 		>{ b.Label }</a>
 	} else {
 		<span
@@ -184,6 +187,7 @@ templ BadgeOf(b BadgeData) {
 			if b.Title != "" {
 				title={ b.Title }
 			}
+			{ b.attrs()... }
 		>{ b.Label }</span>
 	}
 }
@@ -233,15 +237,60 @@ templ Avatar(name, username string) {
 
 // Card is a section: surface, hairline border, 10 px radius, an h2 and an optional line under it.
 templ Card(title, sub string) {
-	<section class="ucard">
-		if title != "" {
-			<h2>{ title }</h2>
-		}
-		if sub != "" {
-			<p class="ucard-sub">{ sub }</p>
-		}
+	@CardOf(CardData{Title: title, Sub: sub}) {
 		{ children... }
-	</section>
+	}
+}
+
+// CardOf is Card for a page that needs more (CardData): the phone stack rank, a class of its own, an id, another
+// element, the heading a label names, attributes of a live swap. Without those it is Card, byte for byte.
+templ CardOf(c CardData) {
+	switch c.tag() {
+		case "article":
+			<article class={ c.classes() } if c.ID != "" { id={ c.ID } } if c.LabelledBy != "" { aria-labelledby={ c.LabelledBy } } if c.Aria != "" { aria-label={ c.Aria } } { c.attrs()... }>
+				@cardBody(c) {
+					{ children... }
+				}
+			</article>
+		case "aside":
+			<aside class={ c.classes() } if c.ID != "" { id={ c.ID } } if c.LabelledBy != "" { aria-labelledby={ c.LabelledBy } } if c.Aria != "" { aria-label={ c.Aria } } { c.attrs()... }>
+				@cardBody(c) {
+					{ children... }
+				}
+			</aside>
+		case "form":
+			<form class={ c.classes() } if c.ID != "" { id={ c.ID } } if c.LabelledBy != "" { aria-labelledby={ c.LabelledBy } } if c.Aria != "" { aria-label={ c.Aria } } { c.attrs()... }>
+				@cardBody(c) {
+					{ children... }
+				}
+			</form>
+		case "div":
+			<div class={ c.classes() } if c.ID != "" { id={ c.ID } } if c.LabelledBy != "" { aria-labelledby={ c.LabelledBy } } if c.Aria != "" { aria-label={ c.Aria } } { c.attrs()... }>
+				@cardBody(c) {
+					{ children... }
+				}
+			</div>
+		default:
+			<section class={ c.classes() } if c.ID != "" { id={ c.ID } } if c.LabelledBy != "" { aria-labelledby={ c.LabelledBy } } if c.Aria != "" { aria-label={ c.Aria } } { c.attrs()... }>
+				@cardBody(c) {
+					{ children... }
+				}
+			</section>
+	}
+}
+
+templ cardBody(c CardData) {
+	if c.Title != "" {
+		if c.LabelledBy != "" {
+			<h2 id={ c.LabelledBy }>{ c.Title }</h2>
+		} else {
+			<h2>{ c.Title }</h2>
+		}
+	}
+	if c.Sub != "" {
+		<p class="ucard-sub">{ c.Sub }</p>
+	}
+	{ children... }
 }
 
 // ListCard is a card whose body is a list of rows: a header row with the title and an optional
@@ -306,9 +355,16 @@ templ RowMenuStatic(label string, items []MenuItem, up bool) {
 	@rowMenu(label, items, up, true)
 }
 
+// MenuButton is the "⋯" button that opens a row menu: the <summary> of a <details class="rowmenu">. The title, when
+// set, is the hover hint (a list row names the device it acts on). RowMenu draws it itself; a menu whose items are
+// not a plain list of links (the device list's, whose items post) writes its own panel and takes only this.
+templ MenuButton(label, title string) {
+	<summary class="btn btn-ghost btn-icon icon" aria-label={ label } if title != "" { title={ title } }>⋯</summary>
+}
+
 templ rowMenu(label string, items []MenuItem, up, static bool) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", up) } open?={ static } data-static?={ static }>
-		<summary class="btn btn-ghost btn-icon icon" aria-label={ label }>⋯</summary>
+		@MenuButton(label, "")
 		<div class="rowmenu-body menu-panel">
 			for _, it := range items {
 				if it.Sep {

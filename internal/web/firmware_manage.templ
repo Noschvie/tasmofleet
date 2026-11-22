@@ -16,7 +16,7 @@ templ fwConfirmContent(v view, c fwConfirm) {
 		if c.Error != "" {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
 		}
-		<section class="ucard confirm-card" aria-labelledby="confirm-h">
+		@ui.CardOf(ui.CardData{Class: "confirm-card", LabelledBy: "confirm-h"}) {
 			if len(c.List) > 0 {
 				<h2 id="confirm-h">Delete { plural(len(c.List), "file") }</h2>
 				<p class="udlg-body">These { plural(len(c.List), "cached file") } ({ sizeNoWrap(c.Size) }) are not needed by any transaction. A later update downloads what it needs again.</p>
@@ -59,7 +59,7 @@ templ fwConfirmContent(v view, c fwConfirm) {
 			} else {
 				<div class="udlg-foot"><a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Back</a></div>
 			}
-		</section>
+		}
 	} else {
 		@fwConfirmOne(v, c)
 	}
@@ -72,7 +72,7 @@ templ fwConfirmOne(v view, c fwConfirm) {
 	if c.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
 	}
-	<section class="ucard confirm-card" aria-labelledby="confirm-h">
+	@ui.CardOf(ui.CardData{Class: "confirm-card", LabelledBy: "confirm-h"}) {
 		switch {
 			case c.Artifact.InUse:
 				<h2 id="confirm-h">File in use</h2>
@@ -104,7 +104,7 @@ templ fwConfirmOne(v view, c fwConfirm) {
 				}
 			</form>
 		}
-	</section>
+	}
 }
 
 // prefetchState is the run's state word.
@@ -149,16 +149,7 @@ templ fwPrefetchContent(pv prefetchView, who string) {
 // fwPrefetchStatus is the run's progress; the event stream replaces it until the run ends (the
 // last one has no stream attributes, so the browser closes the connection).
 templ fwPrefetchStatus(pv prefetchView) {
-	<div
-		id="prefetch"
-		class="ucard fw-prefetch"
-		if pv.Running {
-			hx-ext="sse"
-			sse-connect={ pv.Base + "/firmware/prefetch/" + pv.Run.ID + "/stream" }
-			sse-swap="prefetch"
-			hx-swap="outerHTML"
-		}
-	>
+	@ui.CardOf(ui.CardData{Tag: "div", ID: "prefetch", Class: "fw-prefetch", Attrs: pv.cardAttrs()}) {
 		<p>State: <strong>{ prefetchState(pv) }</strong>, { prefetchCounts(pv) }.</p>
 		<progress max={ strconv.Itoa(pv.Total) } value={ strconv.Itoa(pv.Done) }></progress>
 		for _, it := range pv.Run.Items {
@@ -188,5 +179,5 @@ templ fwPrefetchStatus(pv prefetchView) {
 		if !pv.Running {
 			<div class="btn-row"><a class="btn" href={ templ.SafeURL(fwURL(pv.Base, "release", pv.Run.Release)) }>Back to firmware</a></div>
 		}
-	</div>
+	}
 }

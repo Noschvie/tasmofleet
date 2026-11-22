@@ -19,7 +19,7 @@ import (
 templ fleetBackupsPage(p sysPage) {
 	@ui.PageHeader("Backups", "Device backups for the whole fleet") {
 		if p.Fleet.Admin {
-			<button type="submit" form="bk-all" class="btn btn-primary" title={ p.Fleet.AllTitle() }>Back up all now</button>
+			@ui.Button(ui.Btn{Label: "Back up all now", Kind: "primary", Type: "submit", Form: "bk-all", Attrs: templ.Attributes{"title": p.Fleet.AllTitle()}})
 		}
 	}
 	if p.Fleet.ACL {
@@ -230,7 +230,9 @@ templ fleetDevices(p sysPage, c sysCard) {
 			</div>
 			if v.Admin {
 				<div class="cbd">
-					<button type="submit" form="picker" class="btn" data-needs-selection disabled>Back up selected<span data-select-suffix></span></button>
+					@ui.Button(ui.Btn{Label: "Back up selected", Type: "submit", Form: "picker", Disabled: true, Attrs: templ.Attributes{"data-needs-selection": true}}) {
+						<span data-select-suffix></span>
+					}
 				</div>
 			}
 		</div>
@@ -388,7 +390,7 @@ templ fleetStorage(p sysPage, c sysCard) {
 					{ plural(v.PruneRuns, "backup") + " of " + plural(len(v.Prune), "device") + " · " + v.PruneSize + " beyond the limit of " + v.Keep + ". Each device loses its oldest backups when its next one is taken. Kept backups are never pruned." }
 				</div>
 				if v.CanBulk && len(v.PruneNow) > 0 {
-					<a class="btn" href={ templ.SafeURL(v.Base + pruneNowPath) } data-dialog="dlg-fprune">Prune now…</a>
+					@ui.Button(ui.Btn{Label: "Prune now…", Href: v.Base + pruneNowPath, Dialog: "dlg-fprune"})
 				}
 			</div>
 			<details class="fold">
@@ -432,8 +434,8 @@ templ fleetPruneDialog(p sysPage) {
 				}
 			</div>
 			<div class="udlg-foot">
-				<button type="button" class="btn" data-close>Cancel</button>
-				<button type="submit" class="btn btn-danger-solid">Prune { plural(len(v.PruneNow), "backup") }</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true}})
+				@ui.Button(ui.Btn{Label: "Prune " + plural(len(v.PruneNow), "backup"), Kind: "danger-solid", Type: "submit"})
 			</div>
 		</form>
 	</dialog>
@@ -457,8 +459,8 @@ templ fleetUnrefDialog(p sysPage) {
 				}
 			</div>
 			<div class="udlg-foot">
-				<button type="button" class="btn" data-close>Cancel</button>
-				<button type="submit" class="btn btn-danger-solid">Delete { plural(len(st.Unreferenced), "file") }</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true}})
+				@ui.Button(ui.Btn{Label: "Delete " + plural(len(st.Unreferenced), "file"), Kind: "danger-solid", Type: "submit"})
 			</div>
 		</form>
 	</dialog>

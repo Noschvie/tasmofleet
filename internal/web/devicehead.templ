@@ -97,7 +97,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				if t.BackupWhy != "" {
 					@ui.Button(ui.Btn{Label: "Back up", DisabledReason: t.BackupWhy, ReasonID: t.describedBy(), ReasonShared: true})
 				} else {
-					<button type="submit" class="btn">Back up</button>
+					@ui.Button(ui.Btn{Label: "Back up", Type: "submit"})
 				}
 			</form>
 			if t.IsAdmin {
@@ -312,7 +312,7 @@ templ liveTile(t tile, l liveView) {
 				<input type="hidden" name="csrf" value={ l.CSRF }/>
 				<input type="hidden" name="only" value={ devID(l.ID) }/>
 				<input type="hidden" name="from" value="device"/>
-				<button type="submit" class="btn dev-tile-fix">Make compliant…</button>
+				@ui.Button(ui.Btn{Label: "Make compliant…", Type: "submit", Class: "dev-tile-fix"})
 			</form>
 		}
 	</div>
@@ -403,7 +403,7 @@ templ devActBox(a devActivity, attrs templ.Attributes) {
 	<section id="devact" class={ "devcard", ui.StackRank(5) } aria-labelledby="dc-act" { attrs... }>
 		<div class="devcard-head">
 			<h2 id="dc-act">Activity</h2>
-			<a class="btn btn-link" href={ templ.SafeURL(a.All) }>All activity</a>
+			@ui.Button(ui.Btn{Label: "All activity", Kind: "link", Href: a.All})
 		</div>
 		if len(a.Rows) > 0 {
 			@devActList(a.Rows, a.Base)
@@ -454,7 +454,7 @@ templ deviceHistoryPage(p historyView) {
 	<section class="devcard cw-act" aria-labelledby="dc-hist">
 		<div class="devcard-head">
 			<h2 id="dc-hist">Activity</h2>
-			<a class="btn btn-link" href={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "")) }>Back to the overview</a>
+			@ui.Button(ui.Btn{Label: "Back to the overview", Kind: "link", Href: p.Base + devPath(p.Tabs.ID, "")})
 		</div>
 		if len(p.Rows) > 0 {
 			@devActList(p.Rows, p.Base)
@@ -482,22 +482,7 @@ templ identityCard(c identCard) {
 			<h2 id="dc-ident">Identity</h2>
 			@staleLabel(!c.Off)
 			if c.CanProbe {
-				<button
-					type="button"
-					class="btn btn-link"
-					hx-post={ c.Base + devPath(c.ID, "/probe") }
-					hx-target="#identity"
-					hx-swap="outerHTML"
-					hx-disabled-elt="this"
-					data-needs-device
-					if c.whyText() != "" {
-						// hx-disable: htmx never binds the probe, so this markup sends nothing by click, Enter or Space,
-						// not only while the click guard of select.js runs first; live.js lifts it when the device is back
-						aria-disabled="true"
-						hx-disable
-					}
-					aria-describedby="ident-why"
-				>Refresh identity</button>
+				@ui.Button(ui.Btn{Label: "Refresh identity", Kind: "link", Attrs: c.probeAttrs()})
 			}
 		</div>
 		if c.CanProbe {

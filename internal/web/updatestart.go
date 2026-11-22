@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
@@ -211,6 +213,14 @@ func (w whenState) Preset() string {
 		return ""
 	}
 	return w.Start.Format(time.RFC3339)
+}
+
+// cardAttrs is data-preset on the When card, only when a preset exists (a key the card does not have stays absent).
+func (w whenState) cardAttrs() templ.Attributes {
+	if p := w.Preset(); p != "" {
+		return templ.Attributes{"data-preset": p}
+	}
+	return nil
 }
 
 // Invalid marks the fields of a time the server refused.

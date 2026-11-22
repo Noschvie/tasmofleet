@@ -10,7 +10,7 @@ templ policyHistoryPage(p policyHistoryView) {
 			if len(p.Days) == 0 {
 				@ui.Empty("No versions yet", "Saving a rule creates the first one.") {
 					if p.Admin {
-						<a class="btn btn-primary" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>New rule</a>
+						@ui.Button(ui.Btn{Label: "New rule", Kind: "primary", Href: p.Base + rulesPath + "/new"})
 					}
 				}
 			} else {
@@ -26,10 +26,10 @@ templ policyHistoryPage(p policyHistoryView) {
 							if p.Older != "" || p.Newest != "" {
 								<div class="pol-hpage">
 									if p.Newest != "" {
-										<a class="btn" href={ templ.SafeURL(p.Newest) }>Newest versions</a>
+										@ui.Button(ui.Btn{Label: "Newest versions", Href: p.Newest})
 									}
 									if p.Older != "" {
-										<a class="btn" href={ templ.SafeURL(p.Older) }>Older versions</a>
+										@ui.Button(ui.Btn{Label: "Older versions", Href: p.Older})
 									}
 								</div>
 							}
@@ -104,7 +104,7 @@ templ histDetailCard(p policyHistoryView) {
 				if p.Admin && p.Detail.Revert != 0 {
 					<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/revert/" + vstr(p.Detail.Revert)) }>
 						<input type="hidden" name="csrf" value={ p.CSRF }/>
-						<button type="submit" class="btn" data-dialog="dlg-revert">Revert to v{ vstr(p.Detail.Revert) }…</button>
+						@ui.Button(ui.Btn{Label: "Revert to v" + vstr(p.Detail.Revert) + "…", Type: "submit", Dialog: "dlg-revert"})
 					</form>
 				}
 			</div>

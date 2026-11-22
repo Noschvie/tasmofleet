@@ -45,7 +45,9 @@ templ policyDevToolbar(p devView) {
 			<input type="search" name="q" value={ p.Q } placeholder="Filter devices…" aria-label="Filter devices" data-dev-filter/>
 		</form>
 		if p.CanFix && p.Show != "unknown" && p.Pickable > 0 {
-			<button type="submit" form="dev-pick" class="btn btn-primary"><span data-pick-label>{ "Make compliant… (" + itoa(p.Checked) + " selected)" }</span></button>
+			@ui.Button(ui.Btn{Kind: "primary", Type: "submit", Form: "dev-pick"}) {
+				<span data-pick-label>{ "Make compliant… (" + itoa(p.Checked) + " selected)" }</span>
+			}
 		}
 	</div>
 }
@@ -57,7 +59,7 @@ templ policyDevTable(p devView) {
 	if len(p.Groups) == 0 {
 		@ui.Empty("No device deviates from a rule.", emptyDevText(p)) {
 			if p.Show != "" || p.Q != "" {
-				<a class="btn" href={ templ.SafeURL(p.Base + policyDevPath) }>Clear the filter</a>
+				@ui.Button(ui.Btn{Label: "Clear the filter", Href: p.Base + policyDevPath})
 			}
 		}
 	} else {
@@ -151,7 +153,7 @@ templ policyDevUnjudged(p devView) {
 							for _, c := range p.Backup {
 								<input type="hidden" name="id" value={ devStr(c.ID) }/>
 							}
-							<button type="submit" class="btn btn-sm">Back up these { itoa(len(p.Backup)) }</button>
+							@ui.Button(ui.Btn{Label: "Back up these " + itoa(len(p.Backup)), Small: true, Type: "submit"})
 						</form>
 					}
 				</div>
@@ -167,7 +169,7 @@ templ policyDevUnjudged(p devView) {
 					<form method="post" action={ templ.SafeURL(p.Base + "/policy/live") } class="pol-inline">
 						<input type="hidden" name="csrf" value={ p.CSRF }/>
 						<input type="hidden" name="back" value="deviations"/>
-						<button type="submit" class="btn btn-sm">Run now</button>
+						@ui.Button(ui.Btn{Label: "Run now", Small: true, Type: "submit"})
 					</form>
 				</div>
 			}

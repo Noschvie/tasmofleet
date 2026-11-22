@@ -353,7 +353,7 @@ templ sysPushRowView(row sysPushRow) {
 		<div class="sys-orphan-main">
 			<div class="sys-orphan-title">
 				<span>{ row.Label }</span>
-				<span class="bdg t-accent" data-push-this hidden>This browser</span>
+				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "This browser", Attrs: templ.Attributes{"data-push-this": true, "hidden": true}})
 				if row.LastError != "" {
 					@ui.Badge(ui.ToneDanger, "Last delivery failed")
 				}
@@ -1129,8 +1129,7 @@ templ pwBrokerDialog(p sysPage) {
 
 templ pwBrokerPage(d pwBrokerData) {
 	@ui.PageHeader("Use the broker password", "")
-	<section class="ucard confirm-card" aria-labelledby="confirm-h">
-		<h2 id="confirm-h">{ "Use the broker password for " + plural(len(d.Rows), "device") }</h2>
+	@ui.CardOf(ui.CardData{Title: "Use the broker password for " + plural(len(d.Rows), "device"), Class: "confirm-card", LabelledBy: "confirm-h"}) {
 		<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown. { pwBrokerTestWarning }</p>
 		if d.ACL {
 			@ui.BrokerACLNotice()
@@ -1144,5 +1143,5 @@ templ pwBrokerPage(d pwBrokerData) {
 				<button type="submit" class="btn btn-primary">Use the broker password<span data-select-suffix></span></button>
 			</div>
 		</form>
-	</section>
+	}
 }

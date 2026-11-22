@@ -54,18 +54,14 @@ func sgTitle(id string) string {
 templ styleguidePage(v sgView) {
 	@ui.PageHeader("Styleguide", "Inline banners, toasts and the live connection indicator, as used across TasmoFleet")
 	<div class="sg-grid">
-		<section class="ucard sg-sec" id="sg-banners" aria-labelledby="sg-banners-h">
-			<h2 id="sg-banners-h">{ sgTitle("banners") }</h2>
-			<p class="ucard-sub">Above the page content, under the page header. Stay until the cause is gone.</p>
+		@ui.CardOf(ui.CardData{Title: sgTitle("banners"), Sub: "Above the page content, under the page header. Stay until the cause is gone.", Class: "sg-sec", ID: "sg-banners", LabelledBy: "sg-banners-h"}) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Title: "Settings saved.", Text: "MQTT clients reconnect within a few seconds."})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Tasmota 14.3.0 is available.", Text: "Released 6 Oct 2026 · 19 devices can update.", Action: &ui.Btn{Label: "Release notes"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "3 devices still run Tasmota 13.4.0.", Text: "That release no longer gets security fixes.", Action: &ui.Btn{Label: "Plan update"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Couldn't save MQTT settings.", Text: "The broker refused the username or password.", Action: &ui.Btn{Label: "Retry"}, Alert: true})
 			@ui.BrokerACLNotice()
-		</section>
-		<section class="ucard sg-sec" id="sg-toasts" aria-labelledby="sg-toasts-h">
-			<h2 id="sg-toasts-h">{ sgTitle("toasts") }</h2>
-			<p class="ucard-sub">Bottom right, newest last. Success fades after 4.5 s; failures stay until dismissed.</p>
+		}
+		@ui.CardOf(ui.CardData{Title: sgTitle("toasts"), Sub: "Bottom right, newest last. Success fades after 4.5 s; failures stay until dismissed.", Class: "sg-sec", ID: "sg-toasts", LabelledBy: "sg-toasts-h"}) {
 			<div class="sg-toasts">
 				@ui.ToastStatic(ui.ToastData{Tone: ui.ToneOK, Text: "5 backups saved", Action: "View"})
 				@ui.ToastStatic(ui.ToastData{Tone: ui.ToneWarn, Text: "2 devices skipped: offline", Action: "Details"})
@@ -76,10 +72,8 @@ templ styleguidePage(v sgView) {
 				<button type="button" class="btn" data-toast="2 devices skipped: offline" data-toast-tone="warn">Show warning</button>
 				<button type="button" class="btn" data-toast="Restart failed on Laundry Ceiling Light: timed out" data-toast-tone="danger">Show failure</button>
 			</div>
-		</section>
-		<section class="ucard sg-sec sg-live" id="sg-live" aria-labelledby="sg-live-h">
-			<h2 id="sg-live-h">{ sgTitle("live") }</h2>
-			<p class="ucard-sub">Top bar, right of the navigation. Reconnecting and offline also show a banner.</p>
+		}
+		@ui.CardOf(ui.CardData{Title: sgTitle("live"), Sub: "Top bar, right of the navigation. Reconnecting and offline also show a banner.", Class: "sg-sec sg-live", ID: "sg-live", LabelledBy: "sg-live-h"}) {
 			<div class="sg-live-row">
 				@ui.LivePill("ok", "Live")
 				<span>Device state streams in. Last event 1 s ago.</span>
@@ -92,7 +86,7 @@ templ styleguidePage(v sgView) {
 				@ui.LivePill("off", "Offline")
 				<span>No connection since 09:52. Values are frozen and changes are paused until it returns.</span>
 			</div>
-		</section>
+		}
 	</div>
 	<div class="sg-gallery">
 		<div class="sg-gallery-head">
@@ -307,10 +301,9 @@ templ styleguidePage(v sgView) {
 
 // sgSec is one gallery section with its anchor and heading.
 templ sgSec(id string) {
-	<section class="ucard sg-sec" id={ "sg-" + id } aria-labelledby={ "sg-" + id + "-h" }>
-		<h2 id={ "sg-" + id + "-h" }>{ sgTitle(id) }</h2>
+	@ui.CardOf(ui.CardData{Title: sgTitle(id), Class: "sg-sec", ID: "sg-" + id, LabelledBy: "sg-" + id + "-h"}) {
 		{ children... }
-	</section>
+	}
 }
 
 var sgDiffRows = []ui.DiffRow{

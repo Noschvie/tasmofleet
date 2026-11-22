@@ -120,7 +120,7 @@ templ bulkScopePage(v bulkScopeView) {
 			}
 			<div class="bk-sum">{ v.Summary() }</div>
 			@ui.Button(ui.Btn{Label: v.Verb(), Kind: "primary", Tall: true, Type: "submit", Disabled: v.Error != ""})
-			<a class="btn" href={ templ.SafeURL(v.Base + "/devices") }>Cancel</a>
+			@ui.Button(ui.Btn{Label: "Cancel", Href: v.Base + "/devices"})
 		</aside>
 	</form>
 }
@@ -193,10 +193,10 @@ templ bulkResultPage(v bulkResultView) {
 			</div>
 			<div class="pghead-acts">
 				if v.CanRetry {
-					<a class="btn" href={ templ.SafeURL(v.Base + "/transactions/" + strconv.FormatInt(int64(v.Batch), 10) + "/retry") }>Retry failed ({ strconv.Itoa(v.Failed) })</a>
+					@ui.Button(ui.Btn{Label: "Retry failed (" + strconv.Itoa(v.Failed) + ")", Href: v.Base + "/transactions/" + strconv.FormatInt(int64(v.Batch), 10) + "/retry"})
 				}
-				<a class="btn" href={ templ.SafeURL(v.Base + "/audit") }>Audit log</a>
-				<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/devices") }>Back to devices</a>
+				@ui.Button(ui.Btn{Label: "Audit log", Href: v.Base + "/audit"})
+				@ui.Button(ui.Btn{Label: "Back to devices", Kind: "primary", Href: v.Base + "/devices"})
 			</div>
 		</div>
 		if v.Command != "" {

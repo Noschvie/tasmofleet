@@ -118,8 +118,9 @@ func TestRefreshIdentityRefusesADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 		t.Fatalf("refresh: refreshs %v, body %q", e.pr.refreshs, body)
 	}
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
-	btn := sliceBetween(page, "hx-post=\"/tf/devices/1/probe\"", ">Refresh identity<")
-	if !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || strings.Contains(btn, "title=") ||
+	// The page's attributes come after the component's, sorted by name, so the tag is read whole, not from hx-post on.
+	btn := buttonTag(page, "Refresh identity")
+	if !strings.Contains(btn, `hx-post="/tf/devices/1/probe"`) || !strings.Contains(btn, `aria-disabled="true"`) || strings.Contains(btn, " disabled") || strings.Contains(btn, "title=") ||
 		!strings.Contains(btn, `aria-describedby="ident-why"`) || !strings.Contains(btn, "data-needs-device") || !slices.Contains(strings.Fields(btn), "hx-disable") {
 		t.Errorf("Refresh identity is not blocked (focusable, reason as text, still the probe, never bound by htmx): %s", btn)
 	}

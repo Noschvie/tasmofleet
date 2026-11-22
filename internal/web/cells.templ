@@ -230,7 +230,7 @@ templ (h *handler) deviceRows(d rowsData) {
 // deviceMenu is the row actions of a device in the list, in its table row and on its phone card.
 templ deviceMenu(m rowMenu) {
 	<details class={ "rowmenu", "umenu", templ.KV("up", m.Up) }>
-		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + m.Device.Name } title={ "Actions for " + m.Device.Name }>⋯</summary>
+		@ui.MenuButton("Actions for "+m.Device.Name, "Actions for "+m.Device.Name)
 		<div class="rowmenu-body menu-panel">
 			<a class="menu-item" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID)) }>Open</a>
 			if m.Console {
