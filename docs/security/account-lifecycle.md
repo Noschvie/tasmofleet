@@ -103,7 +103,7 @@ the upgrade end at the upgrade.
 | L13   | `TestStandaloneFirstRun`, `TestStandaloneEndToEnd`                                                                                                                        |
 | L14   | `TestStandaloneFirstRun`, `TestInitialPasswordFileRemovedAtStartupWhenSpent`                                                                                             |
 | L15   | _removed_ |
-| L16   | `TestEndSessionsEndsExactlyOneLocalUser`, `TestEndLocalSessionsRefusedWhenActorChangedMidRequest`, `TestEndOneSessionRefusedWhenActorChangedMidRequest`, `TestEndOneSessionByAValidActorStillWorks`, `TestEndSingleSession`, `TestEndLocalSessionsGuards`, `TestEndLocalSessionsStoreFailureIsAnErrorNotASuccess`, `store.TestDeleteUserSessionsAsDeletesForAValidActor`, `store.TestDeleteSubjectSessionAsActor` |
+| L16   | `TestEndSessionsEndsExactlyOneLocalUser`, `TestEndLocalSessionsRefusedWhenActorChangedMidRequest`, `TestEndOneSessionRefusedWhenActorChangedMidRequest`, `TestEndOneSessionByAValidActorStillWorks`, `TestOIDCAdminEndsOneSessionOfAnSSOUser`, `TestEndSingleSession`, `TestEndLocalSessionsGuards`, `TestEndLocalSessionsStoreFailureIsAnErrorNotASuccess`, `store.TestDeleteUserSessionsAsDeletesForAValidActor`, `store.TestDeleteSubjectSessionAsActor` |
 | B6    | `store.TestSessionRefreshTokenIsSealedAtRest`, `store.TestMigration0002KeepsExistingData`                                                                                |
 
 ## Accepted residual risks

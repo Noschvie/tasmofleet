@@ -198,6 +198,28 @@ func TestEndSessionsHitsExactlyOneSubject(t *testing.T) {
 	}
 }
 
+// Why (#1203, L12): an OIDC admin has no local account to check, so ending one
+// session must work for it with the zero Actor (no per-actor condition) and
+// end exactly that session; the actor check added for local admins must not
+// lock the IdP-authenticated admin out of this action.
+func TestOIDCAdminEndsOneSessionOfAnSSOUser(t *testing.T) {
+	e, alicesBrowser := oidcAdmin(t)
+	bob1, bob2 := e.browser(), e.browser()
+	bob1.get(bob1.startOIDC("/", bob))
+	bob2.get(bob2.startOIDC("/", bob))
+	stepUpOIDC(t, alicesBrowser)
+	id1 := hashID(bob1.cookie(CookieInsecure))
+	if r := alicesBrowser.post("/users/sessions", url.Values{"subject": {"sub-bob"}, "session": {id1}}); r.code != http.StatusOK {
+		t.Fatalf("end one session: %d %s", r.code, r.body)
+	}
+	if bob1.get("/viewer").code == http.StatusOK {
+		t.Error("the ended session still works")
+	}
+	if bob2.get("/viewer").code != http.StatusOK {
+		t.Error("the user's other session ended too")
+	}
+}
+
 // Why: End sessions reaches users whose sessions exist (SSO and local). A
 // forged subject must not end an unknown account's sessions, a header
 // principal's, or the admin's own session (Sign out exists for that).
