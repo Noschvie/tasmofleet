@@ -191,6 +191,18 @@ means nothing stops you: you have to know it. The full working rules are in
   is unused from the order of events or from comparing two indexes.
 - **Enforced:** `make scripts-test` (the decision). The registry calls around it only run on `main` (`_image.yml`, mode edge).
 
+### Base images pulled straight from Docker Hub hit the pull limit (#1212)
+
+- **Happened:** the release commit's `main.yml` run failed twice in `image / build image (edge)`: Docker Hub answered
+  429 Too Many Requests while BuildKit pulled `golang` and `debian`, although the Docker Hub login had succeeded. Several
+  image builds had run in the hour before; the login only exists on `main` and tags and only raises the quota. A rerun
+  after about 25 minutes passed.
+- **Rule:** no CI build depends on the Docker Hub quota alone. Every `docker/setup-buildx-action` step carries
+  `buildkitd-config-inline` with `[registry."docker.io"] mirrors = ["mirror.gcr.io"]`; BuildKit asks the mirror first and falls
+  back to Docker Hub. Keep the `docker.io/library/...` names in the Dockerfile (Renovate, local builds) and do not answer
+  a 429 with a retry or a longer timeout. A new buildx step gets the config in the same change (`docs/dev/ci-tiers.md`).
+- **Enforced:** convention and review; the image build check of the PR (`pr.yml`) and the nightly run the config.
+
 ### The nightly stayed red for days (#485, #428)
 
 - **Happened:** 5 of 9 nightly FULL runs failed, and #428 was closed while the
