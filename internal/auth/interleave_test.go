@@ -76,6 +76,17 @@ func (s *hookedSessions) DeleteUserSessionsAs(ctx context.Context, subject strin
 	return s.fakeSessions.DeleteUserSessionsAs(ctx, subject, by)
 }
 
+// hookedDir fires the same hook before one session of a user is ended.
+type hookedDir struct {
+	*fakeDir
+	h *hookedUsers
+}
+
+func (d *hookedDir) DeleteSubjectSession(ctx context.Context, subject, id string, by store.Actor) (bool, error) {
+	d.h.fire()
+	return d.fakeDir.DeleteSubjectSession(ctx, subject, id, by)
+}
+
 func hookedEnv(t *testing.T) (*env, *hookedUsers) {
 	t.Helper()
 	var h *hookedUsers
@@ -84,6 +95,7 @@ func hookedEnv(t *testing.T) (*env, *hookedUsers) {
 		h = &hookedUsers{fakeUsers: o.LocalUsers.(*fakeUsers)}
 		o.LocalUsers = h
 		o.Sessions = &hookedSessions{fakeSessions: o.Sessions.(*fakeSessions), h: h}
+		o.Directory = &hookedDir{fakeDir: o.Directory.(*fakeDir), h: h}
 	})
 	opsHash, err := HashPassword(opsPassword)
 	if err != nil {

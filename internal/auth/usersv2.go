@@ -336,7 +336,8 @@ func (s *Service) nameSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 // endOneSession ends the single session (form field "session") of subject.
-// The caller has checked the step-up.
+// The caller has checked the step-up. For a local admin the delete is applied
+// only if, in the same statement, the admin is still an enabled admin (L6).
 func (s *Service) endOneSession(w http.ResponseWriter, r *http.Request, ci ctxInfo, subject, id string) {
 	detail := map[string]string{"subject": subject}
 	name := ""
@@ -359,7 +360,14 @@ func (s *Service) endOneSession(w http.ResponseWriter, r *http.Request, ci ctxIn
 		http.NotFound(w, r)
 		return
 	}
-	ok, err := s.o.Directory.DeleteSubjectSession(r.Context(), subject, id)
+	ok, err := s.o.Directory.DeleteSubjectSession(r.Context(), subject, id, actingActor(ci))
+	if errors.Is(err, ErrStaleActor) {
+		// L6: the admin lost its rights while the request ran; nothing was
+		// deleted. Same answer as ending all sessions of a local user.
+		s.record(r, ci.p.Subject, "account.session.end", "denied: acting account changed", detail)
+		s.renderUsers(w, r, http.StatusForbidden, "", "Your account changed while the request ran. Sign in again.")
+		return
+	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "end session", "err", err)
 		s.record(r, ci.p.Subject, "account.session.end", "error", detail)

@@ -299,6 +299,56 @@ func TestEndLocalSessionsRefusedWhenActorChangedMidRequest(t *testing.T) {
 	}
 }
 
+// Why (#1203, L6): ending ONE session of a local user is an account mutation
+// as much as ending all of them. An admin demoted, disabled or re-keyed after
+// its page loaded must not delete anything; the check sits in the same store
+// statement, so no request can slip through between check and delete.
+func TestEndOneSessionRefusedWhenActorChangedMidRequest(t *testing.T) {
+	ruins := map[string]func(m map[string]store.LocalUser){
+		"demoted":          func(m map[string]store.LocalUser) { u := m["admin"]; u.Role = model.RoleOperator; m["admin"] = u },
+		"disabled":         func(m map[string]store.LocalUser) { u := m["admin"]; u.Disabled = true; m["admin"] = u },
+		"password changed": func(m map[string]store.LocalUser) { u := m["admin"]; u.PasswordGen++; m["admin"] = u },
+	}
+	for ruin, doRuin := range ruins {
+		t.Run(ruin, func(t *testing.T) {
+			e, h := hookedEnv(t)
+			adm := e.login("admin", testPassword)
+			adm.stepUp(testPassword)
+			ops := e.login("ops", opsPassword)
+			id := hashID(ops.cookie(CookieInsecure))
+			h.before = func() { e.users.cli(doRuin) }
+			r := adm.post("/users/sessions", url.Values{"subject": {"local:ops"}, "session": {id}})
+			if r.code != http.StatusForbidden {
+				t.Fatalf("after the admin was %s: %d, want 403", ruin, r.code)
+			}
+			if countSessions(e, "local:ops") != 1 {
+				t.Fatal("the refused request ended the session")
+			}
+			if a := e.audit.last(); a.Action != "account.session.end" || a.Result != "denied: acting account changed" {
+				t.Errorf("audit %+v", a)
+			}
+		})
+	}
+}
+
+// Why (#1203): the check must not cost a valid admin anything. With an
+// unchanged actor the one session still ends, and a session that is already
+// gone is still the 404 "already ended", not a 403.
+func TestEndOneSessionByAValidActorStillWorks(t *testing.T) {
+	e, _ := hookedEnv(t)
+	adm := e.login("admin", testPassword)
+	adm.stepUp(testPassword)
+	ops := e.login("ops", opsPassword)
+	id := hashID(ops.cookie(CookieInsecure))
+	form := url.Values{"subject": {"local:ops"}, "session": {id}}
+	if r := adm.post("/users/sessions", form); r.code != http.StatusOK || countSessions(e, "local:ops") != 0 {
+		t.Fatalf("valid admin: %d, ops sessions %d", r.code, countSessions(e, "local:ops"))
+	}
+	if r := adm.post("/users/sessions", form); r.code != http.StatusNotFound {
+		t.Errorf("session already gone: %d, want 404", r.code)
+	}
+}
+
 // Why (#1162): the guards around the local branch. The own account is refused
 // in every spelling of its subject (a case-folded "local:ADMIN" is the same
 // account), an unknown name is a 404 and deletes nothing, and a missing

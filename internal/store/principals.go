@@ -53,8 +53,11 @@ type UserDirectory interface {
 	// expired at now, seen within idle), most recently seen first.
 	ListSubjectSessions(ctx context.Context, subject string, now time.Time, idle time.Duration) ([]Session, error)
 	// DeleteSubjectSession ends the one session idHash if it belongs to
-	// subject; false when no such session exists.
-	DeleteSubjectSession(ctx context.Context, subject, idHash string) (bool, error)
+	// subject and, in the same statement, by is still an enabled admin at its
+	// generation (L6); false when no such session exists. A statement that
+	// matched nothing because the actor went stale is ErrStaleActor; the zero
+	// Actor imposes no condition.
+	DeleteSubjectSession(ctx context.Context, subject, idHash string, by Actor) (bool, error)
 }
 
 func (s *SQLite) RecordLogin(ctx context.Context, p PrincipalRecord) error {
@@ -164,7 +167,16 @@ func (s *SQLite) subjectSessionIDs(ctx context.Context, subject string, now time
 	return ids, rows.Err()
 }
 
-func (s *SQLite) DeleteSubjectSession(ctx context.Context, subject, idHash string) (bool, error) {
-	n, err := rowsDeleted(s.db.ExecContext(ctx, "DELETE FROM sessions WHERE subject = ? AND id_hash = ?", subject, idHash))
-	return n > 0, err
+func (s *SQLite) DeleteSubjectSession(ctx context.Context, subject, idHash string, by Actor) (bool, error) {
+	cond, cargs := actorCond(by)
+	n, err := rowsDeleted(s.db.ExecContext(ctx, "DELETE FROM sessions WHERE subject = ? AND id_hash = ? AND "+cond, append([]any{subject, idHash}, cargs...)...)) //nolint:gosec // G202: cond is a constant fragment; every value is bound
+	if err != nil || n > 0 {
+		return n > 0, err
+	}
+	if stale, err := s.actorStale(ctx, by); err != nil {
+		return false, err
+	} else if stale {
+		return false, ErrStaleActor
+	}
+	return false, nil
 }

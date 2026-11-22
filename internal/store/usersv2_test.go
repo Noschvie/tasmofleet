@@ -103,6 +103,25 @@ func TestProfileEditsCheckTheirAuthority(t *testing.T) {
 	}
 }
 
+// Why (#1203, L6): a session that is already gone must stay "no such session"
+// for a valid admin (the 404 "already ended"), while a stale admin gets
+// ErrStaleActor even then: its authority is gone, so it learns nothing about
+// which sessions exist and the web layer answers 403, not 404.
+func TestDeleteSubjectSessionAsActor(t *testing.T) {
+	s, _, _ := newStore(t)
+	ctx := t.Context()
+	addUser(t, s, "boss", model.RoleAdmin)
+	addUser(t, s, "other", model.RoleAdmin) // the last admin cannot be demoted
+	boss := Actor{Username: "boss", PasswordGen: 1}
+	if ok, err := s.DeleteSubjectSession(ctx, "local:ops", "missing", boss); ok || err != nil {
+		t.Fatalf("valid actor, missing session: %v %v, want false, nil", ok, err)
+	}
+	must(t, s.SetLocalRole(ctx, "boss", model.RoleOperator, Actor{}))
+	if ok, err := s.DeleteSubjectSession(ctx, "local:ops", "missing", boss); ok || !errors.Is(err, ErrStaleActor) {
+		t.Fatalf("stale actor, missing session: %v %v, want ErrStaleActor", ok, err)
+	}
+}
+
 // Why: "End session" on the user detail page ends exactly one session of
 // exactly that user; the list shows only sessions that are still alive.
 func TestSubjectSessionsListAndEndOne(t *testing.T) {
@@ -124,10 +143,10 @@ func TestSubjectSessionsListAndEndOne(t *testing.T) {
 	if err != nil || len(list) != 2 || list[0].IDHash != "a-new" || list[1].IDHash != "a-old" {
 		t.Fatalf("list = %+v, %v (want the two live ones, newest first)", list, err)
 	}
-	if ok, err := s.DeleteSubjectSession(ctx, "sub-a", "b1"); ok || err != nil {
+	if ok, err := s.DeleteSubjectSession(ctx, "sub-a", "b1", Actor{}); ok || err != nil {
 		t.Errorf("ended another user's session: %v %v", ok, err)
 	}
-	if ok, err := s.DeleteSubjectSession(ctx, "sub-a", "a-old"); !ok || err != nil {
+	if ok, err := s.DeleteSubjectSession(ctx, "sub-a", "a-old", Actor{}); !ok || err != nil {
 		t.Errorf("end a-old: %v %v", ok, err)
 	}
 	if _, err := s.GetSession(ctx, "a-new"); err != nil {

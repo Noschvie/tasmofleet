@@ -711,7 +711,17 @@ func (d *fakeDir) ListSubjectSessions(_ context.Context, subject string, now tim
 	return out, nil
 }
 
-func (d *fakeDir) DeleteSubjectSession(_ context.Context, subject, id string) (bool, error) {
+// DeleteSubjectSession mirrors the store: a stale actor is ErrStaleActor
+// before anything is looked at (the same rule as fakeUsers.actorOK).
+func (d *fakeDir) DeleteSubjectSession(_ context.Context, subject, id string, by store.Actor) (bool, error) {
+	if by.Username != "" && d.sessions.users != nil {
+		d.sessions.users.mu.Lock()
+		ok := d.sessions.users.actorOK(by)
+		d.sessions.users.mu.Unlock()
+		if !ok {
+			return false, store.ErrStaleActor
+		}
+	}
 	d.sessions.mu.Lock()
 	defer d.sessions.mu.Unlock()
 	s, ok := d.sessions.m[id]

@@ -590,7 +590,18 @@ func (s *Service) acting(ci ctxInfo) *Accounts {
 	if ci.p.Method != ModeLocal {
 		return s.accounts
 	}
-	return s.accounts.As(store.Actor{Username: ci.p.Name, PasswordGen: ci.passwordGen})
+	return s.accounts.As(actingActor(ci))
+}
+
+// actingActor is the authority a mutation is checked against in the store:
+// the signed-in local admin at its session's generation. The zero Actor (an
+// OIDC admin) imposes no condition. acting and endOneSession both use it, so
+// the rule exists once.
+func actingActor(ci ctxInfo) store.Actor {
+	if ci.p.Method != ModeLocal {
+		return store.Actor{}
+	}
+	return store.Actor{Username: ci.p.Name, PasswordGen: ci.passwordGen}
 }
 
 // endSessions is POST /users/sessions (form field subject): it signs a user

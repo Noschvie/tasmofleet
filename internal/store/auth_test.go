@@ -456,6 +456,14 @@ func TestActorMustStillBeAnEnabledAdminAtWriteTime(t *testing.T) {
 		},
 		"disable": func(s *SQLite, by Actor) error { return s.SetLocalDisabled(context.Background(), "ops", true, by) },
 		"delete":  func(s *SQLite, by Actor) error { return s.DeleteLocalUser(context.Background(), "ops", by) },
+		// #1203: ending one session of a local user is an account mutation too.
+		"session": func(s *SQLite, by Actor) error {
+			ok, err := s.DeleteSubjectSession(context.Background(), "local:ops", "ops-session", by)
+			if err == nil && !ok {
+				return errors.New("a valid actor deleted nothing")
+			}
+			return err
+		},
 		// #1162: ending the sessions of a local user is an account mutation too.
 		"sessions": func(s *SQLite, by Actor) error {
 			_, err := s.DeleteUserSessionsAs(context.Background(), "local:ops", by)
@@ -490,7 +498,7 @@ func TestActorMustStillBeAnEnabledAdminAtWriteTime(t *testing.T) {
 	}
 	t.Run("valid actor", func(t *testing.T) {
 		s, boss := setup(t)
-		for _, name := range []string{"add", "sessions", "password", "role", "disable", "delete"} { // delete last
+		for _, name := range []string{"add", "session", "sessions", "password", "role", "disable", "delete"} { // delete last
 			if err := mutations[name](s, boss); err != nil {
 				t.Fatalf("%s by a valid admin: %v", name, err)
 			}
