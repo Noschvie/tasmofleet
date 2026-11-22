@@ -370,10 +370,13 @@ test.describe("with local accounts", () => {
     await page.goto(local.url + "/settings/system?tab=signin");
     await expect(page.locator("#card-idp")).toHaveClass(/is-off/);
     await expect(page.locator("#card-roles")).toHaveClass(/is-off/);
+    await expect(page.locator("#card-mode")).toContainText("In use now: Local accounts.");
     await page.locator("[data-key='AUTH_MODE'] label.rcard", { hasText: "Single sign-on" }).click();
     await expect(page.locator("#card-idp")).not.toHaveClass(/is-off/);
     await expect(page.locator("#card-roles")).not.toHaveClass(/is-off/);
     await expect(page.locator("[data-sys-bar] .sbar-chip")).toHaveText(["Sign-in"]);
+    // The line names what runs, not what is picked: it stays until the choice is saved and restarted.
+    await expect(page.locator("#card-mode")).toContainText("In use now: Local accounts.");
   });
 
   // Why (#705): "Test discovery" posts with htmx and swaps its own row, but the server answered with

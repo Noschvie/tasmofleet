@@ -15,6 +15,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -826,4 +827,97 @@ func TestSysRuleOnReadsTheSameRulesAsTheScript(t *testing.T) {
 			t.Errorf("sysRuleOn(%q) = %v, want %v", rule, got, want)
 		}
 	}
+}
+
+// storedOIDC is single sign-on saved in the database (not set by the environment), the way an admin leaves it
+// after choosing the card in the UI. PUBLIC_URL comes from the environment, as it must.
+func storedOIDC() map[string]store.SystemSetting {
+	return map[string]store.SystemSetting{
+		"AUTH_MODE":          {Key: "AUTH_MODE", Value: "oidc"},
+		"OIDC_ISSUER":        {Key: "OIDC_ISSUER", Value: "https://idp.example/"},
+		"OIDC_CLIENT_ID":     {Key: "OIDC_CLIENT_ID", Value: "tasmofleet"},
+		"OIDC_CLIENT_SECRET": {Key: "OIDC_CLIENT_SECRET", Value: "fake-stored-secret-1220", Secret: true, Target: "idp.example:443"},
+		"ADMIN_GROUPS":       {Key: "ADMIN_GROUPS", Value: "adm"},
+	}
+}
+
+// modeCardText is the readable text of the Sign-in mode card.
+func modeCardText(t *testing.T, page string) string {
+	t.Helper()
+	_, mode := signInCardOf(t, page, "mode")
+	return pageText(mode)
+}
+
+// Why (#1220, follow-up of #1087): when the mode is saved from the UI, the only sign of the mode in use was the
+// checked card, and that card follows what the admin clicked or posted. So in single sign-on mode the page never
+// said so in words, and while the admin changed the choice before Save nothing said which mode was running. An
+// admin must be able to read which sign-in mode runs before and while changing it. The line is built from what
+// the process runs with, never from the posted choice, and the locked field must not say it twice.
+func TestSignInTabSaysTheModeInUse(t *testing.T) {
+	pub := "TASMOFLEET_PUBLIC_URL=https://tf.example"
+	t.Run("oidc stored", func(t *testing.T) {
+		e := sysEnvStored(t, storedOIDC(), pub)
+		_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+		mode := modeCardText(t, page)
+		if !strings.Contains(mode, "In use now: Single sign-on.") || !strings.Contains(page, `id="help-AUTH_MODE"`) {
+			t.Errorf("the editable mode field must say the mode in use:\n%s", mode)
+		}
+		if strings.Contains(mode, "In use now: Local accounts") {
+			t.Errorf("wrong mode named:\n%s", mode)
+		}
+	})
+	t.Run("nothing stored is local", func(t *testing.T) {
+		e, _, _, _ := sysEnv(t, true)
+		_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+		if mode := modeCardText(t, page); !strings.Contains(mode, "In use now: Local accounts.") {
+			t.Errorf("the default mode must be named too:\n%s", mode)
+		}
+	})
+	t.Run("a refused save of another choice keeps the line", func(t *testing.T) {
+		e := sysEnvStored(t, storedOIDC(), pub)
+		// local is picked, but the save fails on another field: the card shows the choice, the line what runs.
+		_, page := e.do(t, "POST", "/settings/system?tab=signin", "admin", url.Values{"csrf": {"tok"}, "v.AUTH_MODE": {"local"}, "v.BACKUP_KEEP": {"0"}})
+		if !strings.Contains(page, `name="v.AUTH_MODE" value="local" checked`) {
+			t.Fatalf("the refused post must show the picked card:\n%s", modeCardText(t, page))
+		}
+		mode := modeCardText(t, page)
+		if !strings.Contains(mode, "In use now: Single sign-on.") || strings.Contains(mode, "In use now: Local accounts") {
+			t.Errorf("the line followed the posted choice:\n%s", mode)
+		}
+	})
+	t.Run("a saved mode that waits for the restart is not in use", func(t *testing.T) {
+		e := sysEnvStored(t, map[string]store.SystemSetting{}, pub)
+		form := url.Values{"csrf": {"tok"}, "v.AUTH_MODE": {"oidc"}, "v.OIDC_ISSUER": {"https://idp.example/"}, "v.OIDC_CLIENT_ID": {"tasmofleet"},
+			"v.OIDC_CLIENT_SECRET": {"fake-new-secret-1220"}, "v.ADMIN_GROUPS": {"adm"}}
+		if r, body := e.do(t, "POST", "/settings/system?tab=signin", "admin", form); r.StatusCode != 303 {
+			t.Fatalf("the save must work: %d\n%s", r.StatusCode, pageText(body))
+		}
+		_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+		mode := modeCardText(t, page)
+		if !strings.Contains(mode, "In use now: Local accounts.") || strings.Contains(mode, "In use now: Single sign-on") {
+			t.Errorf("between Save and the restart the process still runs local accounts:\n%s", mode)
+		}
+	})
+	t.Run("a stored secret that cannot be read leaves local accounts running", func(t *testing.T) {
+		rows := storedOIDC()
+		rows["OIDC_CLIENT_SECRET"] = store.SystemSetting{Key: "OIDC_CLIENT_SECRET", Secret: true, Unreadable: true}
+		e := sysEnvStored(t, rows, pub)
+		_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+		if mode := modeCardText(t, page); !strings.Contains(mode, "In use now: Local accounts.") {
+			t.Errorf("single sign-on falls back to local sign-in without its secret, and the line must say so:\n%s", mode)
+		}
+	})
+	t.Run("locked by the environment says it once", func(t *testing.T) {
+		header := []string{"TASMOFLEET_AUTH_MODE=header", "TASMOFLEET_TRUSTED_PROXIES=127.0.0.1/32", "TASMOFLEET_ADMIN_GROUPS=adm"}
+		oidc := []string{"TASMOFLEET_AUTH_MODE=oidc", "TASMOFLEET_PUBLIC_URL=https://tf.example", "TASMOFLEET_OIDC_ISSUER=https://idp.example/",
+			"TASMOFLEET_OIDC_CLIENT_ID=tasmofleet", "TASMOFLEET_OIDC_CLIENT_SECRET=fake-env-secret-1220", "TASMOFLEET_ADMIN_GROUPS=adm"}
+		for name, envv := range map[string][]string{"header": header, "local": {"TASMOFLEET_AUTH_MODE=local"}, "oidc": oidc} {
+			e, _, _, _ := sysEnvWith(t, true, envv...)
+			_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+			_, mode := signInCardOf(t, page, "mode")
+			if strings.Contains(mode, "In use now") {
+				t.Errorf("%s: the locked field must not get the line:\n%s", name, pageText(mode))
+			}
+		}
+	})
 }

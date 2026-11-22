@@ -750,3 +750,54 @@ func TestBackupDaysAreValidatedAndAnnounced(t *testing.T) {
 		t.Fatalf("schedule %+v", sched)
 	}
 }
+
+// Why (#1220): the Sign-in tab says which mode is in use. A restart setting such as AUTH_MODE is saved at once but
+// the process keeps what it started with, and a stored client secret that cannot be decrypted makes single
+// sign-on fall back to local sign-in. Value (the saved value) names a mode that is not running in both cases, so
+// State reports what the process runs with, built the same way the page's other values are: nothing for a secret.
+func TestStateReportsWhatTheProcessRunsWith(t *testing.T) {
+	ctx := context.Background()
+	field := func(s *Service, key string) FieldState {
+		for _, f := range s.State() {
+			if f.Key == key {
+				return f
+			}
+		}
+		t.Fatalf("no field %s", key)
+		return FieldState{}
+	}
+	t.Run("a saved restart setting is not running yet", func(t *testing.T) {
+		s, _ := newSvc(t, newMem(), "TASMOFLEET_PUBLIC_URL=https://tf.example")
+		before := field(s, "AUTH_MODE")
+		if before.Value != "local" || before.Running != "local" {
+			t.Fatalf("a fresh install: %+v", before)
+		}
+		if _, err := s.Apply(ctx, Request{Actor: "a", StepUp: stepped, Values: map[string]string{"AUTH_MODE": "oidc", "OIDC_ISSUER": "https://idp.example/",
+			"OIDC_CLIENT_ID": "id", "OIDC_CLIENT_SECRET": "fake-secret-1220", "ADMIN_GROUPS": "adm"}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := field(s, "AUTH_MODE"); got.Value != "oidc" || got.Running != "local" || !got.PendingRestart {
+			t.Fatalf("saved oidc, running local, restart pending: %+v", got)
+		}
+	})
+	t.Run("an unreadable secret keeps single sign-on off", func(t *testing.T) {
+		st := newMem()
+		st.rows["AUTH_MODE"] = store.SystemSetting{Key: "AUTH_MODE", Value: "oidc"}
+		st.rows["OIDC_ISSUER"] = store.SystemSetting{Key: "OIDC_ISSUER", Value: "https://idp.example/"}
+		st.rows["OIDC_CLIENT_ID"] = store.SystemSetting{Key: "OIDC_CLIENT_ID", Value: "id"}
+		st.rows["ADMIN_GROUPS"] = store.SystemSetting{Key: "ADMIN_GROUPS", Value: "adm"}
+		st.rows["OIDC_CLIENT_SECRET"] = store.SystemSetting{Key: "OIDC_CLIENT_SECRET", Secret: true, Unreadable: true}
+		s, _ := newSvc(t, st, "TASMOFLEET_PUBLIC_URL=https://tf.example")
+		if got := field(s, "AUTH_MODE"); got.Value != "oidc" || got.Running != "local" {
+			t.Fatalf("the secret cannot be read, so the process runs local accounts: %+v", got)
+		}
+	})
+	t.Run("a secret is never shown", func(t *testing.T) {
+		st := newMem()
+		st.rows["MQTT_PASSWORD"] = store.SystemSetting{Key: "MQTT_PASSWORD", Value: "fake-stored-pw-1220", Secret: true}
+		s, _ := newSvc(t, st)
+		if got := field(s, "MQTT_PASSWORD"); got.Running != "" || got.Value != "" {
+			t.Fatalf("a secret must show nothing: %+v", got)
+		}
+	})
+}

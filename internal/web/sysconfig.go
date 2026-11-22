@@ -958,6 +958,10 @@ func sysFieldDataGroup(row sysRow) ui.SettingFieldData {
 		// The radio cards carry their own (hidden) legend and the card's header the badges: no label
 		// row, so no lone line above the choices.
 		d.Label, d.Restart, d.CanReset = "", false, false
+		// The mode in use, in words, as the locked field shows it: the cards alone only show what is chosen, and
+		// what is chosen follows the click and the refused save. Running is what the process was built with, so
+		// the line stays true between a save and the restart that applies it.
+		d.Help = "In use now: " + sysAuthModeWords(row.Running) + "."
 	}
 	return d
 }

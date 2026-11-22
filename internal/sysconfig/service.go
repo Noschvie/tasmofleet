@@ -327,7 +327,8 @@ func (s *Service) Subscribe(f func(Event)) (unsubscribe func()) {
 // FieldState is one editable field as the page shows it.
 type FieldState struct {
 	Field
-	Value          string // current value; empty for secrets
+	Value          string // current (saved) value; empty for secrets
+	Running        string // the value the running process was built with (differs from Value while a restart is pending, or when a stored secret cannot be read); empty for secrets
 	HasValue       bool   // a secret has a value
 	Source         string
 	PendingRestart bool
@@ -338,6 +339,20 @@ type FieldState struct {
 	LockNote       string // why a lock the environment did not set directly holds (issuer and client secret lock together); empty otherwise
 }
 
+// shownValue is the value of a field as the page may show it: URLs without user info, empty for a secret. The
+// address of NOTIFY_WEBHOOK_URL is shown as stored: the admin edits it, and a token in its query must survive a
+// save (it holds no user info: validation refuses that).
+func shownValue(f Field, c config.Config) string {
+	if f.Secret {
+		return ""
+	}
+	val, _ := config.Format(c, f.Key)
+	if f.Key == "NOTIFY_WEBHOOK_URL" {
+		return val
+	}
+	return netaddr.RedactURL(val)
+}
+
 // State describes every editable field.
 func (s *Service) State() []FieldState {
 	s.mu.Lock()
@@ -345,13 +360,7 @@ func (s *Service) State() []FieldState {
 	out := make([]FieldState, 0, len(fields))
 	for _, f := range fields {
 		val, _ := config.Format(s.cur, f.Key)
-		st := FieldState{Field: f, Value: netaddr.RedactURL(val), HasValue: val != "", Source: SourceDefault}
-		if f.Key == "NOTIFY_WEBHOOK_URL" {
-			st.Value = val // the admin edits the address as stored: a token in the query must survive a save (it holds no user info: validation refuses that)
-		}
-		if f.Secret {
-			st.Value = ""
-		}
+		st := FieldState{Field: f, Value: shownValue(f, s.cur), Running: shownValue(f, s.start), HasValue: val != "", Source: SourceDefault}
 		if s.unreadable[f.Key] {
 			st.HasValue = false
 		}
