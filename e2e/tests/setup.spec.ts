@@ -95,7 +95,7 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
   // UX review #37: the banner is a warning (not the green success notice) and does not link to the page it is on
   await expect(page.getByText("No device networks are configured")).toHaveCount(0);
   await page.goto(app.url + "/devices");
-  const banner = page.locator("p[role=status]", { hasText: "No device networks are configured" });
+  const banner = page.locator(".banner[role=status]", { hasText: "No device networks are configured" });
   await expect(banner).toBeVisible();
   await expect(banner).toHaveClass(/\btone-warn\b/);
   await expect(banner).not.toHaveClass(/\btone-ok\b/);
