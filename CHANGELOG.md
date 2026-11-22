@@ -4,6 +4,23 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.47.0 "Pigeon Point" (2026-11-22)
+
+### Changed
+
+- The Copy button is one small button everywhere: the one-time password page no longer draws it as a primary button, and the policy export's Copy is as small as the other Copy buttons (#1092)
+- Phone controls are 44 px tall instead of 40 px, the size Apple's guidelines and WCAG 2.5.5 ask for a thumb (#1169); desktop sizes stay
+
+### Fixed
+
+- The dashboard shows a finished transaction as a compact row with its result and the time it ran, and keeps the expanded progress card for transactions that are still running, which now say when they started; the dashboard switches on its own when a transaction ends (#1199, thanks @Noschvie)
+- Status 9 on a device without energy monitoring that has SetOption4 1 is now the same Command Error over MQTT as over HTTP: the read no longer waits for the timeout, the device's next reads are no longer switched to HTTP, and a backup no longer lists Status 9 as not read when HTTP is unavailable. A failure of another Status (another client's, another index) no longer answers or fails TasmoFleet's own Status read or the Status 11 that confirms a light change. The simulator publishes such a failure where the firmware does, on RESULT (#1209)
+- The Sign-in tab now says "In use now: Single sign-on." (or Local accounts) while the mode can be changed, and keeps saying it until the restart that applies a saved change (#1220, follow-up of #1087)
+
+### Security
+
+- Ending a single session of another local user now checks that the acting admin is still an admin (#1203)
+
 ## 0.46.2 "Cape Agulhas" (2026-11-22)
 
 ### Fixed

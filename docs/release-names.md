@@ -35,7 +35,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 24. **Montauk Point** (assigned to 0.44): eastern tip of Long Island, New York, USA. Lit in 1797; approved by Congress in 1792.
 25. **Rubjerg Knude** (assigned to 0.45): North Sea coast of Jutland, Denmark. Lit in 1900; moved 70 m inland in 2019 to escape erosion.
 26. **Cape Agulhas** (assigned to 0.46): Western Cape, South Africa. Lit in 1849; the second oldest lighthouse still operating in South Africa.
-27. **Pigeon Point**: California, USA. Lit in 1872; its 35 m tower ties with Point Arena as the tallest on the US West Coast.
+27. **Pigeon Point** (assigned to 0.47): California, USA. Lit in 1872; its 35 m tower ties with Point Arena as the tallest on the US West Coast.
 28. **Kannonzaki**: Yokosuka, Japan. Lit in 1869; the first Western-style lighthouse in Japan, built under the French engineer Leonce Verny.
 29. **South Stack**: off Holy Island, Anglesey, Wales. First lit in 1809; automated since 1983.
 30. **Sambro Island**: entrance of Halifax Harbour, Nova Scotia, Canada. First lit in 1758; the oldest surviving lighthouse in North America.
