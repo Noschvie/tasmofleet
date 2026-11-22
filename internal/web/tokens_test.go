@@ -3,6 +3,7 @@ package web
 import (
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode"
@@ -225,6 +226,50 @@ func TestDesignSystemTokenTableEqualsStylesheet(t *testing.T) {
 	for name := range light {
 		if strings.HasPrefix(name, "--color-") && !seen[name] {
 			t.Errorf("%s is in app.css but not in the design-system.md token table", name)
+		}
+	}
+}
+
+// Why: a finger needs 44 px (Apple HIG 44 pt, WCAG 2.5.5 44 px; the status bar row was 44 already), a
+// pointer does not, so the phone block of app.css raises the three control tokens and the desktop sizes
+// stay (#1169). Every touch target is written as one of these tokens, never as a number, so this block is
+// the one place that decides what a phone control measures; the e2e check (mobile-density.spec.ts)
+// measures the result. The design system's Controls row states both values; a row that disagrees with the
+// stylesheet sends the next person to the wrong number.
+func TestPhoneControlTokensAreTouchTargets(t *testing.T) {
+	css := readRepoFile(t, "static/app.css")
+	desktop := cssDecls(t, css, baseHeader)
+	phone := cssDecls(t, css, "@media (max-width: 44.99rem) {\n  :root {")
+	var controls string
+	for _, line := range strings.Split(readRepoFile(t, "../../docs/spec/design-system.md"), "\n") {
+		if strings.HasPrefix(line, "| Controls |") {
+			controls = line
+		}
+	}
+	if controls == "" {
+		t.Fatal("design-system.md has no Controls row in the token table")
+	}
+	wantDesktop := map[string]string{"--ctl": "34px", "--ctl-sm": "32px", "--ctl-lg": "40px"}
+	for name, want := range wantDesktop {
+		if desktop[name] != want {
+			t.Errorf("desktop %s = %q, want %q (a pointer needs no more, desktop density stays)", name, desktop[name], want)
+		}
+		got, ok := phone[name]
+		if !ok {
+			t.Errorf("the phone :root does not set %s: a phone control would measure %s", name, want)
+			continue
+		}
+		if px, err := strconv.Atoi(strings.TrimSuffix(got, "px")); err != nil || px < 44 {
+			t.Errorf("phone %s = %q, want at least 44px (thumb size)", name, got)
+		}
+		row := regexp.MustCompile("`" + regexp.QuoteMeta(name) + "` (\\d+px)(?: \\((\\d+px) on phones\\))?[,|:]")
+		m := row.FindStringSubmatch(controls)
+		if m == nil {
+			t.Errorf("design-system.md has no `%s` value with its phone size in the Controls row", name)
+			continue
+		}
+		if m[1] != want || m[2] != got {
+			t.Errorf("design-system.md says %s is %s (%s on phones), app.css has %s (%s on phones)", name, m[1], m[2], want, got)
 		}
 	}
 }

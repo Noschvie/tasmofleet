@@ -114,7 +114,7 @@ for (const width of [375, 412]) {
       await expect(cr).toBeHidden();
       await icon(/^CR\b/).tap();
       await expect(cr, "the explanation of CR is shown after a tap").toBeVisible();
-      // the open icon is drawn as a 16px circle; a filled 40px touch box would cover the end of its label ("CR")
+      // the open icon is drawn as a 16px circle; a filled touch box would cover the end of its label ("CR")
       await expect(icon(/^CR\b/)).toHaveAttribute("aria-expanded", "true");
       await expect(icon(/^CR\b/), "the touch box of an open icon is not filled").toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       // a second tap on the same icon closes it

@@ -52,7 +52,7 @@ export async function overflowProblem(page: Page, name: string): Promise<string 
  * (WCAG 2.5.8 "inline" exception); hidden, closed-fold and screen-reader-only
  * elements are not on screen.
  */
-export async function smallTargets(page: Page, min = 40): Promise<string[]> {
+export async function smallTargets(page: Page, min = 44): Promise<string[]> {
   return page.evaluate((min) => {
     const out: string[] = [];
     const visible = (e: Element) => {
@@ -81,7 +81,7 @@ export async function smallTargets(page: Page, min = 40): Promise<string[]> {
     // the way back and links beside a button act like buttons: they are targets, not prose
     const prose = (e: Element) => !!e.closest("p, li, small, dd, .notice, .lead, .crumb, .tag, .chip, h1, h2, h3, summary, label") && !e.matches(".button, .menu a, td a, .brand, .crumb a, .actions > a");
     for (const e of document.querySelectorAll("button, .button")) check(e);
-    // a framed fold title has a 40px hit area from its ::before (patterns.css), which getBoundingClientRect does not see
+    // a fold title can get its hit area from a pseudo-element, which getBoundingClientRect does not see
     for (const e of document.querySelectorAll("summary:not(.card > details.fold-h > summary)")) check(e);
     // a device name in a list is one link of a wrapping run of 24px targets, 8px apart (WCAG 2.5.8 spacing exception, QA #84)
     for (const e of document.querySelectorAll("a")) if (!e.matches(".button") && !prose(e) && !e.closest(".pager-gap")) { const r = e.getBoundingClientRect(); if (visible(e) && hitBox(e).height < (e.closest(".dev") ? 24 : min) - 0.5) out.push(describe(e, r)); }
@@ -318,8 +318,8 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
         if (stacked || (dense ? !(e.matches("input[type=checkbox]") || toggle) : !(e.matches("input[type=checkbox]") || toggle || lone))) continue;
         // a phone list row keeps the checkbox and the toggle on the first line (QA #67): that line is the reference
         const p1 = dense ? tr.querySelector("td.p1") : null;
-        const p1r = p1 ? rectOf(p1) : null; // the first line of the name cell (40 px), not the whole cell
-        const rr = p1r ? new DOMRect(p1r.left, p1r.top, p1r.width, Math.min(p1r.height, 40)) : rectOf(tr), er = rectOf(e);
+        const p1r = p1 ? rectOf(p1) : null; // the first line of the name cell (its min-height, the phone touch target), not the whole cell
+        const rr = p1r ? new DOMRect(p1r.left, p1r.top, p1r.width, Math.min(p1r.height, parseFloat(getComputedStyle(p1!).minHeight) || p1r.height)) : rectOf(tr), er = rectOf(e);
         const off = (er.top + er.bottom) / 2 - (rr.top + rr.bottom) / 2;
         if (Math.abs(off) > 2) add("c", describe(e, `centre is ${off.toFixed(1)}px off the centre of its row ${box(rr)}`));
       }

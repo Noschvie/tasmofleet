@@ -95,7 +95,7 @@ Theme-independent tokens (all on `:root`):
 | Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-pill` 999px; dots and avatars use `50%` |
 | Spacing | `--sp-N` is N pixels, for the values the prototype uses: 1-12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40. The prototype is not on a 4px grid, nothing is rounded |
 | Card gap | `--card-gap`: the space between sibling cards, down and across, on every page: card stacks, the device overview, its tile row. The value is 16 px (`--sp-16`); the token still reads `--sp-12` and the card stacks write 16 px directly until #1101 makes them one. `device-layout.spec.ts` fails when two cards come closer |
-| Controls | `--ctl` 34px (40px on phones), `--ctl-sm` 32px (40px on phones), `--ctl-lg` 40px, `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
+| Controls | `--ctl` 34px (44px on phones), `--ctl-sm` 32px (44px on phones), `--ctl-lg` 40px (44px on phones): the tall button and the full-width row targets (fold summaries, the drawer, row menus), `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
 | Inline values made tokens | `--backdrop`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
 | Layers | `--z-sticky` 10, `--z-menu` 20, `--z-header` 30, `--z-header-menu` 40, `--z-dialog` 1000, `--z-toast` 1001 |
@@ -150,8 +150,13 @@ title; `--fs-word` 18px: a word as a tile value) and adds the guard. The recurri
   uses the `--sp-N` tokens, never a px literal (#1101 replaces the about 420 literals left).
 - Radii: controls 7, cards 10, dialogs and the auth card 12, banners and toasts 9, code 8, menu items
   6, badges 5, pills 999, dots and avatars 50 %.
-- Heights: controls 34 px (40 px on phones), small buttons 32, top bar 52, sub-navigation 40, phone
-  header 56, row targets 44.
+- Heights: controls 34 px (44 px on phones), small buttons 32 (44 px on phones), top bar 52,
+  sub-navigation 40, phone header 56, row targets 44. A phone target is 44 px because a thumb is not a
+  pointer: Apple's HIG asks for 44 pt, WCAG 2.5.5 (AAA) for 44 px, Material for 48 dp. 40 px had no
+  reference behind it. The status bar row and the table rows were 44 already. Desktop keeps its sizes. A
+  phone target comes from `--ctl`, `--ctl-sm` or `--ctl-lg`, never from a number, so the next change is
+  one token; a control drawn smaller than its target (a crumb link, the info button) takes the target
+  from the token and a negative margin computed from the drawn size, so the layout does not move.
 - `main` is at most 1640 px wide with `clamp(12px, 2.4cqw, 32px)` gutters and no bottom padding
   of its own: the room below the content is the body's (the status bar's height plus `--sp-16`,
   #773).
@@ -201,7 +206,7 @@ Also: [desktop, dark](../design/styleguide/live-desktop-dark.png) · [phone, lig
 
 ### Buttons
 
-Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, padding 14), danger (outlined text in danger-fg), danger-solid (the confirming button of a destructive dialog), ghost, link (text only, 32 px target) and the icon button (⋯). Height `--ctl` (34 px, 40 px on phones), small 32 px. A Btn with `Href` is a link (it only navigates or opens the dialog named by `Dialog`); without it a `type=button` that never submits by accident. One action, one component; the confirming button repeats the trigger's verb and tone.
+Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, padding 14), danger (outlined text in danger-fg), danger-solid (the confirming button of a destructive dialog), ghost, link (text only, 32 px target) and the icon button (⋯). Height `--ctl` (34 px, 44 px on phones), small 32 px (44 px on phones). A Btn with `Href` is a link (it only navigates or opens the dialog named by `Dialog`); without it a `type=button` that never submits by accident. One action, one component; the confirming button repeats the trigger's verb and tone.
 
 Component: `ui.Button(Btn{Label, Kind, Href, Rel, Target, Type, Name, Value, Small, Tall, Icon, Aria, Disabled, DisabledReason, ReasonID, ReasonShared, Dialog, Current, Mask, ID, Form, FormAction, NoValidate})`. `Tall` is the tall size below; `ID` is the element's id (the single sign-on link, the update start button a script finds), `Form` the id of the form a submit button belongs to when it stands outside it, `FormAction` the address a submit button posts to instead of its form's and `NoValidate` skips the form's validation for that post (single sign-on next to a required password). `Name` and `Value` make a submit button that sends a value (the console's quick commands); `Aria` is the accessible name of an icon button. `Rel` and `Target` belong to a link (a pager's `prev` and `next`; an external link's `noopener noreferrer` and `_blank`). `Current` marks the one a row of buttons is on (the pager's page size): `aria-current="page"` and the class `btn-current`, drawn in the selected look below. `Mask` is `data-visual-mask` for text the pixel comparison cannot reproduce (a version). `Disabled` is the native `<button disabled>`, for a button that is off for a moment and says nothing (a request in flight); a disabled link keeps `aria-disabled`. A button that cannot act now and has a reason sets `DisabledReason` (#1072): the blocked variant is `<button type="button" aria-disabled="true" aria-describedby="<id>">`, so Tab still reaches it, and the reason is visible text, never a `title` alone (a title shows on a mouse hover only). It carries no action (no `href`, `Dialog`, `Name`, `Value` or submit type), so pressing it does nothing with or without JavaScript. `ReasonID` is the id of the element that holds the reason: its own one-line `span.btn-why` under the button, or, with `ReasonShared`, a line the page shows already (the offline banner, one line that names several buttons such as "Restart and Back up: …"). A button the server always re-renders with its state (the device header, Retry failed, the user page, the Backups tab) uses the blocked variant; one the page follows live without a swap (Refresh identity) keeps its action and gets `aria-disabled` and its reason line from the server and from `live.js`. The click guard for such a button is the one in `select.js` (`[data-needs-device][aria-disabled="true"]`). A blocked button is drawn at half opacity like a disabled one, but while it has keyboard focus it is drawn at full strength (`button.btn[aria-disabled="true"]:focus-visible`, buttons only), because the half opacity would cut the 2px focus ring to about 2:1 against the page, below the 3:1 a focus indicator needs. A blocked button is never `primary`: the focus rule above draws its label in the grey text colour, which on the accent fill of a primary is about 1:1 (a primary that cannot act is the plain look, and "Update 0 devices…" is one). A blocked button in a page header (Retry failed) names a `p.pghead-why` line under the header (`ReasonShared`), so the header's buttons stay side by side.
 
@@ -291,7 +296,7 @@ Label above (`500 12.5px`, text-2), the control (34 px, radius 7, strong border)
 
 Component: `ui.Field(FieldData{...})`, `ui.SelectField`, `ui.ErrorSummary`.
 
-A setting that has a stored value shows "Reset to default" after its label, in words on every field width (never a bare glyph), as a 24 px high target (a checkbox in a label: `clear.KEY`). Ticked, the control reads "Undo" (named "Undo reset to default" for a screen reader) and the field already shows the default; a second click brings the old value back. The control keeps the width of "Reset to default" in both states, so the row does not move when it is ticked. On a narrow field that shares its row with another one, a label row that cannot hold label, info button and the words wraps, and the control sits on its own line under a one-line label (the rule hangs on the control being there, never on its state). Typing in the field unticks it. The info button (ⓘ) after a label is drawn 16 px with a 24 px hit box (40 px on phones).
+A setting that has a stored value shows "Reset to default" after its label, in words on every field width (never a bare glyph), as a 24 px high target (a checkbox in a label: `clear.KEY`). Ticked, the control reads "Undo" (named "Undo reset to default" for a screen reader) and the field already shows the default; a second click brings the old value back. The control keeps the width of "Reset to default" in both states, so the row does not move when it is ticked. On a narrow field that shares its row with another one, a label row that cannot hold label, info button and the words wraps, and the control sits on its own line under a one-line label (the rule hangs on the control being there, never on its state). Typing in the field unticks it. The info button (ⓘ) after a label is drawn 16 px with a 24 px hit box (44 px on phones).
 
 ![Form fields, desktop, light](../design/styleguide/forms-desktop-light.png)
 
@@ -464,7 +469,7 @@ Component: `ui.Table`, `ui.Pager`, `ui.DeviceCards` (#1094).
 
 ### Chips and tags
 
-A chip is a filter you can toggle: a pill (`--r-pill`), 28 px high (40 px on phones), `500 12.5px`, the
+A chip is a filter you can toggle: a pill (`--r-pill`), 28 px high (44 px on phones), `500 12.5px`, the
 control border; a count after the label in text-2; checked uses the selected state. It is a
 `label > input[type=checkbox|radio]`, so it works without JavaScript. A tag is a read-only outlined label
 (`--color-border-strong`, radius 5, `500 11.5px`) for a kind or a source (Proxy, System, CLI, a device tag).
@@ -476,7 +481,7 @@ Component: `ui.Chip(ChipData{Label, Count, Name, Value, Checked})`, `ui.Tag(labe
 ### Folds
 
 `details.fold` holds something secondary: the summary is a `600 13.5px` line with a chevron on the right and
-a 40 px target; closed at every width unless it has `open`. Inside a card the fold takes the card's width
+a target of `--ctl-lg` (40 px, 44 px on phones); closed at every width unless it has `open`. Inside a card the fold takes the card's width
 and ends it. A card that is only a fold has the summary as its title.
 
 ### Bars fixed to the bottom
@@ -490,7 +495,7 @@ last button at 375 px. The save bar shows the unsaved dot inside the content edg
 ### Info button, copy button, file drop
 
 The info button (ⓘ) sits after a label and opens a popover with one or two sentences; its hit box is 24 px
-even where the drawing is 16 px. It is never the only place a rule is stated, and it never repeats the
+(44 px on phones) even where the drawing is 16 px. It is never the only place a rule is stated, and it never repeats the
 field's help line: a field has a help line or an info button. The copy button is a small default button
 "Copy" after the value, hidden without JavaScript; it confirms with a toast. A file drop zone is a dashed
 `--color-border-strong` frame, radius 10, with "Drop a … here, or choose a file"; the file input is the link.

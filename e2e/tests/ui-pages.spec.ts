@@ -289,12 +289,12 @@ for (const m of modes) {
     await look("snapshots");
     await page.goto(app.url + "/audit");
     await look("audit");
-    // a filtered audit page offers exactly one way back, and on a phone it is a 40 px target
+    // a filtered audit page offers exactly one way back, and on a phone it is a 44 px target
     await page.goto(app.url + "/audit?result=error&since=all");
     await expect(page.getByRole("link", { name: "Clear the filter" })).toHaveCount(1);
     if (m.size === "phone") {
       const box = await page.getByRole("link", { name: "Clear the filter" }).boundingBox();
-      expect(box?.height ?? 0, "Clear the filter is below the 40 px touch target").toBeGreaterThanOrEqual(40);
+      expect(box?.height ?? 0, "Clear the filter is below the 44 px touch target").toBeGreaterThanOrEqual(44);
     }
     await page.goto(app.url + "/settings/system");
     await look("system-settings");

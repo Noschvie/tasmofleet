@@ -433,9 +433,11 @@ test("audit: the shared pager is the same on desktop and phone", async ({ page }
   await expect(page).toHaveURL(/page=3/);
 });
 
-// UX review #1: a thumb needs 40 px. Buttons, summaries, links in rows, toggles,
-// checkbox hit areas and form fields on every main view.
-test("phone: every control is a 40 px touch target", async ({ page }) => {
+// UX review #1, #1169: a thumb needs 44 px (Apple HIG 44 pt, WCAG 2.5.5 44 px; the status bar row and the
+// table rows were 44 already). Buttons, summaries, links in rows, toggles, checkbox hit areas and form
+// fields on every main view. The size is one token (--ctl-sm), so a control that measures less has a
+// hand-written size in the stylesheet.
+test("phone: every control is a 44 px touch target", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 375, height: SCREEN });
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -452,7 +454,7 @@ test("phone: every control is a 40 px touch target", async ({ page }) => {
   await page.getByRole("link", { name: "Account and theme" }).click();
   await expect(page.locator("#nav-drawer [data-theme-choice]").first()).toBeVisible();
   for (const t of await smallTargets(page)) small.push(`drawer: ${t}`);
-  expect(small, "touch targets below 40 px").toEqual([]);
+  expect(small, "touch targets below 44 px").toEqual([]);
 });
 
 // UX review #12 and #15, design v2 (F5): the bulk actions live in one bar that shows from the first

@@ -126,10 +126,10 @@ test("phone: the first rule starts above 400 px, under one summary line", async 
   await expect(page.locator(".dev-tile")).toHaveCount(0);
   const top = await page.locator("section#rules tbody tr").first().evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
   expect(top, "the first rule row starts above y = 400").toBeLessThan(400);
-  // the two live-check buttons stay inside the screen and are the 40 px a phone control is
+  // the two live-check buttons stay inside the screen and are the 44 px a phone control is
   for (const name of ["Run now", "Pause"]) {
     const box = (await page.locator("#live-tile").getByRole("button", { name, exact: true }).boundingBox())!;
     expect(box.x + box.width, `${name} is inside the screen`).toBeLessThanOrEqual(375);
-    expect(box.height, `${name} is a phone touch target`).toBeGreaterThanOrEqual(40);
+    expect(box.height, `${name} is a phone touch target`).toBeGreaterThanOrEqual(44);
   }
 });

@@ -1175,7 +1175,7 @@ details.fold > summary {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
-  min-height: 40px;
+  min-height: var(--ctl-lg);
   cursor: pointer;
   list-style: none;
   font-family: var(--font-sans);
@@ -1241,19 +1241,20 @@ details.fold[open] > summary {
    ========================================================================== */
 @media (max-width: 44.99rem) {
   :root {
-    /* touch targets: every control 40px on phones (both sizes) */
-    --ctl: 40px;
-    --ctl-sm: 40px;
+    /* touch targets: every control 44px on phones (all sizes): the thumb, not the pointer (Apple HIG 44 pt, WCAG 2.5.5 44 px) */
+    --ctl: 44px;
+    --ctl-sm: 44px;
+    --ctl-lg: 44px;
   }
   .menu a,
   .menu button,
   .rowmenu-body a,
   .rowmenu-body button {
-    height: 40px;
+    height: var(--ctl-sm);
   }
   .hit {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: var(--ctl-sm);
+    min-height: var(--ctl-sm);
   }
   .m-hide,
   .d-only {
@@ -1348,7 +1349,7 @@ details.fold[open] > summary {
     flex: 1 1 0;
     min-width: 0;
     font-size: var(--fs-body);
-    min-height: 40px;
+    min-height: var(--ctl-sm);
   }
   table.dense td.p2 {
     order: 2;
@@ -1432,7 +1433,7 @@ td a.ext {
    .chips, .chips.scroll       chip lists wrap to their full height (no cut-off scroll box)              #65
 
    QA v0.9.0 refinements: one control height per pager (#7), optical centring with text-box trim (#8),
-   40px row/form action links on phones (#13), open menus hide tooltips (#3), error glyph "!" on an octagon
+   row/form action links on phones (#13), open menus hide tooltips (#3), error glyph "!" on an octagon
    (#24), empty cells show "-" (#51), ellipsis instead of hard clipping in phone rows and form controls
    (#65 #67 #70), all dropdowns left-aligned except the user menu (#75). */
 
@@ -1811,12 +1812,12 @@ td .hint {
 
 /* ---- phones (up to 44.99rem: the prototype switches at 720px) ---- */
 @media (max-width: 44.99rem) {
-  /* #13 links that act as row or form actions get a 40px hit area */
+  /* #13 links that act as row or form actions get a --ctl-sm hit area */
   td a:not(:disabled):not(.cell a),
   .confirm a:not(:disabled) {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: var(--ctl-sm);
   }
   td .cell {
     /* a list of names is one inline run: 24px targets, 8px apart (WCAG 2.5.8 spacing), normal pitch (#84) */
@@ -2812,7 +2813,7 @@ label.chip:has(input:focus-visible) {
   label.chip,
   label.inline,
   label:has(> input[type="checkbox"]:not([aria-label])) {
-    min-height: 2.5rem;
+    min-height: var(--ctl-sm);
     display: flex;
     align-items: center;
   }
@@ -3037,7 +3038,7 @@ table.rules td[data-label="Findings"] {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 2.5rem;
+    line-height: var(--ctl-sm);
     min-height: 0;
   }
 }
@@ -3128,7 +3129,7 @@ table.rules td[data-label="Findings"] {
 /* ==== phone targets (QA #13 #84) ==== */
 @media (max-width: 44.99rem) {
   table.dense td.sel .hit {
-    min-width: 40px;
+    min-width: var(--ctl-sm);
   }
   td .cell .dev a {
     display: inline-block;
@@ -3145,14 +3146,14 @@ thead th {
 /* ==== phone targets, second pass: rules above lose to patterns.css's min-width: 0 ==== */
 @media (max-width: 44.99rem) {
   table.dense td.sel > .hit {
-    min-width: 40px !important;
+    min-width: var(--ctl-sm) !important;
   }
   table.dense td .cell {
     flex: 1 1 0;
     min-width: 0;
   }
   details.job-log > summary {
-    min-height: 40px;
+    min-height: var(--ctl-sm);
   }
 }
 
@@ -3266,10 +3267,10 @@ td.sel > label.hit {
 .setup-finish > p {
   margin: 0;
 }
-/* phone: the page sizes of the pager are 40 px targets like every other control */
+/* phone: the page sizes of the pager are touch targets like every other control */
 @media (max-width: 44.99rem) {
   .pager-size .btn {
-    min-width: 2.5rem;
+    min-width: var(--ctl-sm);
     justify-content: center;
   }
 }
@@ -3553,7 +3554,7 @@ input[type="file"]::file-selector-button:hover {
 
 @media (max-width: 44.99rem) {
   input[type="file"]::file-selector-button {
-    height: 40px;
+    height: var(--ctl-sm);
   }
 
   /* a label that wraps keeps its checkbox on the first line (centred on it), not in the middle of the block */
@@ -3561,7 +3562,7 @@ input[type="file"]::file-selector-button:hover {
   label.inline:has(> input[type="checkbox"]),
   label:has(> input[type="checkbox"]:not([aria-label])) {
     align-items: flex-start;
-    padding-block: calc((2.5rem - 1lh) / 2);
+    padding-block: calc((var(--ctl-sm) - 1lh) / 2);
   }
   label:not(.hit) > input[type="checkbox"]:not([aria-label]) {
     margin-top: calc((1lh - 18px) / 2);
@@ -3723,7 +3724,7 @@ header.top {
   margin-left: var(--sp-4);
   display: inline-flex;
   align-items: center;
-  min-height: 40px; /* a touch target in the phone drawer */
+  min-height: var(--ctl-lg); /* a touch target in the phone drawer */
 }
 .brand:hover {
   color: var(--color-text);
@@ -5159,6 +5160,13 @@ button.btn[aria-disabled="true"]:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
+/* phones: a short choice ("On") is as wide as it is tall, a touch target in both directions */
+@media (max-width: 44.99rem) {
+  .useg span {
+    min-width: var(--ctl-sm);
+    justify-content: center;
+  }
+}
 
 /* switches: a setting (with its title and line) and the power toggle of a row */
 .utoggle {
@@ -6518,8 +6526,8 @@ body.page-auth main {
   flex: none;
 }
 .urow > .rowmenu > summary {
-  width: 40px;
-  height: 40px;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
 }
 .urow .uavatar {
   background: var(--color-surface-3);
@@ -6836,13 +6844,13 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   color: var(--color-on-accent);
 }
 
-/* phones: a crumb link is a 40 px touch target without moving the line */
+/* phones: a crumb link is a touch target without moving the line */
 @media (max-width: 44.99rem) {
   nav.crumbs a,
   .crumb.trail a {
     display: inline-block;
-    padding: 11px 0;
-    margin: -11px 0;
+    padding: calc((var(--ctl-sm) - 1lh) / 2) 0;
+    margin: calc((var(--ctl-sm) - 1lh) / -2) 0;
   }
 }
 
@@ -7294,7 +7302,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 40px;
+    height: var(--ctl-sm);
     padding: 0 4px;
     font-size: 13px;
     color: var(--color-text-2);
@@ -7319,7 +7327,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   }
   .dcard {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-columns: var(--ctl-sm) minmax(0, 1fr) auto;
     align-items: start;
     gap: 0 4px;
     padding: 6px 6px 10px 2px;
@@ -7338,7 +7346,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   .dcard-sel {
     display: grid;
     place-items: center;
-    width: 40px;
+    width: var(--ctl-sm);
     height: 44px;
   }
   .dcard-main {
@@ -7543,7 +7551,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   .bulkbar:has(> .bulk-acts) .bulk-clear {
     grid-row: 1;
     grid-column: 2;
-    height: 40px;
+    height: var(--ctl-sm);
     background: none;
     color: var(--color-accent-fg);
     font-size: 13.5px;
@@ -7763,7 +7771,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   .dv-sort {
     display: flex;
   }
-  /* a 40 px touch target: the select covers its pill's border too */
+  /* a touch target: the select covers its pill's border too */
   .dv-pick select {
     height: calc(100% + 2px);
     margin: -1px 0;
@@ -8884,16 +8892,16 @@ nav.crumbs a {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* phones: the card links and the relay switches are 40 px touch targets */
+/* phones: the card links and the relay switches are touch targets */
 @media (max-width: 44.99rem) {
   .devcard-head .btn.btn-link {
-    min-height: 40px;
+    min-height: var(--ctl-sm);
   }
   #identity .devcard-head {
     margin: -12px 0 -2px;
   }
   .devrelay-sw {
-    height: 40px;
+    height: var(--ctl-sm);
   }
 }
 /* the settings form's labels are <label for> elements beside the control: the field label's
@@ -9126,7 +9134,7 @@ nav.crumbs a {
   color: var(--color-text-2);
 }
 .dd-ack {
-  min-height: 40px;
+  min-height: var(--ctl-lg);
   cursor: pointer;
 }
 .dd-ack input {
@@ -9670,7 +9678,7 @@ nav.crumbs a {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
+  min-height: var(--ctl-lg);
   font-size: 13px;
   cursor: pointer;
 }
@@ -10048,23 +10056,23 @@ html:has(dialog#dlg-txn:modal) body {
   min-height: 0;
 }
 @media (max-width: 44.99rem) {
-  /* a 40 px touch target without moving the layout */
+  /* a touch target without moving the layout */
   .upd-quick > summary.btn,
   .upd-older > summary.btn {
-    min-height: 40px;
-    margin: -11px 0;
+    min-height: var(--ctl-sm);
+    margin: calc((18px - var(--ctl-sm)) / 2) 0;
   }
   .upd-quick > summary.btn {
     padding: 0 4px;
-    margin: -11px -4px;
+    margin: calc((18px - var(--ctl-sm)) / 2) -4px;
   }
   .upd-older > summary.btn {
-    margin: -8px 0;
+    margin: calc((24px - var(--ctl-sm)) / 2) 0;
   }
   .upd-log-acts a,
   .upd-log-acts button {
-    min-height: 40px;
-    margin: -12px 0;
+    min-height: var(--ctl-sm);
+    margin: calc((16px - var(--ctl-sm)) / 2) 0;
   }
   /* an option with a control: its name above the control, the control as wide as the card */
   .upd-opt:not(:has(> input[type="checkbox"])) {
@@ -10495,7 +10503,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   align-items: center;
   gap: 8px;
 }
-/* compact only above phone width: phones keep --ctl-sm (40px touch target) */
+/* compact only above phone width: phones keep --ctl-sm (touch target) */
 @media (min-width: 45rem) {
   .ukv dd.ukv-copy .btn.btn-sm {
     height: 20px;
@@ -10519,23 +10527,23 @@ dialog.fw-notes-dlg .fw-dlg-body {
     animation: none;
   }
 }
-/* phone: Delete and the bulk delete are 40 px touch targets like every control (QA #13) */
+/* phone: Delete and the bulk delete are touch targets like every control (QA #13) */
 @media (max-width: 44.99rem) {
   .fw-del,
   .fw-needed {
-    height: 40px;
+    height: var(--ctl-sm);
   }
   .fw-unused .btn-link {
-    min-height: 40px;
+    min-height: var(--ctl-sm);
   }
   .fw-chip {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: var(--ctl-sm);
     padding: 0 12px;
   }
   .seg button {
-    height: 40px;
+    height: var(--ctl-sm);
   }
 }
 /* ==========================================================================
@@ -10653,8 +10661,8 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 @media (max-width: 44.99rem) {
   .add-more > summary {
-    padding: 12px 0; /* a 40 px touch target without moving the layout */
-    margin: -12px 0;
+    padding: calc((var(--ctl-sm) - 1lh) / 2) 0; /* a touch target without moving the layout */
+    margin: calc((var(--ctl-sm) - 1lh) / -2) 0;
   }
 }
 .add-more-grid {
@@ -11038,7 +11046,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-card {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: var(--ctl-lg) minmax(0, 1fr);
   gap: 0 4px;
   padding: 8px 12px 10px 2px;
   background: var(--color-surface);
@@ -11051,8 +11059,8 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .add-card-sel {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
 }
 .add-card-sel input {
   width: 18px;
@@ -11445,8 +11453,8 @@ a.add-card-name {
   display: inline;
 }
 .bk-x {
-  width: 40px;
-  height: 40px;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
   flex: none;
   padding: 0;
   border: 0;
@@ -11510,7 +11518,7 @@ a.add-card-name {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 40px;
+  min-height: var(--ctl-lg);
   margin: 0;
   font: 400 13px var(--font-sans);
   color: var(--color-text);
@@ -11880,7 +11888,7 @@ a.bk-namelink:hover {
   visibility: visible;
 }
 /* the phone rule for checkbox labels (label:has(> input[type="checkbox"]) { display: flex }, 0,2,2) would
-   split the two texts into two cells and widen the control; the reset stays one cell, its 40 px min-height stays */
+   split the two texts into two cells and widen the control; the reset stays one cell, its min-height stays */
 .lrow .meta label.srst {
   display: inline-grid;
 }
@@ -12282,18 +12290,18 @@ input:focus-visible + .swtrack {
   .sf.w-xs .in.ro {
     max-width: none;
   }
-  /* 40 px touch targets: the switch and the info button reach past their drawn size */
+  /* touch targets: the switch and the info button reach past their drawn size */
   .swhit {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: var(--ctl-sm);
+    min-height: var(--ctl-sm);
     align-items: center;
     justify-content: center;
-    margin: calc(-1 * var(--sp-10)) calc(-1 * var(--sp-3));
+    margin: calc((20px - var(--ctl-sm)) / 2) calc((34px - var(--ctl-sm)) / 2);
   }
   .uinfo {
-    width: 40px;
-    height: 40px;
-    margin: calc(-1 * var(--sp-12));
+    width: var(--ctl-sm);
+    height: var(--ctl-sm);
+    margin: calc((16px - var(--ctl-sm)) / 2);
     border: 0;
     background: radial-gradient(
       circle,
@@ -12303,9 +12311,9 @@ input:focus-visible + .swtrack {
     );
   }
   .uinfo::after {
-    inset: 0; /* the button is the 40 px box itself */
+    inset: 0; /* the button is the touch-target box itself */
   }
-  /* hovered or open, the 16px picture changes colour; the 40px box must not fill (#680: it covered the last letters of the label) */
+  /* hovered or open, the 16px picture changes colour; the touch-target box must not fill (#680: it covered the last letters of the label) */
   .uinfo:hover,
   .uinfo[aria-expanded="true"] {
     background: radial-gradient(
@@ -12537,7 +12545,7 @@ a.sys-sum:hover {
   table-layout: fixed;
 }
 .bk-table .bk-c-sel {
-  width: 40px;
+  width: var(--ctl-lg);
 }
 .bk-table .bk-c-dev {
   width: 24%;
@@ -12692,7 +12700,7 @@ main.bare {
   padding: 96px var(--sp-16) var(--sp-40);
 }
 .bare .brand {
-  min-height: 40px; /* a touch target on a phone, as every other control */
+  min-height: var(--ctl-lg); /* a touch target on a phone, as every other control */
 }
 .bare .auth-card:has(.setup-steps) {
   width: min(480px, 100%);
@@ -12883,8 +12891,8 @@ main.bare {
 .bk-check {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--ctl-lg);
+  height: var(--ctl-lg);
   flex: none;
 }
 .bk-check input {
@@ -13648,10 +13656,10 @@ tbody[data-rule-list] td[data-label="Compliance"] > div > span {
   tbody[data-rule-list] td[aria-hidden="true"] {
     display: none;
   }
-  /* 40 px touch targets: the row menu (the summary's buttons are .btn-sm, 40 px through --ctl-sm) */
+  /* 40 px touch targets: the row menu (the summary's buttons are .btn-sm, --ctl-sm tall) */
   tbody[data-rule-list] summary.btn-icon {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: var(--ctl-sm);
+    min-height: var(--ctl-sm);
   }
   tbody[data-rule-list] td[data-label="Compliance"] > div > span {
     white-space: normal;
@@ -14253,14 +14261,14 @@ button.pol-chip-x {
   font-size: 13px;
 }
 @media (max-width: 44.99rem) {
-  /* the status line's 32 px buttons get a 40 px touch target (e2e smallTargets) */
+  /* the status line's 32 px buttons get a touch target (e2e smallTargets) */
   .pol-line .pol-line-btn {
     position: relative;
   }
   .pol-line .pol-line-btn::after {
     content: "";
     position: absolute;
-    inset: -4px 0;
+    inset: calc((32px - var(--ctl-sm)) / 2) 0;
   }
   .pol-two {
     grid-template-columns: minmax(0, 1fr);
@@ -14829,11 +14837,11 @@ button.pol-chip-x {
   white-space: nowrap;
 }
 @media (max-width: 44.99rem) {
-  /* a 40 px touch target without moving the line, like the crumbs */
+  /* a touch target without moving the line, like the crumbs */
   .fw-rel-links a {
     display: inline-block;
-    padding: 11px 0;
-    margin: -11px 0;
+    padding: calc((var(--ctl-sm) - 1lh) / 2) 0;
+    margin: calc((var(--ctl-sm) - 1lh) / -2) 0;
   }
   .rel-notes {
     padding: var(--sp-18) var(--sp-22);
@@ -15017,7 +15025,7 @@ tr.pol-grp td {
 details.devcard > summary {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: var(--ctl-lg);
   cursor: pointer;
   font: 600 14px var(--font-sans);
 }
