@@ -116,16 +116,19 @@ test("the first row's menu opens downwards", async ({ page }) => {
 
 // Why (#1086): the four count tiles and the live-check tile took about 400 px of a phone before the first rule
 // (the first row started near y = 700), so the list the page is about was below the fold. The counts are one
-// sentence under the title now, with the live check beside its buttons, and the list starts above y = 400.
+// sentence under the title now, with the live check beside its buttons, and the list starts above y = 412.
+// Why 412 and not 400 (#1169): phone touch targets are 44 px, a design-system rule. That adds 12 px to the policy
+// header (390 -> 402 at 40 px targets), so the bound moved by the same amount. The intent is unchanged: the first
+// rule is visible in the first phone screen without scrolling (the screen is 812 px tall).
 // The state is the one at page load, no waiting: a fresh page, the rules and no devices.
-test("phone: the first rule starts above 400 px, under one summary line", async ({ page }) => {
+test("phone: the first rule starts above 412 px, under one summary line", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(app.url + "/policy");
   await expect(page.locator(".pol-sum-line")).toHaveText("0 of 0 compliant · 0 deviating · 0 not judged");
   await expect(page.locator(".dev-tile")).toHaveCount(0);
   const top = await page.locator("section#rules tbody tr").first().evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
-  expect(top, "the first rule row starts above y = 400").toBeLessThan(400);
+  expect(top, "the first rule row starts above y = 412").toBeLessThan(412);
   // the two live-check buttons stay inside the screen and are the 44 px a phone control is
   for (const name of ["Run now", "Pause"]) {
     const box = (await page.locator("#live-tile").getByRole("button", { name, exact: true }).boundingBox())!;
