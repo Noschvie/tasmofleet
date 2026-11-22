@@ -329,6 +329,15 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 		}
 	}
 	if r.status != "" && m.Kind == mqttbus.KindStatus {
+		if _, values, isObj := topLevel(m.Payload); isObj && values["Command"] != nil {
+			// A failed Status is never data (#1209). Tasmota publishes it like every failure: on RESULT, or with
+			// SetOption4 1 on the command's name without its index, stat/<t>/STATUS (support_command.ino:517). It is
+			// ours only when its Input names this Status, whichever of the two topics it came on.
+			if m.Suffix != r.status && m.Suffix != "STATUS" {
+				return verdict{}, false
+			}
+			return r.failure(values)
+		}
 		if m.Suffix != r.status {
 			return verdict{}, false
 		}
@@ -387,23 +396,8 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 	if !isObj {
 		return verdict{}, false
 	}
-	if cmdVal, has := values["Command"]; has {
-		var word string
-		if json.Unmarshal(cmdVal, &word) != nil || (word != "Unknown" && word != "Error") {
-			return verdict{}, false
-		}
-		var input string
-		if in, hasIn := values["Input"]; hasIn && json.Unmarshal(in, &input) == nil {
-			first, _, _ := strings.Cut(strings.TrimSpace(input), " ")
-			if baseOf(first) != r.base {
-				return verdict{}, false // someone else's failed command
-			}
-		}
-		// The Input is not returned: for a secret-setting command it would be the secret.
-		if word == "Unknown" {
-			return verdict{err: tasmota.ErrUnknownCommand}, true
-		}
-		return verdict{err: tasmota.ErrCommandError}, true
+	if _, has := values["Command"]; has {
+		return r.failure(values)
 	}
 	if failOnly {
 		return verdict{}, false // stat/<t>/COMMAND, or POWER for an indexed Power, carries nothing but a failed command
@@ -435,6 +429,49 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 		return verdict{reply: m.Payload}, true
 	}
 	return verdict{}, false
+}
+
+// failure decides a {"Command":"Unknown"|"Error"} object, the one place that says whether a failure is r's (the
+// same classification as tasmota's for an HTTP reply). Without an Input it is the command in flight's (nothing says
+// whose it is). With one, the Input must name r: its first word, index stripped, is r's command, and for a Status
+// it names this Status (named). An Input that is no text, or names another command, is someone else's failure. The
+// Input is never returned: for a secret-setting command it would be the secret.
+func (r *request) failure(values map[string]json.RawMessage) (verdict, bool) {
+	var word string
+	if json.Unmarshal(values["Command"], &word) != nil || (word != "Unknown" && word != "Error") {
+		return verdict{}, false
+	}
+	if in, hasIn := values["Input"]; hasIn {
+		var input string
+		if json.Unmarshal(in, &input) != nil || !r.named(input) {
+			return verdict{}, false // someone else's failed command
+		}
+	}
+	if word == "Unknown" {
+		return verdict{err: tasmota.ErrUnknownCommand}, true
+	}
+	return verdict{err: tasmota.ErrCommandError}, true
+}
+
+// named reports whether a failure's Input names r. Tasmota writes the Input as the command in upper case, its index
+// unless the index is 1, then a space and the argument (CommandHandler, support_command.ino 446-520): "STATUS 9" for
+// Status 9, "STATUS9" for Status9, "STATUS" for a bare Status. So a Status is named by the first word's index, or
+// else by the second word, and a Status 8 failure never answers a Status 9. Index 1 is left out, so a failed Status1
+// would read as a bare Status and time out; the channel sends Status 1 as "Status1" only when asked so, and Status 1
+// always answers (StatusPRM), so no special case is kept for it.
+func (r *request) named(input string) bool {
+	first, rest, _ := strings.Cut(strings.TrimSpace(input), " ")
+	if baseOf(first) != r.base {
+		return false
+	}
+	if r.status == "" {
+		return true
+	}
+	sel := first[len(strings.TrimRight(first, "0123456789")):]
+	if sel == "" {
+		sel, _, _ = strings.Cut(strings.TrimSpace(rest), " ")
+	}
+	return "STATUS"+sel == r.status
 }
 
 // upgradeReply reports an immediate reply of CmndUpgrade (v15.6.0 support_command.ino:1325-1349): "Version X

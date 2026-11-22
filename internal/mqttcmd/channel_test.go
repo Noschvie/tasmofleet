@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -410,14 +411,40 @@ func TestCommandUnknownAndErrorAreMappedForOurCommandOnly(t *testing.T) {
 		t.Fatalf("err = %v, want ErrUnknownCommand", err)
 	}
 	b2 := &fakeBus{}
-	b2.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Error","Input":"STATUS 99"}`) }
+	b2.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Error","Input":"STATUS 13"}`) }
 	if _, err := newChan(b2).Do(t.Context(), plug(), "Status 13"); !errors.Is(err, tasmota.ErrCommandError) {
 		t.Fatalf("err = %v, want ErrCommandError", err)
+	}
+	// Why (#1209): another index's failure must not decide our read: a Status 99 is not our Status 13.
+	b4 := &fakeBus{}
+	b4.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Error","Input":"STATUS 99"}`) }
+	if _, err := newChan(b4).Do(t.Context(), plug(), "Status 13"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("a Status 99 failure answered Status 13: %v", err)
 	}
 	b3 := &fakeBus{}
 	b3.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Unknown","Input":"OTHER"}`) }
 	if _, err := newChan(b3).Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrTimeout) {
 		t.Fatalf("a stranger's Unknown answered our command: %v", err)
+	}
+	// Why (#1209): an Input that is no text says nothing about whose failure it is; the channel fails closed.
+	b5 := &fakeBus{}
+	b5.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Unknown","Input":["HOSTNAME"]}`) }
+	if _, err := newChan(b5).Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("an Unknown whose Input is no text answered our command: %v", err)
+	}
+	// Why: Tasmota writes only "Unknown" and "Error" there; any other word is no failure it reports, so it neither
+	// fails our command nor, on a STATUS topic, becomes its data.
+	for cmd, emit := range map[string]func(b *fakeBus, p pub){
+		"Hostname": func(b *fakeBus, p pub) { b.result(p.topic, `{"Command":"Done","Input":"HOSTNAME"}`) },
+		"Status 9": func(b *fakeBus, p pub) {
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS9", `{"Command":"Done","Input":"STATUS 9"}`, false)
+		},
+	} {
+		b6 := &fakeBus{}
+		b6.onPub = emit
+		if got, err := newChan(b6).Do(t.Context(), plug(), cmd); !errors.Is(err, tasmota.ErrTimeout) {
+			t.Fatalf("%q: a Command object that is no failure decided it: %s, %v", cmd, got, err)
+		}
 	}
 }
 
@@ -1252,6 +1279,135 @@ func TestRefusesSaysWhatDoPublishes(t *testing.T) {
 		published := len(b.sent()) > 0
 		if Refuses(cmd) != !published || published == errors.Is(err, ErrRefused) {
 			t.Errorf("%q: Refuses=%v, published=%v err=%v", cmd, Refuses(cmd), published, err)
+		}
+	}
+}
+
+// statusFailure is the reply of a Status the device has no data for, as Tasmota writes it (CommandHandler,
+// support_command.ino 446-520: the command in upper case, the index unless it is 1, a space and the argument).
+const statusFailure = `{"Command":"Error","Input":"STATUS 9"}`
+
+// Why (#1209): a device with SetOption4 1 publishes a failed Status 9 on the command's name without its index,
+// stat/<t>/STATUS (support_command.ino:517; derived from the naming rule, not captured). It is the read's answer, the
+// error HTTP reports for the same read; dropped for its suffix, the read timed out and marked the device as one whose
+// MQTT reads go unanswered. Both forms the channel can send name it in the Input.
+func TestAStatusFailureOnTheSetOption4TopicAnswersTheRead(t *testing.T) {
+	t.Parallel()
+	for cmd, input := range map[string]string{"Status 9": "STATUS 9", "Status9": "STATUS9"} {
+		b := &fakeBus{}
+		b.onPub = func(b *fakeBus, p pub) {
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS", `{"Command":"Error","Input":"`+input+`"}`, false)
+		}
+		if _, err := newChan(b).Do(t.Context(), plug(), cmd); !errors.Is(err, tasmota.ErrCommandError) {
+			t.Errorf("%q: err = %v, want ErrCommandError", cmd, err)
+		}
+	}
+}
+
+// Why (#1209): a Command object is a failure wherever it comes, also on the read's own STATUSn topic: stored as data,
+// a backup over MQTT kept {"Command":"Error",...} where HTTP keeps the _error marker, two shapes for one device. The
+// Status 11 that confirms a light write is no exception: its failure fails the write instead of confirming it.
+func TestACommandObjectOnTheStatusTopicIsNeverData(t *testing.T) {
+	t.Parallel()
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindStatus, p.topic, "STATUS9", statusFailure, false) }
+	if got, err := newChan(b).Do(t.Context(), plug(), "Status 9"); !errors.Is(err, tasmota.ErrCommandError) {
+		t.Fatalf("got %s, %v; want ErrCommandError", got, err)
+	}
+	light := lightBulb(func(pub) string { return lightState50 }, `{"Command":"Error","Input":"STATUS 11"}`)
+	if got, err := newChan(light).Do(t.Context(), plug(), "Dimmer 50"); !errors.Is(err, tasmota.ErrCommandError) {
+		t.Fatalf("a failed Status 11 confirmed Dimmer 50: %s, %v", got, err)
+	}
+}
+
+// Why (#1209): Tasmota names the failed Status in the Input; a failure of another Status (another poller, a Status 8
+// of our own that answered late) must neither answer nor fail ours, on any topic a Status failure comes on. An Input
+// that names no Status we sent is not ours either: the channel fails closed, the read times out instead of taking a
+// stranger's failure. A bare Status listens on stat/<t>/STATUS, where under SetOption4 1 every Status failure comes:
+// such a failure is neither its answer nor its data.
+func TestAnotherStatusFailureNeverDecidesOurs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		cmd, suffix, payload string
+		kind                 mqttbus.Kind
+	}{
+		{"Status 9", "RESULT", `{"Command":"Error","Input":"STATUS 8"}`, mqttbus.KindResult},
+		{"Status 9", "STATUS", `{"Command":"Error","Input":"STATUS 8"}`, mqttbus.KindStatus},
+		{"Status 9", "STATUS9", `{"Command":"Error","Input":"STATUS 8"}`, mqttbus.KindStatus},
+		{"Status 9", "STATUS8", statusFailure, mqttbus.KindStatus},
+		{"Status 9", "RESULT", `{"Command":"Error","Input":"STATUS"}`, mqttbus.KindResult},
+		{"Status 9", "RESULT", `{"Command":"Error","Input":"STATUS x"}`, mqttbus.KindResult},
+		{"Status 9", "RESULT", `{"Command":"Error","Input":"STATUS 99"}`, mqttbus.KindResult},
+		{"Status 9", "RESULT", `{"Command":"Error","Input":9}`, mqttbus.KindResult},
+		{"Status", "STATUS", statusFailure, mqttbus.KindStatus},
+		{"Status", "RESULT", statusFailure, mqttbus.KindResult},
+	} {
+		b := &fakeBus{}
+		b.onPub = func(b *fakeBus, p pub) { b.emit(tc.kind, p.topic, tc.suffix, tc.payload, false) }
+		if got, err := newChan(b).Do(t.Context(), plug(), tc.cmd); !errors.Is(err, tasmota.ErrTimeout) {
+			t.Errorf("%q, %s on %s: got %s, %v; want a timeout", tc.cmd, tc.payload, tc.suffix, got, err)
+		}
+	}
+}
+
+// Why (#1209): the Status 11 after a light write is a Status like any other; another client's failed Status 9 that
+// arrives before it must not fail the write, or a light that took the value is reported as failed.
+func TestAnotherStatusFailureNeverFailsALightWrite(t *testing.T) {
+	t.Parallel()
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) {
+		if strings.EqualFold(p.command, "Status") && p.payload == "11" {
+			b.result(p.topic, statusFailure)
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS11", status11At50, false)
+			return
+		}
+		b.result(p.topic, lightState50)
+	}
+	if got, err := newChan(b).Do(t.Context(), plug(), "Dimmer 50"); err != nil || !strings.Contains(string(got), `"Dimmer":50`) {
+		t.Fatalf("got %s, %v; want the write confirmed", got, err)
+	}
+}
+
+// Why (#1209, guards behaviour that already held): the capture of real firmware (2026-10-18) has the Status 9 failure
+// of a device without energy monitoring on stat/<t>/RESULT. Replayed through the real topic codec, it answers a
+// Status 9 with the error HTTP reports. A failure without an Input still answers the command in flight (nothing says
+// whose it is), and the Input never reaches the returned error: for a secret-setting command it holds the secret.
+func TestTheCapturedStatusFailureAnswersWithoutItsInput(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile("../../testdata/fixtures/mqtt/samples/stat-RESULT.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec, _ := mqttbus.NewTopicCodec("", [3]string{})
+	r, err := parseRequest("Status 9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, line := range strings.Split(string(raw), "\n") {
+		f := strings.SplitN(line, "|", 4)
+		if len(f) != 4 || !strings.Contains(f[3], `"Command":"Error"`) {
+			continue
+		}
+		kind, topic, suffix, ok := codec.Decode(f[2])
+		if !ok {
+			t.Fatalf("capture topic %q does not decode", f[2])
+		}
+		seen++
+		v, ok := r.match(mqttbus.Message{Kind: kind, Topic: topic, Suffix: suffix, Payload: []byte(f[3])}, false)
+		if !ok || !errors.Is(v.err, tasmota.ErrCommandError) || v.reply != nil {
+			t.Errorf("%s %s: ok %v, verdict %+v; want ErrCommandError", f[2], f[3], ok, v)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("the capture holds no Status failure: the fixture changed")
+	}
+	for _, payload := range []string{`{"Command":"Error"}`, `{"Command":"Error","Input":"STATUS 9 hunter2-secret"}`} {
+		b := &fakeBus{}
+		b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, payload) }
+		_, err := newChan(b).Do(t.Context(), plug(), "Status 9")
+		if !errors.Is(err, tasmota.ErrCommandError) || strings.Contains(err.Error(), "hunter2") || strings.Contains(err.Error(), "Input") {
+			t.Errorf("%s: err = %v; want ErrCommandError without the Input", payload, err)
 		}
 	}
 }

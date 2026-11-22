@@ -19,6 +19,10 @@
 //   - Retained messages are never answers. A reply is accepted only when it is the one the command
 //     produces: STATUSn for "Status n", else a RESULT whose top-level keys name the command (or
 //     {"Command":"Unknown"|"Error"} for that command). Button presses and other pollers are ignored.
+//     A Command object is a failure, never data, also on a STATUS topic: a Status failure answers only
+//     when its Input names that Status ("STATUS 9" or "STATUS9" for Status 9, a bare "STATUS" for
+//     Status), on RESULT, on its own STATUSn or, with SetOption4 1, on stat/<t>/STATUS (#1209). An
+//     Input that is no text or names another command or Status is someone else's failure.
 //     A device with SetOption4 1 publishes that reply on stat/<t>/<COMMAND> instead of RESULT (the
 //     name in upper case without its index, COMMAND for an unknown command, POWERn for a relay): it
 //     is accepted only on the pending command's own name, with the same key rules (#632). Upgrade answers

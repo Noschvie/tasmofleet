@@ -734,6 +734,10 @@ answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.m
   `stat/<t>/UPGRADE`, where the device later reports its download, so only the immediate reply (`Version X from <url>`,
   `1 or >X to upgrade`, `Safeboot`) answers it and never `Failed ...` or `Successful. Restarting`, and a failed `Power3`
   answers with its Command Error on `stat/<t>/POWER` (#648).
+- A `{"Command":...}` object is a failure, never data, also on a STATUS topic. A Status failure answers only the
+  Status its `Input` names (`STATUS 9` is Status 9, not Status 8), on `RESULT`, on its own `STATUSn`, or with
+  `SetOption4 1` on `stat/<t>/STATUS`, so Status 9 on a device without energy monitoring is the same Command Error
+  over MQTT as over HTTP (#1209).
 - A Backlog has no merged reply over MQTT: one `RESULT` per queued command is collected and
   merged (later keys win).
 - LWT Offline -> `tasmota.ErrUnreachable`, nothing published. No answer in 8 s -> `tasmota.ErrTimeout`

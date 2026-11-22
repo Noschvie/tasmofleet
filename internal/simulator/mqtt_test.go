@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -182,4 +183,37 @@ func TestPowerOffFiresTheWillAndStopsHTTP(t *testing.T) {
 	if _, _, err := cmWith(d, "Status", 500*time.Millisecond, nil); err == nil {
 		t.Error("HTTP still answers after PowerOff")
 	}
+}
+
+// Why (#1209): a Status read the device has no data for (Status 9 without energy monitoring) is a Command Error, and
+// the firmware publishes it like every Command Error: on stat/<t>/RESULT (the capture of 2026-10-18,
+// testdata/fixtures/mqtt/samples/stat-RESULT.txt), with SetOption4 1 on the command's name without its index,
+// stat/<t>/STATUS (support_command.ino:517; derived, not captured). Never on STATUS9, which carries data only. A
+// simulator that put it on STATUS9 let mqttcmd store the error object as data and hid the SetOption4 timeout. Over
+// HTTP the body stays the Command Error; a device with energy monitoring still answers StatusPTH on STATUS9.
+func TestMQTTStatusWithoutDataIsACommandErrorOnTheCommandTopic(t *testing.T) {
+	t.Parallel()
+	b, c, f := newBrokerFleet(t, Extra{})
+	const failed = `{"Command":"Error","Input":"STATUS 9"}`
+	for so4, topic := range map[string]string{"0": "RESULT", "1": "STATUS"} {
+		name := "guest-so4-" + so4
+		d := add(t, f, DeviceSpec{Name: name, Profile: ProfileESP32, Settings: map[string]string{"setoption4": so4}})
+		c.waitFor(t, "[R]tele/"+name+"/LWT=Online")
+		if err := b.Publish("cmnd/"+name+"/Status", []byte("9"), false); err != nil {
+			t.Fatal(err)
+		}
+		c.waitFor(t, "stat/"+name+"/"+topic+"="+failed)
+		if n := c.count("stat/" + name + "/STATUS9="); n != 0 {
+			t.Errorf("SetOption4 %s: the Command Error came on STATUS9 (%d times), where only data belongs", so4, n)
+		}
+		if body := strings.TrimSpace(cm(t, d, "Status 9")); body != failed {
+			t.Errorf("SetOption4 %s: the HTTP body changed: %s", so4, body)
+		}
+	}
+	add(t, f, DeviceSpec{Name: "bambu", Profile: ProfileNOUSA1TBambu})
+	c.waitFor(t, "[R]tele/bambu/LWT=Online")
+	if err := b.Publish("cmnd/bambu/Status", []byte("9"), false); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, `stat/bambu/STATUS9={"StatusPTH"`)
 }

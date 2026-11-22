@@ -258,7 +258,23 @@ func (d *simDevice) statusLocked(base string, idx int, hasIdx bool, data string,
 		}
 		return body, out
 	}
+	if commandReply(body) {
+		// A Status with no data on this device (Status 9 without energy monitoring) is a Command Error, published
+		// like every Command Error on RESULT (execLocked renames it to STATUS under SetOption4 1), never on STATUSn
+		// (testdata/fixtures/mqtt/samples/stat-RESULT.txt, #1209).
+		return body, []outMsg{{topic: "stat/" + d.topic + "/RESULT", payload: string(body)}}
+	}
 	return body, []outMsg{pub("STATUS"+arg, body)}
+}
+
+// commandReply reports a {"Command":...} object, the reply of a command that failed.
+func commandReply(body []byte) bool {
+	for _, m := range topMembers(body) {
+		if m.key == "Command" {
+			return true
+		}
+	}
+	return false
 }
 
 // powerLocked is Power<n>: relay n (default 1); Power0 addresses all relays.

@@ -282,3 +282,36 @@ func TestPowerForAMissingRelayIsACommandError(t *testing.T) {
 		})
 	}
 }
+
+// Why (#1209): Status 9 on a device without energy monitoring is a Command Error, and over MQTT it must be the same
+// error HTTP reports (tasmota.ErrCommandError), so a backup stores one shape whatever the transport. The real chain
+// (broker, bus, simulator): with SetOption4 0 the failure comes on RESULT, with SetOption4 1 on stat/<t>/STATUS (the
+// naming rule of support_command.ino:517, not captured). Before, the read took the error object as data, or timed out.
+func TestAStatusWithoutDataIsTheSameErrorAsOverHTTP(t *testing.T) {
+	t.Parallel()
+	for _, so4 := range []string{"0", "1"} {
+		t.Run("SetOption4 "+so4, func(t *testing.T) {
+			t.Parallel()
+			e := newSimEnv(t, simulator.DeviceSpec{Settings: map[string]string{"setoption4": so4}})
+			e.waitConnected(t)
+			ch := New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 3 * time.Second})
+			t.Cleanup(ch.Close)
+			var (
+				raw []byte
+				err error
+			)
+			for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+				raw, err = ch.Do(t.Context(), e.dvc, "Status 9")
+				if !errors.Is(err, tasmota.ErrUnreachable) || time.Now().After(deadline) {
+					break // until the channel has seen the device come online
+				}
+			}
+			if !errors.Is(err, tasmota.ErrCommandError) {
+				t.Fatalf("Status 9: %s, %v; want ErrCommandError", raw, err)
+			}
+			if raw, err := ch.Do(t.Context(), e.dvc, "Status 8"); err != nil || !strings.Contains(string(raw), "StatusSNS") {
+				t.Fatalf("Status 8 after the failure: %s, %v", raw, err)
+			}
+		})
+	}
+}
