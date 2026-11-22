@@ -4,6 +4,21 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.47.1 "Pigeon Point" (2026-11-22)
+
+### Changed
+
+- Every banner is the one banner component, with at most one action: the policy overview's deviation banner keeps Show (Make compliant is on the Deviating devices tab, where its dialog on the overview is gone), the device name offer keeps "Use device name" and Keep moves into the Device name row of the Identity card, the add-devices address confirmation says "go back" as a link, and rules that overlap are one banner with the conflicts as a list. The shell's flash, setup notice and connection banners stay under the breadcrumb, above the page's own title, as the design system says (#1091)
+
+### Fixed
+
+- A long value on the Make compliant plan (a firmware URL) wraps inside its card instead of widening the page (#1091)
+- A form never shows the same error twice: a wrong sign-in puts its message and the attempts left under the password field and no longer in a banner as well, and one refused field on Add user, the first admin account, Edit device, the setup, System settings and the device Settings tab shows only its own message. When two or more fields are refused, one summary says "Fix 2 fields. Nothing was saved yet." everywhere in the same words; a refusal that has no input on the page (the role of a new user, a setting of another page) is named in a banner instead of being lost (#1098)
+
+### Security
+
+- Ending all sessions of an SSO user now checks that the acting local admin is still an admin when the sessions are deleted, like ending the sessions of a local user does; a stale admin gets "Your account changed while the request ran" and nothing is deleted (#1227, follow-up of #1203)
+
 ## 0.47.0 "Pigeon Point" (2026-11-22)
 
 ### Changed
