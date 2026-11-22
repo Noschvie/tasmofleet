@@ -595,8 +595,8 @@ func (s *Service) acting(ci ctxInfo) *Accounts {
 
 // actingActor is the authority a mutation is checked against in the store:
 // the signed-in local admin at its session's generation. The zero Actor (an
-// OIDC admin) imposes no condition. acting and endOneSession both use it, so
-// the rule exists once.
+// OIDC admin) imposes no condition. acting, endOneSession and the SSO branch
+// of endSessions all use it, so the rule exists once.
 func actingActor(ci ctxInfo) store.Actor {
 	if ci.p.Method != ModeLocal {
 		return store.Actor{}
@@ -646,8 +646,16 @@ func (s *Service) endSessions(w http.ResponseWriter, r *http.Request) {
 		s.renderUsers(w, r, http.StatusBadRequest, "", "Use Sign out to end your own session.")
 		return
 	}
-	n, err := s.o.Sessions.DeleteUserSessions(r.Context(), subject)
-	if err != nil {
+	// The same-statement actor check of L6: a local admin demoted, disabled or
+	// re-keyed since the request began deletes nothing. An OIDC admin has no
+	// local account, so actingActor gives it the zero Actor (no condition).
+	n, err := s.o.Sessions.DeleteUserSessionsAs(r.Context(), subject, actingActor(ci))
+	switch {
+	case errors.Is(err, ErrStaleActor):
+		s.record(r, ci.p.Subject, "account.sessions.end", "denied: acting account changed", detail)
+		s.renderUsers(w, r, http.StatusForbidden, "", "Your account changed while the request ran. Sign in again.")
+		return
+	case err != nil:
 		slog.ErrorContext(r.Context(), "end sessions", "err", err)
 		s.record(r, ci.p.Subject, "account.sessions.end", "error", detail)
 		http.Error(w, "internal error", http.StatusInternalServerError)

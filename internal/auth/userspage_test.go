@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +351,79 @@ func TestEndOneSessionRefusedWhenActorChangedMidRequest(t *testing.T) {
 				t.Errorf("audit %+v", a)
 			}
 		})
+	}
+}
+
+// seedSSOUser puts an SSO user into the directory with n live sessions, the
+// state an OIDC sign-in leaves behind, without running an OIDC flow in a
+// ModeLocal env.
+func seedSSOUser(e *env, subject string, n int) {
+	e.dir.rows[subject] = store.PrincipalRecord{Subject: subject, DisplayName: subject, Kind: MethodSSO, UpdatedAt: e.clock.Now()}
+	for i := 0; i < n; i++ {
+		e.sessions.m[subject+"-"+strconv.Itoa(i)] = store.Session{
+			IDHash:    subject + "-" + strconv.Itoa(i),
+			Principal: model.Principal{Method: MethodSSO, Subject: subject, Name: subject, Role: model.RoleOperator},
+			CreatedAt: e.clock.Now(), LastSeen: e.clock.Now(), ExpiresAt: e.clock.Now().Add(time.Hour),
+		}
+	}
+}
+
+// Why (#1227, L6): ending all sessions of an SSO user is an account mutation
+// like ending them for a local user. A local admin demoted, disabled or
+// re-keyed after its page loaded must not delete anything; the check has to
+// sit in the same store statement as the delete, so no request can slip
+// through between check and delete. The hook ruins the admin right before the
+// delete runs.
+func TestEndSSOSessionsRefusedWhenActorChangedMidRequest(t *testing.T) {
+	ruins := map[string]func(m map[string]store.LocalUser){
+		"demoted":          func(m map[string]store.LocalUser) { u := m["admin"]; u.Role = model.RoleOperator; m["admin"] = u },
+		"disabled":         func(m map[string]store.LocalUser) { u := m["admin"]; u.Disabled = true; m["admin"] = u },
+		"password changed": func(m map[string]store.LocalUser) { u := m["admin"]; u.PasswordGen++; m["admin"] = u },
+	}
+	for ruin, doRuin := range ruins {
+		t.Run(ruin, func(t *testing.T) {
+			e, h := hookedEnv(t)
+			adm := e.login("admin", testPassword)
+			adm.stepUp(testPassword)
+			seedSSOUser(e, "sub-bob", 2)
+			seedSSOUser(e, "sub-carol", 1)
+			h.before = func() { e.users.cli(doRuin) }
+			r := adm.post("/users/sessions", url.Values{"subject": {"sub-bob"}})
+			if r.code != http.StatusForbidden {
+				t.Fatalf("after the admin was %s: %d, want 403", ruin, r.code)
+			}
+			if !strings.Contains(r.body, "Your account changed while the request ran. Sign in again.") {
+				t.Errorf("the 403 lacks the fixed wording: %s", r.body)
+			}
+			if countSessions(e, "sub-bob") != 2 || countSessions(e, "sub-carol") != 1 {
+				t.Fatalf("the refused request deleted sessions: bob %d carol %d", countSessions(e, "sub-bob"), countSessions(e, "sub-carol"))
+			}
+			if a := e.audit.last(); a.Action != "account.sessions.end" || a.Result != "denied: acting account changed" {
+				t.Errorf("audit %+v", a)
+			}
+		})
+	}
+}
+
+// Why (#1227), a guard against over-locking (it passes without the fix, the
+// interleave test above is the one that fails): routing the SSO branch through
+// the actor check must not cost a valid local admin anything. It still ends
+// exactly the sessions of that subject and the audit row carries the count.
+func TestLocalAdminEndsAllSessionsOfAnSSOUser(t *testing.T) {
+	e, _ := hookedEnv(t)
+	adm := e.login("admin", testPassword)
+	adm.stepUp(testPassword)
+	e.login("ops", opsPassword)
+	seedSSOUser(e, "sub-bob", 2)
+	seedSSOUser(e, "sub-carol", 1)
+	if r := adm.post("/users/sessions", url.Values{"subject": {"sub-bob"}}); r.code != http.StatusOK {
+		t.Fatalf("valid admin: %d %s", r.code, r.body)
+	}
+	if countSessions(e, "sub-bob") != 0 || countSessions(e, "sub-carol") != 1 || countSessions(e, "local:ops") != 1 || countSessions(e, "local:admin") != 1 {
+		t.Fatalf("sessions after: bob %d carol %d ops %d admin %d", countSessions(e, "sub-bob"), countSessions(e, "sub-carol"), countSessions(e, "local:ops"), countSessions(e, "local:admin"))
+	}
+	if a := e.audit.last(); a.Action != "account.sessions.end" || a.Result != "ok" || !strings.Contains(a.Detail, "sub-bob") || !strings.Contains(a.Detail, "2") {
+		t.Errorf("audit %+v", a)
 	}
 }
 

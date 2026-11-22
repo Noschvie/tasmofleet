@@ -76,6 +76,15 @@ func (s *hookedSessions) DeleteUserSessionsAs(ctx context.Context, subject strin
 	return s.fakeSessions.DeleteUserSessionsAs(ctx, subject, by)
 }
 
+// DeleteUserSessions is the actor-less delete. It fires the same hook so a
+// handler that still used it (instead of DeleteUserSessionsAs) is tested for
+// its behaviour: the actor is ruined right before the unguarded delete, not
+// merely absent from a hook that never ran.
+func (s *hookedSessions) DeleteUserSessions(ctx context.Context, subject string) (int64, error) {
+	s.h.fire()
+	return s.fakeSessions.DeleteUserSessions(ctx, subject)
+}
+
 // hookedDir fires the same hook before one session of a user is ended.
 type hookedDir struct {
 	*fakeDir
