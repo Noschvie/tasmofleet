@@ -146,7 +146,7 @@ func TestPolicyDeviationsFilters(t *testing.T) {
 	if strings.Contains(adv, "Power after outage") || !strings.Contains(adv, "Local timezone") {
 		t.Error("show=advisory lists Advisory rows only")
 	}
-	if !strings.Contains(adv, `class="dv-n">2</span>`) {
+	if !strings.Contains(squash(adv), `<span class="chip-l">All</span><span class="chip-n">3</span>`) {
 		t.Error("the All chip keeps counting every row")
 	}
 	q := devPage(t, "admin", "?q=attic", devReport())

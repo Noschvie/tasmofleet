@@ -225,11 +225,12 @@ func TestScanRowsOfferTheNextStep(t *testing.T) {
 	d2.MAC = "aa:bb:cc:dd:ee:22"
 	e.inv.devs[2] = d2
 	_, body := e.do(t, "GET", "/discovery/scan", "admin", nil)
+	body = squash(body)
 	for _, want := range []string{
 		`href="/tf/devices/new?proposal=4#card-manual"`, `formaction="/tf/discovery/proposals/4/dismiss"`, `value="4:v4"`,
 		`formaction="/tf/discovery/proposals/5/undismiss"`, ">Show again</button>",
 		`href="/tf/devices/2"`, ">Already known</span>", ">attic<",
-		`All<span class="add-chip-n">3</span>`, `New<span class="add-chip-n">1</span>`, `Known<span class="add-chip-n">1</span>`, `Ignored<span class="add-chip-n">1</span>`,
+		`>All</span><span class="chip-n">3</span>`, `>New</span><span class="chip-n">1</span>`, `>Known</span><span class="chip-n">1</span>`, `>Ignored</span><span class="chip-n">1</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)

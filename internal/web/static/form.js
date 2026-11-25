@@ -180,7 +180,7 @@
     // where it was, and the default "All" pill is current whenever only Chip or Tag is chosen, so
     // scrolling it into view would throw the row back to its start (#116, #428).
     var on =
-      row && !kept && row.querySelectorAll('.dv-chip[aria-current="true"]');
+      row && !kept && row.querySelectorAll('.chip[aria-current]:not([aria-current="false"])');
     if (on && on.length) {
       var chip = on[on.length - 1].getBoundingClientRect();
       var box = row.getBoundingClientRect();

@@ -48,6 +48,15 @@ func ruleShowPost(v ruleDevicesView, show string, all bool) string {
 	return v.Base + rulesPath + "/preview" + q
 }
 
+// ruleShowAttrs are the htmx attributes of a Devices card chip in the editor: it posts the form to the preview, which
+// answers with the card (the link a saved rule's chip has works without JavaScript).
+func ruleShowAttrs(v ruleDevicesView, show string) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": ruleShowPost(v, show, false), "hx-include": "#rule-form", "hx-sync": "#rule-form:replace",
+		"hx-target": "#rule-devices", "hx-swap": "outerHTML",
+	}
+}
+
 func ruleSevTone(required bool) ui.Tone {
 	if required {
 		return ui.ToneWarn
@@ -340,7 +349,7 @@ templ ruleScopeSection(e *ruleEditor, sum scopeSummary) {
 			<span class="ufield-label" id="fam-l">Chip families <small>(none: every family)</small></span>
 			<div class="pol-pills" role="group" aria-labelledby="fam-l">
 				for _, f := range e.Families {
-					<label class="pol-pill"><input type="checkbox" name="family" value={ f.Value } checked?={ f.On }/><span>{ scopeChipText(f) }</span></label>
+					@ui.Chip(ui.ChipData{Label: scopeChipText(f), Name: "family", Value: f.Value, Checked: f.On})
 				}
 			</div>
 		</div>
@@ -384,7 +393,7 @@ templ ruleScopeSection(e *ruleEditor, sum scopeSummary) {
 			<div class="pol-pills pol-except">
 				<span class="pol-pills" data-except-chips>
 					for _, x := range e.Except {
-						<label class="pol-pill pol-exc"><input type="checkbox" name="except" value={ x } checked/><span>{ x }</span><span class="pol-chip-x" aria-hidden="true">×</span></label>
+						@ui.Chip(ui.ChipData{Label: x, Name: "except", Value: x, Checked: true, Remove: true})
 					}
 				</span>
 				<input id="scope-except" name="except_extra" list="scope-names" placeholder="Search a device or tag…" autocomplete="off" data-except-add/>
@@ -401,18 +410,18 @@ templ ruleScopeSection(e *ruleEditor, sum scopeSummary) {
 // scopeTagPill is a tag of the Applies to section: a pill with its device count while unused, a
 // chip once ticked (the same checkbox; policy.js moves it between the two lists).
 templ scopeTagPill(t scopeTag) {
-	<label class="pol-pill pol-tag" data-n={ itoa(t.N) }><input type="checkbox" name="tag" value={ t.Value } checked?={ t.On }/><span>{ t.Value }</span><span class="pol-pill-n">{ itoa(t.N) }</span><span class="pol-chip-x" aria-hidden="true">×</span></label>
+	@ui.Chip(ui.ChipData{Label: t.Value, Count: itoa(t.N), Name: "tag", Value: t.Value, Checked: t.On, Remove: true, Attrs: templ.Attributes{"data-n": itoa(t.N)}})
 }
 
 // ruleDevChip is a filter of the devices card. A saved rule's chip is a link (it works without
 // JavaScript) that the editor also turns into a swap; a draft has no page to link to.
 templ ruleDevChip(v ruleDevicesView, show, label string, n int) {
 	if v.Draft {
-		<button type="button" class="dv-chip" hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></button>
+		@ui.Chip(ui.ChipData{Label: label, Count: itoa(n), Current: v.Show == show, Attrs: ruleShowAttrs(v, show)})
 	} else if v.Edit {
-		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+		@ui.Chip(ui.ChipData{Label: label, Count: itoa(n), Href: ruleShowHref(v, show, false), Current: v.Show == show, Attrs: ruleShowAttrs(v, show)})
 	} else {
-		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+		@ui.Chip(ui.ChipData{Label: label, Count: itoa(n), Href: ruleShowHref(v, show, false), Current: v.Show == show})
 	}
 }
 

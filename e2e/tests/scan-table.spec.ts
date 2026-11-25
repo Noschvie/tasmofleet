@@ -104,7 +104,7 @@ test("the selection column exists only while a row can be selected", async ({ pa
 // Why: the Known and All chips count 20 devices; the table lists 20 rows, and no line leaves devices out.
 test("every device the chips count is a row", async ({ page }) => {
   await openScan(page, "known");
-  await expect(page.locator(".add-chip.is-on")).toContainText("20");
+  await expect(page.locator(".add-chips .chip[aria-current]")).toContainText("20");
   await expect(page.locator(".add-scan-table tbody tr")).toHaveCount(20);
   await expect(page.getByText(/more known devices/)).toHaveCount(0);
 });

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { Locator } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -7,6 +8,19 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 // moves nothing on the page, and the tiles and the line under the title follow the draft.
 let app: App;
 let env: Devenv;
+
+// chipShape is a chip's parts without its text or values: element, classes and, for the input, its type, name and
+// whether it carries data-n. The server (ui.Chip) and policy.js draw the same chip; this tells when they stop doing so.
+async function chipShape(chip: Locator): Promise<string> {
+  return chip.evaluate((root) => {
+    const shape = (el: Element): string => {
+      const input = el instanceof HTMLInputElement ? `[${el.type}|${el.name}|${el.hasAttribute("data-n")}]` : "";
+      const cls = [...el.classList].sort().join(".");
+      return `${el.tagName.toLowerCase()}.${cls}${input}(${[...el.children].map(shape).join(",")})`;
+    };
+    return shape(root);
+  });
+}
 test.beforeAll(async () => {
   env = await startDevenv();
   const fwPort = await freePort();
@@ -86,7 +100,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
 
   // a picked device is a chip, the tiles follow the draft (out-of-band), and the line too
   await list.locator(".pol-row:not([hidden]) input").first().check();
-  await expect(section.locator("[data-dev-chips] .pol-chip")).toHaveCount(1);
+  await expect(section.locator("[data-dev-chips] .chip")).toHaveCount(1);
   await expect(tiles).toHaveText("1");
   await expect(page.locator("#rule-line")).toContainText("1 device");
   await expect(section.locator("#scope-summary")).toContainText("1 picked device");
@@ -94,24 +108,25 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   expect((await list.boundingBox())!.height).toBe(boxH);
 
   // tags in use carry their device count; ticking one turns it into a chip
-  const pill = section.locator("label.pol-tag", { hasText: "lights" });
-  await expect(pill.locator(".pol-pill-n")).toHaveText(String(Math.ceil(total / 2)));
+  const pill = section.locator("[data-tag-chips] label.chip, [data-tag-used] label.chip", { hasText: "lights" });
+  await expect(pill.locator(".chip-n")).toHaveText(String(Math.ceil(total / 2)));
   await pill.locator("input").check();
-  await expect(section.locator("[data-tag-chips] label.pol-tag")).toHaveCount(1);
+  await expect(section.locator("[data-tag-chips] label.chip")).toHaveCount(1);
   await expect(page.locator("#rule-line")).toContainText("tag lights");
 
   // the state of the approved mockup: ESP8266, tag lights, two picked devices, one exception
-  await section.locator("label.pol-pill", { hasText: "ESP8266" }).click();
+  await section.locator("label.chip", { hasText: "ESP8266" }).click();
   await section.locator("[data-scope-search]").fill("lamp");
   await list.locator(".pol-row:not([hidden]) input").nth(1).check();
-  await expect(section.locator("[data-dev-chips] .pol-chip")).toHaveCount(2);
+  await expect(section.locator("[data-dev-chips] .chip")).toHaveCount(2);
 
   // exceptions come from the same names (devices or tags)
   const except = section.locator("[data-except-add]");
   const inventoryName = (await list.locator(".pol-row span").first().textContent())!; // a name the inventory really has
   await except.fill(inventoryName);
   await except.press("Enter");
-  await expect(section.locator("[data-except-chips] label.pol-exc")).toHaveCount(1);
+  await expect(section.locator("[data-except-chips] label.chip")).toHaveCount(1);
+  const exceptShape = await chipShape(section.locator("[data-except-chips] label.chip"));
   // the tile and the line under the title follow the exception, not only the section's own summary
   await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("1 exception");
   await expect(page.locator("#rule-line")).toContainText("1 exception");
@@ -122,7 +137,8 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   // a new tag typed into the field becomes a chip
   await section.locator("[data-tag-add]").fill("garden");
   await section.locator("[data-tag-add]").press("Enter");
-  await expect(section.locator("[data-tag-chips] label.pol-tag")).toHaveCount(2);
+  await expect(section.locator("[data-tag-chips] label.chip")).toHaveCount(2);
+  const gardenShape = await chipShape(section.locator("[data-tag-chips] label.chip", { hasText: "garden" }));
 
   // saved, the rule opens with the same form: family, tags, devices and the exception survive
   await page.getByRole("button", { name: "Save rule" }).click();
@@ -131,19 +147,23 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   await page.goto(ruleURL);
   const saved = page.locator("[data-scope]");
   await expect(saved.locator("input[name='family'][value='esp8266']")).toBeChecked();
-  await expect(saved.locator("[data-dev-chips] .pol-chip")).toHaveCount(2);
-  await expect(saved.locator("[data-tag-chips] label.pol-tag")).toHaveCount(2);
-  await expect(saved.locator("[data-except-chips] label.pol-exc input")).toHaveValue(inventoryName);
+  await expect(saved.locator("[data-dev-chips] .chip")).toHaveCount(2);
+  await expect(saved.locator("[data-tag-chips] label.chip")).toHaveCount(2);
+  await expect(saved.locator("[data-except-chips] label.chip input")).toHaveValue(inventoryName);
+  // policy.js draws these chips a second time in the browser: the parts must be the ones the server draws
+  // (ui.Chip), or the two copies drift and a chip looks different before and after a save
+  expect(await chipShape(saved.locator("[data-tag-chips] label.chip", { hasText: "garden" })), "a tag chip").toBe(gardenShape);
+  expect(await chipShape(saved.locator("[data-except-chips] label.chip")), "an exception chip").toBe(exceptShape);
   await expect(saved.locator("#scope-summary")).toContainText("minus 1 exception");
 
   // unticking the exception removes its chip and, saved, the exception
-  await saved.locator("[data-except-chips] label.pol-exc").click();
-  await expect(saved.locator("[data-except-chips] label.pol-exc")).toHaveCount(0);
+  await saved.locator("[data-except-chips] label.chip").click();
+  await expect(saved.locator("[data-except-chips] label.chip")).toHaveCount(0);
   await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("0 exceptions");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy\?ok=saved/);
   await page.goto(ruleURL);
-  await expect(page.locator("[data-scope] [data-except-chips] label.pol-exc")).toHaveCount(0);
+  await expect(page.locator("[data-scope] [data-except-chips] label.chip")).toHaveCount(0);
 });
 
 test("without JavaScript the section is plain fields and still saves", async ({ browser }) => {
@@ -151,7 +171,7 @@ test("without JavaScript the section is plain fields and still saves", async ({ 
   const page = await ctx.newPage();
   await page.goto(app.url + "/policy/rules/new?command=Timezone");
   await page.locator("input[name='want']").fill("99");
-  await page.locator("[data-scope] label.pol-pill", { hasText: "ESP8266" }).click();
+  await page.locator("[data-scope] label.chip", { hasText: "ESP8266" }).click();
   await page.locator("[data-scope-list] input").first().check();
   await page.locator("input[name='except_extra']").fill("someone");
   await page.getByRole("button", { name: "Save rule" }).click();

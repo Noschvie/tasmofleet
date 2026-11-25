@@ -153,7 +153,7 @@
         }
         label.hidden = false;
         if (d)
-          label.querySelector(".chip-main").textContent =
+          label.querySelector(".chip-l").textContent =
             "Like last time: " + DAYS[d.getDay()] + " " + clock(d);
       }
       if (!d) return;

@@ -153,9 +153,9 @@ func TestFleetBackupsFilterCountsAreTheRows(t *testing.T) {
 	now := time.Now()
 	e := fleetEnv(t, fleetFixture(now))
 	_, all := e.do(t, "GET", "/devices/backups", "admin", nil)
-	chip := regexp.MustCompile(`<a class="dv-chip"[^>]*href="[^"]*filter=([a-z]*)"[^>]*>([^<]*)<span class="dv-n">(\d+)</span>`)
+	chip := regexp.MustCompile(`<a class="chip"[^>]*href="[^"]*filter=([a-z]*)"[^>]*><span class="chip-l">([^<]*)</span><span class="chip-n">(\d+)</span>`)
 	counts := map[string]string{}
-	for _, m := range chip.FindAllStringSubmatch(all, -1) {
+	for _, m := range chip.FindAllStringSubmatch(squash(all), -1) {
 		counts[m[1]] = m[3]
 	}
 	// "All" has no filter parameter; "old" is older than max(7 days, 2 x interval): balcony only;
@@ -169,8 +169,8 @@ func TestFleetBackupsFilterCountsAreTheRows(t *testing.T) {
 		if got := len(rowCount.FindAllString(cardOf(t, body, "devices"), -1)) - 1; got != n {
 			t.Errorf("filter=%s lists %d rows, its chip says %d", key, got, n)
 		}
-		if !strings.Contains(body, `aria-current="true"`) {
-			t.Errorf("filter=%s: no chip is current", key)
+		if !strings.Contains(body, `class="chip" href="/tf/devices/backups?filter=`+key+`" aria-current="page"`) {
+			t.Errorf("filter=%s: its chip is not the current one", key)
 		}
 	}
 	_, none := e.do(t, "GET", "/devices/backups?filter=none", "admin", nil)

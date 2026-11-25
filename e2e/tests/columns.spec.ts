@@ -48,7 +48,7 @@ test.beforeAll(async ({ browser }) => {
     .poll(
       async () => {
         const html = await (await fetch(app.url + "/devices", { headers: adam })).text();
-        return /Online<span class="dv-n">(\d+)<\/span>/.exec(html)?.[1];
+        return /Online<\/span>\s*<span class="chip-n">(\d+)<\/span>/.exec(html)?.[1];
       },
       { timeout: 120_000, intervals: [1000] },
     )

@@ -516,12 +516,13 @@ func TestDeviceListNotCompliantChipUnknownOrPartial(t *testing.T) {
 		prov map[model.DeviceID]map[string]ValueSource
 		want string
 	}{
-		{"nothing read", nil, `title="2 not checked yet">Not compliant<span class="dv-n">–</span>`},
+		{"nothing read", nil, `title="2 not checked yet"><span class="chip-l">Not compliant</span><span class="chip-n">–</span>`},
 		{"partly read", map[model.DeviceID]map[string]ValueSource{6: {"teleperiod": {Kind: "live", At: time.Now()}}},
-			`title="2 not checked yet">Not compliant<span class="dv-n">0</span>`},
+			`title="2 not checked yet"><span class="chip-l">Not compliant</span><span class="chip-n">0</span>`},
 	} {
 		e, _ := dashFleet(t, func(d *Deps) { d.Policy = &fakePolicy{rep: PolicyReport{Findings: unread, Provenance: c.prov}} })
 		_, body := e.do(t, "GET", "/devices", "admin", nil)
+		body = squash(body)
 		if !strings.Contains(body, c.want) {
 			t.Errorf("%s: missing %q in %s", c.name, c.want, between(body, `class="dv-chips"`, `class="dv-vsep"`))
 		}

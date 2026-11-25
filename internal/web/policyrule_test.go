@@ -813,7 +813,7 @@ func TestRulePageDeviceCountsComeFromOneTallyAndAddUp(t *testing.T) {
 		t.Errorf("the scope line must give the tile's number and what it is out of:\n%s", scope)
 	}
 	devs := section(t, body, "dc-devs")
-	if !strings.Contains(devs, `In scope<span class="dv-n">3</span>`) || strings.Contains(devs, ">All<") {
+	if !strings.Contains(squash(devs), `<span class="chip-l">In scope</span><span class="chip-n">3</span>`) || strings.Contains(devs, ">All<") {
 		t.Errorf("the chip counts what it lists (1 applies + 2 covered) and says so:\n%s", devs)
 	}
 }

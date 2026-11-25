@@ -777,9 +777,9 @@ templ whenCard(w whenState) {
 			<fieldset class="upd-picks">
 				<legend>Quick picks</legend>
 				for _, pk := range w.Picks {
-					<label class="chip"><input type="radio" name="at" value={ pk.Value() } form="start" data-kind={ pk.Kind } checked?={ w.Picked == pk.Value() }/><span class="chip-main">{ pk.Label }</span><span class="chip-sub">{ pk.Date() }</span></label>
+					@ui.Chip(ui.ChipData{Label: pk.Label, Sub: pk.Date(), Name: "at", Value: pk.Value(), Form: "start", Radio: true, Checked: w.Picked == pk.Value(), Attrs: templ.Attributes{"data-kind": pk.Kind}})
 				}
-				<label class="chip"><input type="radio" name="at" value="custom" form="start" data-kind="custom" checked?={ w.Picked == "custom" }/><span class="chip-main">Other time</span><span class="chip-sub">Choose below</span></label>
+				@ui.Chip(ui.ChipData{Label: "Other time", Sub: "Choose below", Name: "at", Value: "custom", Form: "start", Radio: true, Checked: w.Picked == "custom", Attrs: templ.Attributes{"data-kind": "custom"}})
 			</fieldset>
 			<div class="upd-custom">
 				<label>Date<input type="date" name="at_date" form="start" value={ w.Date }

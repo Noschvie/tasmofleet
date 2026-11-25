@@ -238,7 +238,7 @@ templ fleetDevices(p sysPage, c sysCard) {
 			<div class="dv-tools bk-tools">
 				<div class="dv-chips">
 					for _, ch := range v.Chips {
-						<a class="dv-chip" href={ templ.SafeURL(ch.Href) } if ch.Current { aria-current="true" }>{ ch.Label }<span class="dv-n">{ strconv.Itoa(ch.N) }</span></a>
+						@ui.Chip(ui.ChipData{Label: ch.Label, Count: strconv.Itoa(ch.N), Href: ch.Href, Current: ch.Current})
 					}
 				</div>
 			</div>

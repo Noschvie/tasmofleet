@@ -734,15 +734,16 @@ small.error {
   font-size: var(--fs-ui);
 }
 
+/* A tag (ui.Tag, #1095): a read-only outlined label for a kind or a source (Proxy, System, a device name). It is
+   never a state; a state is a badge. */
 .tag {
   display: inline-flex;
   align-items: center;
   height: 20px;
   padding: 0 6px;
-  font-size: var(--fs-small);
-  font-weight: 600;
+  font: 500 11.5px var(--font-sans);
   color: var(--color-text-2);
-  border: var(--hair-w) solid var(--color-border);
+  border: var(--hair-w) solid var(--color-border-strong);
   border-radius: var(--r-badge);
   background: var(--color-surface);
   white-space: nowrap;
@@ -2374,36 +2375,113 @@ details.job-log > summary {
 .rule-editor p {
   margin: 0;
 }
-label.chip {
+/* A chip (ui.Chip, #1095): a pill that filters or picks, in three shapes that draw alike: a label around an input,
+   a link (a filter that changes the address) and a button. 28 px, 44 px on a phone. Selected is the accent tint
+   (the input is checked, the link or button is aria-current, or the chip is chip-on); nothing is drawn inverted. */
+.chip {
+  position: relative;
   display: inline-flex;
-  gap: 0.35rem;
+  flex: none;
+  align-self: center; /* in a row of taller controls (the device list's pickers) a chip stays 28 px, centred */
   align-items: center;
-  padding: 0.1rem 0.55rem;
-  border: 1px solid var(--color-control-border);
-  border-radius: var(--r-control);
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 11px;
+  border: var(--hair-w) solid var(--color-control-border);
+  border-radius: var(--r-pill);
   background: var(--color-surface);
-  font-weight: 450;
-  font-size: 0.9rem;
+  color: var(--color-text);
+  font: 500 12.5px var(--font-sans);
+  text-decoration: none;
   cursor: pointer;
   /* a chip never gets wider than its list: a long unbroken device name wraps inside it */
   max-width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-label.chip > input {
-  flex: none;
+.chip > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
-label.chip:has(input:checked) {
+/* a radio chip with two lines (the quick picks) is aimed at by its text: the label takes that click */
+.chip > input[type="radio"] {
+  pointer-events: none;
+}
+.chip:has(input:checked),
+.chip[aria-current],
+.chip-on {
   background: var(--color-accent-bg);
-  color: var(--color-accent-fg);
   border-color: var(--color-accent);
+  color: var(--color-accent-fg);
 }
-label.chip:has(input:focus-visible) {
+.chip:has(input:focus-visible),
+.chip:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
-.tag-except {
-  border-style: dashed;
+.chip-n {
+  color: var(--color-text-2); /* the secondary text colour, never opacity on content (#1071, #1174) */
+  font-variant-numeric: tabular-nums;
+}
+/* the count is for the chip that is not ticked: a policy tag shows its cross instead while it is in the rule */
+.chip:has(> .chip-x):has(input:checked) > .chip-n {
+  display: none;
+}
+span.chip-x {
+  display: none;
+  color: var(--color-text-2);
+}
+.chip:has(input:checked) > span.chip-x {
+  display: inline;
+}
+/* the cross of a chip a script draws for a ticked row is a button of its own */
+button.chip-x {
+  padding: 0 6px;
+  line-height: 1;
+  border: 0;
+  background: none;
+  color: var(--color-text-2);
+  font: 500 14px var(--font-sans);
+  cursor: pointer;
+}
+.chip:has(> button.chip-x) {
+  padding-right: 4px;
+}
+/* a chip with a second line (the update's quick picks) is as high as its two lines and a touch target */
+.chip:has(> .chip-sub) {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  min-height: 44px;
+  padding: var(--sp-6) var(--sp-12);
+}
+.chip-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-2);
+}
+.chip:has(input:checked) > .chip-sub,
+.chip[aria-current] > .chip-sub {
+  color: var(--color-accent-fg);
+}
+@media (max-width: 44.99rem) {
+  .chip {
+    min-height: var(--ctl);
+  }
+  /* the phone rule for a label around a checkbox (display, alignment, padding) is for text that wraps; a chip is one
+     line in a box of the touch height, so it keeps its own (this selector is the more specific one) */
+  .chip:has(> input[type="checkbox"]:not([aria-label])) {
+    display: inline-flex;
+    align-items: center;
+    padding-block: 0;
+  }
 }
 .shortid {
   border-bottom: 1px dotted var(--color-text-2);
@@ -2497,10 +2575,6 @@ label.chip:has(input:focus-visible) {
   table.dense td.ctx > .error {
     order: 5;
     flex: 1 0 100%;
-  }
-  label.chip {
-    padding: 0 0.5rem;
-    font-size: 0.86rem;
   }
   .rule-editor {
     gap: 0.4rem;
@@ -2699,9 +2773,6 @@ label.chip:has(input:focus-visible) {
   table.tfix .c-gt {
     display: table-cell;
   }
-  table.tfix .c-fam .tag {
-    white-space: nowrap;
-  }
   table.hc1 > :is(thead, tbody) > tr > :is(th, td):nth-child(1):not([colspan]) {
     display: none !important;
   }
@@ -2812,9 +2883,6 @@ label.chip:has(input:focus-visible) {
     transition: none;
   }
 }
-.chip[title] {
-  cursor: help;
-}
 @media (max-width: 44.99rem) {
   td.none {
     display: none;
@@ -2828,7 +2896,6 @@ label.chip:has(input:focus-visible) {
   margin: 0 0 0.75rem;
 }
 @media (max-width: 44.99rem) {
-  label.chip,
   label.inline,
   label:has(> input[type="checkbox"]:not([aria-label])) {
     min-height: var(--ctl-sm);
@@ -3576,7 +3643,6 @@ input[type="file"]::file-selector-button:hover {
   }
 
   /* a label that wraps keeps its checkbox on the first line (centred on it), not in the middle of the block */
-  label.chip:has(> input[type="checkbox"]),
   label.inline:has(> input[type="checkbox"]),
   label:has(> input[type="checkbox"]:not([aria-label])) {
     align-items: flex-start;
@@ -7648,33 +7714,6 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   padding-bottom: 0;
   overflow-x: visible;
 }
-.dv-chip {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  height: var(--ctl);
-  padding: 0 11px;
-  border: var(--hair-w) solid var(--color-control-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: 500 12.5px var(--font-sans);
-  white-space: nowrap;
-  text-decoration: none;
-}
-.dv-chip[aria-current] {
-  border-color: var(--color-text);
-  background: var(--color-text);
-  color: var(--color-surface);
-}
-.dv-n {
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-2); /* the secondary text colour, never opacity on content (#1071, #1174) */
-}
-.dv-chip[aria-current] .dv-n {
-  color: inherit; /* the current chip is drawn inverted: its count keeps the chip's own text colour */
-}
 .dv-vsep {
   flex: none;
   align-self: stretch;
@@ -9988,31 +10027,6 @@ nav.crumbs a {
   font: 500 12.5px var(--font-sans);
   color: var(--color-text-2);
 }
-.upd-picks label.chip {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  padding: var(--sp-6) var(--sp-12);
-  min-height: 44px;
-  justify-content: center;
-}
-.upd-picks label.chip > input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.upd-picks .chip-main {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-.upd-picks .chip-sub {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-2);
-}
-.upd-picks label.chip:has(input:checked) .chip-sub {
-  color: var(--color-accent-fg);
-}
 .upd-custom {
   display: flex;
   flex-wrap: wrap;
@@ -11308,28 +11322,6 @@ a.add-card-name {
   flex-wrap: wrap;
   align-items: center;
   margin-bottom: var(--sp-10);
-}
-.add-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-6);
-  height: var(--ctl);
-  padding: 0 11px;
-  border-radius: 999px;
-  border: var(--hair-w) solid var(--color-control-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: 500 12.5px var(--font-sans);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.add-chip.is-on {
-  border-color: var(--color-text);
-  background: var(--color-text);
-  color: var(--color-surface);
-}
-.add-chip-n {
-  opacity: 0.75;
 }
 
 /* Import from TasmoAdmin */
@@ -13960,78 +13952,10 @@ a.pol-tpl {
 .pol-chips {
   min-height: 28px;
 }
-/* a pill is a checkbox you can see as a toggle; a ticked tag looks like a chip with a cross */
-.pol-pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border: var(--hair-w) solid var(--color-control-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text-2);
-  font: 500 12.5px var(--font-sans);
-  cursor: pointer;
-}
-.pol-pill input {
-  position: absolute;
-  opacity: 0;
-  inset: 0;
-  margin: 0;
-  cursor: pointer;
-}
-.pol-pill:has(input:checked) {
-  background: var(--color-accent-bg);
-  border-color: var(--color-accent);
-  color: var(--color-text);
-}
-.pol-pill:has(input:focus-visible) {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.pol-pill-n::before {
-  content: "· ";
-}
-.pol-pill-n {
-  color: var(--color-text-3);
-  font-variant-numeric: tabular-nums;
-}
-.pol-tag .pol-chip-x,
-.pol-exc .pol-chip-x {
-  display: none;
-}
-.pol-tag:has(input:checked) .pol-pill-n {
-  display: none;
-}
-.pol-tag:has(input:checked) .pol-chip-x,
-.pol-exc:has(input:checked) .pol-chip-x {
-  display: inline;
-  color: var(--color-text-2);
-}
-.pol-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 4px 5px 11px;
-  border: var(--hair-w) solid var(--color-accent);
-  border-radius: 999px;
-  background: var(--color-accent-bg);
-  color: var(--color-text);
-  font: 500 12.5px var(--font-sans);
-}
-.pol-exc:has(input:checked) {
+/* the exceptions are a warning tone while they are ticked: the field above them says what they are */
+[data-except-chips] .chip:has(input:checked) {
   border-color: var(--color-warn);
   background: var(--color-warn-bg);
-}
-button.pol-chip-x {
-  padding: 0 6px;
-  line-height: 1;
-  border: 0;
-  background: none;
-  color: var(--color-text-2);
-  font: 500 14px var(--font-sans);
-  cursor: pointer;
 }
 .pol-form .pol-except input:not([type="hidden"]) {
   flex: 0 1 280px;
@@ -15826,39 +15750,14 @@ time[data-ts]:not([data-painted]):not([data-ts="title"]) {
   }
 }
 
-/* weekday chips of the backup schedule (#601): the checkbox stays in the page for keyboard and
-   screen readers and covers the label; the chip is the label. Selected = the accent tint. */
+/* weekday chips of the backup schedule (#601): ui.Chip; the checkbox stays in the page for keyboard and
+   screen readers and covers the label. */
 .cks.chips {
   gap: var(--sp-8);
 }
-.ucheck.chip {
-  position: relative;
+.cks .chip {
   min-width: 3rem;
-  min-height: var(--ctl);
   justify-content: center;
-  padding: 0 var(--sp-12);
-  border: 1px solid var(--color-control-border);
-  border-radius: 999px;
-  cursor: pointer;
-}
-.ucheck.chip input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.ucheck.chip:has(input:checked) {
-  background: var(--color-accent-bg);
-  border-color: var(--color-accent);
-  color: var(--color-accent-fg);
-  font-weight: 600;
-}
-.ucheck.chip:has(input:focus-visible) {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 
 /* A control a person changes (a field, a drop zone, a live preview; form.js sets aria-busy on it) draws

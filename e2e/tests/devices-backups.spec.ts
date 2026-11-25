@@ -50,10 +50,10 @@ test("the Devices menu has Backups between Policy and Add, and the page lists ev
   await expect(page).toHaveURL(/\/devices\/backups$/);
   await expect(page.getByRole("heading", { name: "Backups", level: 1 })).toBeVisible();
   await expect(page.locator(".bk-table tbody tr")).toHaveCount(total);
-  await expect(page.locator(".dv-chip").first()).toContainText(String(total));
+  await expect(page.locator(".dv-chips .chip").first()).toContainText(String(total));
   // the chips count what they show
-  for (const chip of await page.locator(".dv-chip").all()) {
-    const n = Number((await chip.locator(".dv-n").textContent())!);
+  for (const chip of await page.locator(".dv-chips .chip").all()) {
+    const n = Number((await chip.locator(".chip-n").textContent())!);
     await chip.click();
     await expect(page.locator(".bk-table tbody tr")).toHaveCount(n);
   }

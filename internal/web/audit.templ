@@ -100,12 +100,12 @@ templ auditSelect(name, label string, opts []ui.Option) {
 // auditWho is the User cell: the name with a chip for its kind, the subject as the tooltip.
 templ auditWho(w whoParts) {
 	if w.System {
-		<span class="who who-system"><span class="tag">{ w.Name }</span></span>
+		<span class="who who-system">@ui.Tag(w.Name)</span>
 	} else if w.Tip != "" {
 		<span class="who" title={ w.Tip }>
 			{ w.Name }
 			if w.Badge != "" {
-				<span class="tag">{ w.Badge }</span>
+				@ui.Tag(w.Badge)
 			}
 		</span>
 	} else {

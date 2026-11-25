@@ -158,11 +158,11 @@ templ (h *handler) deviceRows(d rowsData) {
 				<a id={ nameID(row.Device.ID) } href={ templ.SafeURL(d.Base + "/devices/" + devID(row.Device.ID)) }>{ row.Device.Name }</a>
 				if row.Device.OTAExcluded {
 					{ " " }
-					<span class="tag" title={ h.hint("no-ota") }>no OTA</span>
+					@ui.TagOf(ui.TagData{Label: "no OTA", Title: h.hint("no-ota")})
 				}
 				if row.ViaMQTT {
 					{ " " }
-					<span class="tag" data-via-mqtt title="HTTP to this device fails, so TasmoFleet manages it over MQTT">MQTT</span>
+					@ui.TagOf(ui.TagData{Label: "MQTT", Title: "HTTP to this device fails, so TasmoFleet manages it over MQTT", Attrs: templ.Attributes{"data-via-mqtt": true}})
 				}
 			</td>
 			<td data-label="Status" class="s st-wrap"><span class="dv-live" sse-swap={ "health-" + devID(row.Device.ID) }>

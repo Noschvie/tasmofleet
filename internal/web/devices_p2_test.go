@@ -124,8 +124,9 @@ func streamUntil(t *testing.T, e *env, ev events.Event, until string) string {
 func TestDeviceListToolbarOffersCountedFilters(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices?q=a&tag=kitchen", "operator", nil)
+	body = squash(body)
 	for _, want := range []string{
-		`>All<span class="dv-n">`, `>Offline / unknown<span class="dv-n">`, `>Outdated<span class="dv-n">`, `>Not compliant<span class="dv-n">`,
+		`>All</span><span class="chip-n">`, `>Offline / unknown</span><span class="chip-n">`, `>Outdated</span><span class="chip-n">`, `>Not compliant</span><span class="chip-n">`,
 		`<option value="esp32">ESP32 · 1</option>`, `<option value="esp8266">ESP8266 · 1</option>`,
 		`<option value="kitchen" selected>kitchen · 1</option>`,
 		// the search field is short (the toolbar must fit one row at 1280px, #428), so the placeholder is
@@ -138,9 +139,9 @@ func TestDeviceListToolbarOffersCountedFilters(t *testing.T) {
 		}
 	}
 	if !strings.Contains(body, `href="/tf/devices?chip=down&amp;dir=asc&amp;q=a&amp;sort=name&amp;tag=kitchen"`) {
-		t.Errorf("the Offline chip must keep the search, the tag and the sort: %s", between(body, `class="dv-chips"`, `class="dv-vsep"`))
+		t.Errorf("the Offline chip must keep the search, the tag and the sort: %s", dvChips(body))
 	}
-	if !strings.Contains(body, `<a class="dv-chip" href="/tf/devices?dir=asc&amp;q=a&amp;sort=name&amp;tag=kitchen" aria-current="true">All`) {
+	if !strings.Contains(body, `<a class="chip" href="/tf/devices?dir=asc&amp;q=a&amp;sort=name&amp;tag=kitchen" aria-current="page"><span class="chip-l">All`) {
 		t.Error("the chip in effect must be marked")
 	}
 }
@@ -228,15 +229,15 @@ func TestDeviceListIsALiveRegion(t *testing.T) {
 func TestDeviceListHealthFilterHasItsOwnActiveChip(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices?health=offline", "operator", nil)
-	chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
-	if strings.Contains(chips, `aria-current="true">All`) {
+	chips := dvChips(body)
+	if strings.Contains(chips, `aria-current="page"><span class="chip-l">All`) {
 		t.Errorf("All is marked while health=offline narrows the list: %s", chips)
 	}
-	if n := strings.Count(chips, `aria-current="true"`); n != 1 || !strings.Contains(chips, `aria-current="true" title="Show all states again">Offline<span class="dv-n">0</span>`) {
+	if n := strings.Count(chips, `aria-current=`); n != 1 || !strings.Contains(chips, `aria-current="page" title="Show all states again"><span class="chip-l">Offline</span><span class="chip-n">0</span>`) {
 		t.Errorf("want exactly the Offline chip marked: %s", chips)
 	}
 	_, body = e.do(t, "GET", "/devices", "operator", nil)
-	if strings.Contains(between(body, `class="dv-chips"`, `class="dv-vsep"`), "Show all states again") {
+	if strings.Contains(dvChips(body), "Show all states again") {
 		t.Error("the health chip shows without a health filter")
 	}
 }
@@ -251,8 +252,8 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 	e := setup(t)
 	for _, q := range []string{"health=online", "health=offline", "health=unknown", "chip=down", "chip=outdated", "chip=noncompliant", "health=online&chip=down"} {
 		_, body := e.do(t, "GET", "/devices?"+q+"&tag=kitchen", "operator", nil)
-		chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
-		hrefs := regexp.MustCompile(`<a class="dv-chip" href="([^"]*)"[^>]*>([^<]*)<`).FindAllStringSubmatch(chips, -1)
+		chips := dvChips(body)
+		hrefs := regexp.MustCompile(`<a class="chip" href="([^"]*)"[^>]*><span class="chip-l">([^<]*)<`).FindAllStringSubmatch(chips, -1)
 		if len(hrefs) == 0 {
 			t.Fatalf("%s: no chips in %s", q, chips)
 		}
@@ -286,24 +287,24 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 // while active drops the filter again.
 func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 	e := setup(t)
-	online := regexp.MustCompile(`<a class="dv-chip" href="([^"]*)"([^>]*)>Online<span class="dv-n">(\d+)</span></a>`)
+	online := regexp.MustCompile(`<a class="chip" href="([^"]*)"([^>]*)><span class="chip-l">Online</span><span class="chip-n">(\d+)</span></a>`)
 	for _, q := range []string{"", "?chip=down", "?chip=outdated", "?health=offline"} {
 		_, body := e.do(t, "GET", "/devices"+q, "operator", nil)
-		m := online.FindStringSubmatch(between(body, `class="dv-chips"`, `class="dv-vsep"`))
+		m := online.FindStringSubmatch(dvChips(body))
 		if m == nil {
-			t.Fatalf("%q: no Online chip among the chips: %s", q, between(body, `class="dv-chips"`, `class="dv-vsep"`))
+			t.Fatalf("%q: no Online chip among the chips: %s", q, dvChips(body))
 		}
 		if !strings.Contains(m[1], "health=online") || strings.Contains(m[1], "chip=") || strings.Contains(m[2], "aria-current") {
 			t.Errorf("%q: inactive Online chip links to %q (%s): want the health=online filter, no other status filter, not marked", q, m[1], m[2])
 		}
 	}
 	_, body := e.do(t, "GET", "/devices?health=online", "operator", nil)
-	chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
+	chips := dvChips(body)
 	m := online.FindStringSubmatch(chips)
-	if m == nil || !strings.Contains(m[2], `aria-current="true"`) || strings.Contains(m[1], "health=") {
+	if m == nil || !strings.Contains(m[2], `aria-current="page"`) || strings.Contains(m[1], "health=") {
 		t.Errorf("health=online: want the Online chip marked and linking back to the unfiltered list: %s", chips)
 	}
-	if n := strings.Count(chips, `aria-current="true"`); n != 1 || strings.Count(chips, ">Online<") != 1 {
+	if n := strings.Count(chips, `aria-current=`); n != 1 || strings.Count(chips, ">Online<") != 1 {
 		t.Errorf("health=online: want exactly one marked chip and one Online chip: %s", chips)
 	}
 }
@@ -313,8 +314,8 @@ func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
-	chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
-	pos := func(label string) int { return strings.Index(chips, ">"+label+"<span") }
+	chips := dvChips(body)
+	pos := func(label string) int { return strings.Index(chips, ">"+label+"</span><span class=\"chip-n\"") }
 	all, online, down := pos("All"), pos("Online"), pos("Offline / unknown")
 	if all < 0 || online < 0 || down < 0 || all >= online || online >= down {
 		t.Errorf("want the order All, Online, Offline / unknown (positions %d, %d, %d): %s", all, online, down, chips)

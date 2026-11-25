@@ -119,11 +119,11 @@ for (const width of [1280, 375]) {
           await page.getByRole("link", { name: "Power lock" }).click();
           await expect(page.locator("#rule-devices tbody tr").first()).toBeVisible();
         }
-        const chips = page.locator(".dv-chips .dv-chip");
+        const chips = page.locator(".dv-chips .chip");
         expect(await chips.count(), "the page shows its chips").toBeGreaterThan(1);
-        await expect(page.locator(".dv-chips .dv-chip[aria-current] .dv-n").first(), "one chip is the current one").toBeVisible();
+        await expect(page.locator(".dv-chips .chip[aria-current] .chip-n").first(), "one chip is the current one").toBeVisible();
         const runs = await textRuns(page, ".dv-chips");
-        expect(runs.some((r) => r.where.includes("dv-n")), "the counts were measured").toBe(true);
+        expect(runs.some((r) => r.where.includes("chip-n")), "the counts were measured").toBe(true);
         expect(faded(runs), "no chip text is drawn at less than full opacity").toEqual([]);
         expect(lowContrast(runs), "chip text below AA").toEqual([]);
       });

@@ -2,8 +2,6 @@ package web
 
 import (
 	"context"
-	"html"
-	"html/template"
 	"log/slog"
 	"regexp"
 	"sort"
@@ -127,7 +125,7 @@ func (d *principalDir) Text(subject string) string {
 		return shortToken(r.DisplayName)
 	}
 	if longToken.FindString(subject) == subject {
-		return "Unknown user" // a whole subject nobody recorded, as Who and Parts say
+		return "Unknown user" // a whole subject nobody recorded, as Parts says
 	}
 	return shortToken(subject)
 }
@@ -141,71 +139,14 @@ func shortToken(s string) string {
 	return s
 }
 
-// Who renders a subject for a page: the name, a badge for the kind of
-// principal, the full subject in the tooltip. A string that is not a subject
-// but contains one ("requested by <sub>") gets each long token replaced.
-func (d *principalDir) Who(subject string) template.HTML {
-	if subject == "" {
-		return ""
-	}
-	if l, ok := systemActors[subject]; ok {
-		return template.HTML(`<span class="who who-system"><span class="tag">` + html.EscapeString(l) + `</span></span>`) //nolint:gosec // G203: escaped
-	}
-	known := d.load()
-	if n, ok := localName(subject); ok {
-		// A chip like the other kinds, so the User column reads the same for every source.
-		return whoSpan(n, "Local", subject)
-	}
-	if r, ok := known[subject]; ok {
-		name := shortToken(r.DisplayName)
-		if d.ambiguous(r, known) {
-			name += " \u00b7 " + subjectSuffix(subject)
-		}
-		badge := ""
-		switch r.Kind {
-		case "sso":
-			badge = "SSO"
-		case "header":
-			badge = "Proxy"
-		}
-		return whoSpan(name, badge, subject)
-	}
-	if !longToken.MatchString(subject) {
-		return template.HTML(html.EscapeString(subject)) //nolint:gosec // G203: escaped
-	}
-	if longToken.FindString(subject) == subject {
-		// A whole subject nobody recorded (a deleted account): say so instead of
-		// showing a piece of the id as if it were a name. The tooltip keeps the id.
-		return whoSpan("Unknown user", "", subject)
-	}
-	var out strings.Builder
-	last := 0
-	for _, loc := range longToken.FindAllStringIndex(subject, -1) {
-		out.WriteString(html.EscapeString(subject[last:loc[0]]))
-		tok := subject[loc[0]:loc[1]]
-		if r, ok := known[tok]; ok {
-			name := shortToken(r.DisplayName)
-			if d.ambiguous(r, known) {
-				name += " \u00b7 " + subjectSuffix(tok)
-			}
-			out.WriteString(string(whoSpan(name, "", tok)))
-		} else {
-			out.WriteString(string(whoSpan(shortToken(tok), "", tok)))
-		}
-		last = loc[1]
-	}
-	out.WriteString(html.EscapeString(subject[last:]))
-	return template.HTML(out.String()) //nolint:gosec // G203: every part is escaped
-}
-
-// whoParts is a subject as a templ page draws it (the parts of Who): the name, a chip for the
-// kind of principal, and the full subject for the tooltip. System actors are a chip only.
+// whoParts is a subject as a templ page draws it (auditWho): the name, a tag for the kind of principal, and the
+// full subject for the tooltip. System actors are a tag only.
 type whoParts struct {
 	Name, Badge, Tip string
 	System           bool
 }
 
-// Parts is Who for one subject, in parts. A string that only contains subjects (a "requested by"
+// Parts is one subject in parts. A string that only contains subjects (a "requested by"
 // text) is not a subject: it gets its plain text.
 func (d *principalDir) Parts(subject string) whoParts {
 	if subject == "" {
@@ -239,14 +180,6 @@ func (d *principalDir) Parts(subject string) whoParts {
 		return whoParts{Name: "Unknown user", Tip: tip(subject)}
 	}
 	return whoParts{Name: d.Text(subject), Tip: tip(subject)}
-}
-
-func whoSpan(name, badge, subject string) template.HTML {
-	s := `<span class="who" title="` + html.EscapeString(tip(subject)) + `">` + html.EscapeString(name)
-	if badge != "" {
-		s += ` <span class="tag">` + html.EscapeString(badge) + `</span>`
-	}
-	return template.HTML(s + `</span>`) //nolint:gosec // G203: escaped
 }
 
 // subjectSuffix tells apart two people who share a name: the first characters

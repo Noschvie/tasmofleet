@@ -49,7 +49,7 @@ async function pills(page: Page): Promise<Record<string, Box>> {
       const r = el.getBoundingClientRect();
       out[key] = { x: r.x, y: r.y, w: r.width, h: r.height };
     };
-    for (const a of document.querySelectorAll(".dv-chips .dv-chip")) {
+    for (const a of document.querySelectorAll(".dv-chips .chip")) {
       const label = (a.firstChild?.textContent ?? "").trim();
       add(label, a);
     }
@@ -68,10 +68,10 @@ for (const scheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width, height: 900 });
       await page.setExtraHTTPHeaders(adam);
       await page.goto(app.url + "/devices");
-      await expect(page.locator(".dv-chips .dv-chip").first()).toBeVisible();
+      await expect(page.locator(".dv-chips .chip").first()).toBeVisible();
       // the CLI import runs after the server started; wait until the fleet is listed
       await expect(
-        page.locator(".dv-chips .dv-chip", { hasText: "Online" }),
+        page.locator(".dv-chips .chip", { hasText: "Online" }),
       ).toBeVisible();
       // The fleet comes online while the page is open, and the Online count (a digit more or less
       // changes the pill's width) is the fleet's, not the filter's. The toolbar is not live, so
@@ -81,8 +81,8 @@ for (const scheme of ["light", "dark"] as const) {
         .poll(
           async () => {
             const n = await page
-              .locator(".dv-chips .dv-chip", { hasText: "Online" })
-              .locator(".dv-n")
+              .locator(".dv-chips .chip", { hasText: "Online" })
+              .locator(".chip-n")
               .textContent();
             if (n !== String(Object.keys(env.devices).length)) await page.reload();
             return n;

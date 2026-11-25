@@ -244,6 +244,70 @@ func (b BadgeData) classes() string {
 	return c
 }
 
+// ChipData is a chip (#1095): a pill that filters or picks. It has three shapes, chosen by which field is set:
+//   - Name set: a label around an input (a checkbox, or a radio with Radio), so it works without JavaScript. Value,
+//     Checked and Form belong to the input, and so do Attrs (a script finds the control, not the pill).
+//   - Href set: a link, a filter that changes the address. Current marks the one the page shows (aria-current="page").
+//   - neither: a button for a filter that has no page to link to; Current gives aria-current="true", Attrs carry hx-*.
+//
+// Label is the text; Count follows it (a string, so a list can show a dash while a count is unknown); Sub is a second
+// line (the update quick picks); Long is the full word for a screen reader after an abbreviation ("Mon"); Remove
+// adds a cross that shows while a label chip is ticked (a policy tag or exception takes the place of its count).
+// Everything is text, never markup. The classes are one set (chip, chip-l, chip-sub, chip-n, chip-x); the selected look is
+// the accent tint, drawn by the CSS from the input, aria-current or chip-on.
+type ChipData struct {
+	Label, Count, Sub, Long, Title string
+	Name, Value, Form              string
+	Radio, Checked                 bool
+	Href                           string
+	Current                        bool
+	Remove                         bool
+	// Attrs are the attributes a script or htmx needs and no field covers (data-*, hx-*); see pageAttrs. A title
+	// goes through Title, so Attrs may not carry one.
+	Attrs templ.Attributes
+}
+
+func (c ChipData) attrs() templ.Attributes { return attrsWithoutTitle(c.Attrs) }
+
+func (c ChipData) inputType() string {
+	if c.Radio {
+		return "radio"
+	}
+	return "checkbox"
+}
+
+// TagData is a tag that needs more than its words (#1095): a hint, a link (a device in a list), the mono font (a
+// name an address or an id) or an attribute a script finds it by. Tag(label) is the short form. A tag is never a state.
+type TagData struct {
+	Label, Title string
+	Href         string
+	Mono         bool
+	Attrs        templ.Attributes // see pageAttrs; a title goes through Title
+}
+
+func (t TagData) classes() string {
+	if t.Mono {
+		return "tag mono"
+	}
+	return "tag"
+}
+
+func (t TagData) attrs() templ.Attributes { return attrsWithoutTitle(t.Attrs) }
+
+// attrsWithoutTitle is pageAttrs for a component that has a Title field: a title in Attrs would be a second one.
+func attrsWithoutTitle(a templ.Attributes) templ.Attributes {
+	out := pageAttrs(a)
+	for k := range out {
+		if strings.EqualFold(k, "title") {
+			delete(out, k)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // CopyData is a button that copies text to the clipboard (static/copy.js). Text is the value, From the selector of
 // an element whose text is copied instead (a secret shown once must not be in the markup twice); one of them is set.
 // The button is hidden in the markup and copy.js shows it, so without JavaScript the page has no dead button.

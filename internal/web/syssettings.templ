@@ -506,7 +506,7 @@ templ sysDayChips(row sysRow, label string) {
 	<div class="cks chips" role="group" aria-label={ label }>
 		<input type="hidden" name={ "m." + row.Key } value="1"/>
 		for _, c := range row.Choices {
-			<label class="ucheck chip"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ dayLabels[c] }<span class="sr-only">{ " " + dayFull[c] }</span></span></label>
+			@ui.Chip(ui.ChipData{Label: dayLabels[c], Long: dayFull[c], Name: row.InputName(), Value: c, Checked: slices.Contains(sysChecked(row), c)})
 		}
 	</div>
 }

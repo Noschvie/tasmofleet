@@ -24,7 +24,7 @@
     var chipX = function (label) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "pol-chip-x";
+      b.className = "chip-x";
       b.setAttribute("aria-label", label);
       b.textContent = "\u00d7";
       return b;
@@ -50,9 +50,13 @@
         if (!box.checked) {
           return;
         }
+        // the same parts ui.Chip draws, as a chip that is on and has a cross of its own
         var chip = document.createElement("span");
-        chip.className = "pol-chip";
-        chip.appendChild(document.createTextNode(box.value));
+        chip.className = "chip chip-on";
+        var text = document.createElement("span");
+        text.className = "chip-l";
+        text.textContent = box.value;
+        chip.appendChild(text);
         var x = chipX("Remove " + box.value);
         x.addEventListener("click", function () {
           box.checked = false;
@@ -84,24 +88,26 @@
     devSearch.addEventListener("input", filter);
     hush(devSearch, ["input", "change"]);
     scope.querySelector("[data-scope-list]").addEventListener("change", drawDevChips);
-    // tags: a ticked tag is a chip, an unticked one a pill with its count (an unused one is gone)
+    // tags: a ticked tag sits among the chosen ones, an unticked one among the used with its count (an unused one is
+    // gone). The labels are those ui.Chip draws in the two containers.
     var tagChips = scope.querySelector("[data-tag-chips]");
     var tagUsed = scope.querySelector("[data-tag-used]");
     var placeTag = function (label) {
       var box = label.querySelector("input");
       if (box.checked) {
         tagChips.appendChild(label);
-      } else if (label.getAttribute("data-n") === "0") {
+      } else if (box.getAttribute("data-n") === "0") {
         label.remove();
       } else {
         tagUsed.appendChild(label);
       }
     };
+    var tagLabelSelector = "[data-tag-chips] > label, [data-tag-used] > label";
     var tagLabels = function () {
-      return Array.prototype.slice.call(scope.querySelectorAll("label.pol-tag"));
+      return Array.prototype.slice.call(scope.querySelectorAll(tagLabelSelector));
     };
     scope.addEventListener("change", function (e) {
-      var label = e.target instanceof Element ? e.target.closest("label.pol-tag") : null;
+      var label = e.target instanceof Element ? e.target.closest(tagLabelSelector) : null;
       if (label) {
         placeTag(label);
       }
@@ -112,19 +118,23 @@
       })[0];
       if (!found) {
         found = document.createElement("label");
-        found.className = "pol-pill pol-tag";
-        found.setAttribute("data-n", "0");
+        found.className = "chip";
         var box = document.createElement("input");
         box.type = "checkbox";
         box.name = "tag";
         box.value = name;
+        box.setAttribute("data-n", "0");
         var text = document.createElement("span");
+        text.className = "chip-l";
         text.textContent = name;
+        var n = document.createElement("span");
+        n.className = "chip-n";
+        n.textContent = "0";
         var x = document.createElement("span");
-        x.className = "pol-chip-x";
+        x.className = "chip-x";
         x.setAttribute("aria-hidden", "true");
         x.textContent = "\u00d7";
-        found.append(box, text, x);
+        found.append(box, text, n, x);
         tagChips.appendChild(found);
       }
       var cb = found.querySelector("input");
@@ -168,7 +178,7 @@
       return o.value;
     });
     exChips.addEventListener("change", function (e) {
-      var label = e.target instanceof Element ? e.target.closest("label.pol-exc") : null;
+      var label = e.target instanceof Element ? e.target.closest("label") : null;
       if (label && !e.target.checked) {
         label.remove();
       }
@@ -181,16 +191,17 @@
         }
       }
       var label = document.createElement("label");
-      label.className = "pol-pill pol-exc";
+      label.className = "chip";
       var box = document.createElement("input");
       box.type = "checkbox";
       box.name = "except";
       box.value = name;
       box.checked = true;
       var text = document.createElement("span");
+      text.className = "chip-l";
       text.textContent = name;
       var x = document.createElement("span");
-      x.className = "pol-chip-x";
+      x.className = "chip-x";
       x.setAttribute("aria-hidden", "true");
       x.textContent = "\u00d7";
       label.append(box, text, x);

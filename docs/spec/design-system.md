@@ -506,22 +506,41 @@ Component: `ui.Table(TableData{Key, Class, Caption, CaptionVisible, BodyAttrs, S
 
 Also: [desktop, dark](../design/styleguide/tables-desktop-dark.png) · [phone, light](../design/styleguide/tables-phone-light.png) · [phone, dark](../design/styleguide/tables-phone-dark.png)
 
+### Chips and tags
+
+A chip is a filter or a choice you can toggle: a pill (`--r-pill`), 28 px high (44 px on phones, `--ctl`),
+`500 12.5px`, the control border; a count after the label in text-2. It comes in three shapes that draw alike:
+a `label > input[type=checkbox|radio]` (works without JavaScript; the checked chip is selected), a link
+(`Href`: a filter that changes the address, so it works without JavaScript too; the one the page shows is
+`aria-current="page"`) and a button (`aria-current="true"`; a filter of a draft that has no page to link to).
+Selected is the accent tint of the Selected rule below, never inverted; the checked or current state is
+`:has(input:checked)` or `[aria-current]`. A chip can have a second line (`Sub`, the update's quick picks), the
+full word for a screen reader after an abbreviation (`Long`, "Mon" and "Monday"), and a cross that shows while
+it is ticked instead of its count (`Remove`, the tags and exceptions of a policy rule). The strip that holds
+the chips (`.dv-chips`, `.add-chips`, `.pol-pills`, `.cks`) keeps its own name: it scrolls or wraps, and a
+strip that scrolls fades its edge (see Page header, crumbs and tabs).
+
+A tag is a read-only outlined label (`--color-border-strong`, radius 5, `500 11.5px`) for a kind or a source
+(Proxy, System, CLI, MQTT discovery, Network scan, a device name). A tag never carries a state; a state is a
+badge, and a tag has no tone. `TagOf` adds a hint, a link or the mono font.
+
+Component: `ui.Chip(ui.ChipData{Label, Count, Sub, Long, Title, Name, Value, Form, Radio, Checked, Href, Current,
+Remove, Attrs})` (`Attrs` of a chip around an input go on its input, where a script finds the control),
+`ui.Tag(label)`, `ui.TagOf(ui.TagData{Label, Title, Href, Mono, Attrs})` (#1095). They replaced `label.chip`,
+`.ucheck.chip`, `.dv-chip`, `.add-chip`, `.pol-pill` and `.tag`; `static/policy.js` builds the same classes
+(`chip`, `chip-l`, `chip-n`, `chip-x`, `chip-on`, `tag`) for the pills it adds in the browser, and
+`chip_classes_test.go` fails on the old names in `app.css`, the templates and the scripts. A policy exception is
+the one chip with its own tone: it is tinted warn while ticked (a page rule, the field says what it is).
+
+![Chips and tags, desktop, light](../design/styleguide/chips-desktop-light.png)
+
+Also: [desktop, dark](../design/styleguide/chips-desktop-dark.png) · [phone, light](../design/styleguide/chips-phone-light.png) · [phone, dark](../design/styleguide/chips-phone-dark.png)
+
 ### Patterns without a style guide section yet
 
 The sections below describe patterns the app uses every day that `/styleguide` does not show yet. Each gets
 its style guide section, its screenshots and, where named, its component with the issue in brackets; until
 then the rule here is the reference for new markup.
-
-### Chips and tags
-
-A chip is a filter you can toggle: a pill (`--r-pill`), 28 px high (44 px on phones), `500 12.5px`, the
-control border; a count after the label in text-2; checked uses the selected state. It is a
-`label > input[type=checkbox|radio]`, so it works without JavaScript. A tag is a read-only outlined label
-(`--color-border-strong`, radius 5, `500 11.5px`) for a kind or a source (Proxy, System, CLI, a device tag).
-A tag never carries a state; a state is a badge.
-
-Component: `ui.Chip(ChipData{Label, Count, Name, Value, Checked})`, `ui.Tag(label)` (#1095). They replace
-`label.chip`, `.ucheck.chip`, `.dv-chip`, `.add-chip`, `.pol-pill` and `.tag`.
 
 ### Folds
 
@@ -702,8 +721,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
 12. `main` has no 120 px bottom padding (the prototype's, from before the status bar). The body
     reserves the status bar plus one `--sp-16` gap, so a page ends one gap above the bar (#773).
 13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button, the default
-    (outlined) buttons, the filter chips (`label.chip`, `.ucheck.chip`), the clickable chips (`.dv-chip`,
-    `.add-chip`), the policy pills (`.pol-pill`), the switch track in its off state (`.swtrack`, border),
+    (outlined) buttons, the chips (`.chip`, #1095), the switch track in its off state (`.swtrack`, border),
     the filled switch tracks in their off state (`.pwr .sw`, `.utoggle .sw`, `.devsw`: the fill marks the
     control, the white knob keeps 3.5:1 or more on it) and the segment controls (`.seg`, `.useg`, frame and
     inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1

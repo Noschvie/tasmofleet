@@ -536,7 +536,7 @@ func TestBackupsTileOpensTheListOfDevicesWithoutABackup(t *testing.T) {
 	if strconv.Itoa(len(rows)) != m[2] {
 		t.Errorf("tile counts %s, list shows %d", m[2], len(rows))
 	}
-	chip := regexp.MustCompile(`<a class="dv-chip"[^>]*aria-current="true"[^>]*>No backup<span class="dv-n">(\d+)</span>`).FindStringSubmatch(list)
+	chip := regexp.MustCompile(`<a class="chip"[^>]*aria-current="page"[^>]*><span class="chip-l">No backup</span><span class="chip-n">(\d+)</span>`).FindStringSubmatch(squash(list))
 	if chip == nil || chip[1] != m[2] {
 		t.Errorf("the active chip must say No backup with the tile's count %s, got %v", m[2], chip)
 	}

@@ -65,13 +65,13 @@ for (const tile of tiles) {
     await page.locator("a.stat-tile").filter({ hasText: tile }).click();
     // the tile's filter is in force: it is in the URL and "All" is not the selected chip
     await expect(page).toHaveURL(/[?&](health|chip)=/);
-    const all = page.locator(".dv-chips a.dv-chip").filter({ hasText: /^All/ });
-    await expect(all).not.toHaveAttribute("aria-current", "true");
+    const all = page.locator(".dv-chips a.chip").filter({ hasText: /^All/ });
+    await expect(all).not.toHaveAttribute("aria-current", "page");
 
     await all.click();
     await expect(page).not.toHaveURL(/[?&](health|chip)=/);
-    await expect(all).toHaveAttribute("aria-current", "true");
-    await expect(all.locator(".dv-n")).toHaveText(String(total));
+    await expect(all).toHaveAttribute("aria-current", "page");
+    await expect(all.locator(".chip-n")).toHaveText(String(total));
     await expect(
       page.locator(
         "table[data-table=devices] tbody tr[data-id]",

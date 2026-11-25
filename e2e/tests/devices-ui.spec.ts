@@ -136,18 +136,18 @@ test("Columns button shares the toolbar's vertical centre and height", async ({
   await open(page, 1280);
   // the toolbar's first row: search, filter chips, Chip and Tag, and Columns at its end (design v2)
   const items = page.locator(
-    ".dv-q, .dv-chip, .dv-pick, .dv-cols details.colmenu > summary",
+    ".dv-q, .dv-chips .chip, .dv-pick, .dv-cols details.colmenu > summary",
   );
   await expect(items.last()).toBeVisible();
   // One in-page measurement: #devtable reloads 0.5 s after the first health reports, and separate calls
   // could read the toolbar from the old table and the frame from a node the swap had already removed.
   const { boxes, tableRight } = await page.evaluate(() => {
-    const sel = ".dv-q, .dv-chip, .dv-pick, .dv-cols details.colmenu > summary";
+    const sel = ".dv-q, .dv-chips .chip, .dv-pick, .dv-cols details.colmenu > summary";
     const boxes = [...document.querySelectorAll(sel)]
       .filter((e) => e.getBoundingClientRect().width > 0)
       .map((e) => {
         const r = e.getBoundingClientRect();
-        return { c: r.top + r.height / 2, h: r.height, right: r.right };
+        return { c: r.top + r.height / 2, h: r.height, right: r.right, chip: e.classList.contains("chip") };
       });
     const frame = document.querySelector(
       ".tablewrap[data-key=devices] > .tablescroll",
@@ -158,9 +158,14 @@ test("Columns button shares the toolbar's vertical centre and height", async ({
     };
   });
   expect(boxes.length).toBeGreaterThan(1);
+  // the filter chips are 28 px (ui.Chip, #1095), the controls beside them 34: the height is the controls', the
+  // centre is everyone's
+  const controls = boxes.filter((b) => !b.chip);
   for (const b of boxes) {
     expect(Math.abs(b.c - boxes[0].c)).toBeLessThanOrEqual(1);
-    expect(Math.abs(b.h - boxes[0].h)).toBeLessThanOrEqual(1);
+  }
+  for (const b of controls) {
+    expect(Math.abs(b.h - controls[0].h)).toBeLessThanOrEqual(1);
   }
   // right-aligned at the edge of the table's frame (the table scrolls inside it)
   expect(

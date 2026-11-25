@@ -65,7 +65,8 @@ func TestNewDevicesFilterByState(t *testing.T) {
 		}
 	}
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
-	for _, want := range []string{`>All<span class="add-chip-n">3</span>`, `>Online<span class="add-chip-n">1</span>`, `>Offline<span class="add-chip-n">2</span>`} {
+	body = squash(body)
+	for _, want := range []string{`>All</span><span class="chip-n">3</span>`, `>Online</span><span class="chip-n">1</span>`, `>Offline</span><span class="chip-n">2</span>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("chips lack %q", want)
 		}
@@ -241,5 +242,25 @@ func TestNewDevicesActionsKeepStateAndSort(t *testing.T) {
 	// the default view needs no parameters
 	if r, _ := e.do(t, "POST", "/discovery/proposals/1/dismiss", "admin", url.Values{"version": {"v1"}}); r.Header.Get("Location") != "/tf/devices/new?ok=dismissed" {
 		t.Errorf("default redirect %q", r.Header.Get("Location"))
+	}
+}
+
+// Why (#1095, audit A3-010): the Source column says where a device was found (MQTT discovery or a network scan), a
+// kind and not a state. An accent badge for MQTT and a neutral one for a scan made one source look like news and the
+// other like a result; a tag is the design system's read-only label for a kind or a source, with no tone.
+func TestNewDevicesSourceIsATagNotAToneBadge(t *testing.T) {
+	e, _ := listFixture(t)
+	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
+	i := strings.Index(body, "add-disc-table")
+	table := body[i : i+strings.Index(body[i:], "</tbody>")]
+	for _, want := range []string{`<span class="tag">MQTT discovery</span>`, `<span class="tag">Network scan</span>`} {
+		if !strings.Contains(table, want) {
+			t.Errorf("the Source column lacks %s", want)
+		}
+	}
+	for _, bad := range []string{`bdg t-accent">MQTT`, `bdg t-neutral">Network`, `bdg t-accent">Network`} {
+		if strings.Contains(table, bad) {
+			t.Errorf("the Source column still draws a tone badge: %s", bad)
+		}
 	}
 }

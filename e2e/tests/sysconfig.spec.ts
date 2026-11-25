@@ -108,7 +108,7 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await pick("SaveData");
   await page.locator("input[name='want']").fill("0");
   await page.locator("input[name='name']").fill("Flash wear");
-  await page.locator("[data-scope] label.pol-pill", { hasText: "ESP32 (all variants)" }).click(); // Applies to is always open
+  await page.locator("[data-scope] label.chip", { hasText: "ESP32 (all variants)" }).click(); // Applies to is always open
 
   // The devices card updates while editing and stores nothing.
   await expect(page.locator("#rule-devices")).toContainText(/Device/);

@@ -31,6 +31,7 @@ var sgSections = []sgSection{
 	{"tiles", "Stat tiles and fleet health"},
 	{"lists", "Attention list and transactions"},
 	{"tables", "Data tables"},
+	{"chips", "Chips and tags"},
 	{"tabs", "Page header, crumbs and tabs"},
 	{"menus", "Menus"},
 	{"dialogs", "Dialogs"},
@@ -252,6 +253,43 @@ templ styleguidePage(v sgView) {
 			}
 			<p class="sg-label">Pager</p>
 			@ui.Pager(ui.PagerData{Page: 2, Pages: 6, Total: 139, Noun: "events", Prev: v.Base + "/styleguide", Next: v.Base + "/styleguide", Sizes: []ui.PagerSize{{N: 25, Href: v.Base + "/styleguide", Current: true}, {N: 50, Href: v.Base + "/styleguide"}, {N: 100, Href: v.Base + "/styleguide"}}})
+		}
+		@sgSec("chips") {
+			<p class="sg-label">Filter chips that change the address: links, the current one is tinted</p>
+			<div class="sg-row">
+				@ui.Chip(ui.ChipData{Label: "All", Count: "60", Href: v.Base + "/styleguide", Current: true})
+				@ui.Chip(ui.ChipData{Label: "Online", Count: "54", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Offline / unknown", Count: "6", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Outdated", Count: "19", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Not compliant", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"})
+			</div>
+			<p class="sg-label">Choices around an input: they work without JavaScript</p>
+			<div class="sg-row">
+				@ui.Chip(ui.ChipData{Label: "Mon", Long: "Monday", Name: "sg-day", Value: "mon", Checked: true})
+				@ui.Chip(ui.ChipData{Label: "Tue", Long: "Tuesday", Name: "sg-day", Value: "tue"})
+				@ui.Chip(ui.ChipData{Label: "Wed", Long: "Wednesday", Name: "sg-day", Value: "wed", Checked: true})
+				@ui.Chip(ui.ChipData{Label: "Thu", Long: "Thursday", Name: "sg-day", Value: "thu"})
+			</div>
+			<p class="sg-label">With a count, and a cross while ticked (the tags of a rule)</p>
+			<div class="sg-row">
+				@ui.Chip(ui.ChipData{Label: "kitchen", Count: "4", Name: "sg-tag", Value: "kitchen", Remove: true})
+				@ui.Chip(ui.ChipData{Label: "lights", Count: "9", Name: "sg-tag", Value: "lights", Checked: true, Remove: true})
+			</div>
+			<p class="sg-label">With a second line (the update's quick picks)</p>
+			<div class="sg-row">
+				@ui.Chip(ui.ChipData{Label: "Tonight 03:00", Sub: "Thu, Nov 26", Name: "sg-at", Value: "tonight", Radio: true, Checked: true})
+				@ui.Chip(ui.ChipData{Label: "Tomorrow night 03:00", Sub: "Fri, Nov 27", Name: "sg-at", Value: "tomorrow", Radio: true})
+			</div>
+			<p class="sg-label">Tags: a kind or a source, never a state</p>
+			<div class="sg-row">
+				@ui.Tag("Proxy")
+				@ui.Tag("SSO")
+				@ui.Tag("CLI")
+				@ui.Tag("MQTT discovery")
+				@ui.Tag("Network scan")
+				@ui.TagOf(ui.TagData{Label: "no OTA", Title: "Excluded from firmware updates"})
+				@ui.TagOf(ui.TagData{Label: "kitchen-plug", Href: v.Base + "/styleguide", Mono: true})
+			</div>
 		}
 		@sgSec("tabs") {
 			@ui.CrumbsSample([]ui.Crumb{{Label: "Devices", Path: "/styleguide"}, {Label: "Balcony Windowsill", Path: "/styleguide"}}, v.Base)

@@ -212,7 +212,7 @@ test(
     await page.goto(app.url + "/devices");
     for (let i = 0; i < 3; i++) {
       for (const chip of ["Online", "All"]) {
-        const link = page.locator(`a.dv-chip:has-text("${chip}")`).first();
+        const link = page.locator(`a.chip:has-text("${chip}")`).first();
         await expect(link).toBeVisible({ timeout: 40_000 });
         await Promise.all([
           page.waitForNavigation({ waitUntil: "load" }),
@@ -270,7 +270,7 @@ test("no time is drawn in the server's format under CPU throttling alone, withou
   const cdp = await ctx.newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   await page.goto(app.url + "/devices");
-  const link = page.locator('a.dv-chip:has-text("Online")').first();
+  const link = page.locator('a.chip:has-text("Online")').first();
   await expect(link).toBeVisible({ timeout: 40_000 });
   await Promise.all([
     page.waitForNavigation({ waitUntil: "load" }),

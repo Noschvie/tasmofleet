@@ -187,7 +187,7 @@ func TestNightPicksOnAClockChangeNightAreThreeOClockLocal(t *testing.T) {
 			e, _, _, _ := setupOTAAt(t, fixedClock{c.now})
 			_, body := e.do(t, "POST", "/updates/preview", "operator", startForm(nil))
 			for label, want := range map[string]string{"Tonight 03:00": c.tonight, "Tomorrow night 03:00": c.tomorrow} {
-				m := regexp.MustCompile(`value="([^"]+)"[^>]*><span class="chip-main">` + label).FindStringSubmatch(body)
+				m := regexp.MustCompile(`value="([^"]+)"[^>]*><span class="chip-l">` + label).FindStringSubmatch(body)
 				if m == nil || m[1] != want {
 					t.Errorf("%s must be %s, got %v", label, want, m)
 				}
@@ -385,7 +385,7 @@ func TestSubmitPassesTheSameStartToEveryRequest(t *testing.T) {
 func TestSubmitReadsPicksAndFieldsWithoutJavaScript(t *testing.T) {
 	e, o, _, _ := setupOTAAt(t, fixedClock{friday})
 	_, page := e.do(t, "POST", "/updates/preview", "operator", startForm(nil))
-	tonight := regexp.MustCompile(`value="([^"]+)"[^>]*><span class="chip-main">Tonight 03:00`).FindStringSubmatch(page)
+	tonight := regexp.MustCompile(`value="([^"]+)"[^>]*><span class="chip-l">Tonight 03:00`).FindStringSubmatch(page)
 	if tonight == nil {
 		t.Fatalf("no Tonight pick in: %s", page)
 	}

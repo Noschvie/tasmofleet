@@ -51,7 +51,7 @@ test("the Devices without a backup tile opens exactly those devices", async ({ p
   const rows = page.locator(".bk-table tbody tr");
   await expect(rows).toHaveCount(total - 1);
   await expect(page.locator(".bk-table").getByRole("link", { name: "plug-4m", exact: true })).toHaveCount(0);
-  await expect(page.locator(".dv-chip[aria-current=true]")).toContainText("No backup");
+  await expect(page.locator(".chip[aria-current=page]")).toContainText("No backup");
   // the device list's own chip counts the same devices
   await page.goto(app.url + "/devices?chip=nobackup");
   await expect(page.locator("table[data-table=devices] tbody tr")).toHaveCount(total - 1);
@@ -63,7 +63,7 @@ test("the Devices without a backup tile opens exactly those devices", async ({ p
   await page.goto(app.url + "/devices?chip=nobackup");
   const inside = await page.evaluate(() => {
     const row = document.querySelector(".dv-chips")!.getBoundingClientRect();
-    const c = document.querySelector('.dv-chip[aria-current="true"]')!.getBoundingClientRect();
+    const c = document.querySelector('.chip[aria-current="page"]')!.getBoundingClientRect();
     return { ok: c.left >= row.left - 0.5 && c.right <= row.right + 0.5, scrolled: window.scrollY };
   });
   expect(inside.ok, "active chip inside the row's box at 375").toBe(true);

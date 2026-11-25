@@ -226,11 +226,7 @@ templ discoveredBody(p discView) {
 		if len(p.Chips) > 0 && (len(p.Rows) > 0 || p.Filtered) {
 			<div class="add-chips" role="group" aria-label="Filter by state">
 				for _, c := range p.Chips {
-					<a class={ "add-chip", templ.KV("is-on", c.Current) } href={ templ.SafeURL(c.Href) }
-						if c.Current {
-							aria-current="true"
-						}
-					>{ c.Label }<span class="add-chip-n">{ strconv.Itoa(c.N) }</span></a>
+					@ui.Chip(ui.ChipData{Label: c.Label, Count: strconv.Itoa(c.N), Href: c.Href, Current: c.Current})
 				}
 			</div>
 		}
@@ -292,11 +288,7 @@ templ discoveredBody(p discView) {
 								</td>
 								<td class="mono" title={ r.Address }>{ r.Address }</td>
 								<td>
-									if r.MQTT {
-										@ui.Badge(ui.ToneAccent, r.Source)
-									} else {
-										@ui.Badge(ui.ToneNeutral, r.Source)
-									}
+									@ui.Tag(r.Source)
 								</td>
 								<td class="add-t2"><time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></td>
 								<td class="act">
@@ -737,11 +729,7 @@ templ scanLive(b scanBodyView) {
 			}
 			<div class="add-chips">
 				for _, c := range b.Chips {
-					<a class={ "add-chip", templ.KV("is-on", c.Current) } href={ templ.SafeURL(c.Href) }
-						if c.Current {
-							aria-current="true"
-						}
-					>{ c.Label }<span class="add-chip-n">{ strconv.Itoa(c.N) }</span></a>
+					@ui.Chip(ui.ChipData{Label: c.Label, Count: strconv.Itoa(c.N), Href: c.Href, Current: c.Current})
 				}
 				<span class="add-gap"></span>
 				if b.Selectable {

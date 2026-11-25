@@ -324,8 +324,9 @@ test("an action row below a table has a gap", async ({ page }) => {
   expect(gap).toBeGreaterThanOrEqual(12);
 });
 
-// Why: native progress was blue, rounded and 140px wide; job bars and chips were pills; job cards had a shadow.
-// Design v2 rounds bars and chips with the small token radii (4px, 7px) but they stay no pills.
+// Why: native progress was blue, rounded and 140px wide; job bars were pills; job cards had a shadow.
+// Design v2 rounds bars with the small token radius (4px) and they stay no pills. A filter chip is a pill
+// (ui.Chip, #1095): the design system says so, and one chip radius is what the eight old families lacked.
 test("native controls are flat and full width", async ({ page }) => {
   await open(page, "/about");
   await mount(
@@ -372,7 +373,7 @@ test("native controls are flat and full width", async ({ page }) => {
     m.barBadW,
     "a failed job's bar is full, not an empty pill",
   ).toBeGreaterThan(0.9);
-  expect(m.chip, "chips are control-radius, not pills").toBe("7px");
+  expect(m.chip, "a chip is a pill").toBe("999px");
   // #329 made .btn-sm and the pager/toolbar size one --ctl-sm token, 32px on desktop (it was 28px); the
   // file button follows that token, so this test pins "same as button.sm", not an old pixel value.
   expect(m.file, "the file button is a button.sm (--ctl-sm, 32px)").toBe("32px");

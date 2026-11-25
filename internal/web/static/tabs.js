@@ -9,7 +9,7 @@
 (function () {
   "use strict";
   var STRIPS = "nav.utabs, .dv-chips";
-  // the selected one: aria-current="page" on a tab, aria-current (true, or empty) on a chip
+  // the selected one: aria-current="page" on a tab or a link chip, "true" on a button chip
   var CURRENT = '[aria-current]:not([aria-current="false"])';
 
   function scrolls(strip) {

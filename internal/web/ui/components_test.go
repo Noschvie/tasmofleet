@@ -103,6 +103,14 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"TableSrCaption":   Table(TableData{Caption: h, Key: "audit", Select: h, SortBase: h, Cols: []TableCol{{Label: h, SrOnly: true}}}),
 		"RowHead":          RowHead(RowHeadData{Class: h, Label: h}),
 		"Pager":            Pager(PagerData{Page: 1, Pages: 2, Total: 30, Noun: h, Prev: "/p", Next: "/n", Sizes: []PagerSize{{N: 25, Href: h, Current: true}}}),
+		"ChipInput":        Chip(ChipData{Label: h, Count: h, Sub: h, Long: h, Title: h, Name: h, Value: h, Form: h, Remove: true, Attrs: templ.Attributes{"data-x": h}}),
+		"ChipRadio":        Chip(ChipData{Label: h, Name: h, Value: h, Radio: true, Checked: true}),
+		"ChipLink":         Chip(ChipData{Label: h, Count: h, Title: h, Href: h, Current: true, Attrs: templ.Attributes{"data-x": h}}),
+		"ChipLinkPath":     Chip(ChipData{Label: h, Href: "/x?q=" + h}),
+		"ChipButton":       Chip(ChipData{Label: h, Count: h, Title: h, Current: true, Attrs: templ.Attributes{"hx-post": h}}),
+		"Tag":              Tag(h),
+		"TagOf":            TagOf(TagData{Label: h, Title: h, Attrs: templ.Attributes{"data-x": h}}),
+		"TagLink":          TagOf(TagData{Label: h, Title: h, Href: h, Mono: true}),
 	}
 	for name, c := range all {
 		out := comp(t, c)
@@ -821,5 +829,103 @@ func TestConsoleQuickCommandThatNeedsAConfirmationIsALink(t *testing.T) {
 	out = comp(t, Console(ConsoleData{Title: "c", Action: "/x", CSRF: "c", Quick: []QuickCmd{{Command: "Restart 1", Why: "It is offline.", WhyID: "devhd-why"}}}))
 	if strings.Contains(out, `value="Restart 1"`) || !strings.Contains(out, `aria-disabled="true"`) || !strings.Contains(out, `aria-describedby="devhd-why"`) {
 		t.Errorf("blocked Restart 1 sends nothing and says why: %s", out)
+	}
+}
+
+// tight removes the whitespace templ puts between elements on separate lines (it draws nothing in a flex box).
+func tight(s string) string {
+	for _, p := range [][2]string{{"> <", "><"}, {"> </", "></"}} {
+		s = strings.ReplaceAll(s, p[0], p[1])
+	}
+	return s
+}
+
+// Why (#1095): eight CSS families drew the same two things (a toggleable filter and a read-only label), each a
+// little different (28 or 34 px, pill or 7 px, inverted or tinted), and a page had to pick the right copy. One
+// component draws each, in the three shapes a filter has: a label around an input (works without JavaScript), a
+// link (a filter that changes the address) and a button (a filter of a draft that has no page to link to).
+func TestChipForms(t *testing.T) {
+	box := tight(comp(t, Chip(ChipData{Label: "Mon", Long: "Monday", Name: "day", Value: "mon", Checked: true, Form: "f"})))
+	for _, want := range []string{
+		`<label class="chip">`, `<input type="checkbox" name="day" value="mon" form="f" checked>`,
+		`<span class="chip-l">Mon<span class="sr-only"> Monday</span></span>`,
+	} {
+		if !strings.Contains(box, want) {
+			t.Errorf("checkbox chip: want %s in %s", want, box)
+		}
+	}
+	if got := comp(t, Chip(ChipData{Label: "Now", Name: "at", Value: "now", Radio: true})); !strings.Contains(got, `type="radio"`) || strings.Contains(got, "checked") {
+		t.Errorf("radio chip: %s", got)
+	}
+	link := tight(comp(t, Chip(ChipData{Label: "All", Count: "12", Href: "/devices?chip=", Current: true, Title: "everything"})))
+	for _, want := range []string{`<a class="chip" href="/devices?chip="`, `aria-current="page"`, `title="everything"`, `<span class="chip-n">12</span>`} {
+		if !strings.Contains(link, want) {
+			t.Errorf("link chip: want %s in %s", want, link)
+		}
+	}
+	if got := comp(t, Chip(ChipData{Label: "Offline", Href: "/x"})); strings.Contains(got, "aria-current") || strings.Contains(got, "chip-n") {
+		t.Errorf("a chip that is not current, and has no count, says neither: %s", got)
+	}
+	btn := comp(t, Chip(ChipData{Label: "Deviate", Count: "3", Current: true, Attrs: templ.Attributes{"hx-post": "/p"}}))
+	for _, want := range []string{`<button type="button" class="chip"`, `aria-current="true"`, `hx-post="/p"`} {
+		if !strings.Contains(btn, want) {
+			t.Errorf("button chip: want %s in %s", want, btn)
+		}
+	}
+}
+
+// Why (#1095): a tag with a count drops it while it is ticked and shows a cross instead (policy tags and
+// exceptions), the quick picks of the update start have a second line, and a script (policy.js, updatestart.js)
+// finds the input by its attributes: the attributes of a label chip belong on its input, where the control is.
+func TestChipPartsAndInputAttrs(t *testing.T) {
+	got := tight(comp(t, Chip(ChipData{Label: "kitchen", Count: "4", Remove: true, Name: "tag", Value: "kitchen", Attrs: templ.Attributes{"data-n": "4"}})))
+	for _, want := range []string{`<input type="checkbox" name="tag" value="kitchen" data-n="4">`, `<span class="chip-n">4</span>`, `<span class="chip-x" aria-hidden="true">×</span>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tag chip: want %s in %s", want, got)
+		}
+	}
+	if two := tight(comp(t, Chip(ChipData{Label: "Tonight", Sub: "Wed 25 Nov", Name: "at", Value: "x", Radio: true}))); !strings.Contains(two, `<span class="chip-l">Tonight</span><span class="chip-sub">Wed 25 Nov</span>`) {
+		t.Errorf("two-line chip: %s", two)
+	}
+}
+
+// Why (#1095): the chip is one class set. The old inverted look and the old family names must not come back
+// through a field (a page's Attrs must not carry a class, id, style or script into the chip).
+func TestChipAttrsRefuseWhatTheComponentOwns(t *testing.T) {
+	bad := templ.Attributes{"class": "evil", "style": "color:red", "onclick": "x()", "id": "evil", "title": "evil", "aria-current": "evil", "hx-get": "/ok"}
+	for name, c := range map[string]templ.Component{
+		"input":  Chip(ChipData{Label: "x", Name: "n", Value: "v", Attrs: bad}),
+		"link":   Chip(ChipData{Label: "x", Href: "/x", Attrs: bad}),
+		"button": Chip(ChipData{Label: "x", Attrs: bad}),
+		"tag":    TagOf(TagData{Label: "x", Href: "/x", Attrs: bad}),
+	} {
+		got := comp(t, c)
+		for _, banned := range []string{"evil", "style=", "onclick"} {
+			if strings.Contains(got, banned) {
+				t.Errorf("%s: Attrs wrote %q: %s", name, banned, got)
+			}
+		}
+		if !strings.Contains(got, `hx-get="/ok"`) {
+			t.Errorf("%s: an allowed key is dropped too: %s", name, got)
+		}
+	}
+}
+
+// Why (#1095): a tag is a read-only outlined label for a kind or a source; it is never a state (that is a badge),
+// so it has no tone and no state class. A link tag (a device in a list) and a mono tag (a device name) are the
+// same tag with a link and the mono font.
+func TestTag(t *testing.T) {
+	if got, want := comp(t, Tag("Proxy")), `<span class="tag">Proxy</span>`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if got, want := comp(t, TagOf(TagData{Label: "no OTA", Title: "why"})), `<span class="tag" title="why">no OTA</span>`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	got := comp(t, TagOf(TagData{Label: "kitchen", Href: "/devices/1", Mono: true, Title: "t"}))
+	if want := `<a class="tag mono" href="/devices/1" title="t">kitchen</a>`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if got := comp(t, TagOf(TagData{Label: "MQTT", Attrs: templ.Attributes{"data-via-mqtt": true}})); got != `<span class="tag" data-via-mqtt>MQTT</span>` {
+		t.Errorf("attrs: %s", got)
 	}
 }

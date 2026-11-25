@@ -35,7 +35,7 @@ func TestRuleFormAppliesToIsAnOpenSectionAfterSeverity(t *testing.T) {
 		`data-scope-count`,  // "N of M devices match"
 		`ESP8266`,           // the device meta shows the family
 		`id="scope-names"`,  // exceptions search devices and tags
-		`class="pol-pill"`,  // family toggles
+		`name="family"`,     // family toggles
 	} {
 		if !strings.Contains(body, w) {
 			t.Errorf("Applies to section lacks %q", w)
@@ -48,7 +48,7 @@ func TestRuleFormTagsShowTheirDeviceCount(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, nil)
 	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
-	if !strings.Contains(body, `<span class="pol-pill-n">`) {
+	if !strings.Contains(squash(body), `</span><span class="chip-n">`) {
 		t.Errorf("tags in use show no count:\n%s", body)
 	}
 }

@@ -67,9 +67,19 @@ func outsideTooltips(body string) string {
 
 var optionValue = regexp.MustCompile(`<option value="[^"]*"`)
 
+// whoHTML is what the audit page draws for a subject: auditWho of its parts.
+func whoHTML(t *testing.T, pr *principalDir, subject string) string {
+	t.Helper()
+	var b strings.Builder
+	if err := auditWho(pr.Parts(subject)).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
 // Why: an OIDC subject is a 64-character hash nobody can read. Every place
 // that shows a principal must show the name captured at sign-in, the kind as a
-// badge, and keep the subject in the tooltip only.
+// tag, and keep the subject in the tooltip only.
 func TestWhoShowsNamesBadgesAndHidesSubjects(t *testing.T) {
 	pr := newPrincipalDir(&memPrincipals{})
 	pr.Record(context.Background(), model.Principal{Subject: testSub, Name: "alice", Method: "oidc"})
@@ -78,18 +88,19 @@ func TestWhoShowsNamesBadgesAndHidesSubjects(t *testing.T) {
 		in           string
 		want, absent []string
 	}{
-		{testSub, []string{">alice <span class=\"tag\">SSO</span>", `title="` + testSub + `"`}, nil},
-		{"local:admin", []string{">admin <span class=\"tag\">Local</span>"}, nil},
+		{testSub, []string{"alice", `<span class="tag">SSO</span>`, `title="` + testSub + `"`}, nil},
+		{"local:admin", []string{"admin", `<span class="tag">Local</span>`}, nil},
 		{"discovery", []string{`<span class="tag">Discovery</span>`}, nil},
 		{"system", []string{`<span class="tag">System</span>`}, nil},
 		{"cli", []string{`<span class="tag">CLI</span>`}, nil},
-		{"proxy-user", []string{">Pat <span class=\"tag\">Proxy</span>"}, nil},
-		{"tasmofleet (OTA restore for job 3, requested by " + testSub + ")", []string{"requested by <span", ">alice</span>"}, nil},
-		{strings.Repeat("ab", 32), []string{">Unknown user</span>", `title="` + strings.Repeat("ab", 32) + `"`}, []string{"abababab<"}},
+		{"proxy-user", []string{"Pat", `<span class="tag">Proxy</span>`}, nil},
+		// a text that only contains a subject ("requested by <sub>") is no subject: its plain text, the token gone
+		{"tasmofleet (OTA restore for job 3, requested by " + testSub + ")", nil, []string{`<span class="tag">`}},
+		{strings.Repeat("ab", 32), []string{"Unknown user", `title="` + strings.Repeat("ab", 32) + `"`}, []string{"abababab<"}},
 		{"plain", []string{"plain"}, []string{"<span"}},
 	}
 	for _, c := range cases {
-		got := string(pr.Who(c.in))
+		got := whoHTML(t, pr, c.in)
 		for _, w := range c.want {
 			if !strings.Contains(got, w) {
 				t.Errorf("Who(%.20q) = %s, lacks %q", c.in, got, w)
@@ -106,6 +117,16 @@ func TestWhoShowsNamesBadgesAndHidesSubjects(t *testing.T) {
 	}
 }
 
+// Why: a name comes from the identity provider and is the person's to choose; the page draws it as text, never as markup.
+func TestWhoEscapesTheDisplayName(t *testing.T) {
+	pr := newPrincipalDir(&memPrincipals{})
+	pr.Record(context.Background(), model.Principal{Subject: testSub, Name: `<b>x</b>"`, Method: "oidc"})
+	got := whoHTML(t, pr, testSub)
+	if strings.Contains(got, "<b>") || !strings.Contains(got, "&lt;b&gt;x&lt;/b&gt;") {
+		t.Errorf("the name is not escaped: %s", got)
+	}
+}
+
 // Why: the display name can change at the identity provider; the next sign-in
 // must replace it, so old audit rows show the current name of the same subject.
 func TestRecordUpdatesAChangedName(t *testing.T) {
@@ -114,7 +135,7 @@ func TestRecordUpdatesAChangedName(t *testing.T) {
 	ctx := context.Background()
 	pr.Record(ctx, model.Principal{Subject: testSub, Name: "alice", Method: "oidc"})
 	pr.Record(ctx, model.Principal{Subject: testSub, Name: "Alice K.", Method: "oidc"})
-	if st.rows[testSub].DisplayName != "Alice K." || !strings.Contains(string(pr.Who(testSub)), "Alice K.") {
+	if st.rows[testSub].DisplayName != "Alice K." || !strings.Contains(pr.Parts(testSub).Name, "Alice K.") {
 		t.Fatalf("%+v", st.rows[testSub])
 	}
 }
@@ -141,12 +162,12 @@ func TestSharedDisplayNamesGetASubjectSuffix(t *testing.T) {
 	pr := newPrincipalDir(&memPrincipals{})
 	ctx := context.Background()
 	pr.Record(ctx, model.Principal{Subject: testSub, Name: "alice", Method: "oidc"})
-	if got := string(pr.Who(testSub)); strings.Contains(got, "\u00b7") {
+	if got := whoHTML(t, pr, testSub); strings.Contains(got, "\u00b7") {
 		t.Fatalf("a unique name needs no suffix: %s", got)
 	}
 	pr.Record(ctx, model.Principal{Subject: otherSub, Name: "Alice", Method: "oidc"}) // case-insensitive clash
 	for sub, suffix := range map[string]string{testSub: "5f2c0e", otherSub: "aa11bb"} {
-		got := string(pr.Who(sub))
+		got := whoHTML(t, pr, sub)
 		if !strings.Contains(got, " \u00b7 "+suffix) || !strings.Contains(got, `title="`+sub+`"`) {
 			t.Errorf("Who(%s) = %s", sub[:6], got)
 		}
@@ -162,11 +183,11 @@ func TestReservedDisplayNamesGetASubjectSuffix(t *testing.T) {
 	for i, name := range []string{"System", "discovery", "Root (local)", "alice"} {
 		sub := strings.Repeat(string(rune('a'+i)), 40)
 		pr.Record(ctx, model.Principal{Subject: sub, Name: name, Method: "oidc"})
-		if got := string(pr.Who(sub)); !strings.Contains(got, " \u00b7 ") {
+		if got := whoHTML(t, pr, sub); !strings.Contains(got, " \u00b7 ") {
 			t.Errorf("%q is reserved but shown plain: %s", name, got)
 		}
 	}
-	if got := string(pr.Who("local:alice")); strings.Contains(got, "\u00b7") || !strings.Contains(got, `alice <span class="tag">Local</span>`) {
+	if got := whoHTML(t, pr, "local:alice"); strings.Contains(got, "\u00b7") || !strings.Contains(got, `<span class="tag">Local</span>`) || !strings.Contains(got, "alice") {
 		t.Errorf("the local account itself: %s", got)
 	}
 }
@@ -227,7 +248,7 @@ func TestLongDisplayNamesAreShortened(t *testing.T) {
 	pr := newPrincipalDir(&memPrincipals{})
 	hash := "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b"
 	pr.Record(context.Background(), model.Principal{Subject: hash, Name: hash, Method: "header"})
-	got := string(pr.Who(hash))
+	got := whoHTML(t, pr, hash)
 	if strings.Contains(outsideTooltips(got), hash) || !strings.Contains(got, "user 9f86d081") {
 		t.Fatalf("%s", got)
 	}

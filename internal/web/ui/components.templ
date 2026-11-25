@@ -192,6 +192,106 @@ templ BadgeOf(b BadgeData) {
 	}
 }
 
+// Chip is a pill that filters or picks (ChipData): a label around an input, a link or a button, drawn alike. The
+// attributes of a label chip go on its input, those of a link or button on the element.
+templ Chip(c ChipData) {
+	switch {
+		case c.Name != "":
+			<label
+				class="chip"
+				if c.Title != "" {
+					title={ c.Title }
+				}
+			>
+				<input
+					type={ c.inputType() }
+					name={ c.Name }
+					value={ c.Value }
+					if c.Form != "" {
+						form={ c.Form }
+					}
+					checked?={ c.Checked }
+					{ c.attrs()... }
+				/>
+				@chipBody(c)
+			</label>
+		case c.Href != "":
+			<a
+				class="chip"
+				href={ templ.URL(c.Href) }
+				if c.Current {
+					aria-current="page"
+				}
+				if c.Title != "" {
+					title={ c.Title }
+				}
+				{ c.attrs()... }
+			>
+				@chipBody(c)
+			</a>
+		default:
+			<button
+				type="button"
+				class="chip"
+				if c.Current {
+					aria-current="true"
+				}
+				if c.Title != "" {
+					title={ c.Title }
+				}
+				{ c.attrs()... }
+			>
+				@chipBody(c)
+			</button>
+	}
+}
+
+// chipBody is the parts of a chip. templ puts a space between elements it finds on separate lines; the chip is a flex
+// box, which draws no whitespace between its items.
+templ chipBody(c ChipData) {
+	<span class="chip-l">{ c.Label }if c.Long != "" {
+		<span class="sr-only">{ " " + c.Long }</span>
+	}</span>
+	if c.Sub != "" {
+		<span class="chip-sub">{ c.Sub }</span>
+	}
+	if c.Count != "" {
+		<span class="chip-n">{ c.Count }</span>
+	}
+	if c.Remove {
+		<span class="chip-x" aria-hidden="true">×</span>
+	}
+}
+
+// Tag is a read-only outlined label for a kind or a source (Proxy, System, MQTT discovery). It is never a state: a
+// state is a badge.
+templ Tag(label string) {
+	<span class="tag">{ label }</span>
+}
+
+// TagOf is a Tag that needs more than its words (TagData): a hint, a link, the mono font or an attribute a script
+// finds it by.
+templ TagOf(t TagData) {
+	if t.Href != "" {
+		<a
+			class={ t.classes() }
+			href={ templ.URL(t.Href) }
+			if t.Title != "" {
+				title={ t.Title }
+			}
+			{ t.attrs()... }
+		>{ t.Label }</a>
+	} else {
+		<span
+			class={ t.classes() }
+			if t.Title != "" {
+				title={ t.Title }
+			}
+			{ t.attrs()... }
+		>{ t.Label }</span>
+	}
+}
+
 // CopyButton is the small button that copies a value (CopyData). It is hidden until static/copy.js shows it.
 templ CopyButton(c CopyData) {
 	<button
