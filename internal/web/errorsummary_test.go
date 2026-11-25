@@ -159,6 +159,29 @@ func TestOneRejectedSettingShowsNoSummary(t *testing.T) {
 	}
 }
 
+// Why (#1236): a value that cannot be read at all used to end the check at that field, so a second wrong field stayed
+// unmarked and the summary never appeared. Every refused input is marked and counted, on System settings and on the
+// setup, which share the check.
+func TestAnUnparseableSettingDoesNotHideTheOthers(t *testing.T) {
+	s, _, _, _ := sysEnv(t, true)
+	r, body := s.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.POLL_INTERVAL": {"abc"}, "v.TELEPERIOD": {"0s"}})
+	if r.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("system settings: status %d", r.StatusCode)
+	}
+	wantOneSummary(t, "system settings", body, "POLL_INTERVAL", "TELEPERIOD")
+
+	e, _, _ := setupHandlerEnv(t)
+	r, body = e.do(t, "POST", "/setup/finish", "admin", url.Values{"csrf": {"tok"}, "v.DEVICE_NETWORKS": {"not-a-cidr"}, "v.MQTT_URL": {"tcp://user:pw@broker.example:1883"}})
+	if r.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("setup: status %d", r.StatusCode)
+	}
+	wantOneSummary(t, "setup", body, "DEVICE_NETWORKS")
+	// The broker URL is composed from host and port, so its message sits under the host input.
+	if !strings.Contains(body, `id="err-v.MQTT_URL"`) || !strings.Contains(inputTag(t, body, "mqtt.host"), `aria-invalid="true"`) {
+		t.Error("setup: the broker refusal is not shown at its input")
+	}
+}
+
 // Why (#1098): the setup form has an input for every setting it may change, so a refusal of any of them has a place
 // to sit. If one lost its message element, the refusal would count towards the summary and show nowhere.
 func TestEverySetupSettingShowsItsRefusalAtTheInput(t *testing.T) {

@@ -486,6 +486,14 @@ func (s *Service) deny(ctx context.Context, req Request, why string, keys []stri
 	s.rec(req.Audit).Record(ctx, model.AuditEvent{Actor: req.Actor, Action: req.action(), Target: "settings:system", Detail: string(d), Result: "denied: " + why})
 }
 
+// addBad records msg for key unless the key already has a message: the first
+// stage that rejects a field decides its wording.
+func addBad(bad map[string]string, key, msg string) {
+	if _, ok := bad[key]; !ok {
+		bad[key] = msg
+	}
+}
+
 func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error) {
 	keys := make([]string, 0, len(req.Values)+len(req.Clear))
 	for k := range req.Values {
@@ -511,6 +519,10 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 		}
 	}
 
+	// Every rejected input is reported in one round, so a form with two bad
+	// fields marks both (and the page can count them). The first message per
+	// key wins: parse, then enum, then cross-field validation, then UI checks.
+	bad := map[string]string{}
 	cand := s.cur
 	var changed []string
 	for _, k := range keys {
@@ -521,7 +533,11 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 			want = req.Values[k]
 		}
 		if err := config.Set(&cand, k, want); err != nil {
-			return Result{}, nil, &ValidationError{Fields: map[string]string{k: config.KeyErrors(err)[k]}}
+			// cand keeps this key's current value (Set writes nothing on a
+			// parse error); a cross-field rule may judge that old value, but
+			// the parse message wins on its own key and nothing is saved.
+			bad[k] = config.KeyErrors(err)[k]
+			continue
 		}
 		if !config.Equal(s.cur, cand, k) {
 			changed = append(changed, k)
@@ -538,24 +554,32 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 		}
 	}
 	if len(changed) == 0 && len(unchanged) == 0 {
+		if len(bad) > 0 {
+			return Result{}, nil, &ValidationError{Fields: bad}
+		}
 		return Result{}, nil, nil
 	}
 	for _, k := range changed {
 		if f, _ := Lookup(k); len(f.Enum) > 0 {
 			if v, _ := config.Format(cand, k); !slices.Contains(f.Enum, v) {
-				return Result{}, nil, &ValidationError{Fields: map[string]string{k: "must be one of " + strings.Join(f.Enum, ", ")}}
+				addBad(bad, k, "must be one of "+strings.Join(f.Enum, ", "))
 			}
 		}
 	}
 	if err := config.Validate(cand); err != nil {
 		fields := config.KeyErrors(err)
 		if len(fields) == 0 {
-			fields = map[string]string{changed[0]: err.Error()}
+			fields = map[string]string{append(slices.Clone(changed), unchanged...)[0]: err.Error()} // never fail open on an unkeyed error
 		}
-		return Result{}, nil, &ValidationError{Fields: fields}
+		for k, msg := range fields {
+			addBad(bad, k, msg)
+		}
 	}
-	if fe := uiChecks(cand, changed); len(fe) > 0 {
-		return Result{}, nil, &ValidationError{Fields: fe}
+	for k, msg := range uiChecks(cand, changed) {
+		addBad(bad, k, msg)
+	}
+	if len(bad) > 0 {
+		return Result{}, nil, &ValidationError{Fields: bad}
 	}
 	// A secret only goes to the target it was entered for: a new target needs
 	// the secret typed again (or removed) in the same save.

@@ -265,6 +265,90 @@ func TestInvalidValuesAreRejectedWithFieldErrors(t *testing.T) {
 		t.Fatalf("wrote %v", st.rows)
 	}
 }
+
+// Why (#1236): a person fixes a form in one round only if every refused input is marked. A value that cannot be
+// parsed at all used to end the check at that key, so the other bad fields stayed unmarked and the page could not
+// count them. The wording of each message stays the one the single-error case shows.
+func TestEveryRejectedValueIsReportedNotOnlyTheFirstUnparseable(t *testing.T) {
+	st := newMem()
+	s, _ := newSvc(t, st)
+	_, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped,
+		Values: map[string]string{"POLL_INTERVAL": "abc", "OTA_PARALLEL": "x", "TELEPERIOD": "0s", "BACKUP_KEEP": "5"}})
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("err = %v", err)
+	}
+	for _, k := range []string{"POLL_INTERVAL", "OTA_PARALLEL"} {
+		var c config.Config
+		want := config.KeyErrors(config.Set(&c, k, map[string]string{"POLL_INTERVAL": "abc", "OTA_PARALLEL": "x"}[k]))[k]
+		if want == "" || ve.Fields[k] != want {
+			t.Errorf("%s: message %q, want the parse message %q", k, ve.Fields[k], want)
+		}
+	}
+	if ve.Fields["TELEPERIOD"] == "" {
+		t.Errorf("TELEPERIOD is not marked: %v", ve.Fields)
+	}
+	if ve.Fields["BACKUP_KEEP"] != "" {
+		t.Errorf("a valid field is marked: %v", ve.Fields)
+	}
+	if len(st.userRows()) != 0 {
+		t.Fatalf("a refused form wrote %v", st.rows)
+	}
+}
+
+// Why (#1236): two values that parse but are both too small must both be marked; validateOperational used to stop at
+// the first of POLL_INTERVAL and TELEPERIOD, so the second wrong field stayed unmarked and "Fix 2 fields." never showed.
+func TestTwoTooSmallIntervalsAreBothReported(t *testing.T) {
+	st := newMem()
+	s, _ := newSvc(t, st)
+	_, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped,
+		Values: map[string]string{"POLL_INTERVAL": "0s", "TELEPERIOD": "0s"}})
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("err = %v", err)
+	}
+	if ve.Fields["POLL_INTERVAL"] == "" || ve.Fields["TELEPERIOD"] == "" {
+		t.Errorf("both intervals must be marked: %v", ve.Fields)
+	}
+	if len(st.userRows()) != 0 {
+		t.Fatalf("a refused form wrote %v", st.rows)
+	}
+}
+
+// Why (#1236): an unparseable value alone changes nothing, so it must still be refused (not taken for "no change"),
+// and a reset in the same request must not slip through behind it.
+func TestAnUnparseableValueAloneIsStillRefused(t *testing.T) {
+	st := newMem()
+	s, _ := newSvc(t, st)
+	_, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped, Values: map[string]string{"POLL_INTERVAL": "abc"}})
+	var ve *ValidationError
+	if !errors.As(err, &ve) || len(ve.Fields) != 1 || ve.Fields["POLL_INTERVAL"] == "" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(st.userRows()) != 0 {
+		t.Fatalf("wrote %v", st.rows)
+	}
+}
+
+// Why (#1236): the UI-only rule (no user name inside the broker URL) ran only after everything else had passed, so a
+// second wrong field hid it.
+func TestUserInURLIsReportedNextToOtherErrors(t *testing.T) {
+	st := newMem()
+	s, _ := newSvc(t, st)
+	_, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped,
+		Values: map[string]string{"MQTT_URL": "tcp://user:pw@broker.example:1883", "TELEPERIOD": "0s"}})
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("err = %v", err)
+	}
+	if ve.Fields["MQTT_URL"] == "" || ve.Fields["TELEPERIOD"] == "" {
+		t.Fatalf("fields = %v, want both marked", ve.Fields)
+	}
+	if len(st.userRows()) != 0 {
+		t.Fatalf("wrote %v", st.rows)
+	}
+}
+
 func TestAuditRecordsOldAndNewButRedactsSecrets(t *testing.T) {
 	st := newMem()
 	s, aud := newSvc(t, st)

@@ -394,10 +394,10 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 			bad("MQTT_URL", "must be a broker URL such as tcp://host:1883 or ssl://host:8883")
 		}
 	}
-	switch {
-	case c.PollInterval < time.Second:
+	if c.PollInterval < time.Second {
 		bad("POLL_INTERVAL", "must be at least 1s")
-	case c.TelePeriod < time.Second:
+	}
+	if c.TelePeriod < time.Second {
 		bad("TELEPERIOD", "must be at least 1s")
 	}
 	if c.BackupMaxAge < 0 {
