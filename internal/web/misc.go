@@ -131,7 +131,7 @@ type auditPage struct {
 	Families     []string
 	Choices      []ui.Option // subjects a typed name could mean (value) with their names; asks instead of merging
 	Events       []auditRow
-	Pager        pager
+	Pager        ui.PagerData
 	Sort         tableSort
 	SortBase     string
 	Sub          string // the line under the title: how long events are kept

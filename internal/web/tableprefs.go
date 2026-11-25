@@ -450,6 +450,7 @@ var (
 	theadRe     = regexp.MustCompile(`(?s)<thead\b.*?</thead>`)
 	thRe        = regexp.MustCompile(`(?s)<th\b[^>]*>(.*?)</th>`)
 	colgroupRe  = regexp.MustCompile(`(?s)<colgroup\b.*?</colgroup>`)
+	captionRe   = regexp.MustCompile(`(?s)^\s*<caption\b.*?</caption>`)
 	classAttrRe = regexp.MustCompile(`\bclass="([^"]*)"`)
 )
 
@@ -968,6 +969,10 @@ func rewriteTable(key, tag, body string, prefs map[string]string, sorts map[stri
 		menu = ""
 	}
 	head = `<div class="tablewrap" data-key="` + key + `">` + scrollOpen + tag
+	// the caption names the table and is its first child: the colgroup this function wrote goes after it
+	if caption := captionRe.FindString(body); caption != "" {
+		return head, caption + colgroup.String() + body[len(caption):], menu, true
+	}
 	return head, colgroup.String() + body, menu, true
 }
 

@@ -452,7 +452,7 @@ templ deviceHistoryPage(p historyView) {
 		} else {
 			<p class="devcard-note">No state changes or transactions yet. Online/offline changes, updates and commands appear here, newest first.</p>
 		}
-		@pagerNav(p.Pager)
+		@ui.Pager(p.Pager)
 	</section>
 }
 

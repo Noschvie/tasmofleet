@@ -2303,7 +2303,7 @@ func deviceHistoryPage(p historyView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = pagerNav(p.Pager).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.Pager(p.Pager).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

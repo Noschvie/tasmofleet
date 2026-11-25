@@ -33,6 +33,9 @@ test("a ui.TableData is found wherever its Key stands, and one without a literal
   expect(dataSites("x.go", go(`ui.TableData{Class: "a {b}", Cols: []ui.TableCol{{Label: "L"}},\n\tKey: "later"}`), false)[0].dataTable).toBe("later");
   expect(() => dataSites("x.go", go(`ui.TableData{Class: "dense"}`), false)).toThrow(/no literal Key/);
   expect(() => dataSites("x.go", go(`ui.TableData{Key: name}`), false)).toThrow(/no literal Key/);
+  // #1094: a table with no Key (an ordered list, no registry entry) is named by its literal column labels, two at least
+  expect(dataSites("x.go", go(`ui.TableData{Class: "dense", Cols: []ui.TableCol{{Label: "Rule"}, {Label: "Setting", Col: "c"}}}`), false)).toMatchObject([{ id: "x.go buildIt", dataTable: "", labels: ["Rule", "Setting"] }]);
+  expect(() => dataSites("x.go", go(`ui.TableData{Class: "dense", Cols: []ui.TableCol{{Label: "Rule"}}}`), false)).toThrow(/fewer than two/);
   expect(dataSites("y.templ", `package web\n\ntempl thingsView() {\n\t@ui.Table(ui.TableData{Key: "things_view"}) {}\n}\n`, true)).toMatchObject([{ id: "y.templ thingsView", dataTable: "things_view" }]);
 });
 

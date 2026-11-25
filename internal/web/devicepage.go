@@ -156,7 +156,7 @@ type historyView struct {
 	Tabs  deviceTabs
 	Base  string
 	Rows  []devActRow
-	Pager pager
+	Pager ui.PagerData
 }
 
 // identCard is the Identity card. "Refresh identity" swaps the whole card, so the rows show what

@@ -80,7 +80,13 @@ func TestAuditFamilySearchAndToday(t *testing.T) {
 	count := func(q string) string {
 		t.Helper()
 		_, body := e.do(t, "GET", "/audit?"+q, "admin", nil)
-		i := strings.Index(body, " events")
+		i := strings.Index(body, " events") // the pager's "Page 1 of 1, 2 events" (the table's caption says "Audit events" before it)
+		if at := strings.Index(body, "</table>"); at >= 0 {
+			i = at + strings.Index(body[at:], " events")
+			if i < at {
+				i = -1
+			}
+		}
 		if i < 0 {
 			return "no count in " + body[:min(len(body), 200)]
 		}
@@ -323,5 +329,46 @@ func TestAuditPagerUsesTheDesignSystemButtons(t *testing.T) {
 	cur := regexp.MustCompile(`<a [^>]*aria-current="page"[^>]*>([^<]*)</a>`).FindAllStringSubmatch(nav("&page=2"), -1)
 	if len(cur) != 1 || cur[0][1] != "25" || !strings.Contains(cur[0][0], "btn-current") || !strings.Contains(cur[0][0], "page=2") {
 		t.Errorf("page 2: exactly the current size is marked, as a link to this page with btn-current: %q", cur)
+	}
+}
+
+// Why (#1094): the events table has no heading of its own (the page title names the page, not the
+// table), so it is named by a caption, and its header cells say they head a column. The caption must
+// stay the first child of the table when the server rewrites the table for the user's saved columns:
+// a <caption> after the <colgroup> is invalid and browsers drop the caption.
+func TestAuditTableHasCaptionFirstAndColumnScope(t *testing.T) {
+	now := time.Date(2030, 1, 15, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct{ name, pref string }{
+		{"defaults", ""},
+		{"custom order and a hidden column", `{"o":["action","actor"],"h":["target"]}`},
+		{"a pinned column and a width", `{"p":{"result":"r"},"w":{"actor":30}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fp := newFakePrefs()
+			e := setupWith(t, func(d *Deps) { d.Prefs = fp; d.Clock = noonClock{now} })
+			e.aud.Record(t.Context(), model.AuditEvent{ID: 1, At: now.Add(-time.Hour), Actor: "alice", Action: "device.update", Target: "device:1", Result: "ok"})
+			if tc.pref != "" {
+				_ = fp.SetUserPref(t.Context(), "test:admin", "table.audit", tc.pref)
+			}
+			_, body := e.do(t, "GET", "/audit", "admin", nil)
+			i := strings.Index(body, `<table`)
+			if i < 0 {
+				t.Fatal("no table on the audit page")
+			}
+			tbl := body[i : i+strings.Index(body[i:], "</table>")]
+			after := tbl[strings.Index(tbl, ">")+1:]
+			if !strings.HasPrefix(after, `<caption class="sr-only">Audit events</caption>`) {
+				t.Errorf("the caption is not the first child of the table: %.200s", after)
+			}
+			head := tbl[strings.Index(tbl, "<thead"):strings.Index(tbl, "</thead>")]
+			for _, th := range regexp.MustCompile(`<th\b[^>]*>`).FindAllString(head, -1) {
+				if !strings.Contains(th, `scope="col"`) && !strings.Contains(th, `class="spare"`) {
+					t.Errorf("header cell without scope=col: %s", th)
+				}
+			}
+			if !strings.Contains(tbl, `data-table="audit"`) {
+				t.Error("the audit table keeps its registry key: saved widths, order and pins live under it")
+			}
+		})
 	}
 }

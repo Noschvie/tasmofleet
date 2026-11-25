@@ -99,6 +99,10 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"DiffUnified":      Diff(DiffData{OldLabel: h, NewLabel: h, Unified: true, Rows: []DiffRow{{Key: h, Old: h, New: h, Changed: true}}}),
 		"Notes":            Notes([]NoteBlock{{Kind: "h", Text: h}, {Kind: "p", Text: h}, {Kind: "ul", Items: []string{h}}, {Kind: "code", Text: h}, {Kind: "breaking", Text: h, Items: []string{h}}}),
 		"LivePill":         LivePill("ok", h),
+		"Table":            Table(TableData{Caption: h, CaptionVisible: true, Class: h, Cols: []TableCol{{Label: h, Class: h}}, BodyAttrs: templ.Attributes{"data-x": h, "style": h, "onclick": h}}),
+		"TableSrCaption":   Table(TableData{Caption: h, Key: "audit", Select: h, SortBase: h, Cols: []TableCol{{Label: h, SrOnly: true}}}),
+		"RowHead":          RowHead(RowHeadData{Class: h, Label: h}),
+		"Pager":            Pager(PagerData{Page: 1, Pages: 2, Total: 30, Noun: h, Prev: "/p", Next: "/n", Sizes: []PagerSize{{N: 25, Href: h, Current: true}}}),
 	}
 	for name, c := range all {
 		out := comp(t, c)

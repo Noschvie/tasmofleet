@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
@@ -160,6 +162,19 @@ type policyView struct {
 	Banner    string
 	Alert     *devAlert
 	Templates []ruleTemplate
+}
+
+// ruleBodyAttrs are the hooks of the drag script on the rule table's body: the list it reorders and the form that
+// sends the new order. The table is an ordered list, not a registry table, so it has no data-table key.
+var ruleBodyAttrs = templ.Attributes{"data-rule-list": true, "data-order-form": "rule-order"}
+
+// tableCols are the columns of the rule table: the data columns the template names, and for an admin the drag
+// handle in front and the row menu behind them, named for a screen reader only.
+func (p policyView) tableCols(data ...ui.TableCol) []ui.TableCol {
+	if !p.Admin {
+		return data
+	}
+	return slices.Concat([]ui.TableCol{{Label: "Order", SrOnly: true}}, data, []ui.TableCol{{Label: "Actions", SrOnly: true}})
 }
 
 // policyRender writes the overview.

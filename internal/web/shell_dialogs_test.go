@@ -44,7 +44,7 @@ func TestRowMenuEllipsisFollowsWhetherTheStepAsksForInput(t *testing.T) {
 func TestSelectAllHeaderCellIsASelectionCell(t *testing.T) {
 	e := cmdEnv(t, &fakeCmd{})
 	_, body := e.do(t, "GET", "/devices", "admin", nil)
-	if !strings.Contains(body, `<th class="sel"><input type="checkbox" data-select-all`) {
+	if !strings.Contains(body, `<th scope="col" class="sel"><input type="checkbox" data-select-all`) {
 		t.Errorf("devices select-all header cell is not th.sel")
 	}
 }

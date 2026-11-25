@@ -849,15 +849,46 @@ table {
   border-collapse: collapse;
   font-size: var(--fs-ui);
 }
+/* the one header style of every data table (the prototype's, #1094): a 38 px surface-2 band, 500 12px,
+   sentence case. The keyed tables repeat it in their frame (.tablescroll) and the pinned cells keep it. */
 thead th {
   text-align: left;
-  font-size: var(--fs-small);
-  font-weight: 500;
+  height: 38px;
+  padding: 0 10px;
+  background: var(--color-surface-2);
+  font: 500 var(--fs-small) var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--color-text-2);
-  padding: 8px 10px;
   border-bottom: var(--hair-w) solid var(--color-border);
   white-space: nowrap;
-  vertical-align: bottom;
+  vertical-align: middle;
+}
+table > caption {
+  caption-side: top;
+  padding: var(--sp-8) 10px;
+  text-align: left;
+  font: 600 var(--fs-ui) var(--font-sans);
+  color: var(--color-text);
+}
+/* the row header (ui.RowHead): the name of the row, set like the first cell of the keyed tables. :where keeps
+   it at zero specificity so a table that styles its own row heads (the GPIO pin tables) wins */
+:where(tbody th[scope="row"]) {
+  padding: 6px 10px;
+  border-bottom: var(--hair-w) solid var(--color-border);
+  text-align: left;
+  font-weight: 600;
+  vertical-align: middle;
+}
+@media (max-width: 44.99rem) {
+  /* a table without .dense is a stack of blocks on a phone: its caption and its row head are blocks too */
+  table:not(.dense) > caption {
+    display: block;
+  }
+  :where(table:not(.dense) tbody th[scope="row"]) {
+    padding: var(--sp-4) var(--sp-12);
+    border: 0;
+  }
 }
 td {
   padding: 6px 10px;
@@ -10822,19 +10853,8 @@ dialog.fw-notes-dlg .fw-dlg-body {
   min-width: 950px; /* the fixed columns take 776 px with the selection column, the name keeps 170 */
 }
 .add-table thead th {
-  height: 38px;
-  padding: 0 10px;
-  background: var(--color-surface-2);
-  border-bottom: var(--hair-w) solid var(--color-border);
-  text-align: left;
-  font: 500 12px var(--font-sans);
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--color-text-2);
-  white-space: nowrap;
-  overflow: hidden;
+  overflow: hidden; /* the header look is the base thead th */
   text-overflow: ellipsis;
-  vertical-align: middle;
 }
 .add-table td {
   height: 52px;
@@ -13578,6 +13598,23 @@ main.bare {
 tbody[data-rule-list] > tr.is-drag {
   opacity: 0.4;
 }
+/* the rule table sits in its card edge to edge from 45rem (design-system.md, Data tables): the header band spans
+   the card, whose corners it follows; below it every row is a card of its own and keeps the padding */
+@media (min-width: 45rem) {
+  #rules.devcard {
+    padding: 0;
+  }
+  #rules.devcard > table > thead > tr > th:first-child {
+    border-top-left-radius: 9px;
+  }
+  #rules.devcard > table > thead > tr > th:last-child {
+    border-top-right-radius: 9px;
+  }
+  /* the last row's hairline would double the card's own bottom border */
+  #rules.devcard > table > tbody > tr:last-child > td {
+    border-bottom: 0;
+  }
+}
 tbody[data-rule-list] td[data-label="Setting"] {
   max-width: 28ch;
   overflow: hidden;
@@ -15513,9 +15550,7 @@ details.devcard > summary {
   border-top: var(--hair-w) solid var(--color-border);
 }
 .gt-ptab thead th {
-  font: 600 11.5px var(--font-sans);
-  color: var(--color-text-2);
-  border-top: 0;
+  border-top: 0; /* the header look is the base thead th */
 }
 .gt-ptab tr.gt-bad td,
 .gt-ptab tr.gt-bad th {

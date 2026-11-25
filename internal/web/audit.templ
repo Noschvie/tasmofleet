@@ -40,10 +40,13 @@ templ auditView(base string, p auditPage) {
 	}
 	if len(p.Events) > 0 {
 		<section class="audit-card" aria-label="Events">
-			<table class="audittable dense" data-table="audit" data-sortbase={ p.SortBase } data-sort={ p.Sort.Key } data-dir={ p.Sort.Dir }>
-				<colgroup><col class="c-time"/><col class="c-actor"/><col class="c-action"/><col class="c-target"/><col/><col class="c-res"/><col class="c-det"/></colgroup>
-				<thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Summary</th><th>Result</th><th>Details</th></tr></thead>
-				<tbody>
+			@ui.Table(ui.TableData{
+				Key: "audit", Class: "audittable dense", Caption: "Audit events", SortBase: p.SortBase, Sort: p.Sort.Key, Dir: p.Sort.Dir,
+				Cols: []ui.TableCol{
+					{Label: "When", Col: "c-time"}, {Label: "User", Col: "c-actor"}, {Label: "Action", Col: "c-action"}, {Label: "Target", Col: "c-target"},
+					{Label: "Summary"}, {Label: "Result", Col: "c-res"}, {Label: "Details", Col: "c-det"},
+				},
+			}) {
 					for i, ev := range p.Events {
 						<tr>
 							<td data-label="When" class="nowrap s"><time title={ stamp(ev.At) } { ui.StampAttrs(ev.At, ui.StampDateTimeSec)... }>{ ui.StampText(ev.At, ui.StampDateTimeSec) }</time></td>
@@ -73,9 +76,8 @@ templ auditView(base string, p auditPage) {
 							</td>
 						</tr>
 					}
-				</tbody>
-			</table>
-			@pagerNav(p.Pager)
+			}
+			@ui.Pager(p.Pager)
 		</section>
 	} else if p.Filtered() {
 		@ui.Empty("No events match.", "Nothing matches the filter.") {
@@ -109,36 +111,6 @@ templ auditWho(w whoParts) {
 	} else {
 		{ w.Name }
 	}
-}
-
-// pagerNav is the one paging control of every paged table (the legacy "pager" partial):
-// Previous, the position, Next and the page sizes, plain links that keep the filters.
-templ pagerNav(p pager) {
-	<nav class="pager" aria-label="Pages">
-		if p.Prev != "" {
-			@ui.Button(ui.Btn{Label: "Previous", Href: p.Prev, Rel: "prev", Small: true})
-		} else {
-			@ui.Button(ui.Btn{Label: "Previous", Small: true, Disabled: true})
-		}
-		<span class="pager-of">
-			if p.Total > 0 {
-				Page { strconv.Itoa(p.Page) } of { strconv.Itoa(p.Pages) }, { strconv.Itoa(p.Total) } { p.Noun }
-			} else {
-				No { p.Noun }
-			}
-		</span>
-		if p.Next != "" {
-			@ui.Button(ui.Btn{Label: "Next", Href: p.Next, Rel: "next", Small: true})
-		} else {
-			@ui.Button(ui.Btn{Label: "Next", Small: true, Disabled: true})
-		}
-		<span class="pager-size">
-			Per page
-			for _, s := range p.Sizes {
-				@ui.Button(ui.Btn{Label: strconv.Itoa(s.N), Href: s.Href, Small: true, Current: s.Current})
-			}
-		</span>
-	</nav>
 }
 
 // auditDetailLines is the event's JSON detail, indented, one line per span (log box).

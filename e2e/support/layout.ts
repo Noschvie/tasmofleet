@@ -579,7 +579,7 @@ export async function withFoldsOpen<T>(page: Page, fn: () => Promise<T>): Promis
 }
 
 /** The table guards of #821 (expectTableGuards), which knownLayoutIssues can name beside the guards of layoutGuards. */
-export type TableGuardId = "s" | "r";
+export type TableGuardId = "s" | "r" | "t";
 
 /**
  * knownLayoutIssues lists the pages whose guards are tolerated red for a named finding
@@ -1224,7 +1224,43 @@ export async function hoverRowProblems(page: Page, rows = 2, perRow = 8): Promis
 }
 
 /**
- * expectTableGuards runs guards s and r (as loaded and with the pointer) on every table of the page, with
+ * headerStyleProblems is guard t (#1094): every table of the design system has one header style (design-system.md,
+ * "Data tables"), so the header cells of the tables on screen must look like the base one: the same font, case,
+ * letter spacing and background. The reference is a probe thead th built outside every table frame, so it carries
+ * the base rule (app.css, thead th) and nothing a page adds; a table whose header differs (an uppercase band, a bold
+ * 11.5 px header, a frame that paints a band the base rule does not) is named with the cell and what differs. A pinned
+ * cell has the same background by rule and is judged like any other.
+ */
+export async function headerStyleProblems(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const look = (e: Element) => {
+      const c = getComputedStyle(e);
+      return { "font-family": c.fontFamily, "font-size": c.fontSize, "font-weight": c.fontWeight, "letter-spacing": c.letterSpacing, "text-transform": c.textTransform, background: c.backgroundColor };
+    };
+    const probe = document.createElement("table");
+    probe.innerHTML = "<thead><tr><th>probe</th></tr></thead>";
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    document.body.append(probe);
+    const want = look(probe.querySelector("th")!);
+    probe.remove();
+    const out: string[] = [];
+    document.querySelectorAll("table").forEach((table, t) => {
+      if (!table.checkVisibility({ visibilityProperty: true }) || table.closest("dialog:not([open]), [hidden]")) return;
+      const name = table.id ? `#${table.id}` : table.dataset.table ? `table[data-table=${table.dataset.table}]` : `table ${t}${table.className ? "." + String(table.className).trim().split(/\s+/).join(".") : ""}`;
+      for (const th of table.tHead?.rows[0]?.cells ?? []) {
+        if (th.classList.contains("spare") || th.getAttribute("aria-hidden") === "true") continue;
+        const got = look(th) as Record<string, string>;
+        const diff = Object.entries(want).filter(([k, v]) => got[k] !== v).map(([k, v]) => `${k} ${got[k]} (want ${v})`);
+        if (diff.length) out.push(`${name} header "${(th.textContent ?? "").replace(/\s+/g, " ").trim() || th.className}": ${diff.join(", ")}`);
+      }
+    });
+    return out;
+  });
+}
+
+/**
+ * expectTableGuards runs guards s and r (as loaded and with the pointer) and t (the header style) on every table of the page, with
  * `freeText` the labels of the columns guard s does not judge. A page and guard listed in knownLayoutIssues
  * is reported as an annotation, as expectLayout does.
  */
@@ -1234,7 +1270,9 @@ export async function expectTableGuards(page: Page, name: string, freeText: stri
   if (s.length) found.push({ guard: "s", what: "a cell is not cut off while another column has room to spare", offenders: s });
   const r = [...(await rowCoverProblems(page)), ...(await hoverRowProblems(page))];
   if (r.length) found.push({ guard: "r", what: "no element of one row over the text of another, also with the pointer on a row", offenders: r });
-  const red = withKnownIssues(name, ["s", "r"], found);
+  const t = await headerStyleProblems(page);
+  if (t.length) found.push({ guard: "t", what: "every table header cell has the one header style of the design system (font, case, background)", offenders: t });
+  const red = withKnownIssues(name, ["s", "r", "t"], found);
   expect(red.length, guardReport(name, red)).toBe(0);
 }
 

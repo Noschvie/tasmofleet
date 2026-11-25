@@ -229,3 +229,35 @@ func TestPolicyOverviewOneBrokenRuleDoesNotHideTheOthers(t *testing.T) {
 		t.Errorf("the broken rule's own page says why:\n%s", page)
 	}
 }
+
+// Why (#1094): a screen reader that lands in the rule table has no heading to go by (the page names the
+// list "Rules" only in an aria-label of the card), so the table carries its own caption, and every header
+// cell says it heads a column (scope=col). The table is an ordered list, not a registry table: it must not
+// carry data-table, which would put it under the Columns chooser and the column resizer. The drag script
+// and the order form still find the body by the same attributes.
+func TestPolicyRuleTableHasCaptionAndColumnScope(t *testing.T) {
+	e, _, _ := rulesEnv(t, "")
+	threeRules(t, e)
+	_, body := e.do(t, "GET", "/policy", "admin", nil)
+	i := strings.Index(body, `<table`)
+	if i < 0 {
+		t.Fatal("no table on the policy page")
+	}
+	tbl := body[i : i+strings.Index(body[i:], "</table>")]
+	if !strings.Contains(tbl, `<caption class="sr-only">Policy rules, highest first</caption>`) {
+		t.Errorf("the rule table has no caption:\n%.400s", tbl)
+	}
+	if first := tbl[strings.Index(tbl, ">")+1:]; !strings.HasPrefix(first, "<caption") {
+		t.Errorf("the caption must be the first child of the table: %.200s", first)
+	}
+	head := tbl[strings.Index(tbl, "<thead"):strings.Index(tbl, "</thead>")]
+	if n, cols := len(regexp.MustCompile(`<th\b`).FindAllString(head, -1)), strings.Count(head, `<th scope="col"`); n != cols || n != 7 {
+		t.Errorf("%d header cells, %d with scope=col, want 7 of 7:\n%s", n, cols, head)
+	}
+	if strings.Contains(tbl, "data-table") {
+		t.Error("the ordered rule list has no column registry entry: no data-table")
+	}
+	if tb := regexp.MustCompile(`<tbody[^>]*>`).FindString(tbl); !strings.Contains(tb, ` data-rule-list`) || !strings.Contains(tb, `data-order-form="rule-order"`) {
+		t.Errorf("the drag script finds the rule list by data-rule-list and its form by data-order-form: %s", tb)
+	}
+}

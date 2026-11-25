@@ -151,6 +151,11 @@ func TestTemplatesMatchColumnRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	sources["deviceTableData"] = dev.String()
+	var aud strings.Builder
+	if err := auditView("", auditPage{Events: []auditRow{{}}}).Render(context.Background(), &aud); err != nil {
+		t.Fatal(err)
+	}
+	sources["auditView"] = aud.String()
 	for f, src := range sources {
 		for _, m := range tableRe.FindAllStringSubmatch(src, -1) {
 			def, ok := tableDefs[m[1]]
@@ -693,5 +698,41 @@ func TestPixelTableHasASpareCellBeforeTheColumnsPinnedRight(t *testing.T) {
 	audit := `<table data-table="audit"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Summary</th><th>Result</th><th>Details</th></tr></thead><tbody><tr><td>a</td><td>b</td><td>c</td><td>d</td><td>e</td><td>f</td><td>g</td></tr></tbody></table>`
 	if out := string(applyTablePrefs([]byte(audit), nil)); strings.Contains(out, "spare") {
 		t.Errorf("a table of shares has no spare cell:\n%s", out)
+	}
+}
+
+// Why (#1094): a table is named by its <caption>, which must be the first child of the <table>
+// (HTML content model; a caption after the <colgroup> is dropped by browsers). The server writes the
+// user's own <colgroup> into the table, so it must go after the caption on every path: defaults, a
+// custom order, a hidden column and a pinned one.
+func TestApplyTablePrefsKeepsTheCaptionFirst(t *testing.T) {
+	table := func(inner string) string {
+		return `<table data-table="audit"><caption class="sr-only">Audit events</caption>` + inner + `</table>`
+	}
+	head := `<thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Summary</th><th scope="col">Result</th><th scope="col">Details</th></tr></thead><tbody><tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr><tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td></tr></tbody>`
+	colgroup := `<colgroup><col class="c-time"><col class="c-actor"><col class="c-action"><col class="c-target"><col><col class="c-res"><col class="c-det"></colgroup>`
+	for name, pref := range map[string]string{
+		"defaults": "", "custom order": `{"o":["action","actor"]}`, "hidden column": `{"h":["target"]}`,
+		"pinned column": `{"p":{"result":"r"}}`, "width": `{"w":{"actor":40}}`,
+	} {
+		prefs := map[string]string{}
+		if pref != "" {
+			prefs["table.audit"] = pref
+		}
+		for _, withGroup := range []bool{true, false} {
+			in := table(head)
+			if withGroup {
+				in = table(colgroup + head)
+			}
+			out := string(applyTablePrefs([]byte(in), prefs))
+			i := strings.Index(out, "<table")
+			after := out[i+strings.Index(out[i:], ">")+1:]
+			if !strings.HasPrefix(after, `<caption class="sr-only">Audit events</caption>`) {
+				t.Errorf("%s (colgroup %v): the caption is not the first child: %.160s", name, withGroup, after)
+			}
+			if strings.Count(out, "<caption") != 1 {
+				t.Errorf("%s (colgroup %v): the caption is not there exactly once", name, withGroup)
+			}
+		}
 	}
 }

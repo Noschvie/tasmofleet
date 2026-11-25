@@ -30,6 +30,7 @@ const dirs = ["internal", "cmd"];
 // be listed in tablePages.
 const notSites: Record<string, string> = {
   "internal/web/ui/table.templ": "ui.Table, the frame component: its callers are the sites (the Go files below)",
+  "internal/web/styleguide.templ": "the style guide's samples of the components, not pages of the app (its table is the one ui.Table draws)",
   "internal/auth/pages.go": "the auth package's plain fallback pages; the app serves the users page from accountpages.templ",
 };
 
@@ -80,11 +81,14 @@ function bracedBody(src: string, open: number): string {
 export function dataSites(file: string, src: string, isTempl: boolean): TableSite[] {
   const out: TableSite[] = [];
   for (const m of src.matchAll(/\bui\.TableData\{/g)) {
-    const key = /\bKey:\s*"([a-z_]+)"/.exec(bracedBody(src, m.index! + m[0].length - 1));
-    if (!key) throw new Error(`${file}: a ui.TableData has no literal Key, so the table cannot be named (e2e/support/table-pages.ts)`);
+    const body = bracedBody(src, m.index! + m[0].length - 1);
+    const key = /\bKey:\s*"([a-z_]+)"/.exec(body);
+    // a table without a Key is no registry table (an ordered list, the policy rules): its header labels name it, as for a <table>
+    const labels = key ? [] : [...body.matchAll(/\bLabel:\s*"([^"]+)"/g)].map((l) => l[1]);
+    if (!key && labels.length < 2) throw new Error(`${file}: a ui.TableData has no literal Key and fewer than two literal column Labels, so the table cannot be named (e2e/support/table-pages.ts)`);
     const fn = [...src.slice(0, m.index).matchAll(isTempl ? /^templ\s+(\w+)\(/gm : /^func\s+(?:\([^)]*\)\s*)?(\w+)\(/gm)].pop();
     if (!fn) throw new Error(`${file}: a ui.TableData is not inside a function or component`);
-    out.push({ id: `${file} ${fn[1]}`, file, dataTable: key[1], labels: [] });
+    out.push({ id: `${file} ${fn[1]}`, file, dataTable: key ? key[1] : "", labels });
   }
   return out;
 }
@@ -109,7 +113,7 @@ export function tableSites(): TableSite[] {
       let src = readFileSync(abs, "utf8");
       // Go comments talk about <table> a lot; only code and string literals count
       if (isGo) src = src.replace(/^\s*\/\/.*$/gm, "");
-      sites.push(...dataSites(file, src, isTempl));
+      if (!notSites[file]) sites.push(...dataSites(file, src, isTempl));
       if (/ui\.TableData\{/.test(src)) seen.add(file);
       if (isTempl && !notSites[file]) checkTableCalls(file, src);
       // in Go code only a literal table (<table> followed by its head or rows) counts: tableprefs.go

@@ -65,28 +65,14 @@ templ ruleDeleteDialog(p policyView) {
 // row is a card (name, menu, then the labelled values).
 templ policyTable(p policyView) {
 	<section class="devcard" id="rules" aria-label="Rules, highest first">
-		<table class="dense">
-			<thead>
-				<tr>
-					if p.Admin {
-						<th><span class="sr-only">Order</span></th>
-					}
-					<th>Rule</th>
-					<th>Setting</th>
-					<th>Applies to</th>
-					<th>When it deviates</th>
-					<th>Compliance</th>
-					if p.Admin {
-						<th><span class="sr-only">Actions</span></th>
-					}
-				</tr>
-			</thead>
-			<tbody data-rule-list data-order-form="rule-order">
-				for i, r := range p.Rows {
-					@policyRow(p, i, r)
-				}
-			</tbody>
-		</table>
+		@ui.Table(ui.TableData{
+			Class: "dense", Caption: "Policy rules, highest first", BodyAttrs: ruleBodyAttrs,
+			Cols: p.tableCols(ui.TableCol{Label: "Rule"}, ui.TableCol{Label: "Setting"}, ui.TableCol{Label: "Applies to"}, ui.TableCol{Label: "When it deviates"}, ui.TableCol{Label: "Compliance"}),
+		}) {
+			for i, r := range p.Rows {
+				@policyRow(p, i, r)
+			}
+		}
 		if p.Admin {
 			<form id="rule-order" method="post" action={ templ.SafeURL(p.Base + rulesPath + "/order") } hidden>
 				<input type="hidden" name="csrf" value={ p.CSRF }/>

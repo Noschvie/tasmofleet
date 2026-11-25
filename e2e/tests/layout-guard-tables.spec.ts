@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { cutCellProblems, hoverRowProblems, layoutGuards, rowCoverProblems } from "../support/layout";
+import { cutCellProblems, headerStyleProblems, hoverRowProblems, layoutGuards, rowCoverProblems } from "../support/layout";
+import { root } from "../support/stack";
 
 // Guards s and r (table cells and rows, #821) and the line-wise guard o, on built pages: each guard must
 // report the defect it exists for and stay quiet where the page is right. Without these a guard that
@@ -110,4 +113,37 @@ test("r: a table in a form that has a control named id is still named and measur
   const rows = `<tr><td title="first row">first row</td><td>a</td></tr><tr><td title="second row">second row</td><td>b</td></tr>`;
   await page_(page, `<form id="scan"><input name="id" type="hidden" value="1"><div><table style="width:400px"><thead><tr><th>Col 0</th><th>Col 1</th></tr></thead><tbody>${rows}</tbody></table></div></form>`);
   expect(await hoverRowProblems(page, 2, 2)).toEqual([]);
+});
+
+// Why (#1094): the design system has one header style for every data table. The audit found three (a band on
+// the keyed tables, none on the plain ones, a bold 11.5 px header on the GPIO pin tables); each page was right by
+// its own CSS and nothing compared them. Guard t compares every header cell with the base one.
+test("t: a header that is uppercase, bold or without the band of the others is reported, one in the base style is not", async ({ page }) => {
+  await page_(page, `<style>thead th{background:#eee;font:500 12px sans-serif;text-transform:none;letter-spacing:0}</style>
+    <table id="ok" style="width:400px"><thead><tr><th>Name</th><th>State</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>
+    <table id="loud" style="width:400px"><thead><tr><th style="text-transform:uppercase">Name</th><th style="font:600 11.5px sans-serif">State</th><th style="background:transparent">Plain</th></tr></thead><tbody><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>`);
+  const found = (await headerStyleProblems(page)).join("\n");
+  expect(found).toMatch(/#loud header "Name": text-transform uppercase/);
+  expect(found).toMatch(/#loud header "State": font-size 11.5px/);
+  expect(found).toMatch(/#loud header "Plain": background/);
+  expect(found).not.toMatch(/#ok/);
+});
+
+// The real stylesheet with the classes the pages draw: the keyed table in its frame (the devices list, the audit), a
+// plain table in a card (about, backups, the policy tables), the add-devices table and the GPIO pin table. On main
+// the frame painted a band, the plain table none and the pin table a bold 11.5 px header.
+test("t: the header cells of every table frame the app draws share one style in the real stylesheet", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const head = `<thead><tr><th>Name</th><th>Status</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody>`;
+  await page.setContent(`<!doctype html><html><body><main>
+    <div class="tablewrap"><div class="tablescroll"><table id="keyed" class="devtable dense" data-table="devices">${head}</table></div></div>
+    <section class="devcard"><table id="plain" class="dense">${head}</table></section>
+    <div class="add-table"><table id="add">${head}</table></div>
+    <details class="gt-pins" open><table id="gpio" class="gt-ptab">${head}</table></details>
+  </main></body></html>`);
+  await page.addStyleTag({ content: readFileSync(join(root, "internal/web/static/app.css"), "utf8") });
+  for (const scheme of ["light", "dark"] as const) {
+    await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), scheme);
+    expect(await headerStyleProblems(page), `${scheme}: one header style`).toEqual([]);
+  }
 });

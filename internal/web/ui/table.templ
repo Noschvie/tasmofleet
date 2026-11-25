@@ -16,10 +16,20 @@ type TableCol struct {
 // TableData is a data table (design v2, D19). Key names its entry in the column registry of
 // internal/web (tableDefs): the server writes the user's saved widths, hidden columns, order
 // and pins into the rendered table and adds the Columns chooser; tables.js adds resizing,
-// fitting and the sticky offsets of the pinned columns. The rows are the component's children.
+// fitting and the sticky offsets of the pinned columns. A table with no Key is no registry table
+// (an ordered list such as the policy rules): it has no data-table, so none of those hooks find it.
+// The rows are the component's children.
 type TableData struct {
 	Key   string
 	Class string
+	// Caption names the table for a screen reader (#1094); it is the first child of the table. It is
+	// not drawn (sr-only) while the page has a visible heading for the table; CaptionVisible draws it
+	// for a table that has none. "" writes no caption.
+	Caption        string
+	CaptionVisible bool
+	// BodyAttrs are the data attributes a script needs on the <tbody> (the policy list's drag hooks):
+	// the refusals and the order of a button's Attrs.
+	BodyAttrs templ.Attributes
 	// Select names the leading "select all" checkbox for screen readers; "" means the table
 	// has no selection column. The checkbox is hidden until select.js runs (it needs the script).
 	Select string
@@ -28,19 +38,27 @@ type TableData struct {
 	SortBase, Sort, Dir string
 }
 
-// Table renders the frame of a data table: colgroup, header and the rows given as children.
+// Table renders the frame of a data table: caption, colgroup, header and the rows given as children.
+// Every header cell is scope="col".
 templ Table(t TableData) {
 	<table
 		if t.Class != "" {
 			class={ t.Class }
 		}
-		data-table={ t.Key }
+		if t.Key != "" {
+			data-table={ t.Key }
+		}
 		if t.SortBase != "" {
 			data-sortbase={ t.SortBase }
 			data-sort={ t.Sort }
 			data-dir={ t.Dir }
 		}
 	>
+		if t.Caption != "" && t.CaptionVisible {
+			<caption>{ t.Caption }</caption>
+		} else if t.Caption != "" {
+			<caption class="sr-only">{ t.Caption }</caption>
+		}
 		<colgroup>
 			if t.Select != "" {
 				<col class="c-sel"/>
@@ -56,10 +74,11 @@ templ Table(t TableData) {
 		<thead>
 			<tr>
 				if t.Select != "" {
-					<th class="sel"><input type="checkbox" data-select-all hidden aria-label={ t.Select }/><span class="sr-only">Select</span></th>
+					<th scope="col" class="sel"><input type="checkbox" data-select-all hidden aria-label={ t.Select }/><span class="sr-only">Select</span></th>
 				}
 				for _, c := range t.Cols {
 					<th
+						scope="col"
 						if c.Class != "" {
 							class={ c.Class }
 						}
@@ -73,10 +92,79 @@ templ Table(t TableData) {
 				}
 			</tr>
 		</thead>
-		<tbody>
+		<tbody { pageAttrs(t.BodyAttrs)... }>
 			{ children... }
 		</tbody>
 	</table>
+}
+
+// RowHeadData is the first cell of a row that names the row (#1094): the rule's name, the firmware.
+type RowHeadData struct {
+	// Class goes on the cell (the page's own hook, such as p1 of the phone card), Label is its data-label.
+	Class, Label string
+}
+
+// RowHead is a <th scope="row">: a screen reader says it with each other cell of the row. The name
+// (text, a link, a badge) is the component's children.
+templ RowHead(r RowHeadData) {
+	<th
+		scope="row"
+		if r.Class != "" {
+			class={ r.Class }
+		}
+		if r.Label != "" {
+			data-label={ r.Label }
+		}
+	>
+		{ children... }
+	</th>
+}
+
+// PagerSize is one page size of a Pager: the link to it, Current for the one the list is on.
+type PagerSize struct {
+	N       int
+	Href    string
+	Current bool
+}
+
+// PagerData is the model of a Pager: made of plain links (no script) that keep the filters of the
+// page; the server builds it (newPager in internal/web). Prev and Next are empty when there is
+// nothing to go to.
+type PagerData struct {
+	Page, Pages, Total, Size int
+	Noun                     string
+	Prev, Next               string
+	Sizes                    []PagerSize
+}
+
+// Pager is the one paging control of every paged table: Previous, the position, Next and the
+// page sizes.
+templ Pager(p PagerData) {
+	<nav class="pager" aria-label="Pages">
+		if p.Prev != "" {
+			@Button(Btn{Label: "Previous", Href: p.Prev, Rel: "prev", Small: true})
+		} else {
+			@Button(Btn{Label: "Previous", Small: true, Disabled: true})
+		}
+		<span class="pager-of">
+			if p.Total > 0 {
+				Page { strconv.Itoa(p.Page) } of { strconv.Itoa(p.Pages) }, { strconv.Itoa(p.Total) } { p.Noun }
+			} else {
+				No { p.Noun }
+			}
+		</span>
+		if p.Next != "" {
+			@Button(Btn{Label: "Next", Href: p.Next, Rel: "next", Small: true})
+		} else {
+			@Button(Btn{Label: "Next", Small: true, Disabled: true})
+		}
+		<span class="pager-size">
+			Per page
+			for _, s := range p.Sizes {
+				@Button(Btn{Label: strconv.Itoa(s.N), Href: s.Href, Small: true, Current: s.Current})
+			}
+		</span>
+	</nav>
 }
 
 // DeviceCardData is one device of the phone list (design v2: below 45rem the device list shows

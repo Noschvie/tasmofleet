@@ -455,28 +455,46 @@ Component: `ui.Notes(blocks)`.
 
 Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, light](../design/styleguide/notes-phone-light.png) · [phone, dark](../design/styleguide/notes-phone-dark.png)
 
+### Data tables
+
+A table sits in a card frame edge to edge (no inner padding), with a hairline under the header and between
+rows. Header cells are `500 12px` text-2, sentence case, on a `--color-surface-2` band 38 px tall: the prototype's
+header and the one style of every table (the base `thead th` rule; no page paints another). A sortable header
+carries the sort icon (3:1 against the header) and `aria-sort`. Rows are at least 44 px tall, cells `400 13.5px`,
+values that are addresses, MACs, versions and ids in mono; an empty cell reads "-". At most two row actions, more go
+into the row menu (⋯). Pinned columns, column widths and the Columns chooser come from `tableprefs.go`. Below
+45rem a table either scrolls sideways (`.dense` tables with few columns) or turns into phone cards, one block
+per row with label before value. A table without rows shows `ui.Empty` instead of a header.
+
+A screen reader needs two more things from a table (#1094). Every header cell is `scope="col"` (`ui.Table` writes
+it), and a table with no visible heading of its own has a caption: `TableData.Caption` is the first child of the
+`<table>`, drawn only with `CaptionVisible` and otherwise `sr-only` (a page whose h1 or card title names the table
+does not draw it twice). The first cell of a row that names the row is `ui.RowHead(RowHeadData{Class, Label})`, a
+`<th scope="row">` with the name as its children, so a reader says "Keep SaveData off, Setting: SaveData 0". The
+server keeps the caption first when it writes the user's own column layout (`rewriteTable` puts the `<colgroup>`
+after it). A table with no `Key` is no registry table: `ui.Table` writes no `data-table`, so it has no Columns
+chooser and no column resizing (the policy rules are an ordered list the person drags). A script that needs a
+hook on the rows gets data attributes on the body through `BodyAttrs` (`data-rule-list`), under the rules of a
+button's `Attrs`. Guard t of the layout guards (`e2e/support/layout.ts`, `headerStyleProblems`) compares the
+header cells of every table page with the base style.
+
+Under the table: the pager (`ui.Pager(PagerData)`; `newPager` in `pager.go` builds the model and keeps the filters in
+every link): Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small buttons (`ui.Button`,
+`Small`). A page that cannot be reached (Previous on the first page, Next on the last) is a disabled button. The
+current page size is a link to the page you are on with `Current`: it uses the selected state (`.btn-current`).
+
+Component: `ui.Table(TableData{Key, Class, Caption, CaptionVisible, BodyAttrs, Select, Cols, SortBase, Sort, Dir})`,
+`ui.RowHead(RowHeadData{Class, Label})`, `ui.Pager(PagerData)`, `ui.DeviceCards` (#1094).
+
+![Data tables, desktop, light](../design/styleguide/tables-desktop-light.png)
+
+Also: [desktop, dark](../design/styleguide/tables-desktop-dark.png) · [phone, light](../design/styleguide/tables-phone-light.png) · [phone, dark](../design/styleguide/tables-phone-dark.png)
+
 ### Patterns without a style guide section yet
 
 The sections below describe patterns the app uses every day that `/styleguide` does not show yet. Each gets
 its style guide section, its screenshots and, where named, its component with the issue in brackets; until
 then the rule here is the reference for new markup.
-
-### Data tables
-
-A table sits in a card frame edge to edge (no inner padding), with a hairline under the header and between
-rows. Header cells are `500 12px` text-2, sentence case, no background band; a sortable header carries the
-sort icon (3:1 against the header) and `aria-sort`. Rows are at least 44 px tall, cells `400 13.5px`, values
-that are addresses, MACs, versions and ids in mono; an empty cell reads "-". At most two row actions, more go
-into the row menu (⋯). Pinned columns, column widths and the Columns chooser come from `tableprefs.go`. Below
-45rem a table either scrolls sideways (`.dense` tables with few columns) or turns into phone cards, one block
-per row with label before value. A table without rows shows `ui.Empty` instead of a header.
-
-Under the table: the pager: Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small
-buttons (`ui.Button`, `Small`). A page that cannot be reached (Previous on the first page, Next on the last)
-is a disabled button. The current page size is a link to the page you are on with `Current`: it uses the
-selected state (`.btn-current`).
-
-Component: `ui.Table`, `ui.Pager`, `ui.DeviceCards` (#1094).
 
 ### Chips and tags
 

@@ -30,6 +30,7 @@ var sgSections = []sgSection{
 	{"controls", "Choices and switches"},
 	{"tiles", "Stat tiles and fleet health"},
 	{"lists", "Attention list and transactions"},
+	{"tables", "Data tables"},
 	{"tabs", "Page header, crumbs and tabs"},
 	{"menus", "Menus"},
 	{"dialogs", "Dialogs"},
@@ -230,6 +231,27 @@ templ styleguidePage(v sgView) {
 					</div>
 				}
 			</div>
+		}
+		@sgSec("tables") {
+			<p class="sg-label">Header, row head and caption: a table with no heading of its own draws its caption</p>
+			@ui.Table(ui.TableData{Caption: "Rules of the sample fleet", CaptionVisible: true, Cols: []ui.TableCol{{Label: "Rule"}, {Label: "Setting"}, {Label: "Applies to"}}}) {
+				<tr>
+					@ui.RowHead(ui.RowHeadData{}) {
+						Keep SaveData off
+					}
+					<td data-label="Setting"><span class="mono">SaveData 0</span></td>
+					<td data-label="Applies to">All devices</td>
+				</tr>
+				<tr>
+					@ui.RowHead(ui.RowHeadData{}) {
+						Default sleep
+					}
+					<td data-label="Setting"><span class="mono">Sleep 50</span></td>
+					<td data-label="Applies to">-</td>
+				</tr>
+			}
+			<p class="sg-label">Pager</p>
+			@ui.Pager(ui.PagerData{Page: 2, Pages: 6, Total: 139, Noun: "events", Prev: v.Base + "/styleguide", Next: v.Base + "/styleguide", Sizes: []ui.PagerSize{{N: 25, Href: v.Base + "/styleguide", Current: true}, {N: 50, Href: v.Base + "/styleguide"}, {N: 100, Href: v.Base + "/styleguide"}}})
 		}
 		@sgSec("tabs") {
 			@ui.CrumbsSample([]ui.Crumb{{Label: "Devices", Path: "/styleguide"}, {Label: "Balcony Windowsill", Path: "/styleguide"}}, v.Base)
