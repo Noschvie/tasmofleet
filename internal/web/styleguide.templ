@@ -199,11 +199,11 @@ templ styleguidePage(v sgView) {
 					@ui.Segmented("Diff layout", "sg-layout", []ui.Option{{Value: "side", Label: "Side by side", Checked: true}, {Value: "uni", Label: "Unified"}})
 					@ui.Check("sg-keep", "Keep me signed in", "", true, false)
 					@ui.Check("sg-names", "Device names in metric labels", "Off: labels use the device ID only.", false, true)
-					@ui.Toggle("sg-metrics", "Expose Prometheus metrics", "Serves device state, power and transaction counters at /metrics.", true, false)
+					@ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and transaction counters at /metrics.", On: true})
 					<div class="sg-row">
-						@ui.PowerSwitch("Power on", true, false)
-						@ui.PowerSwitch("Power off", false, false)
-						@ui.PowerSwitch("Power (device offline)", false, true)
+						@ui.PowerSwitch(ui.PowerSwitchData{Label: "Power on", On: true})
+						@ui.PowerSwitch(ui.PowerSwitchData{Label: "Power off"})
+						@ui.PowerSwitch(ui.PowerSwitchData{Label: "Power (device offline)", Disabled: true})
 					</div>
 				</div>
 			</div>

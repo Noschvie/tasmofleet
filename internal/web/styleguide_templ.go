@@ -728,7 +728,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Toggle("sg-metrics", "Expose Prometheus metrics", "Serves device state, power and transaction counters at /metrics.", true, false).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and transaction counters at /metrics.", On: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -736,15 +736,15 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.PowerSwitch("Power on", true, false).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.PowerSwitch(ui.PowerSwitchData{Label: "Power on", On: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.PowerSwitch("Power off", false, false).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.PowerSwitch(ui.PowerSwitchData{Label: "Power off"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.PowerSwitch("Power (device offline)", false, true).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.PowerSwitch(ui.PowerSwitchData{Label: "Power (device offline)", Disabled: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

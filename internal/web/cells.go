@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/hellwand/tasmofleet/internal/model"
 )
 
@@ -81,6 +82,19 @@ func nameID(id model.DeviceID) string { return "dvn-" + devID(id) }
 // the relays are not known). The texts are rendered once per page (devicesTableBody), the name is the row's own.
 func powerLabelledBy(id model.DeviceID, relay int) string {
 	return nameID(id) + " rly-" + strconv.Itoa(relay)
+}
+
+// powerSwitchAttrs are the attributes htmx and the hover text need on a row's power switch: the toggle goes to the
+// device's power route and the answer replaces the .pcell the switch sits in (the card's and the row's alike).
+func powerSwitchAttrs(p powerCell, rl relayState) templ.Attributes {
+	return templ.Attributes{
+		"title":           relayTitle(p, rl),
+		"hx-post":         p.Base + "/devices/" + strconv.FormatInt(int64(p.ID), 10) + "/power/" + strconv.Itoa(rl.N),
+		"hx-vals":         `{"action":"TOGGLE"}`,
+		"hx-target":       "closest .pcell",
+		"hx-swap":         "innerHTML",
+		"hx-disabled-elt": "this",
+	}
 }
 
 // relayTitle is the tooltip of a relay switch.

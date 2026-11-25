@@ -338,18 +338,7 @@ templ relayBoxView(l liveView) {
 						<span class="dev-relay-n">{ rl.Name } <span class="mono">{ rl.Cmd }</span></span>
 						<span class="dev-relay-s" data-visual-mask>{ rl.Line }</span>
 					</div>
-					<button
-						type="submit"
-						class="devrelay-sw"
-						role="switch"
-						aria-checked={ ariaBool(rl.On) }
-						aria-label={ rl.Aria }
-						disabled?={ !l.Box.Enabled }
-						if l.Box.Why != "" {
-							title={ l.Box.Why }
-							aria-describedby="dev-relays-why"
-						}
-					><span class="devsw" aria-hidden="true"></span></button>
+					@ui.PowerSwitch(ui.PowerSwitchData{Label: rl.Aria, On: rl.On, Disabled: !l.Box.Enabled, Submit: true, Class: "devrelay-sw", Attrs: relaySwitchAttrs(l.Box.Why)})
 				</form>
 			}
 		</div>

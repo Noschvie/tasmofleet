@@ -83,7 +83,7 @@ templ backupsTab(p backupsView) {
 				</div>
 				<noscript>
 					<div class="bk-selbar" role="region" aria-label="Selected backups">
-						<span class="bk-selcount">Tick two backups to compare them</span>
+						<span class="bk-selcount">Select two backups to compare them</span>
 						@ui.Button(ui.Btn{Label: "Compare", Kind: "primary", Small: true, Type: "submit"})
 						if p.CanDelete {
 							@ui.Button(ui.Btn{Label: "Delete selected", Small: true, Type: "submit", Class: "bk-seldel", FormAction: p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete"})

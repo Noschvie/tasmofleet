@@ -245,7 +245,7 @@ test("a busy relay switch keeps its knob in place", async ({ page }) => {
   }
   const sw = page.locator("button.devrelay-sw").first();
   await expect(sw).toBeEnabled();
-  const knob = () => sw.evaluate((b) => b.querySelector(".devsw")!.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  const knob = () => sw.evaluate((b) => b.querySelector(".sw")!.getBoundingClientRect().top - b.getBoundingClientRect().top);
   const idle = await knob();
   await sw.click();
   await expect(sw).toBeDisabled();

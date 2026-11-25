@@ -75,7 +75,7 @@ func TestRelaySwitchAndRestartRefuseADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 			t.Errorf("the device page lacks %q", want)
 		}
 	}
-	if sw := sliceBetween(page, `class="devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
+	if sw := sliceBetween(page, `class="pwr devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
 		t.Errorf("the relay switch is not disabled with the reason: %s", sw)
 	}
 	// the header's Restart is blocked (Tab reaches it, no title is the only carrier) and a visible line gives the reason
@@ -618,7 +618,7 @@ func TestButtonsFollowTheTilesRefusalBeforeTheTrackerHasRecordedIt(t *testing.T)
 	if !strings.Contains(sliceBetween(tile, `data-tile="reach"`, `data-tile="live"`), "HTTP API off") {
 		t.Fatalf("the setup is not the measured moment: the tile does not say the API is off: %s", tile)
 	}
-	if sw := sliceBetween(page, `class="devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
+	if sw := sliceBetween(page, `class="pwr devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
 		t.Errorf("the relay switch is enabled while the tile says the API is off: %s", sw)
 	}
 	if !strings.Contains(page, `id="dev-relays-why"`) {

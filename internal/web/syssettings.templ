@@ -495,7 +495,7 @@ templ sysInput(row sysRow) {
 templ sysSwitch(row sysRow) {
 	@ui.SettingField(sysSwitchData(row)) {
 		<input type="hidden" name={ "b." + row.Key } value="1"/>
-		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(row.Key) } name={ row.InputName() } value="true" checked?={ row.Posted == "true" } { sysDescribe(row)... }/><span class="swtrack" aria-hidden="true"></span></label>
+		@ui.Toggle(ui.ToggleData{Name: row.InputName(), ID: ui.SettingControlID(row.Key), On: row.Posted == "true", Attrs: sysDescribe(row)})
 	}
 }
 
@@ -539,7 +539,7 @@ templ sysBroker(p sysPage, row sysRow) {
 		<div class="sf w-tls">
 			<div class="lrow"><span class="lbl">TLS</span></div>
 			<div class="sf-switch tlsrow">
-				<label class="swhit"><input type="checkbox" role="switch" id="f-mqtt-tls" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span class="swtrack" aria-hidden="true"></span></label>
+				@ui.Toggle(ui.ToggleData{Name: "mqtt.tls", Value: "1", ID: "f-mqtt-tls", On: p.MQTT.TLS})
 				<div class="sf-main"><div class="lrow"><label class="lbl" for="f-mqtt-tls">Use TLS</label></div></div>
 			</div>
 		</div>
@@ -639,7 +639,7 @@ templ sysOrphans(p sysPage, st sysStorage) {
 			</div>
 			<noscript>
 				<div class="bk-selbar" role="region" aria-label="Selected backups">
-					<span class="bk-selcount">Tick the backups to delete</span>
+					<span class="bk-selcount">Select the backups to delete</span>
 					<button type="submit" form="bk-orph-sel" class="btn btn-sm bk-seldel">Delete selected…</button>
 				</div>
 			</noscript>

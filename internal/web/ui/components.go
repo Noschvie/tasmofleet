@@ -308,6 +308,76 @@ func attrsWithoutTitle(a templ.Attributes) templ.Attributes {
 	return out
 }
 
+// ToggleData is a setting switch (#1096): a checkbox with role="switch", 38 x 22. With a Label it is the card of a
+// setting (the title, an explaining line, the switch); without one it draws the switch alone, for a setting whose
+// label is drawn elsewhere (SettingField, a <label for> the ID). It posts Value when on (the settings form's
+// contract is "true", the default) and nothing when off. Everything is text or a flag, never markup.
+type ToggleData struct {
+	Name, Value, ID string
+	Label, Text     string
+	On, Disabled    bool
+	// Attrs go to the input (aria-describedby, aria-invalid, autofocus, data-*); see pageAttrs. The switch's own
+	// attributes (role, aria-checked, checked) are not Attrs' to set.
+	Attrs templ.Attributes
+}
+
+func (t ToggleData) value() string {
+	if t.Value == "" {
+		return "true"
+	}
+	return t.Value
+}
+
+func (t ToggleData) attrs() templ.Attributes { return switchAttrs(t.Attrs, false) }
+
+// PowerSwitchData is the relay switch of a device (#1096): 34 x 20 inside a 48 x 44 target, a button with
+// role="switch". Exactly one of Label (aria-label) and LabelledBy (aria-labelledby: ids of the device's name and the
+// relay's word, so a fragment that goes out for every health event holds no name and no id) names it.
+type PowerSwitchData struct {
+	Label, LabelledBy string
+	On, Disabled      bool
+	Submit            bool   // type="submit": the switch of a form that also works without script
+	Class             string // classes after pwr, a page's hook (devrelay-sw)
+	// Attrs are the attributes htmx and the page need (hx-*, title, aria-describedby); see pageAttrs.
+	Attrs templ.Attributes
+}
+
+func (p PowerSwitchData) classes() string {
+	if p.Class == "" {
+		return "pwr"
+	}
+	return "pwr " + p.Class
+}
+
+func (p PowerSwitchData) buttonType() string {
+	if p.Submit {
+		return "submit"
+	}
+	return "button"
+}
+
+func (p PowerSwitchData) attrs() templ.Attributes { return switchAttrs(p.Attrs, true) }
+
+// switchAttrs is pageAttrs for a switch: role, aria-checked and checked are the component's own (a second one would
+// make the switch say two things); a button keeps its title, an input has no use for one.
+func switchAttrs(a templ.Attributes, button bool) templ.Attributes {
+	out := pageAttrs(a)
+	for k := range out {
+		switch strings.ToLower(k) {
+		case "role", "aria-checked", "checked":
+			delete(out, k)
+		case "title":
+			if !button {
+				delete(out, k)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // CopyData is a button that copies text to the clipboard (static/copy.js). Text is the value, From the selector of
 // an element whose text is copied instead (a secret shown once must not be in the markup twice); one of them is set.
 // The button is hidden in the markup and copy.js shows it, so without JavaScript the page has no dead button.

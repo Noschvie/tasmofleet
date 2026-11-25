@@ -669,25 +669,61 @@ templ Segmented(label, name string, opts []Option) {
 	</div>
 }
 
-// Toggle is a switch (a checkbox with role=switch) with a title and an explaining line. It posts
-// "true" when on (the settings form's on/off contract), nothing when off.
-templ Toggle(name, label, text string, on, disabled bool) {
-	<label class="utoggle">
-		<input type="checkbox" role="switch" name={ name } value="true" checked?={ on } disabled?={ disabled }/>
-		<span class="sw" aria-hidden="true"></span>
-		<span class="utoggle-text">
-			<b>{ label }</b>
-			if text != "" {
-				<span>{ text }</span>
-			}
-		</span>
-	</label>
+// Toggle is a setting switch (a checkbox with role="switch", 38 x 22); see ToggleData. It posts Value ("true" unless
+// set) when on, nothing when off. With a Label it is the setting's card; without one, only the switch in its label,
+// which a <label for> the ID names.
+templ Toggle(t ToggleData) {
+	if t.Label != "" {
+		<label class="utoggle">
+			@toggleInput(t)
+			<span class="sw" aria-hidden="true"></span>
+			<span class="utoggle-text">
+				<b>{ t.Label }</b>
+				if t.Text != "" {
+					<span>{ t.Text }</span>
+				}
+			</span>
+		</label>
+	} else {
+		<label class="uswitch">
+			@toggleInput(t)
+			<span class="sw" aria-hidden="true"></span>
+		</label>
+	}
 }
 
-// PowerSwitch is the relay toggle of a device row (34 x 20 inside a 44 px target); disabled
-// while the device is offline.
-templ PowerSwitch(label string, on, disabled bool) {
-	<button type="button" class="pwr" role="switch" aria-checked={ ariaBool(on) } aria-label={ label } disabled?={ disabled }><span class="sw" aria-hidden="true"></span></button>
+templ toggleInput(t ToggleData) {
+	<input
+		type="checkbox"
+		role="switch"
+		name={ t.Name }
+		value={ t.value() }
+		if t.ID != "" {
+			id={ t.ID }
+		}
+		checked?={ t.On }
+		disabled?={ t.Disabled }
+		{ t.attrs()... }
+	/>
+}
+
+// PowerSwitch is the relay switch of a device (34 x 20 inside a 48 x 44 target), in a list row, on a card and in the
+// relay box; see PowerSwitchData. Disabled while the device is offline.
+templ PowerSwitch(p PowerSwitchData) {
+	<button
+		type={ p.buttonType() }
+		class={ p.classes() }
+		role="switch"
+		aria-checked={ ariaBool(p.On) }
+		if p.Label != "" {
+			aria-label={ p.Label }
+		}
+		if p.LabelledBy != "" {
+			aria-labelledby={ p.LabelledBy }
+		}
+		disabled?={ p.Disabled }
+		{ p.attrs()... }
+	><span class="sw" aria-hidden="true"></span></button>
 }
 
 // StatTile is a dashboard tile: dot and label, the value, a hint; the whole tile links to the

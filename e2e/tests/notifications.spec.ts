@@ -137,10 +137,10 @@ test("Send test is not usable while its channel's switch is off", { tag: "@core"
     const inert = () => row.locator("button").evaluate((el) => el.closest("[inert]") !== null);
     await expect(row).toHaveClass(/is-off/);
     expect(await inert()).toBe(true);
-    await page.locator(`[data-key='${key}'] .swtrack`).click();
+    await page.locator(`[data-key='${key}'] .sw`).click();
     await expect(row).not.toHaveClass(/is-off/);
     expect(await inert()).toBe(false);
-    await page.locator(`[data-key='${key}'] .swtrack`).click(); // leave the form as found
+    await page.locator(`[data-key='${key}'] .sw`).click(); // leave the form as found
     await expect(row).toHaveClass(/is-off/);
   }
 });
@@ -149,7 +149,7 @@ test("Send test is not usable while its channel's switch is off", { tag: "@core"
 // same JSON; the secret header goes with it; and the secret must never come back to the browser.
 test("webhook: save, the secret is not shown again, Send test reaches the receiver", { tag: "@core" }, async ({ page }) => {
   await open(page);
-  await page.locator("[data-key='NOTIFY_WEBHOOK'] .swtrack").click();
+  await page.locator("[data-key='NOTIFY_WEBHOOK'] .sw").click();
   await page.locator("select[name='v.NOTIFY_WEBHOOK_FORMAT']").selectOption("homeassistant");
   await page.locator("input[name='v.NOTIFY_WEBHOOK_URL']").fill(`http://127.0.0.1:${hook.port}/api/webhook/tf-notify-9c1f`);
   await page.getByLabel("Secret header").check();
@@ -219,7 +219,7 @@ test("webhook: ntfy format sends plain text with a title; the preview follows th
 // Why: e-mail has its own settings, a status and a test; the password is write-only like the others.
 test("e-mail: Send test delivers one message and the password stays write-only", { tag: "@core" }, async ({ page }) => {
   await open(page);
-  await page.locator("[data-key='NOTIFY_SMTP'] .swtrack").click();
+  await page.locator("[data-key='NOTIFY_SMTP'] .sw").click();
   await page.locator("input[name='v.NOTIFY_SMTP_HOST']").fill("127.0.0.1");
   await page.locator("input[name='v.NOTIFY_SMTP_PORT']").fill(String(smtp.port));
   await page.locator("select[name='v.NOTIFY_SMTP_SECURITY']").selectOption("none");

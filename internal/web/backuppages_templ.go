@@ -268,7 +268,7 @@ func backupsTab(p backupsView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div><noscript><div class=\"bk-selbar\" role=\"region\" aria-label=\"Selected backups\"><span class=\"bk-selcount\">Tick two backups to compare them</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div><noscript><div class=\"bk-selbar\" role=\"region\" aria-label=\"Selected backups\"><span class=\"bk-selcount\">Select two backups to compare them</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

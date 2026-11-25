@@ -79,7 +79,7 @@ test("System, General: resetting a stored switch turns it to its default at once
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system?tab=general");
   const sw = page.locator("input[name='v.METRICS_DEVICE_LABELS']");
-  await field(page, "METRICS_DEVICE_LABELS").locator(".swtrack").click();
+  await field(page, "METRICS_DEVICE_LABELS").locator(".sw").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system?tab=general");
   await expect(sw).toBeChecked();
@@ -109,7 +109,7 @@ test("System settings: undo brings a radio choice back, typing in a text area ca
   await expect(level).toHaveValue("debug");
 
   await page.goto(app.url + "/settings/system?tab=discovery");
-  await field(page, "DISCOVERY_SCAN").locator(".swtrack").click();
+  await field(page, "DISCOVERY_SCAN").locator(".sw").click();
   const nets = page.locator("textarea[name='v.DISCOVERY_SCAN_CIDRS']");
   await nets.fill("127.0.0.0/24");
   await page.getByRole("button", { name: "Save settings" }).click();
@@ -143,7 +143,7 @@ test("the broker reset empties host and port and turns TLS off at once; undo and
   await host.fill("127.0.0.1");
   await port.fill("18883");
   if (!(await tls.isChecked()))
-    await page.locator("label.swhit:has(#f-mqtt-tls) .swtrack").click();
+    await page.locator("label.uswitch:has(#f-mqtt-tls) .sw").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system?tab=mqtt");
   await expect(host).toHaveValue("127.0.0.1");
@@ -162,7 +162,7 @@ test("the broker reset empties host and port and turns TLS off at once; undo and
   // switching TLS by hand after a reset is the person's own choice: the reset is off again
   await reset(page, "MQTT_URL").click();
   await expect(tls).not.toBeChecked();
-  await page.locator("label.swhit:has(#f-mqtt-tls) .swtrack").click();
+  await page.locator("label.uswitch:has(#f-mqtt-tls) .sw").click();
   await expect(tls).toBeChecked();
   await expect(box).not.toBeChecked();
 });

@@ -313,7 +313,7 @@ Also: [desktop, dark](../design/styleguide/forms-desktop-dark.png) · [phone, li
 
 ### Choices and switches
 
-Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`); the power switch of a row is 34 x 20 inside a 48 x 44 px target and disabled while the device is offline. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
+Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. There are two switches and no third (#1096). A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`; on a phone its target reaches 44 x 44): `ui.Toggle(ToggleData{Name, Value, ID, Label, Text, On, Disabled, Attrs})` draws the setting's card with a `Label`, and the switch alone without one, for a setting whose label is drawn elsewhere (System settings and the broker's TLS, named by their `<label for>`; the rule editor's Enabled). It posts `Value` ("true" unless a page names another) when on and nothing when off. The power switch of a row, a card, the header and a relay is `ui.PowerSwitch(PowerSwitchData{Label or LabelledBy, On, Disabled, Submit, Class, Attrs})`, 34 x 20 inside a 48 x 44 px target (44 px wide where a row has several relays), disabled while the device is offline. Every switch has one off state, the `--color-control-border` fill, and the accent when on (a setting that warns takes `--color-warn`). `Attrs` of both are `hx-*`, `data-*`, `aria-describedby` and the like; `role`, `aria-checked`, `checked` and the keys the component writes are its own. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
 
 Component: `ui.RadioCards`, `ui.Segmented`, `ui.Check`, `ui.Toggle`, `ui.PowerSwitch`.
 
@@ -552,8 +552,8 @@ and ends it. A card that is only a fold has the summary as its title.
 
 The status bar (`ui.StatusBar`, #307) is one `--sb-line` row at the bottom of every signed-in page: broker,
 running jobs, backups, the Live pill and the version, each a 32 px item with a tone; on a phone one line that
-opens a sheet. The bulk bar (device list), the backups selection bar and the save bar (settings, device
-settings) sit one gap above it, are surface bars (never inverted), use `--shadow-bar` and never clip their
+opens a sheet. The bulk bar (device list) and the save bar (settings, device
+settings) sit one gap above it, the backups selection bar sits in the flow above the list it acts on; all three are surface bars (never inverted, a hairline border), use `--shadow-bar`, carry ordinary buttons and never clip their
 last button at 375 px. The save bar shows the unsaved dot inside the content edge to its left.
 
 ### Info button, copy button, file drop
@@ -612,8 +612,8 @@ same ring until the page arrives.
 - **Selected.** A selected item that is not a tab (a toggled filter chip, the current page of a pager, the
   chosen release, a checked radio card) uses the accent tint: `--color-accent-bg` background,
   `--color-accent` border, `--color-accent-fg` text. A segmented control's checked segment is
-  `--color-surface-3`. Tabs use the underline. Nothing is drawn inverted (text colour as fill)
-  (#1096).
+  `--color-surface-3`. Tabs use the underline. A pressed toggle button (`aria-pressed="true"`, a kept backup) is the same tint. The open row menu's trigger is the hover look (`--color-surface-2`). Nothing is drawn inverted (text colour as fill)
+  (#1096; `selected_look_test.go` fails on a rule that fills with `var(--color-text)`).
 - **No opacity on content.** Stale, not judged, disabled rules and switched-off settings keep their text
   colours (AA in both themes) and say their state in words; only a control that cannot act takes the
   disabled look (#1071).
@@ -721,8 +721,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
 12. `main` has no 120 px bottom padding (the prototype's, from before the status bar). The body
     reserves the status bar plus one `--sp-16` gap, so a page ends one gap above the bar (#773).
 13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button, the default
-    (outlined) buttons, the chips (`.chip`, #1095), the switch track in its off state (`.swtrack`, border),
-    the filled switch tracks in their off state (`.pwr .sw`, `.utoggle .sw`, `.devsw`: the fill marks the
+    (outlined) buttons, the chips (`.chip`, #1095), the filled switch tracks in their off state (`.pwr .sw`, `.utoggle .sw`, `.uswitch .sw`: the fill marks the
     control, the white knob keeps 3.5:1 or more on it) and the segment controls (`.seg`, `.useg`, frame and
     inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
     (light) and 1.75:1 (dark) against the card surface, below the 3:1 that WCAG 2.2 SC 1.4.11 (Non-text

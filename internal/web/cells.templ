@@ -118,26 +118,18 @@ templ powerCellView(p powerCell) {
 	if len(p.Relays) > 0 {
 		for _, rl := range p.Relays {
 			if p.Enabled {
-				<button
-					type="button"
-					class="pwr"
-					role="switch"
-					aria-checked={ ariaBool(rl.State == "ON") }
-					aria-labelledby={ powerLabelledBy(p.ID, rl.N) }
-					title={ relayTitle(p, rl) }
-					hx-post={ p.Base + "/devices/" + strconv.FormatInt(int64(p.ID), 10) + "/power/" + strconv.Itoa(rl.N) }
-					hx-vals={ `{"action":"TOGGLE"}` }
-					hx-target="closest .pcell"
-					hx-swap="innerHTML"
-					hx-disabled-elt="this"
-					disabled?={ p.Off }
-				><span class="sw" aria-hidden="true"></span></button>
+				@ui.PowerSwitch(ui.PowerSwitchData{
+					LabelledBy: powerLabelledBy(p.ID, rl.N),
+					On:         rl.State == "ON",
+					Disabled:   p.Off,
+					Attrs:      powerSwitchAttrs(p, rl),
+				})
 			} else {
 				<span class="relay-state">{ label(rl.State) }</span>
 			}
 		}
 	} else if p.Enabled {
-		<button type="button" class="pwr" role="switch" aria-checked="false" aria-labelledby={ powerLabelledBy(p.ID, 0) } title="The power state is not known yet" disabled><span class="sw" aria-hidden="true"></span></button>
+		@ui.PowerSwitch(ui.PowerSwitchData{LabelledBy: powerLabelledBy(p.ID, 0), Disabled: true, Attrs: templ.Attributes{"title": "The power state is not known yet"}})
 	} else {
 		<span class="muted">-</span>
 	}

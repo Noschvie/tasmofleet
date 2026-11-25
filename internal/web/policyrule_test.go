@@ -756,7 +756,7 @@ func TestRuleDraftShowAllWithoutJavaScriptKeepsTheEnabledSwitch(t *testing.T) {
 		if r.StatusCode != 200 || !strings.Contains(body, "<html") {
 			t.Fatalf("state %v: %d, want the whole page", c.state, r.StatusCode)
 		}
-		if on := strings.Contains(between(body, `type="checkbox" name="state" value="enabled"`, ">"), "checked"); on != c.on {
+		if on := strings.Contains(between(body, `type="checkbox" role="switch" name="state" value="enabled"`, ">"), "checked"); on != c.on {
 			t.Errorf("state %v: the Enabled switch is on=%v after Show all, want %v", c.state, on, c.on)
 		}
 		// a switched-off draft still shows what it would judge: every device, nothing left to show

@@ -129,7 +129,7 @@ templ rulePageTempl(p rulePageView) {
 			</div>
 			if len(p.History) > 0 {
 				<details class="devcard" id="rule-history">
-					<summary>History of this rule</summary>
+					<summary>{ "History of this rule · " + plural(len(p.History), "version") }</summary>
 					<div class="pol-hist-list">
 						for _, v := range p.History {
 							<a class="pol-hv" href={ templ.SafeURL(p.Base + policyHistoryPath + "?v=" + vstr(v.ID) + "#diff") }>
@@ -306,11 +306,8 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 					<span class="ufield-label">Note</span>
 					<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists" autocomplete="off">{ e.Spec.Note }</textarea>
 				</label>
-			<label class="pol-enabled">
-				<input type="hidden" name="state" value="disabled"/>
-				<input type="checkbox" name="state" value="enabled" checked?={ e.Enabled }/>
-				Enabled
-			</label>
+			<input type="hidden" name="state" value="disabled"/>
+			@ui.Toggle(ui.ToggleData{Name: "state", Value: "enabled", Label: "Enabled", On: e.Enabled})
 			</div>
 			<div class="pol-ed-foot">
 			<label class="ufield">

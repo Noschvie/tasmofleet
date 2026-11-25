@@ -78,7 +78,7 @@ export async function textRuns(page: Page, roots: string): Promise<TextRun[]> {
       a[1] * (1 - t) + b[1] * t,
       a[2] * (1 - t) + b[2] * t,
     ];
-    const CONTROL = 'button, input, select, textarea, [role="switch"], .menu-item, a.btn, .utab, .swtrack, .useg';
+    const CONTROL = 'button, input, select, textarea, [role="switch"], .menu-item, a.btn, .utab, .sw, .useg';
     const cannotAct = (el: Element): boolean => {
       const ctl = el.closest(CONTROL);
       if (!ctl) return false;

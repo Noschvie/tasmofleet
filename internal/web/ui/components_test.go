@@ -80,8 +80,10 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"Check":            Check("n", h, h, false, false),
 		"RadioCards":       RadioCards(h, "n", []Option{{Value: h, Label: h, Text: h}}),
 		"Segmented":        Segmented(h, "n", []Option{{Value: h, Label: h}}),
-		"Toggle":           Toggle("n", h, h, true, false),
-		"Power":            PowerSwitch(h, true, false),
+		"Toggle":           Toggle(ToggleData{Name: "n", Label: h, Text: h, On: true, Attrs: templ.Attributes{"data-x": h}}),
+		"ToggleBare":       Toggle(ToggleData{Name: "n", Value: h, ID: h, Attrs: templ.Attributes{"aria-describedby": h}}),
+		"Power":            PowerSwitch(PowerSwitchData{Label: h, On: true}),
+		"PowerLabelledBy":  PowerSwitch(PowerSwitchData{LabelledBy: h, Class: h, Submit: true, Attrs: templ.Attributes{"title": h, "hx-post": h}}),
 		"StatTile":         StatTile(StatTileData{Label: h, Value: h, Hint: h, Href: "/x"}),
 		"Attention":        AttentionList([]AttProposal{{Name: h, Text: h, Primary: h, Secondary: h, PrimaryAction: "/a", SecondaryAction: "/b"}}, []AttItem{{Name: h, Text: h, Href: "/x"}}, h),
 		"TxnCard":          TxnCard(TxnData{ID: h, Title: h, State: h, Summary: h, StartedText: h, Href: "/x", OK: 1, Total: 1}),
@@ -927,5 +929,66 @@ func TestTag(t *testing.T) {
 	}
 	if got := comp(t, TagOf(TagData{Label: "MQTT", Attrs: templ.Attributes{"data-via-mqtt": true}})); got != `<span class="tag" data-via-mqtt>MQTT</span>` {
 		t.Errorf("attrs: %s", got)
+	}
+}
+
+// Why (#1096): there are two switches and each page used to draw its own, with its own sizes and off state. The
+// setting switch is a checkbox that posts "true" (the settings form's contract) unless a page names another value,
+// and the bare form (no Label) draws only the switch, which a <label for> names. A row's power switch is named by
+// the ids of its row (aria-labelledby, so the fragment holds no name and no id), or by a label of its own.
+func TestSwitchForms(t *testing.T) {
+	got := comp(t, Toggle(ToggleData{Name: "v.X", ID: "f-X", On: true, Attrs: templ.Attributes{"aria-describedby": "help-X"}}))
+	if want := `<label class="uswitch"><input type="checkbox" role="switch" name="v.X" value="true" id="f-X" checked aria-describedby="help-X"><span class="sw" aria-hidden="true"></span></label>`; got != want {
+		t.Errorf("bare toggle:\n got %s\nwant %s", got, want)
+	}
+	got = comp(t, Toggle(ToggleData{Name: "state", Value: "enabled", Label: "Enabled", Text: "why"}))
+	for _, want := range []string{`<label class="utoggle">`, `name="state" value="enabled"`, `<b>Enabled</b>`, `<span>why</span>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("toggle card lacks %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "checked") || strings.Contains(got, " id=") {
+		t.Errorf("an off toggle without an id: %s", got)
+	}
+
+	got = comp(t, PowerSwitch(PowerSwitchData{LabelledBy: "dvn-1 rly-1", On: true, Attrs: templ.Attributes{"hx-post": "/p", "title": "t"}}))
+	if want := `<button type="button" class="pwr" role="switch" aria-checked="true" aria-labelledby="dvn-1 rly-1" hx-post="/p" title="t"><span class="sw" aria-hidden="true"></span></button>`; got != want {
+		t.Errorf("row switch:\n got %s\nwant %s", got, want)
+	}
+	if strings.Contains(got, "aria-label=") || strings.Contains(got, " id=") {
+		t.Errorf("a switch named by its row has no label and no id of its own: %s", got)
+	}
+	got = comp(t, PowerSwitch(PowerSwitchData{Label: "Relay 1 is Off", Submit: true, Class: "devrelay-sw", Disabled: true}))
+	if want := `<button type="submit" class="pwr devrelay-sw" role="switch" aria-checked="false" aria-label="Relay 1 is Off" disabled><span class="sw" aria-hidden="true"></span></button>`; got != want {
+		t.Errorf("relay switch:\n got %s\nwant %s", got, want)
+	}
+	a, b := comp(t, PowerSwitch(PowerSwitchData{LabelledBy: "x", Attrs: templ.Attributes{"hx-vals": "1", "hx-post": "/p", "title": "t", "hx-swap": "s"}})), comp(t, PowerSwitch(PowerSwitchData{LabelledBy: "x", Attrs: templ.Attributes{"hx-swap": "s", "title": "t", "hx-post": "/p", "hx-vals": "1"}}))
+	if a != b {
+		t.Errorf("the markup depends on the order of Attrs (live.js memoises the swapped fragment as a string):\n%s\n%s", a, b)
+	}
+}
+
+// Why (#1096): a page may not make a switch say two things (a second role or aria-checked), run script (on*) or
+// draw outside the CSP (style); the keys the component writes itself are its own. A button keeps its title (the
+// reason a switch is off), an input has no use for one.
+func TestSwitchAttrsRefuseWhatTheComponentOwns(t *testing.T) {
+	bad := templ.Attributes{"class": "evil", "style": "color:red", "onclick": "x()", "id": "evil", "role": "evil", "aria-checked": "evil", "checked": "evil", "aria-label": "evil", "aria-labelledby": "evil", "type": "evil", "hx-get": "/ok"}
+	for name, c := range map[string]templ.Component{
+		"toggle": Toggle(ToggleData{Name: "n", Attrs: bad}),
+		"card":   Toggle(ToggleData{Name: "n", Label: "x", Attrs: bad}),
+		"power":  PowerSwitch(PowerSwitchData{Label: "x", Attrs: bad}),
+	} {
+		got := comp(t, c)
+		for _, banned := range []string{"evil", "style=", "onclick"} {
+			if strings.Contains(got, banned) {
+				t.Errorf("%s: Attrs wrote %q: %s", name, banned, got)
+			}
+		}
+		if !strings.Contains(got, `hx-get="/ok"`) {
+			t.Errorf("%s: an allowed key is dropped too: %s", name, got)
+		}
+	}
+	if got := comp(t, Toggle(ToggleData{Name: "n", Attrs: templ.Attributes{"title": "t"}})); strings.Contains(got, "title") {
+		t.Errorf("a title on the input: %s", got)
 	}
 }

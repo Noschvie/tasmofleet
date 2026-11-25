@@ -203,14 +203,6 @@ func tileStale(t tile, l liveView) bool {
 	return l.Off && t.Key != "reach"
 }
 
-// ariaBool is "true" or "false" for aria-pressed and aria-checked.
-func ariaBool(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
 // backPath is the tab the header's Back up returns to (headBack accepts it).
 func (t deviceTabs) backPath() string {
 	if t.Active == "overview" || t.Active == "" {
@@ -338,4 +330,13 @@ func keepParts(s string) []keepPart {
 		out = append(out, keepPart{Text: s[last:]})
 	}
 	return out
+}
+
+// relaySwitchAttrs are the attributes of a relay switch that is disabled for a reason: the reason as its hover
+// text and as the line the switch is described by (the note under the relay box, "dev-relays-why").
+func relaySwitchAttrs(why string) templ.Attributes {
+	if why == "" {
+		return nil
+	}
+	return templ.Attributes{"title": why, "aria-describedby": "dev-relays-why"}
 }

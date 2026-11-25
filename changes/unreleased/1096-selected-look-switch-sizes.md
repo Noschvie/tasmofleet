@@ -1,0 +1,4 @@
+---
+section: Changed
+---
+A selected or pressed control is the accent tint everywhere and nothing is drawn inverted any more: the pressed buttons, the open row menu, the bulk bar of the device list and the selection bar of the Backups tab, which are surface bars now. There are two switches: a setting switch (38 x 22, System settings and the rule editor's Enabled, which was a bare checkbox) and a power switch (34 x 20 in a 44 px high target in the device list, on the cards and in the relay box, where the list row's target was only 32 px high), with one off look. The Backups tab and the list of orphaned backups say "Select" in the bar and below the list, and a rule's "History of this rule" says how many versions it holds. The Reset to default control of a setting (A6-046) was already real text since #1075 (#1096)

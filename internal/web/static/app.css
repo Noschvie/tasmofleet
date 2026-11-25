@@ -490,9 +490,9 @@ button.icon {
 }
 
 button[aria-pressed="true"] {
-  background: var(--color-text);
-  border-color: var(--color-text);
-  color: var(--color-surface);
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
 }
 button[disabled],
 button[aria-disabled="true"],
@@ -1151,11 +1151,6 @@ details.rowmenu > summary::after {
 }
 details.rowmenu > summary.icon::after {
   display: none;
-}
-details.rowmenu[open] > summary {
-  background: var(--color-text);
-  border-color: var(--color-text);
-  color: var(--color-surface);
 }
 details.rowmenu > .rowmenu-body {
   position: absolute;
@@ -5257,7 +5252,9 @@ button.btn[aria-disabled="true"]:focus-visible {
   }
 }
 
-/* switches: a setting (with its title and line) and the power toggle of a row */
+/* switches (#1096): two sizes and one off state (the control-border fill). A setting switch is 38 x 22 (ui.Toggle: a
+   card with its title and line, or .uswitch, the switch alone for a setting whose label is drawn elsewhere); a
+   power switch is 34 x 20 inside a 48 x 44 target (ui.PowerSwitch) */
 .utoggle {
   display: flex;
   flex-direction: row;
@@ -5271,13 +5268,24 @@ button.btn[aria-disabled="true"]:focus-visible {
   color: var(--color-text);
   cursor: pointer;
 }
-.utoggle input {
+.utoggle input,
+.uswitch input {
   position: absolute;
   opacity: 0;
   width: 1px;
   height: 1px;
 }
+/* the switch alone: the label is its hit box (a phone widens it, see the settings page's touch targets) */
+.uswitch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
 .utoggle .sw,
+.uswitch .sw,
 .pwr .sw {
   position: relative;
   flex: none;
@@ -5287,6 +5295,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   background: var(--color-control-border);
 }
 .utoggle .sw::after,
+.uswitch .sw::after,
 .pwr .sw::after {
   content: "";
   position: absolute;
@@ -5299,13 +5308,16 @@ button.btn[aria-disabled="true"]:focus-visible {
   box-shadow: var(--shadow-knob);
   transition: left 0.15s;
 }
-.utoggle input:checked + .sw {
+.utoggle input:checked + .sw,
+.uswitch input:checked + .sw {
   background: var(--color-accent);
 }
-.utoggle input:checked + .sw::after {
+.utoggle input:checked + .sw::after,
+.uswitch input:checked + .sw::after {
   left: 19px;
 }
-.utoggle input:focus-visible + .sw {
+.utoggle input:focus-visible + .sw,
+.uswitch input:focus-visible + .sw {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
@@ -7513,9 +7525,9 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   }
 }
 
-/* Bulk bar (prototype): on a wide screen a dark bar centred at the bottom of the window with
-   the count, Update firmware, Send command, Back up, Restart, Power on, Power off and Clear;
-   on a phone a light panel across the bottom: the count and Clear, then the actions in a grid
+/* Bulk bar (prototype): on a wide screen a surface bar centred at the bottom of the window with
+   the count, Update firmware, Send command, Back up, Restart, Power on, Power off and Clear (never
+   inverted: #1096); on a phone a panel across the bottom: the count and Clear, then the actions in a grid
    of three. It is fixed to the window, so it is never clipped (layout guard a). The bars of the
    pages not ported yet (no .bulk-acts) keep their old look until their package moves them. */
 .bulkbar:has(> .bulk-acts) {
@@ -7533,11 +7545,11 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   min-height: 0;
   margin: 0 auto;
   padding: 7px 7px 7px 16px;
-  background: var(--color-text);
-  color: var(--color-surface);
-  border: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: var(--hair-w) solid var(--color-border);
   border-radius: 11px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-bar);
 }
 .bulkbar:has(> .bulk-acts)[hidden] {
   display: none;
@@ -7557,11 +7569,10 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   height: 34px;
   padding: 0 12px;
   border-radius: 7px;
-  border: var(--hair-w) solid
-    color-mix(in oklab, var(--color-surface) 30%, transparent);
-  background: transparent;
+  border: var(--hair-w) solid var(--color-control-border);
+  background: var(--color-surface);
   box-shadow: none;
-  color: var(--color-surface);
+  color: var(--color-text);
   font: 500 13px var(--font-sans);
   white-space: nowrap;
 }
@@ -7574,12 +7585,14 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 .bulkbar:has(> .bulk-acts) .bulk-clear {
   padding: 0 10px;
   border: 0;
+  background: none;
+  color: var(--color-accent-fg);
 }
 .bulkbar:has(> .bulk-acts) .bulk-sep {
   width: 1px;
   height: 20px;
   margin: 0 4px;
-  background: color-mix(in oklab, var(--color-surface) 25%, transparent);
+  background: var(--color-border);
 }
 .bulkbar:has(> .bulk-acts) .bulk-sm {
   display: none;
@@ -8091,47 +8104,15 @@ table.devtable > tbody > tr > td[data-label="Firmware"] {
   font: 400 12px var(--font-mono);
   color: var(--color-text-2);
 }
-/* the power switch of a row: 32 x 18 inside a 44 x 32 target; a card's is 34 x 20 in 48 x 44 */
-td.pcell .pwr,
-td.pcell .pwr[aria-checked="true"] {
-  width: 44px;
-  height: 32px;
-  border: 0;
-  background: none;
-  vertical-align: middle;
-}
-td.pcell .pwr .sw {
-  width: 32px;
-  height: 18px;
-  border-radius: 9px;
-}
-.pcell .pwr[aria-checked="true"] .sw {
-  background: var(--color-accent);
-}
-td.pcell .pwr[aria-checked="true"] .sw::after {
-  left: 16px;
-}
-.dcard-side .pwr[aria-checked="true"] {
-  border: 0;
-  background: none;
+/* the power switch of a row is the one ui.PowerSwitch (34 x 20 inside 48 x 44), the height of the row; the target
+   sits at the top of the line and takes the cell's 1 px bottom border, so the row stays 44 px tall; a row with
+   several relays narrows each to 44 px */
+td.pcell .pwr {
+  vertical-align: top;
+  margin-bottom: -1px;
 }
 .pcell:has(.pwr + .pwr) .pwr {
-  width: 36px;
-}
-.dcard-side .pwr {
-  width: 48px;
-  height: 44px;
-}
-.dcard-side .pwr .sw {
-  width: 34px;
-  height: 20px;
-  border-radius: 10px;
-}
-.dcard-side .pwr .sw::after {
-  top: 3px;
-}
-.dcard-side .pwr[aria-checked="true"] .sw::after {
-  left: 18px;
+  width: 44px;
 }
 /* the row menu trigger "⋯" and its panel */
 .rowacts .umenu > summary,
@@ -8326,33 +8307,6 @@ body:has(.dv-list .bulkbar:not([hidden])) {
     margin-left: auto; /* the menu opens from the right edge, where its panel has room */
   }
 }
-/* the switch of the header and of a relay: a track with a white knob, the accent when on */
-.devsw {
-  position: relative;
-  flex: none;
-  width: 30px;
-  height: 18px;
-  border-radius: 9px;
-  background: var(--color-control-border);
-}
-.devsw::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-knob);
-}
-[aria-pressed="true"] > .devsw,
-[aria-checked="true"] > .devsw {
-  background: var(--color-accent);
-}
-[aria-pressed="true"] > .devsw::after {
-  left: 14px;
-}
 /* why a button cannot act where no banner says it (#1082): its own full row under the name and the buttons, like the ACL notice */
 .devhd-why {
   flex: 1 1 100%;
@@ -8418,26 +8372,6 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   margin: var(--sp-12) 0 4px;
   font: 600 12px var(--font-sans);
   color: var(--color-text-2);
-}
-.devrelay-sw {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-}
-.devrelay-sw:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-.devrelay-sw .devsw {
-  width: 32px;
-}
-.devrelay-sw[aria-checked="true"] .devsw::after {
-  left: 16px;
 }
 /* ==== device overview (#145): live tiles, relay box, Identity | Connection, Activity ==== */
 .devlive {
@@ -12072,54 +12006,8 @@ a.bk-namelink:hover {
   align-items: flex-start;
   gap: var(--sp-10);
 }
-.swhit {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-}
-.swhit input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-.swtrack {
-  position: relative;
-  flex: none;
-  width: 34px;
-  height: 20px;
-  margin-top: var(--sp-1);
-  border-radius: 999px;
-  background: var(--color-surface-3);
-  border: var(--hair-w) solid var(--color-control-border);
-  cursor: pointer;
-}
-.swtrack::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-knob);
-  transition: left 0.15s;
-}
-input:checked + .swtrack {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-input:checked + .swtrack::after {
-  left: 16px;
-}
-.sf-warn input:checked + .swtrack {
+.sf-warn input:checked + .sw {
   background: var(--color-warn);
-  border-color: var(--color-warn);
-}
-input:focus-visible + .swtrack {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 .sf-switch .lrow {
   margin-bottom: 0;
@@ -12389,12 +12277,10 @@ input:focus-visible + .swtrack {
     max-width: none;
   }
   /* touch targets: the switch and the info button reach past their drawn size */
-  .swhit {
+  .uswitch {
     min-width: var(--ctl-sm);
     min-height: var(--ctl-sm);
-    align-items: center;
-    justify-content: center;
-    margin: calc((20px - var(--ctl-sm)) / 2) calc((34px - var(--ctl-sm)) / 2);
+    margin: calc((22px - var(--ctl-sm)) / 2) calc((38px - var(--ctl-sm)) / 2);
   }
   .uinfo {
     width: var(--ctl-sm);
@@ -12929,7 +12815,7 @@ main.bare {
   color: var(--color-text-3);
 }
 
-/* the selection bar: dark, in the flow above the list (the prototype's, not the fixed bulk bar) */
+/* the selection bar: a surface bar like the bulk bar (#1096), in the flow above the list */
 .bk-selbar {
   display: flex;
   align-items: center;
@@ -12937,9 +12823,11 @@ main.bare {
   flex-wrap: wrap;
   padding: 6px 6px 6px 14px;
   margin-bottom: var(--sp-10);
+  border: var(--hair-w) solid var(--color-border);
   border-radius: 9px;
-  background: var(--color-text);
-  color: var(--color-surface);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-bar);
 }
 .bk-selbar[hidden],
 .bk-selbar [hidden] {
@@ -12952,13 +12840,6 @@ main.bare {
 .bk-selbar .btn.btn-primary {
   padding: 0 var(--sp-12);
   border: 0;
-}
-.bk-selbar .btn.bk-seldel,
-.bk-selbar .btn.bk-seldel:hover {
-  border-color: color-mix(in oklab, var(--color-surface) 30%, transparent);
-  background: transparent;
-  color: var(--color-surface);
-  font-weight: 500;
 }
 
 /* the rows: one per backup run or failed attempt */
@@ -13865,20 +13746,6 @@ a.pol-tpl {
 .pol-form label.ufield-label {
   font: 500 12.5px var(--font-sans);
   color: var(--color-text-2);
-}
-.pol-enabled {
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  min-height: 36px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.pol-enabled input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-accent);
 }
 .pol-two {
   /* one column: the editor is ~360 px wide, two halves cut "Choose a setting…" and the value */
