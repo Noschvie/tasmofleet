@@ -212,3 +212,29 @@ func TestValidateWantSetOptionParameter(t *testing.T) {
 		t.Errorf("SetOption34 0: %v", err)
 	}
 }
+
+// Why (#1240): the rule page must tell "no backup yet" from "a backup exists but cannot answer this setting",
+// and fromBackup cannot (it returns nothing for both, and ignores dump and snapshot backups). The report
+// carries the fact for the devices it could not judge, so the page does not send the user to debug a backup
+// job that is fine.
+func TestPolicyReportSaysWhichUnjudgedDevicesHaveABackup(t *testing.T) {
+	now := time.Now()
+	rep := &policyReporter{
+		rules:   []policy.Rule{{Command: "SetOption55", Want: "1"}}, // not in decodedKeys: no backup can answer it (#1201)
+		devices: fakeLister{{ID: 1, Name: "dump-only"}, {ID: 2, Name: "none"}, {ID: 3, Name: "decoded"}},
+		backups: fakeBackupSvc{
+			list: map[model.DeviceID][]model.Backup{
+				1: {{ID: 10, Kind: model.BackupConfigDump, TakenAt: now}},
+				3: {{ID: 30, Kind: model.BackupDecoded, TakenAt: now}},
+			},
+			data: map[model.BackupID]string{30: `{"save_data":0}`},
+		},
+	}
+	r, err := rep.Evaluate(t.Context(), rep.rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.HasBackup[1] || !r.HasBackup[3] || r.HasBackup[2] {
+		t.Errorf("HasBackup = %v, want devices 1 (dump only) and 3 (decoded, key missing) but not 2", r.HasBackup)
+	}
+}

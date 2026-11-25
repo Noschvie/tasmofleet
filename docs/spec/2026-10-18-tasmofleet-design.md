@@ -2254,6 +2254,10 @@ an unsaved copy (`/policy/rules/duplicate`); nothing is stored until Save rule, 
 below its source. "Copy from a device" (`/policy/rules/new/copy`) starts a draft from one device's value
 the same way. Saving checks the version the editor was opened on (409 when someone else saved first).
 The compliance column of the table has a fixed width of 230 px (bar and numbers).
+On the rule page, the Source cell of a device that could not be judged names the reason (#1240): the firmware
+note, "chip family unknown", "not readable live", or, when none of those applies, "no backup yet" for a device with
+no stored backup and "not in backup" for one whose backups cannot answer the setting (only the settings in
+`policy.decodedKeys` are read from a backup); an offline device gets the prefix "offline · ".
 
 The Deviating devices tab (`GET /policy/deviations`, `?show=required|advisory|unknown`, `?q=`) lists every
 deviation grouped by device. Admins get a box per row read live (a backup-only value has none): Required rows

@@ -261,10 +261,31 @@ func (p *policyReporter) evaluate(ctx context.Context, devs []model.Device, rule
 			notLive[strings.ToLower(r.Command)] = true
 		}
 	}
+	outcomes := policy.Outcomes(rules, devs, values)
 	return web.PolicyReport{
 		Rules: rules, Devices: devs, Findings: policy.Check(rules, devs, values),
-		Provenance: prov, NotLive: notLive, Values: values, Outcomes: policy.Outcomes(rules, devs, values),
+		Provenance: prov, NotLive: notLive, Values: values, Outcomes: outcomes,
+		HasBackup: p.hasBackup(ctx, outcomes),
 	}
+}
+
+// hasBackup says, for the devices with an Unknown outcome, whether they have a stored backup of any kind.
+// fromBackup cannot say it: it returns nothing both for "no backup" and for "the newest decoded backup does not
+// hold this key", and it ignores dump and snapshot backups. The rule page needs the difference (#1240). The
+// second List per such device is deliberate: it keeps values/fromBackup as they are.
+func (p *policyReporter) hasBackup(ctx context.Context, outcomes []policy.Outcome) map[model.DeviceID]bool {
+	have := map[model.DeviceID]bool{}
+	seen := map[model.DeviceID]bool{}
+	for _, o := range outcomes {
+		if o.Kind != policy.OutcomeUnknown || seen[o.DeviceID] {
+			continue
+		}
+		seen[o.DeviceID] = true
+		if list, err := p.backups.List(ctx, o.DeviceID); err == nil && len(list) > 0 {
+			have[o.DeviceID] = true // a failed List leaves it false: "no backup yet", as fromBackup treats it
+		}
+	}
+	return have
 }
 
 // ReadValue reads one setting of one device so a rule can start from it ("Copy

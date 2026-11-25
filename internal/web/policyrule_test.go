@@ -34,6 +34,7 @@ type rulePolicy struct {
 	// the held devices with their next read, and the outcomes that say which rules judge them.
 	cooldown map[model.DeviceID]time.Time
 	judged   []policy.Outcome
+	backed   map[model.DeviceID]bool // devices with a stored backup of any kind, as the app reports it (#1240)
 }
 
 func (p *rulePolicy) devices() []model.Device {
@@ -74,7 +75,7 @@ func (p *rulePolicy) Evaluate(_ context.Context, rules []policy.Rule) (PolicyRep
 	defer p.mu.Unlock()
 	p.evals++
 	devs := p.devices()
-	return PolicyReport{Rules: rules, Devices: devs, Values: p.values, Provenance: p.prov,
+	return PolicyReport{Rules: rules, Devices: devs, Values: p.values, Provenance: p.prov, HasBackup: p.backed,
 		Outcomes: policy.Outcomes(rules, devs, p.values)}, nil
 }
 
@@ -814,5 +815,38 @@ func TestRulePageDeviceCountsComeFromOneTallyAndAddUp(t *testing.T) {
 	devs := section(t, body, "dc-devs")
 	if !strings.Contains(devs, `In scope<span class="dv-n">3</span>`) || strings.Contains(devs, ">All<") {
 		t.Errorf("the chip counts what it lists (1 applies + 2 covered) and says so:\n%s", devs)
+	}
+}
+
+// Why (#1240): the Source cell of a device that could not be judged must name the real reason. It said
+// "no backup yet" for a device that has backups but whose backup cannot answer the setting, which sent the
+// user to debug a backup job that was fine; and it never said that the device is offline.
+func TestRuleSourceNamesWhyADeviceIsNotJudged(t *testing.T) {
+	rp := &rulePolicy{backed: map[model.DeviceID]bool{2: true}} // attic has a backup, kitchen and shed have none
+	e, mem := ruleEnvWith(t, rp)
+	id := ruleSeed(t, e, mem, url.Values{"command": {"SetOption55"}, "want": {"1"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
+	rows := func() map[string]string {
+		_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+		devs := section(t, body, "dc-devs")
+		out := map[string]string{}
+		for _, n := range []string{"kitchen", "attic", "shed"} {
+			out[n] = sliceBetween(devs, n, "</tr>")
+		}
+		return out
+	}
+	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOffline}
+	e.health[3] = model.Health{DeviceID: 3, State: model.HealthOffline}
+	got := rows()
+	for name, want := range map[string]string{"kitchen": "no backup yet", "attic": "offline · not in backup", "shed": "offline · no backup yet"} {
+		if !strings.Contains(got[name], want) {
+			t.Errorf("%s: Source cell lacks %q:\n%s", name, want, got[name])
+		}
+	}
+	if strings.Contains(got["attic"], "no backup yet") || strings.Contains(got["kitchen"], "offline") {
+		t.Errorf("a device with a backup is not \"no backup yet\", an online one is not offline:\nattic: %s\nkitchen: %s", got["attic"], got["kitchen"])
+	}
+	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline}
+	if row := rows()["attic"]; !strings.Contains(row, "not in backup") || strings.Contains(row, "offline") {
+		t.Errorf("online again: the cell says only the backup reason:\n%s", row)
 	}
 }

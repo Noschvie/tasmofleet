@@ -50,6 +50,10 @@ type PolicyReport struct {
 	// them was read less than five minutes ago (#989), each with the time its next read is possible. It is
 	// set by Report with live true only.
 	Cooldown map[model.DeviceID]time.Time
+	// HasBackup is true for a device that has at least one stored backup of any kind (decoded, dump, snapshot).
+	// It is filled only for devices with an Unknown outcome, to tell "no backup yet" from "the backup cannot
+	// answer this setting" in the rule page's Source cell (#1240); a device that is absent has no backup.
+	HasBackup map[model.DeviceID]bool
 }
 
 // PolicyService builds the report from live values (read in the background,

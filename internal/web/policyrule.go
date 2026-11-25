@@ -148,7 +148,15 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 			case rep.NotLive[key]:
 				row.Source = "not readable live"
 			default:
+				// Why not judged, as exactly as the report knows it (#1240): a backup that exists but cannot
+				// answer this setting is not "no backup yet", and an offline device cannot be read live.
 				row.Source = "no backup yet"
+				if rep.HasBackup[o.DeviceID] {
+					row.Source = "not in backup"
+				}
+				if h.d.Health.Get(o.DeviceID).State == model.HealthOffline {
+					row.Source = "offline · " + row.Source
+				}
 			}
 		case policy.OutcomeShadowed:
 			row.Source = "covered by " + ruleName(sysconfig.RuleSpec{Name: rules[o.ByIndex].Name, Command: rules[o.ByIndex].Command})
