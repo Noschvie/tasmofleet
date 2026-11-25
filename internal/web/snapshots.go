@@ -80,7 +80,7 @@ func (h *handler) snapStepUp(w http.ResponseWriter, r *http.Request, what, actio
 			return true
 		}
 		h.renderActionConfirm(w, r, "snapshots", actionConfirm{
-			Title: "Download a database snapshot?", Heading: "Download a database snapshot", Text: "The file holds every user's password hash and the encrypted device, broker and sign-in secrets. Keep it like a password. Your sign-in comes from the proxy, so it cannot be asked for a password; confirm instead.",
+			Title: "Download a database snapshot?", Text: "The file holds every user's password hash and the encrypted device, broker and sign-in secrets. Keep it like a password. Your sign-in comes from the proxy, so it cannot be asked for a password; confirm instead.",
 			Last:   "Download snapshot",
 			Action: action, Fields: fields, Ack: snapAckText, Verb: "Download", CancelHref: snapPath, CancelLabel: "Cancel",
 			NoBusy: true, // the confirmed POST answers with the file, so no next page clears the busy state (#538)
@@ -242,7 +242,7 @@ func (h *handler) snapDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderActionConfirm(w, r, "snapshots", actionConfirm{
-		Title: "Delete this snapshot?", Heading: "Delete this snapshot", Text: snapDeleteText(name),
+		Title: "Delete this snapshot?", Text: snapDeleteText(name),
 		Last:   "Delete snapshot",
 		Action: snapPath + "/" + name + "/delete", Verb: "Delete snapshot", CancelHref: snapPath, CancelLabel: "Cancel",
 	})

@@ -236,7 +236,7 @@ test("users: no Deactivate, Delete or role change on your own row", async ({ pag
   await expect(own.getByText("You cannot delete your own account")).toBeVisible();
   await page.keyboard.press("Escape"); // the open menu lies over the next row
   await other.getByLabel(/^Actions for /).click();
-  for (const name of ["Deactivate", "Delete…", "Make admin"]) {
+  for (const name of ["Deactivate", "Delete", "Make admin"]) {
     await expect(other.getByRole("link", { name, exact: true })).not.toHaveAttribute("aria-disabled", "true");
   }
 });

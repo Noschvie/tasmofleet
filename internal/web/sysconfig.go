@@ -368,10 +368,9 @@ const sysResetText = "Every setting on this page goes back to its default: the d
 // sysResetConfirm is the confirmation of "Reset settings…" as a page (no JavaScript).
 func (h *handler) sysResetConfirm(w http.ResponseWriter, r *http.Request) {
 	h.renderActionConfirm(w, r, "system", actionConfirm{
-		Title: "Reset all settings?", Heading: "Reset all settings", Text: sysResetText,
 		Crumbs: []ui.Crumb{sysTabCrumb("advanced")}, Last: "Reset",
-		Action: sysPath + "/reset", Verb: "Reset settings", CancelHref: sysTabPath("advanced"), CancelLabel: "Cancel",
-	})
+		Action: sysPath + "/reset", CancelHref: sysTabPath("advanced"),
+	}.words(resetWords()))
 }
 
 // sysReset puts every stored setting back to its default (N9). It always needs the step-up:

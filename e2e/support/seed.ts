@@ -387,7 +387,8 @@ async function seedFirmwareCache(page: Page, app: App, fx: DesignFixture): Promi
   await page.goto(app.url + "/firmware");
   const c3 = page.locator(".fw-crow").filter({ hasText: "tasmota32c3.bin" }).filter({ hasText: fx.latest });
   if ((await c3.count()) > 0) {
-    await c3.getByRole("link", { name: /^Delete/ }).click();
+    await c3.locator("summary").click(); // Delete is an entry of the file's row menu (#1093)
+    await c3.getByRole("link", { name: "Delete", exact: true }).click();
     await page.locator("dialog[open]").getByRole("button", { name: "Delete file" }).click();
     await expect(page.locator(".fw-crow").filter({ hasText: "tasmota32c3.bin" })).toHaveCount(0);
   }

@@ -284,7 +284,7 @@ type rulePageView struct {
 	Editor     *ruleEditor
 	KV         []ui.KVRow
 	Devices    ruleDevicesView
-	DeleteText string
+	Delete     confirmWords  // what the delete dialog says
 	History    []ruleHistRow // the versions that touched this rule, newest first
 
 	// Cooldown: Check now left devices of this rule alone because they were read recently (#989); CooldownUntil
@@ -407,11 +407,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		e.Enabled = !spec.Disabled // a duplicate keeps its source's state; the other drafts start enabled
 		p.Editor = e
 		if !draft {
-			p.DeleteText = "It currently judges " + plural(stat.Applies(), "device") + ". They stop being checked for " + spec.Command +
-				". The change is saved as a new version you can revert to."
-			if spec.Disabled {
-				p.DeleteText = "It is disabled and judges no device. The change is saved as a new version you can revert to."
-			}
+			p.Delete = ruleDeleteWords(name, spec.Command, stat.Applies(), spec.Disabled)
 		}
 	} else {
 		p.KV = ruleKV(spec)

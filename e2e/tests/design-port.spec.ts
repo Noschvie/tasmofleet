@@ -102,7 +102,7 @@ test("restart: one confirmation naming the consequence, then the device restarts
   await page.locator('.rowmenu-body a[data-dlg-kind="restart"]').first().click();
   const dlg = page.locator("dialog[open]");
   await expect(dlg).toContainText("relays switch off for a few seconds");
-  await dlg.getByRole("button", { name: "Restart", exact: true }).click();
+  await dlg.getByRole("button", { name: "Restart device", exact: true }).click();
   await expect(page.getByText("Restart sent.")).toBeVisible();
 });
 

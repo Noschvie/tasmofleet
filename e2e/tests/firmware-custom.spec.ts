@@ -125,8 +125,43 @@ test("upload a custom image, update an ESP8266 with it, delete it", async ({ pag
   await expect(page.locator("table.audittable").getByText("Use uploaded firmware").first()).toBeVisible();
 
   await page.goto(app.url + "/firmware");
-  await uploads(page).getByRole("link", { name: /^Delete/ }).click();
+  await uploads(page).locator("summary").click(); // Delete is an entry of the file's row menu
+  await uploads(page).getByRole("link", { name: "Delete", exact: true }).click();
   await expect(page.locator("dialog[open]")).toContainText("cannot be downloaded again");
+  await page.locator("dialog[open]").getByRole("button", { name: "Delete image" }).click();
+  await expect(uploads(page)).toHaveCount(0);
+});
+
+// Why (#1093): the file menu is positioned inside the cache card, which cuts off what lies outside it. An uploaded
+// image sorts last and is never part of "Delete N unused", so the last row's only Delete entry must not depend on the
+// footer below it: its panel has to be whole at the card's end. The footer is hidden to make that case certain; the
+// bottom edge of the panel must still hit the panel, not the page behind the card, on a phone and on a wide window.
+test("the menu of the last file row is not cut off by the card without the bulk footer", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await upload(page, version, "my-build.bin", image("tasmota.bin.gz", 4 * 1024));
+  await expect(uploads(page)).toHaveCount(1);
+  for (const width of [375, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(app.url + "/firmware");
+    await page.evaluate(() => document.querySelectorAll(".fw-cache-foot").forEach((f) => ((f as HTMLElement).hidden = true)));
+    await uploads(page).locator("summary").click();
+    const panel = uploads(page).locator(".rowmenu-body");
+    await expect(panel.getByRole("link", { name: "Delete", exact: true })).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          panel.evaluate((p) => {
+            const r = p.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.bottom - 3);
+            return !!hit && p.contains(hit);
+          }),
+        { message: `panel bottom at ${width}px` },
+      )
+      .toBe(true);
+    await uploads(page).locator("summary").click();
+  }
+  await uploads(page).locator("summary").click();
+  await uploads(page).getByRole("link", { name: "Delete", exact: true }).click();
   await page.locator("dialog[open]").getByRole("button", { name: "Delete image" }).click();
   await expect(uploads(page)).toHaveCount(0);
 });

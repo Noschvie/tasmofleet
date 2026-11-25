@@ -5,8 +5,11 @@
   "use strict";
   // A dialog shared by many rows (the device list) is filled from the data-dlg-*
   // attributes of the link that opens it: title, text, the form's action and the
-  // confirming button's verb; data-dlg-danger makes that button red; data-dlg-dismiss
-  // names the dismissing button when "Cancel" would be ambiguous ("Keep running").
+  // confirming button's verb; data-dlg-danger makes that button danger-solid (and its absence
+  // puts it back to primary, so a red verb never carries over to the next opener);
+  // data-dlg-dismiss names the dismissing button when "Cancel" would be ambiguous ("Keep
+  // running"); data-dlg-field-<name> fills the hidden input[data-fill-field="<name>"] (the rule
+  // a shared delete dialog removes), and an opener without it empties the field.
   function fill(dlg, opener) {
     if (!opener.hasAttribute("data-dlg-title")) {
       return;
@@ -36,9 +39,26 @@
       el.textContent = opener.getAttribute("data-dlg-dismiss") || "Cancel";
     });
     set("verb", function (el) {
+      var danger = opener.hasAttribute("data-dlg-danger");
       el.textContent = opener.getAttribute("data-dlg-verb") || "";
-      el.classList.toggle("danger", opener.hasAttribute("data-dlg-danger"));
+      el.classList.toggle("btn-danger-solid", danger);
+      el.classList.toggle("btn-primary", !danger);
     });
+    dlg.querySelectorAll("input[data-fill-field]").forEach(function (el) {
+      el.value = opener.getAttribute("data-dlg-field-" + el.getAttribute("data-fill-field")) || "";
+    });
+  }
+  // A dialog whose confirming button is danger-solid opens on its Cancel (the first element with
+  // data-close), not on the first focusable thing in it (the Copy button of a file's checksum):
+  // Enter or Space on a dialog that just opened must not run the destructive action.
+  function focusCancel(dlg) {
+    if (!dlg.querySelector('button[type="submit"].btn-danger-solid')) {
+      return;
+    }
+    var cancel = dlg.querySelector("[data-close]");
+    if (cancel) {
+      cancel.focus();
+    }
   }
   document.addEventListener("click", function (e) {
     var t = e.target instanceof Element ? e.target : null;
@@ -61,6 +81,7 @@
           });
         fill(dlg, opener);
         dlg.showModal();
+        focusCancel(dlg);
       }
       return;
     }
@@ -84,6 +105,7 @@
       if (typeof d.showModal === "function") {
         d.close();
         d.showModal();
+        focusCancel(d);
       }
     });
 })();

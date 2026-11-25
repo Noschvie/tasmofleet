@@ -448,3 +448,12 @@ func itemStates(run firmware.PrefetchRun) string {
 	}
 	return b.String()
 }
+
+// oneCard is the card of the one-file confirmation: named by its "File in use" heading, or, with no heading of its own
+// (the page header is the title, #1093), by the title.
+func (c fwConfirm) oneCard() ui.CardData {
+	if c.Artifact.InUse {
+		return ui.CardData{Class: "confirm-card", LabelledBy: "confirm-h"}
+	}
+	return ui.CardData{Class: "confirm-card", Aria: fileDeleteWords(c.Artifact).Title}
+}

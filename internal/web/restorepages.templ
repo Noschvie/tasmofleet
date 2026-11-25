@@ -74,7 +74,7 @@ templ restoreConfirm(c restoreConfirmView) {
 							}
 							<div class="rs-acts">
 								@ui.Button(ui.Btn{Label: "Cancel", Href: c.CancelHref})
-								@ui.Button(ui.Btn{Label: "Restore and restart", Kind: "primary", Type: "submit"})
+								@ui.Button(ui.Btn{Label: restoreVerb, Kind: "danger-solid", Type: "submit"})
 							</div>
 						</form>
 					}

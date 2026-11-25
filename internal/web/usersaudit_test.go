@@ -317,13 +317,13 @@ func TestUserDetailExplainsDisabledActions(t *testing.T) {
 		Guards: auth.UserGuards{Role: last, Disable: last, Delete: last, Reset: auth.Guard{Reason: "Use Change password for your own account."},
 			Profile: auth.Guard{Reason: "Edit your own profile on the Account page."}}})
 	// each disabled action is blocked, not disabled (Tab reaches it), and names a visible line with its reason (#1072)
-	for label, why := range map[string]string{"Delete…": "This would leave no enabled administrator", "Reset password": "Use Change password for your own account"} {
+	for label, why := range map[string]string{"Delete": "This would leave no enabled administrator", "Reset password": "Use Change password for your own account"} {
 		bt := buttonTag(body, label)
 		if !blockedButton(bt) {
 			t.Errorf("%s is not a blocked button: %s", label, bt)
 			continue
 		}
-		if line := elementText(body, describedBy(bt), "</p>"); !strings.Contains(line, why+".") || !strings.Contains(line, strings.TrimSuffix(label, "…")+":") {
+		if line := elementText(body, describedBy(bt), "</p>"); !strings.Contains(line, why+".") || !strings.Contains(line, label+":") {
 			t.Errorf("the line %s names does not say why: %q", label, line)
 		}
 	}

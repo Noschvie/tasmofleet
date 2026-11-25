@@ -79,7 +79,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				if t.restartWhy() != "" {
 					@ui.Button(ui.Btn{Label: "Restart", DisabledReason: t.restartWhy(), ReasonID: t.describedBy(), ReasonShared: true})
 				} else {
-					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
+					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: restartDialogID})
 				}
 			}
 			<form method="post" action={ templ.SafeURL(t.Base + devPath(t.ID, "/backup")) }>
@@ -157,7 +157,7 @@ templ deviceOffBanner(t deviceTabs) {
 // restartDialog is the Restart confirmation, named after the device. oob: sent by a refresh that
 // may have renamed the device, over the dialog already on the page (#110).
 templ restartDialog(t deviceTabs, oob bool) {
-	@ui.Dialog(ui.DialogData{ID: "dlg-restart", Title: "Restart " + t.Name + "?", Body: "Its relays switch off for a few seconds.", Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: "Restart", OOB: oob})
+	@ui.Dialog(ui.DialogData{ID: restartDialogID, Title: restartWords(t.Name).Title, Body: restartWords(t.Name).Text, Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: restartWords(t.Name).Verb, Danger: true, OOB: oob})
 }
 
 // deviceOverviewPage is the overview tab (#145, #421): the live tiles, the relay box, then two card

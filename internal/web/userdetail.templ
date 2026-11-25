@@ -33,13 +33,13 @@ templ userDetailPage(v userDetailView) {
 		</div>
 	</div>
 	<div class="btn-row ud-acts" aria-label="User actions" role="group">
-		// Only Delete… (the menu's last item, after its rule) reads red, as in the prototype;
-		// Deactivate is a danger in its dialog only.
+		// Only Delete (the menu's last item, after its rule) reads red, here as in the row menu; Deactivate is a
+		// default button in both places and danger-solid in its dialog.
 		for _, a := range v.Actions {
 			if a.Disabled {
 				@ui.Button(ui.Btn{Label: a.Label, Disabled: true, DisabledReason: a.Why, ReasonID: v.reasonID(a.Label), ReasonShared: true})
 			} else {
-				<a class={ "btn", templ.KV("ud-danger", a.Danger && a.Sep) } href={ templ.SafeURL(a.Href) } data-dialog={ a.Dialog }>{ a.Label }</a>
+				@ui.Button(ui.Btn{Label: a.Label, Kind: userActionKind(a), Href: a.Href, Dialog: a.Dialog})
 			}
 		}
 	</div>

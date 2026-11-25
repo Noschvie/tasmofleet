@@ -578,31 +578,34 @@ templ fwCache(v view, p firmwarePage) {
 		<div class="ulist-head">
 			<h2 id="fw-cache-h">Cached files</h2>
 			<span class="fw-cache-total">
-				if v.IsAdmin && p.CanManage && p.UnusedCount > 0 {
-					<form method="post" action={ templ.SafeURL(v.Base + "/firmware/delete-selected") } class="fw-unused">
-						<input type="hidden" name="csrf" value={ v.CSRF }/>
-						for _, a := range p.Artifacts {
-							if a.Selectable {
-								<input type="hidden" name="id" value={ strconv.FormatInt(int64(a.ID), 10) }/>
-							}
-						}
-						<button type="submit" class="btn btn-link" title={ plural(p.UnusedCount, "file") + " not needed by any transaction (" + humanBytes(p.UnusedSize) + ")" }>Delete { strconv.Itoa(p.UnusedCount) } unused…</button>
-					</form>
-				}
 				<span id="cache-total">{ plural(len(p.Artifacts), "file") } · { sizeNoWrap(p.CacheSize) }</span>
 			</span>
 		</div>
-		for _, a := range p.Artifacts {
-			@fwCacheRow(v, p, a)
+		for i, a := range p.Artifacts {
+			@fwCacheRow(v, p, a, i > 0 && i >= len(p.Artifacts)-2)
 		}
 		if len(p.Artifacts) == 0 {
 			<p class="fw-cache-empty">Nothing cached yet.</p>
+		}
+		if v.IsAdmin && p.CanManage && p.UnusedCount > 0 {
+			// the bulk delete is a destructive action of the whole list: it stands at the end of it, not among the rows' own (#1093)
+			<div class="fw-cache-foot">
+				<form method="post" action={ templ.SafeURL(v.Base + "/firmware/delete-selected") } class="fw-unused">
+					<input type="hidden" name="csrf" value={ v.CSRF }/>
+					for _, a := range p.Artifacts {
+						if a.Selectable {
+							<input type="hidden" name="id" value={ strconv.FormatInt(int64(a.ID), 10) }/>
+						}
+					}
+					@ui.Button(ui.Btn{Label: "Delete " + strconv.Itoa(p.UnusedCount) + " unused", Type: "submit", Attrs: templ.Attributes{"title": plural(p.UnusedCount, "file") + " not needed by any transaction (" + humanBytes(p.UnusedSize) + ")"}})
+				</form>
+			</div>
 		}
 	</section>
 }
 
 // fwCacheRow is one cached file: name, release and size, checksum, date and Delete.
-templ fwCacheRow(v view, p firmwarePage, a artifactView) {
+templ fwCacheRow(v view, p firmwarePage, a artifactView, up bool) {
 	<div class="fw-crow fw-crow-2" title={ cacheTitle(a) }>
 		<span class="fw-c-f">
 			if a.Upload != nil {
@@ -621,7 +624,7 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView) {
 					<span class="fw-needed" title={ "Needed by " + a.NeededText() }>Needed</span>
 				}
 			} else if v.IsAdmin && p.CanManage {
-				<a class="fw-del" href={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete") } data-dialog={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) } aria-label={ "Delete " + a.Release + " " + a.Filename }>Delete</a>
+				@ui.RowMenu("Actions for "+fileName(a), []ui.MenuItem{{Label: "Delete", Danger: true, Href: v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete", Dialog: "dlg-file-" + strconv.FormatInt(int64(a.ID), 10)}}, up)
 			}
 		</span>
 		<span class="fw-c-v">
@@ -656,26 +659,15 @@ templ fwDeleteDialog(v view, p firmwarePage, a artifactView) {
 		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete") } class="udlg-in">
 			<input type="hidden" name="csrf" value={ v.CSRF }/>
 			<input type="hidden" name="confirm" value="yes"/>
-			if a.Upload != nil {
-				<h2 id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>Delete { a.Upload.Label } (custom) from the cache?</h2>
-				<p class="udlg-body">This is an image you uploaded. Deleting it removes it for good: it cannot be downloaded again, so keep your own copy if you still need it.</p>
-			} else {
-				<h2 id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>Delete { a.Filename } ({ a.Release }) from the cache?</h2>
-				<p class="udlg-body">{ waitingText(a) }</p>
-			}
+			<h2 id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>{ fileDeleteWords(a).Title }</h2>
+			<p class="udlg-body">{ fileDeleteWords(a).Text }</p>
 			<div class="udlg-changes">
 				<div><span>Frees</span><span class="mono">{ sizeNoWrap(a.Size) }</span></div>
 				<div><span>Checksum</span><span class="mono fw-sum"><code title={ a.SHA256 }>{ shortHash(a.SHA256) }</code>@ui.CopyButton(ui.CopyData{Text: a.SHA256, Aria: "Copy the SHA-256 of " + a.Filename})</span></div>
 			</div>
 			<div class="udlg-foot">
-				<button type="button" class="btn" data-close>Cancel</button>
-				<button type="submit" class="btn btn-danger-solid">
-					if a.Upload != nil {
-						Delete image
-					} else {
-						Delete file
-					}
-				</button>
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true}})
+				@ui.Button(ui.Btn{Label: fileDeleteWords(a).Verb, Kind: "danger-solid", Type: "submit"})
 			</div>
 		</form>
 	</dialog>

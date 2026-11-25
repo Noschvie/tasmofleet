@@ -46,19 +46,19 @@ var markupExemptions = []markupBlock{
 		"transactions.templ": {"btn": 16},
 	}},
 	{Name: "#1092 buttons: firmware", Files: map[string]map[string]int{
-		"firmware.templ":        {"btn": 11},
-		"firmware_manage.templ": {"btn": 8},
+		"firmware.templ":        {"btn": 8},
+		"firmware_manage.templ": {"btn": 6},
 		"release.templ":         {"btn": 3},
 	}},
 	{Name: "#1092 buttons: accounts", Files: map[string]map[string]int{
 		"accountpages.templ": {"btn": 8},
 		"messagepage.templ":  {"btn": 2},
 		"setup.templ":        {"btn": 1},
-		"userdetail.templ":   {"btn": 7},
+		"userdetail.templ":   {"btn": 6},
 	}},
 	{Name: "#1092 buttons: system", Files: map[string]map[string]int{
 		"audit.templ":       {"btn": 3},
-		"syssettings.templ": {"btn": 28},
+		"syssettings.templ": {"btn": 27},
 	}},
 	{Name: "#1092 buttons: add devices", Files: map[string]map[string]int{
 		"adddevices.templ": {"btn": 42},

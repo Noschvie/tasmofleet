@@ -269,6 +269,7 @@ test("firmware: short hash with a copy button", async ({ page, context }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/firmware");
+  await page.locator(".fw-crow summary").first().click(); // Delete is an entry of the file's row menu
   await page.locator('a[data-dialog^="dlg-file-"]').first().click();
   const dlg = page.locator("dialog[open]");
   const full = await dlg.locator("code").getAttribute("title");
@@ -595,7 +596,7 @@ test("phone: a cached file keeps its name and Delete inside the row", async ({ p
     const b = (await row.locator(part).boundingBox())!;
     expect(b.x >= box.x - 0.5 && b.x + b.width <= box.x + box.width + 0.5, `${part} inside the row`).toBe(true);
   }
-  await expect(row.locator(".fw-del, .fw-needed")).toBeVisible();
+  await expect(row.locator("summary, .fw-needed")).toBeVisible();
 });
 
 /** rowOverflows: a descendant of the row reaches past the row's right edge. */

@@ -72,7 +72,8 @@ test("prefetch for my fleet, then delete a cached file and all unused ones", asy
   await expect(minimal).toContainText("16.1.0");
 
   // delete one file in its dialog
-  await minimal.getByRole("link", { name: /^Delete/ }).click();
+  await minimal.locator("summary").click(); // Delete is an entry of the file's row menu
+  await minimal.getByRole("link", { name: "Delete", exact: true }).click();
   const dlg = page.locator("dialog[open]");
   await expect(dlg.getByRole("heading", { name: "Delete tasmota-minimal.bin.gz (16.1.0) from the cache?" })).toBeVisible();
   await dlg.getByRole("button", { name: "Delete file" }).click();

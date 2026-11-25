@@ -736,7 +736,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Button(ui.Btn{Kind: "primary", Type: "submit", Attrs: templ.Attributes{"data-fill": "verb"}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Kind: "danger-solid", Type: "submit", Attrs: templ.Attributes{"data-fill": "verb"}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

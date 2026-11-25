@@ -38,18 +38,18 @@ test("admin restores a backup; the job ends verified", { tag: "@core" }, async (
   await expect(page.getByText(/Backup taken/).first()).toBeVisible({ timeout: 30_000 });
 
   await page.locator("nav.utabs").getByRole("link", { name: "Backups" }).click();
-  await page.getByRole("link", { name: "Restore…" }).first().click();
+  await page.getByRole("link", { name: "Restore", exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Restore backup" })).toBeVisible();
   await expect(page.getByText(/^plug-4m · backup from/)).toBeVisible();
 
   // without the confirmation nothing starts
-  await page.getByRole("button", { name: "Restore and restart" }).click();
+  await page.getByRole("button", { name: "Restore backup" }).click();
   await expect(page.getByText("Tick the box to confirm.")).toBeVisible();
 
   // the decoder is off here, so the chip family cannot be checked: the ONE confirmation names it
   await expect(page.locator("label", { hasText: /I understand/ })).toContainText(/same chip family/);
   await page.getByLabel(/I understand/).check();
-  await page.getByRole("button", { name: "Restore and restart" }).click();
+  await page.getByRole("button", { name: "Restore backup" }).click();
   await expect(page.getByRole("heading", { name: "Restore backup" })).toBeVisible();
   await expect(page).toHaveURL(/\/restores\/\d+$/);
   await expect(page.locator("#restore-status")).toContainText("Restore finished.", { timeout: 90_000 });

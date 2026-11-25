@@ -310,8 +310,10 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 	self := u.Subject == d.Self
 	var items []ui.MenuItem
 	var dialogs []ui.DialogData
+	// danger is the tone of the confirming button; the menu entry itself reads red only for the last one, after its rule
+	// (Delete). Deactivate is a default entry here and a default button on the user page, and danger-solid in its dialog.
 	add := func(key, label string, guard auth.Guard, dlg ui.DialogData, danger, sep bool) {
-		it := ui.MenuItem{Label: label, Href: detail, Danger: danger, Sep: sep}
+		it := ui.MenuItem{Label: label, Href: detail, Danger: danger && sep, Sep: sep}
 		switch {
 		case d.ViewOnly:
 			it.Disabled, it.Why = true, "View only behind the proxy"
@@ -347,7 +349,7 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 		add("enable", "Reactivate", g.Disable, ui.DialogData{Title: "Reactivate " + who + "?", Body: who + " can sign in again.", Action: local, Verb: "Reactivate",
 			Fields: []ui.KVRow{{Key: "action", Value: "enable"}}}, false, false)
 	} else {
-		add("disable", "Deactivate", g.Disable, ui.DialogData{Title: "Deactivate " + who + "?", Body: who + " is signed out at once and cannot sign in until an admin reactivates the account.", Action: local, Verb: "Deactivate",
+		add("disable", "Deactivate", g.Disable, ui.DialogData{Title: "Deactivate " + who + "?", Body: who + " is signed out at once and cannot sign in until an admin reactivates the account.", Action: local, Verb: "Deactivate user",
 			Fields: []ui.KVRow{{Key: "action", Value: "disable"}}}, true, false)
 	}
 	end := auth.Guard{Allowed: (u.Method == auth.MethodSSO || u.Method == auth.MethodLocal) && u.Sessions > 0 && !self}
@@ -365,7 +367,7 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 	}
 	add("sessions", "End all sessions", end, ui.DialogData{Title: "End all sessions of " + who + "?", Body: endBody, Action: base + "/users/sessions", Verb: "End sessions",
 		Fields: []ui.KVRow{{Key: "subject", Value: u.Subject}}}, false, false)
-	add("delete", "Delete…", g.Delete, ui.DialogData{Title: "Delete " + who + "?", Body: "The account is removed for good. The audit log keeps its entries.", Action: local, Verb: "Delete",
+	add("delete", "Delete", g.Delete, ui.DialogData{Title: "Delete " + who + "?", Body: "The account is removed for good. The audit log keeps its entries.", Action: local, Verb: "Delete user",
 		Fields: []ui.KVRow{{Key: "action", Value: "delete"}}}, true, true)
 	return items, dialogs
 }
@@ -552,6 +554,14 @@ type userDetailView struct {
 	ProfileOpen  bool
 	PasswordOpen bool
 	StepUp       *ui.StepUpData
+}
+
+// userActionKind is the kind of a user page button: the danger one for the menu's red entry, default for the rest.
+func userActionKind(a ui.MenuItem) string {
+	if a.Danger {
+		return "danger"
+	}
+	return ""
 }
 
 // reactivateAction is the deactivated banner's one button, a link that opens the Reactivate dialog; nil when the

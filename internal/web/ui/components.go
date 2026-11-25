@@ -417,6 +417,10 @@ type ConfirmData struct {
 	ACL                           bool // the broker ACL notice (BrokerACLNotice) stands above the facts (#840)
 }
 
+// showHeading says whether the card draws its own heading: only a heading that adds something to the page's title. A
+// confirmation has one title, the dialog's (#1093); the card of a page whose heading equals it, or has none, draws none.
+func (c ConfirmData) showHeading() bool { return c.Heading != "" && c.Heading != c.Title }
+
 // FieldData is a label-above input with help text and the server's error for it.
 type FieldData struct {
 	Label, Name, Type, Value string
@@ -487,7 +491,15 @@ type ConsoleData struct {
 	ClearHref           string
 	Hidden              []KVRow
 	Lines               []ConsoleLine
-	Quick               []string
+	Quick               []QuickCmd
+}
+
+// QuickCmd is one quick command of the console: a submit button that sends Command, or, with Href, a link that opens
+// the confirmation named by Dialog instead (a command that interrupts the device is never sent in one click, #1093).
+// With Why the command cannot be sent now: the blocked button, named by the element WhyID.
+type QuickCmd struct {
+	Command, Href, Dialog string
+	Why, WhyID            string
 }
 
 // DiffRow is one setting of a backup comparison; Changed marks a difference.

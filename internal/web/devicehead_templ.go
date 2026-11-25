@@ -461,7 +461,7 @@ func deviceHead(t deviceTabs, attrs templ.Attributes) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: restartDialogID}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -772,7 +772,7 @@ func restartDialog(t deviceTabs, oob bool) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = ui.Dialog(ui.DialogData{ID: "dlg-restart", Title: "Restart " + t.Name + "?", Body: "Its relays switch off for a few seconds.", Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: "Restart", OOB: oob}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.Dialog(ui.DialogData{ID: restartDialogID, Title: restartWords(t.Name).Title, Body: restartWords(t.Name).Text, Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: restartWords(t.Name).Verb, Danger: true, OOB: oob}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

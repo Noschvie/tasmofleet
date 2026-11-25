@@ -59,7 +59,7 @@ test("admin deletes a backup; the newest one is warned about; delete selected co
   // lamp-1m has its own backup cooldown; plug-4m is kept for the replace test
   await backUp(page, "lamp-1m");
   await page.locator("nav.utabs").getByRole("link", { name: "Backups" }).click();
-  await expect(page.getByRole("link", { name: "Restore…" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Restore", exact: true })).toBeVisible();
 
   // "Delete selected": the confirmation names the count and the newest backup before anything goes
   await page.locator(".bk-row").getByRole("checkbox").first().check();

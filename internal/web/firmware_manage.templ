@@ -68,20 +68,16 @@ templ fwConfirmContent(v view, c fwConfirm) {
 // fwConfirmOne is the confirmation of one file: the dialog's text as a page; a file in use
 // says which transaction needs it and offers no Delete.
 templ fwConfirmOne(v view, c fwConfirm) {
-	@ui.PageHeader("Delete "+c.Artifact.Release+"/"+c.Artifact.Filename, "")
+	@ui.PageHeader(fileDeleteWords(c.Artifact).Title, "")
 	if c.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
 	}
-	@ui.CardOf(ui.CardData{Class: "confirm-card", LabelledBy: "confirm-h"}) {
-		switch {
-			case c.Artifact.InUse:
-				<h2 id="confirm-h">File in use</h2>
-			case c.Artifact.Upload != nil || firmware.IsCustomSource(c.Artifact.Source):
-				<h2 id="confirm-h">Delete image</h2>
-				<p class="udlg-body">This is an image you uploaded. Deleting it removes it for good: it cannot be downloaded again, so keep your own copy if you still need it.</p>
-			default:
-				<h2 id="confirm-h">Delete file</h2>
-				<p class="udlg-body">{ waitingText(c.Artifact) }</p>
+	@ui.CardOf(c.oneCard()) {
+		// one title: the page header says what is asked, the card does not repeat it (#1093)
+		if c.Artifact.InUse {
+			<h2 id="confirm-h">File in use</h2>
+		} else {
+			<p class="udlg-body">{ fileDeleteWords(c.Artifact).Text }</p>
 		}
 		@ui.KV([]ui.KVRow{
 			{Key: "Chip / variant", Value: chipLabel(c.Artifact.Family) + " / " + c.Artifact.Variant},
@@ -97,11 +93,7 @@ templ fwConfirmOne(v view, c fwConfirm) {
 				<input type="hidden" name="csrf" value={ v.CSRF }/>
 				<input type="hidden" name="confirm" value="yes"/>
 				<a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Cancel</a>
-				if c.Artifact.Upload != nil || firmware.IsCustomSource(c.Artifact.Source) {
-					<button type="submit" class="btn btn-danger-solid">Delete image</button>
-				} else {
-					<button type="submit" class="btn btn-danger-solid">Delete file</button>
-				}
+				@ui.Button(ui.Btn{Label: fileDeleteWords(c.Artifact).Verb, Kind: "danger-solid", Type: "submit"})
 			</form>
 		}
 	}

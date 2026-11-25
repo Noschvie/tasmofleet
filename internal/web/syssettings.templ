@@ -85,8 +85,8 @@ templ sysSettingsPage(p sysPage) {
 		@sysResetBox(p)
 	</div>
 	</div>
-	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: "Reset all settings?", Body: sysResetText,
-		Action: p.Base + sysPath + "/reset", CSRF: p.CSRF, Verb: "Reset settings", Danger: true})
+	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: resetWords().Title, Body: resetWords().Text,
+		Action: p.Base + sysPath + "/reset", CSRF: p.CSRF, Verb: resetWords().Verb, Danger: true})
 	if len(p.Notify.Push.Rows) > 0 {
 		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 	}
@@ -393,6 +393,7 @@ templ sysPushRowView(row sysPushRow) {
 				data-dlg-text={ row.RemoveText }
 				data-dlg-action={ row.RemoveURL }
 				data-dlg-verb="Remove"
+				data-dlg-danger
 			>Remove</a>
 		</div>
 	</div>
@@ -706,6 +707,7 @@ templ sysOrphanRow(p sysPage, st sysStorage, o sysOrphan) {
 					data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTimeSec) }
 					data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
 					data-dlg-verb="Delete backup"
+					data-dlg-danger
 				>Delete</a>
 			}
 		</div>
@@ -881,6 +883,7 @@ templ sysStoredBlock(db sysDB) {
 							data-dlg-text={ snapDeleteText(f.Name) }
 							data-dlg-action={ f.Delete }
 							data-dlg-verb="Delete snapshot"
+							data-dlg-danger
 						>Delete</a>
 					</div>
 				</div>
@@ -907,7 +910,7 @@ templ sysResetBox(p sysPage) {
 			<div class="sys-danger-title">Reset all settings</div>
 			<div class="sys-danger-text">Devices, backups and users are kept.</div>
 		</div>
-		<a class="btn btn-danger-solid" href={ templ.SafeURL(p.Base + sysPath + "/reset") } data-dialog="dlg-reset">Reset settings…</a>
+		@ui.Button(ui.Btn{Label: "Reset settings", Href: p.Base + sysPath + "/reset", Dialog: "dlg-reset"})
 	</div>
 }
 

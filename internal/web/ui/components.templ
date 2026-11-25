@@ -797,8 +797,17 @@ templ StepUp(s StepUpData) {
 // with the CSRF token, Cancel as a link back.
 templ ConfirmPage(c ConfirmData) {
 	@PageHeader(c.Title, "")
-	<section class="ucard confirm-card" aria-labelledby="confirm-h">
-		<h2 id="confirm-h">{ c.Heading }</h2>
+	<section
+		class="ucard confirm-card"
+		if c.showHeading() {
+			aria-labelledby="confirm-h"
+		} else {
+			aria-label={ c.Title }
+		}
+	>
+		if c.showHeading() {
+			<h2 id="confirm-h">{ c.Heading }</h2>
+		}
 		<p class="udlg-body">{ c.Text }</p>
 		if c.Warning != "" {
 			@Banner(BannerData{Tone: ToneDanger, Text: c.Warning, Alert: true})
@@ -956,7 +965,14 @@ templ Console(c ConsoleData) {
 			}
 			<span class="console-quick-l">Quick</span>
 			for _, q := range c.Quick {
-				<button type="submit" class="btn console-chip" name="command" value={ q }>{ q }</button>
+				switch {
+				case q.Why != "":
+					@Button(Btn{Label: q.Command, DisabledReason: q.Why, ReasonID: q.WhyID, ReasonShared: true, Class: "console-chip"})
+				case q.Href != "":
+					@Button(Btn{Label: q.Command, Href: q.Href, Dialog: q.Dialog, Class: "console-chip"})
+				default:
+					<button type="submit" class="btn console-chip" name="command" value={ q.Command }>{ q.Command }</button>
+				}
 			}
 		</form>
 	}

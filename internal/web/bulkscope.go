@@ -39,7 +39,7 @@ var bulkWords = map[bulkKind][4]string{
 	bulkBackup:  {"Back up devices", "Downloads each device’s configuration and stores it with a label.", "Back up", "Backups finished"},
 	bulkRestart: {"Restart devices", "Each device reboots. Relays switch off for a few seconds.", "Restart", "Restart finished"},
 	bulkOn:      {"Power on", "Switches the relays of each device on.", "Switch on", "Power on finished"},
-	bulkOff:     {"Power off", "Switches the relays of each device off.", "Switch off", "Power off finished"},
+	bulkOff:     {"Power off", "Switches the relays of each device off.", "Power off", "Power off finished"},
 }
 
 // bulkRunning is the result's title while the transaction still runs.
@@ -88,6 +88,10 @@ func (v bulkScopeView) Sub() string   { return bulkWords[v.Kind][1] }
 
 // Verb is the run button: "Send to 6 devices".
 func (v bulkScopeView) Verb() string { return bulkWords[v.Kind][2] + " " + plural(v.RunN, "device") }
+
+// Destructive says whether the run button is danger-solid: Restart and Power off interrupt what the devices do
+// (#1093); sending a command, backing up and powering on are not.
+func (v bulkScopeView) Destructive() bool { return v.Kind == bulkRestart || v.Kind == bulkOff }
 
 // Summary is the line above the run button: "6 devices run · 2 skipped".
 func (v bulkScopeView) Summary() string {
@@ -571,4 +575,12 @@ func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) b
 		}
 	}
 	return row
+}
+
+// verbKind is the run button's kind: danger-solid for an action that interrupts devices, else primary.
+func (v bulkScopeView) verbKind() string {
+	if v.Destructive() {
+		return "danger-solid"
+	}
+	return "primary"
 }

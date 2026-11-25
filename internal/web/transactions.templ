@@ -75,14 +75,10 @@ templ txList(p txListView) {
 									class="btn btn-sm"
 									href={ templ.SafeURL(s.CancelHref) }
 									data-dialog="dlg-txn"
-									data-dlg-title={ "Cancel " + s.ID + "?" }
-									data-dlg-text={ s.CancelText }
+									{ cancelScheduleWords(s.ID, s.CancelText).attrs(s.CancelHref)... }
 									data-dlg-at={ ui.StampISO(s.Start) }
 									data-dlg-ts={ ui.StampStart.Key }
 									data-dlg-shown={ ui.StampText(s.Start, ui.StampStart) }
-									data-dlg-action={ s.CancelHref }
-									data-dlg-verb="Cancel schedule"
-									data-dlg-dismiss="Keep schedule"
 									aria-label={ "Cancel " + s.ID }
 								>Cancel</a>
 							</span>
@@ -185,14 +181,10 @@ templ txnBody(p txnPage) {
 					class="btn"
 					href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/cancel") }
 					data-dialog="dlg-txn"
-					data-dlg-title={ "Cancel " + p.ID + "?" }
-					data-dlg-text={ p.Sched.CancelText }
+					{ cancelScheduleWords(p.ID, p.Sched.CancelText).attrs(p.Base + "/transactions/" + bid(p.Batch) + "/cancel")... }
 					data-dlg-at={ ui.StampISO(p.Sched.Start) }
 					data-dlg-ts={ ui.StampStart.Key }
 					data-dlg-shown={ ui.StampText(p.Sched.Start, ui.StampStart) }
-					data-dlg-action={ p.Base + "/transactions/" + bid(p.Batch) + "/cancel" }
-					data-dlg-verb="Cancel schedule"
-					data-dlg-dismiss="Keep schedule"
 					aria-label={ "Cancel " + p.ID }
 				>Cancel</a>
 			} else if p.Active {
@@ -200,11 +192,7 @@ templ txnBody(p txnPage) {
 					class="btn"
 					href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/cancel") }
 					data-dialog="dlg-txn"
-					data-dlg-title={ "Cancel " + p.ID + "?" }
-					data-dlg-text={ p.CancelText }
-					data-dlg-action={ p.Base + "/transactions/" + bid(p.Batch) + "/cancel" }
-					data-dlg-verb="Cancel remaining"
-					data-dlg-dismiss="Keep running"
+					{ cancelRemainingWords(p.ID, p.CancelText).attrs(p.Base + "/transactions/" + bid(p.Batch) + "/cancel")... }
 				>Cancel remaining</a>
 			}
 			if p.Sched != nil && p.Sched.Again != nil {
@@ -386,11 +374,7 @@ templ txnBody(p txnPage) {
 								<a
 									href={ templ.SafeURL(p.Base + "/jobs/" + jid(p.Sel.JobID) + "/cancel") }
 									data-dialog="dlg-txn"
-									data-dlg-title={ "Cancel the update of " + p.Sel.Name + "?" }
-									data-dlg-text="A running flash cannot be stopped; a device that has not started keeps its previous state."
-									data-dlg-action={ p.Base + "/jobs/" + jid(p.Sel.JobID) + "/cancel" }
-									data-dlg-verb="Cancel update"
-									data-dlg-dismiss="Keep running"
+									{ cancelUpdateWords(p.Sel.Name, jobRunningCancelText, false).attrs(p.Base + "/jobs/" + jid(p.Sel.JobID) + "/cancel")... }
 								>Cancel</a>
 							}
 							if p.Sel.CanRetry {

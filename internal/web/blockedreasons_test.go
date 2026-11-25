@@ -54,6 +54,9 @@ func TestHeaderBlockedButtonsAlwaysNameALineThatIsOnThePage(t *testing.T) {
 			}
 			for _, label := range []string{"Restart", "Back up"} {
 				bt := buttonTag(page, label)
+				if bt == "" && strings.Contains(page, ">"+label+"</a>") {
+					continue // the action can run: the header offers its confirmation link, no blocked button to check
+				}
 				if bt == "" {
 					t.Fatalf("no %s button", label)
 				}
@@ -199,7 +202,7 @@ func TestUserDetailBlockedActionsShareOneLinePerReason(t *testing.T) {
 		User:   auth.UserRow{Subject: "local:admin", Name: "admin", Method: auth.MethodLocal, Role: "admin"},
 		Guards: auth.UserGuards{Role: last, Disable: last, Delete: last, Reset: ok, Profile: ok}})
 	var ids = map[string]bool{}
-	for _, label := range []string{"Make operator", "Deactivate", "Delete…"} {
+	for _, label := range []string{"Make operator", "Deactivate", "Delete"} {
 		bt := buttonTag(body, label)
 		if !blockedButton(bt) {
 			t.Errorf("%s is not a blocked button: %s", label, bt)
@@ -227,7 +230,7 @@ func TestUserDetailOfAProxyUserPointsItsButtonsAtTheInfoBanner(t *testing.T) {
 	body := userDetailBody(t, auth.UserDetailData{BasePath: "/tf", CSRFToken: "tok", Self: "local:admin",
 		User:   auth.UserRow{Subject: "hdr:ops", Name: "ops", Method: auth.MethodHeader, Role: "operator"},
 		Guards: auth.UserGuards{Role: no, Disable: no, Delete: no, Reset: no, Profile: no}})
-	for _, label := range []string{"Make admin", "Reset password", "Deactivate", "Delete…", "End all sessions"} {
+	for _, label := range []string{"Make admin", "Reset password", "Deactivate", "Delete", "End all sessions"} {
 		bt := buttonTag(body, label)
 		if !blockedButton(bt) || describedBy(bt) != "ud-info" {
 			t.Errorf("%s does not name the info banner: %s", label, bt)

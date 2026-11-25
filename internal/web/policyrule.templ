@@ -90,7 +90,7 @@ templ rulePageTempl(p rulePageView) {
 					} else {
 						@ruleOpForm(p, "/disable", "rule", "Disable")
 					}
-					@ui.Button(ui.Btn{Label: "Delete…", Kind: "danger", Href: p.Base + rulesPath + "/delete?id=" + p.ID, Dialog: "dlg-rule-delete"})
+					@ui.Button(ui.Btn{Label: "Delete", Href: p.Base + rulesPath + "/delete?id=" + p.ID, Dialog: "dlg-rule-delete"})
 				}
 			</div>
 		</div>
@@ -146,10 +146,10 @@ templ rulePageTempl(p rulePageView) {
 		</div>
 		if p.Admin && !p.Draft {
 			@ui.Dialog(ui.DialogData{
-				ID: "dlg-rule-delete", Title: "Delete rule “" + p.Name + "”?", Body: p.DeleteText,
+				ID: "dlg-rule-delete", Title: p.Delete.Title, Body: p.Delete.Text,
 				Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
 				Fields: []ui.KVRow{{Key: "id", Value: p.ID}, {Key: "version", Value: vstr(p.Version)}},
-				Verb:   "Delete rule", Danger: true,
+				Verb:   p.Delete.Verb, Danger: true,
 			})
 		}
 		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>

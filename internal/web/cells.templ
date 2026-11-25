@@ -244,11 +244,8 @@ templ deviceMenu(m rowMenu) {
 					href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/restart") }
 					data-dialog="dlg-row"
 					data-dlg-kind="restart"
-					data-dlg-title={ "Restart " + m.Device.Name + "?" }
-					data-dlg-text="Its relays switch off for a few seconds."
-					data-dlg-action={ m.Base + "/devices/" + devID(m.Device.ID) + "/restart" }
-					data-dlg-verb="Restart"
-				>Restart…</a>
+					{ restartWords(m.Device.Name).attrs(m.Base + "/devices/" + devID(m.Device.ID) + "/restart")... }
+				>Restart</a>
 			}
 			if m.Admin {
 				<hr/>

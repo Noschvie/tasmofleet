@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -248,10 +249,22 @@ func TestConsoleQuickCommandsAndClear(t *testing.T) {
 	old := time.Now().Add(-time.Hour)
 	e.aud.Record(t.Context(), model.AuditEvent{At: old, Actor: "oidc:olli", Action: "command.send", Target: "device:1", Detail: `{"command":"Status 2"}`, Result: "ok"})
 	_, body := e.do(t, "GET", "/devices/1/console", "operator", nil)
-	for _, q := range []string{"Status 5", "Power TOGGLE", "Status 11", "TelePeriod 300", "Restart 1"} {
+	for _, q := range []string{"Status 5", "Power TOGGLE", "Status 11", "TelePeriod 300"} {
 		if !strings.Contains(body, `name="command" value="`+q+`">`+q+`</button>`) {
 			t.Errorf("quick command %q missing", q)
 		}
+	}
+	// Why (#1093): Restart 1 interrupts the device; the quick button must not send it in one click. An operator has no
+	// Restart (its routes are admin-only), so there is no chip for them at all.
+	if strings.Contains(body, `value="Restart 1"`) || strings.Contains(body, ">Restart 1<") {
+		t.Errorf("an operator got a Restart 1 quick command, which the restart routes refuse")
+	}
+	_, adm := e.do(t, "GET", "/devices/1/console", "admin", nil)
+	if strings.Contains(adm, `value="Restart 1"`) {
+		t.Errorf("Restart 1 is a submit button of the quick form: it would send without the confirmation")
+	}
+	if !regexp.MustCompile(`<a class="btn console-chip" data-dialog="dlg-restart" href="/tf/devices/1/restart">Restart 1</a>|<a class="btn console-chip" href="/tf/devices/1/restart" data-dialog="dlg-restart">Restart 1</a>`).MatchString(adm) {
+		t.Errorf("Restart 1 must lead to the restart confirmation of the header:\n%s", adm)
 	}
 	if strings.Contains(body, "Status 0") {
 		t.Fatal("Status 0 is offered")

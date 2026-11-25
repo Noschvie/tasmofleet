@@ -35,18 +35,30 @@ templ policyPage(p policyView) {
 				</p>
 			}
 		}
-		if p.Admin {
-			for _, r := range p.Rows {
-				@ui.Dialog(ui.DialogData{
-					ID: "dlg-rule-" + r.ID, Title: "Delete rule “" + r.Name + "”?", Body: r.Delete,
-					Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
-					Fields: []ui.KVRow{{Key: "id", Value: r.ID}, {Key: "version", Value: vstr(p.Version)}},
-					Verb:   "Delete rule", Danger: true,
-				})
-			}
+		if p.Admin && len(p.Rows) > 0 {
+			@ruleDeleteDialog(p)
 		}
 		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
 	</div>
+}
+
+// ruleDeleteDialog is the one delete dialog of the rule list: the Delete of a row fills its words and the rule's id
+// (dialog.js, data-dlg-*), so the page carries one dialog and not one per rule. The version is the policy's, the same for
+// every row; the POST refuses a stale one as it did.
+templ ruleDeleteDialog(p policyView) {
+	<dialog id="dlg-rule-delete" class="udlg" aria-labelledby="dlg-rule-delete-h">
+		<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/delete") } class="udlg-in" data-fill="form">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="id" value="" data-fill-field="id"/>
+			<input type="hidden" name="version" value={ vstr(p.Version) }/>
+			<h2 id="dlg-rule-delete-h" data-fill="title"></h2>
+			<p class="udlg-body" data-fill="text"></p>
+			<div class="udlg-foot">
+				@ui.Button(ui.Btn{Label: "Cancel", Attrs: templ.Attributes{"data-close": true, "data-fill": "dismiss"}})
+				@ui.Button(ui.Btn{Kind: "danger-solid", Type: "submit", Attrs: templ.Attributes{"data-fill": "verb"}})
+			</div>
+		</form>
+	</dialog>
 }
 
 // policyTable is the rule table. Admins get the drag handle and the row menu; on a phone every
@@ -157,7 +169,13 @@ templ policyRowMenu(p policyView, r ruleRow) {
 				@policyRowOp(p, r, "/order", "down", "", "Move down")
 			}
 			<hr/>
-			<a class="menu-item danger" href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + r.ID) } data-dialog={ "dlg-rule-" + r.ID }><span>Delete…</span></a>
+			<a
+				class="menu-item danger"
+				href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + r.ID) }
+				data-dialog="dlg-rule-delete"
+				data-dlg-field-id={ r.ID }
+				{ r.Delete.attrs(p.Base + rulesPath + "/delete")... }
+			><span>Delete</span></a>
 		</div>
 	</details>
 }

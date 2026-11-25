@@ -483,7 +483,7 @@ func restoreConfirm(c restoreConfirmView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restore and restart", Kind: "primary", Type: "submit"}).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.Button(ui.Btn{Label: restoreVerb, Kind: "danger-solid", Type: "submit"}).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

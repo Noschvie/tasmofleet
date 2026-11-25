@@ -618,7 +618,7 @@ func bulkScopePage(v bulkScopeView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = ui.Button(ui.Btn{Label: v.Verb(), Kind: "primary", Tall: true, Type: "submit", Disabled: v.Error != ""}).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.Button(ui.Btn{Label: v.Verb(), Kind: v.verbKind(), Tall: true, Type: "submit", Disabled: v.Error != ""}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

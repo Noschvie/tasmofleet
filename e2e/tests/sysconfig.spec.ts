@@ -210,7 +210,7 @@ test("metrics token: set on the page it applies at once, resetting it opens the 
   expect((await request.get(app.url + "/metrics")).status(), "token removed").toBe(200);
 });
 
-// Why (N9): "Reset settings…" puts every stored setting back to its default, but only after the
+// Why (N9): "Reset settings" puts every stored setting back to its default, but only after the
 // admin confirmed it is them (it changes the broker, the networks and the sign-in at once).
 // Header principals cannot confirm, so a local admin does it here.
 test("reset settings: one confirmation, then the step-up, then the defaults", async ({ page }) => {
@@ -230,7 +230,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
   await expect(page.getByText("Saved.")).toBeVisible();
 
   await page.goto(app.url + "/settings/system?tab=advanced");
-  await page.getByRole("link", { name: "Reset settings…" }).click();
+  await page.getByRole("link", { name: "Reset settings", exact: true }).click();
   const confirm = page.locator("dialog#dlg-reset");
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("Devices, backups and users are kept.");
@@ -243,7 +243,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
   await stepup.getByRole("button", { name: "Confirm" }).click();
   await expect(page).toHaveURL(/tab=advanced/);
 
-  await page.getByRole("link", { name: "Reset settings…" }).click();
+  await page.getByRole("link", { name: "Reset settings", exact: true }).click();
   await page.locator("dialog#dlg-reset").getByRole("button", { name: "Reset settings" }).click();
   await expect(page.getByText("All settings are back at their defaults.")).toBeVisible();
   await page.goto(app.url + "/devices/backups");

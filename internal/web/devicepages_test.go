@@ -394,12 +394,12 @@ func TestReplaceRefusalDoesNotRepeatTheStandingWarning(t *testing.T) {
 	}
 }
 
-// Why: a restart is reversible. Red is for delete; the restart confirmation uses the
-// primary button.
-func TestRestartConfirmIsNotADangerButton(t *testing.T) {
+// Why (#1093): a restart switches the relays off and the device is gone for a few seconds, so its confirmation is a
+// destructive one: danger-solid like the dialog it is the twin of, never the blue of a harmless action.
+func TestRestartConfirmIsADangerButton(t *testing.T) {
 	e := cmdEnv(t, &fakeCmd{})
 	_, restart := e.do(t, "GET", "/devices/1/restart", "admin", nil)
-	if !strings.Contains(restart, `<button type="submit" class="btn btn-primary">Restart device</button>`) {
+	if !strings.Contains(restart, `<button type="submit" class="btn btn-danger-solid">Restart device</button>`) {
 		t.Errorf("restart:\n%s", restart)
 	}
 	_, del := e.do(t, "GET", "/devices/1/delete", "admin", nil)

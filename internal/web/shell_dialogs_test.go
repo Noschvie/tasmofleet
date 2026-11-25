@@ -25,13 +25,14 @@ func TestCancelDialogsNameTheirDismissButton(t *testing.T) {
 	}
 }
 
-// Why: Delete leads to its confirmation page and is written "Delete..."; Restart opens a dialog
-// and must carry the same ellipsis, otherwise the menu promises an immediate action.
-func TestRowMenuRestartHasTheEllipsisOfAConfirmation(t *testing.T) {
+// Why: the design system ends a trigger with "…" only when it opens a step that asks for more input. Restart only asks
+// for the confirmation, so it has none (#1093); Delete leads to a page that asks what happens to the device's backups,
+// so its "…" stays.
+func TestRowMenuEllipsisFollowsWhetherTheStepAsksForInput(t *testing.T) {
 	e := cmdEnv(t, &fakeCmd{})
 	_, body := e.do(t, "GET", "/devices", "admin", nil)
-	if !strings.Contains(body, `data-dlg-verb="Restart">Restart…</a>`) {
-		t.Errorf("row menu Restart has no ellipsis")
+	if !strings.Contains(body, `data-dlg-verb="Restart device"`) || !strings.Contains(body, `>Restart</a>`) || strings.Contains(body, "Restart…") {
+		t.Errorf("row menu Restart only confirms: no ellipsis")
 	}
 	if !regexp.MustCompile(`href="/tf/devices/\d+/delete">Delete…</a>`).MatchString(body) {
 		t.Errorf("row menu Delete lost its ellipsis or its confirmation page")

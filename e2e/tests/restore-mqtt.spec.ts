@@ -52,7 +52,7 @@ test.describe("restore over MQTT", () => {
     }).toPass({ timeout: 180_000, intervals: [5_000] });
 
     await page.goto(mqApp.url + devicePath + "/backups");
-    await page.getByRole("link", { name: "Restore…" }).first().click();
+    await page.getByRole("link", { name: "Restore", exact: true }).first().click();
     await expect(page.getByRole("heading", { name: "Restore backup" })).toBeVisible();
     // the page names the path, and it is not the HTTP download
     await expect(page.locator(".rs-path")).toContainText("MQTT");
@@ -62,7 +62,7 @@ test.describe("restore over MQTT", () => {
     await expect(page.locator(".rs-cred")).toContainText("without a broker ACL that is every client of the broker");
     await expect(aclNotice(page)).toHaveCount(0);
     await page.getByLabel(/I understand/).check();
-    await page.getByRole("button", { name: "Restore and restart" }).click();
+    await page.getByRole("button", { name: "Restore backup" }).click();
     await expect(page).toHaveURL(/\/restores\/\d+$/);
     await expect(page.locator("#restore-status")).toContainText("Restore finished.", { timeout: 120_000 });
     await expect(page.locator("#restore-status")).toContainText("uploaded over MQTT");

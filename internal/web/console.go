@@ -84,7 +84,26 @@ func (h *handler) consoleHistory(r *http.Request, id model.DeviceID) []historyRo
 
 // quickCommands are the console's quick commands (prototype, D9: Status 5 instead of Status 0,
 // which automated code never sends). Each is checked by the command policy like a typed one.
-var quickCommands = []string{"Status 5", "Power TOGGLE", "Status 11", "TelePeriod 300", "Restart 1"}
+var quickCommands = []string{"Status 5", "Power TOGGLE", "Status 11", "TelePeriod 300", restartCommand}
+
+// quickOf turns the quick commands into the console's buttons. Restart 1 leads to the confirmation of the header's
+// Restart (its dialog, or its page without JavaScript) and is offered to whoever gets that button: the restart
+// routes are admin-only, so an operator has no chip (the typed line is the way for them, as before).
+func quickOf(t deviceTabs) []ui.QuickCmd {
+	var out []ui.QuickCmd
+	for _, c := range quickCommands {
+		switch {
+		case c != restartCommand:
+			out = append(out, ui.QuickCmd{Command: c})
+		case !t.CanRestart:
+		case t.restartWhy() != "":
+			out = append(out, ui.QuickCmd{Command: c, Why: t.restartWhy(), WhyID: t.describedBy()})
+		default:
+			out = append(out, ui.QuickCmd{Command: c, Href: t.Base + devPath(t.ID, "/restart"), Dialog: restartDialogID})
+		}
+	}
+	return out
+}
 
 // consoleSince reads "since" (Clear): lines older than it are not shown. Zero shows everything.
 func consoleSince(s string) time.Time {
@@ -139,7 +158,7 @@ func (h *handler) renderConsole(w http.ResponseWriter, r *http.Request, status i
 		ClearHref:  v.Base + devPath(d.ID, "/console?since="+strconv.FormatInt(now.Unix(), 10)),
 		HistoryAdd: data.HistoryAdd,
 		Lines:      consoleLines(data, consoleSince(since), now),
-		Quick:      quickCommands,
+		Quick:      quickOf(data.Tabs),
 	}
 	if !consoleSince(since).IsZero() {
 		c.Hidden = []ui.KVRow{{Key: "since", Value: since}}

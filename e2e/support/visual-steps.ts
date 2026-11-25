@@ -104,7 +104,8 @@ async function c3Uncached(page: Page): Promise<void> {
   }
   const row = page.locator(".fw-crow").filter({ hasText: "tasmota32c3.bin" }).first();
   if ((await row.count()) > 0) {
-    await row.locator(".fw-del").click();
+    await row.locator("summary").click(); // Delete is an entry of the file's row menu (#1093)
+    await row.getByRole("link", { name: "Delete", exact: true }).click();
     await page.locator("dialog[open]").getByRole("button", { name: "Delete file" }).click();
     await page.waitForLoadState();
     await page.goto(url);
@@ -280,7 +281,7 @@ async function startRestore(page: Page): Promise<void> {
       { timeout: 10_000 },
     );
     await page
-      .getByRole("button", { name: "Restore and restart" })
+      .getByRole("button", { name: "Restore backup" })
       .click({ timeout: 3_000 });
     if ((await answer).status() !== 409) {
       await page.waitForURL(/\/restores\/\d+$/, { timeout: 10_000 });
@@ -464,7 +465,7 @@ const customSteps: Record<string, (page: Page, vars: StepVars) => Promise<void>>
   "delete-cached-file": async (page) => {
     await page.evaluate(() => {
       const row = [...document.querySelectorAll(".fw-crow")].find((r) => r.querySelector(".fw-c-f")?.textContent?.trim() === "tasmota.bin.gz");
-      row?.querySelector<HTMLElement>(".fw-del")?.click();
+      row?.querySelector<HTMLElement>("a[data-dialog^='dlg-file-']")?.click();
     });
     await page.locator("dialog[open]").waitFor();
   },

@@ -133,9 +133,9 @@ type ruleRow struct {
 	// Counted: the numbers below are known (the report ran). A disabled rule is never counted.
 	Counted                 bool
 	Match, Deviate, Unknown int
-	Applied                 int    // devices the rule is evaluated for
-	Text                    string // "17 / 18 · 1 deviate · 2 ?"
-	Delete                  string // the delete dialog's body
+	Applied                 int          // devices the rule is evaluated for
+	Text                    string       // "17 / 18 · 1 deviate · 2 ?"
+	Delete                  confirmWords // what the delete dialog says (the list has one dialog; the row's Delete fills it)
 	// Invalid is why the stored rule no longer validates ("" when it does). Such a rule is not
 	// evaluated: it is flagged on its row and left out of the tiles.
 	Invalid string
@@ -255,11 +255,7 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 			row.Applies += " · " + strconv.Itoa(t.Applies())
 			row.Text = complianceText(t)
 		}
-		row.Delete = "It currently judges " + plural(row.Applied, "device") + ". They stop being checked for " + s.Command +
-			". The change is saved as a new version you can revert to."
-		if s.Disabled {
-			row.Delete = "It is disabled and judges no device. The change is saved as a new version you can revert to."
-		}
+		row.Delete = ruleDeleteWords(names[i], s.Command, row.Applied, s.Disabled)
 		p.Rows = append(p.Rows, row)
 	}
 

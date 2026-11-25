@@ -307,7 +307,7 @@ func TestSystemSettingsDangerZoneAndContainerListAreOutsideTheForm(t *testing.T)
 	e, _, _, _ := sysEnv(t, true)
 	_, page := e.do(t, "GET", "/settings/system?tab=advanced", "admin", nil)
 	form := formBody(t, page)
-	for _, s := range []string{"Reset all settings", "Reset settings…", "Set by the container"} {
+	for _, s := range []string{"Reset all settings", "Reset settings", "Set by the container"} {
 		if strings.Contains(form, s) {
 			t.Errorf("%q is inside the settings form", s)
 		}

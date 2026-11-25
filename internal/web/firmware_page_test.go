@@ -202,7 +202,7 @@ func TestFirmwareCachedFiles(t *testing.T) {
 	_, body := e.do(t, "GET", "/firmware", "admin", nil)
 	list := fwSection(t, body, "cache")
 	for _, want := range []string{
-		"2 files · 3.0\u00a0KiB", "Delete 1 unused…", `name="id" value="2"`,
+		"2 files · 3.0\u00a0KiB", "Delete 1 unused", `name="id" value="2"`,
 		`href="/tf/transactions/5"`, "Needed by #5",
 		"sha256 9f2c…e77c", "ESP32 / tasmota, from ota.tasmota.com; installed on dimmer",
 		`href="/tf/firmware/artifacts/2/delete" data-dialog="dlg-file-2"`,
@@ -613,5 +613,32 @@ func TestFirmwareListReadErrorKeepsTheChainOffThePage(t *testing.T) {
 	_, body := e.do(t, "GET", "/firmware", "admin", nil)
 	if !strings.Contains(body, "The release list could not be read. The server log has the details.") || strings.Contains(body, "127.0.0.1") || strings.Contains(body, "answered 500") {
 		t.Errorf("the page does not map the list error to a sentence:\n%s", body)
+	}
+}
+
+// Why (#1093): "Delete N unused" is destructive, so it is a default button at the end of the cached list, after the
+// rows, not red text in the card head among the file's own controls (.fw-del), where it read as a harmless action of
+// the header. The per-file Delete moved into each row's menu.
+func TestFirmwareBulkDeleteStandsInTheCardFooter(t *testing.T) {
+	fw := &fakeMgrFW{releases: baseRelease(), arts: []model.Artifact{
+		{ID: 1, Release: "16.1.0", Filename: "tasmota-minimal.bin.gz", Family: model.ChipESP8266, Variant: "minimal", Size: 2048, SHA256: strings.Repeat("a", 64), Source: "github", FetchedAt: time.Now()},
+		{ID: 2, Release: "16.1.0", Filename: "tasmota32.bin", Family: model.ChipESP32, Variant: "tasmota", Size: 1024, SHA256: strings.Repeat("b", 64), Source: "ota.tasmota.com", FetchedAt: time.Now()},
+	}}
+	e := fwEnv(t, fw)
+	_, body := e.do(t, "GET", "/firmware", "admin", nil)
+	list := fwSection(t, body, "cache")
+	if strings.Contains(list, "fw-del") {
+		t.Errorf("the per-file red Delete link is back in the cache card:\n%s", list)
+	}
+	head := list[:strings.Index(list, `class="fw-crow`)]
+	if strings.Contains(head, "fw-unused") || strings.Contains(head, "Delete") {
+		t.Errorf("the bulk delete is in the card head:\n%s", head)
+	}
+	foot := strings.Index(list, `class="fw-cache-foot"`)
+	if foot < 0 || foot < strings.LastIndex(list, `class="fw-crow`) {
+		t.Fatalf("the bulk delete is not in a footer after the last row:\n%s", list)
+	}
+	if f := list[foot:]; !strings.Contains(f, "fw-unused") || !strings.Contains(f, "Delete 2 unused") {
+		t.Errorf("the footer lacks the bulk delete:\n%s", f)
 	}
 }

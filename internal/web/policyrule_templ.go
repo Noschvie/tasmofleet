@@ -189,7 +189,7 @@ func rulePageTempl(p rulePageView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Delete…", Kind: "danger", Href: p.Base + rulesPath + "/delete?id=" + p.ID, Dialog: "dlg-rule-delete"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Delete", Href: p.Base + rulesPath + "/delete?id=" + p.ID, Dialog: "dlg-rule-delete"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -494,10 +494,10 @@ func rulePageTempl(p rulePageView) templ.Component {
 		}
 		if p.Admin && !p.Draft {
 			templ_7745c5c3_Err = ui.Dialog(ui.DialogData{
-				ID: "dlg-rule-delete", Title: "Delete rule “" + p.Name + "”?", Body: p.DeleteText,
+				ID: "dlg-rule-delete", Title: p.Delete.Title, Body: p.Delete.Text,
 				Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
 				Fields: []ui.KVRow{{Key: "id", Value: p.ID}, {Key: "version", Value: vstr(p.Version)}},
-				Verb:   "Delete rule", Danger: true,
+				Verb:   p.Delete.Verb, Danger: true,
 			}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

@@ -88,13 +88,13 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"TxnRow":           TxnRow(TxnRowData{ID: h, Title: h, Result: h, When: h, Href: "/x"}),
 		"Dialog":           Dialog(DialogData{ID: "d", Title: h, Body: h, Command: h, Changes: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Verb: h}),
 		"StepUp":           StepUp(StepUpData{ID: "s", Name: h, Sub: h, What: h, IdP: h, IdPHref: "/x", Local: true, Action: "/x", CSRF: h, Error: h}),
-		"ConfirmPage":      ConfirmPage(ConfirmData{Title: h, Heading: h, Text: h, Warning: h, Facts: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Fields: []KVRow{{Key: h, Value: h}}, Verb: h, CancelHref: "/x", CancelLabel: h}),
+		"ConfirmPage":      ConfirmPage(ConfirmData{Title: h, Heading: h + "x", Text: h, Warning: h, Facts: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Fields: []KVRow{{Key: h, Value: h}}, Verb: h, CancelHref: "/x", CancelLabel: h}),
 		"Empty":            Empty(h, h),
 		"NoMatch":          NoMatch(h, "/x"),
 		"Skeleton":         Skeleton(h, 2),
 		"ErrorPage":        ErrorPage(h, h, h, h, Btn{Label: h, Href: "/x"}, Btn{Label: h}),
 		"AuthCard":         AuthCard("", h, h),
-		"Console":          Console(ConsoleData{Title: h, Action: "/x", CSRF: h, Lines: []ConsoleLine{{Time: h, Text: h, Kind: "err"}}, Quick: []string{h}}),
+		"Console":          Console(ConsoleData{Title: h, Action: "/x", CSRF: h, Lines: []ConsoleLine{{Time: h, Text: h, Kind: "err"}}, Quick: []QuickCmd{{Command: h}, {Command: h, Href: h, Dialog: h}, {Command: h, Why: h, WhyID: h}}}),
 		"Diff":             Diff(DiffData{OldLabel: h, NewLabel: h, Rows: []DiffRow{{Key: h, Old: h, New: h, Changed: true}}}),
 		"DiffUnified":      Diff(DiffData{OldLabel: h, NewLabel: h, Unified: true, Rows: []DiffRow{{Key: h, Old: h, New: h, Changed: true}}}),
 		"Notes":            Notes([]NoteBlock{{Kind: "h", Text: h}, {Kind: "p", Text: h}, {Kind: "ul", Items: []string{h}}, {Kind: "code", Text: h}, {Kind: "breaking", Text: h, Items: []string{h}}}),
@@ -775,5 +775,47 @@ func TestCardOf(t *testing.T) {
 	}
 	if got, want := comp(t, CardOf(CardData{Tag: "article", Rank: 1, Class: "rel-notes", Aria: "Release notes"})), `<article class="r1 ucard rel-notes" aria-label="Release notes"></article>`; got != want {
 		t.Errorf("article: got %s, want %s", got, want)
+	}
+}
+
+// Why (#1093): a confirmation has one title. The page header is it; a card heading that only says it again made every
+// confirm page read twice (A6-017). A heading that adds something stays, and the card is named either way.
+func TestConfirmPageDrawsNoHeadingThatRepeatsItsTitle(t *testing.T) {
+	base := ConfirmData{Title: "Delete this rule?", Text: "t", Action: "/x", CSRF: "c", Verb: "Delete rule", Danger: true, CancelHref: "/y", CancelLabel: "Cancel"}
+	for name, heading := range map[string]string{"none": "", "same": "Delete this rule?"} {
+		c := base
+		c.Heading = heading
+		out := comp(t, ConfirmPage(c))
+		if strings.Contains(out, "<h2") || strings.Contains(out, "aria-labelledby=\"confirm-h\"") {
+			t.Errorf("%s: the card repeats the title: %s", name, out)
+		}
+		if !strings.Contains(out, `aria-label="Delete this rule?"`) || strings.Count(out, "Delete this rule?") != 2 {
+			t.Errorf("%s: the page header and the card's name are the title, once each: %s", name, out)
+		}
+	}
+	c := base
+	c.Heading = "Send 3 devices?"
+	if out := comp(t, ConfirmPage(c)); !strings.Contains(out, `<h2 id="confirm-h">Send 3 devices?</h2>`) || !strings.Contains(out, `aria-labelledby="confirm-h"`) {
+		t.Errorf("a heading of its own is kept and names the card: %s", out)
+	}
+}
+
+// Why (#1093): a quick command that interrupts the device is never one click. With Href it is a link to the
+// confirmation (the dialog when JavaScript is on), not a submit button of the quick form; blocked, it is the
+// blocked button and carries no action.
+func TestConsoleQuickCommandThatNeedsAConfirmationIsALink(t *testing.T) {
+	out := comp(t, Console(ConsoleData{Title: "c", Action: "/x", CSRF: "c", Quick: []QuickCmd{
+		{Command: "Status 5"},
+		{Command: "Restart 1", Href: "/devices/1/restart", Dialog: "dlg-restart"},
+	}}))
+	if !strings.Contains(out, `name="command" value="Status 5">Status 5</button>`) {
+		t.Errorf("a plain quick command still sends: %s", out)
+	}
+	if strings.Contains(out, `value="Restart 1"`) || !strings.Contains(out, `href="/devices/1/restart"`) || !strings.Contains(out, `data-dialog="dlg-restart"`) {
+		t.Errorf("Restart 1 must lead to the confirmation, not send: %s", out)
+	}
+	out = comp(t, Console(ConsoleData{Title: "c", Action: "/x", CSRF: "c", Quick: []QuickCmd{{Command: "Restart 1", Why: "It is offline.", WhyID: "devhd-why"}}}))
+	if strings.Contains(out, `value="Restart 1"`) || !strings.Contains(out, `aria-disabled="true"`) || !strings.Contains(out, `aria-describedby="devhd-why"`) {
+		t.Errorf("blocked Restart 1 sends nothing and says why: %s", out)
 	}
 }

@@ -169,9 +169,9 @@ func (h *handler) orphansDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		text += " " + strconv.Itoa(plan.Left) + " of the selection stays: a kept backup is released before it can be deleted."
 	}
 	c := actionConfirm{
-		Title: "Delete " + plural(plan.Runs, "backup") + " of deleted devices?", Heading: "Delete " + plural(plan.Runs, "backup") + " of deleted devices",
-		Text: text + " This cannot be undone; the audit log lists every backup.",
-		Last: "Delete selected", Action: orphansDeletePath, Verb: "Delete " + plural(plan.Runs, "backup"),
+		Title: "Delete " + plural(plan.Runs, "backup") + " of deleted devices?",
+		Text:  text + " This cannot be undone; the audit log lists every backup.",
+		Last:  "Delete selected", Action: orphansDeletePath, Verb: "Delete " + plural(plan.Runs, "backup"),
 		CancelHref: fleetPath, CancelLabel: "Cancel",
 	}
 	for _, id := range ids {
@@ -220,7 +220,7 @@ func (h *handler) unrefDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		c.Fields = append(c.Fields, confirmField{Name: "path", Value: f.Path})
 	}
 	c.Fields = append(c.Fields, confirmField{Name: "confirm", Value: "1"})
-	c.Title, c.Heading = "Delete "+plural(len(files), "unreferenced file")+"?", "Delete "+plural(len(files), "unreferenced file")
+	c.Title = "Delete " + plural(len(files), "unreferenced file") + "?"
 	c.Verb = "Delete " + plural(len(files), "file")
 	c.Text = plural(len(files), "file") + ", " + humanBytes(size) + " in all, in old backup folders that no backup entry points to. " +
 		"No backup and no restore point uses them. This cannot be undone; the audit log lists every file."
@@ -304,7 +304,7 @@ func (h *handler) pruneNowConfirm(w http.ResponseWriter, r *http.Request) {
 		c.Fields = append(c.Fields, confirmField{Name: "id", Value: strconv.FormatInt(int64(run.ID), 10)})
 	}
 	c.Fields = append(c.Fields, confirmField{Name: "confirm", Value: "1"})
-	c.Title, c.Heading, c.Verb = "Prune "+plural(len(runs), "backup")+" now?", "Prune "+plural(len(runs), "backup"), "Prune "+plural(len(runs), "backup")
+	c.Title, c.Verb = "Prune "+plural(len(runs), "backup")+" now?", "Prune "+plural(len(runs), "backup")
 	c.Text = plural(len(runs), "backup") + " of " + plural(devices, "device") + ", " + humanBytes(size) + " in all, are deleted now instead of at their next backup. " +
 		pruneNowRules + " This cannot be undone; the audit log lists every backup."
 	h.renderActionConfirm(w, r, "backups", c)

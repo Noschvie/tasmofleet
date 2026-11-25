@@ -290,7 +290,7 @@ func TestPolicyRuleMenuOpensTheRulePageAndOffersTheRowActions(t *testing.T) {
 		t.Errorf("the rule name does not link to its page:\n%s", row)
 	}
 	menu := row[strings.Index(row, `class="rowmenu`):]
-	for _, w := range []string{">Edit<", ">Duplicate<", ">Disable<", ">Delete…<", `name="id" value="` + id + `"`} {
+	for _, w := range []string{">Edit<", ">Duplicate<", ">Disable<", ">Delete<", `name="id" value="` + id + `"`} {
 		if !strings.Contains(menu, w) {
 			t.Errorf("the rule menu lost %q:\n%s", w, menu)
 		}

@@ -221,8 +221,15 @@ The Copy button is one component, `ui.CopyButton(CopyData{Label, Text | From, Ar
 `Text` is the value; `From` is the selector of an element whose text is copied, for a secret shown once that must
 not be in the markup twice.
 The trigger of a destructive action is a default button (or the danger link in a row); its confirming
-button is danger-solid and repeats the verb with the object ("Power off 6 devices"); a destructive dialog
-opens with the focus on Cancel (#1093).
+button is danger-solid and repeats the verb with the object ("Power off 6 devices", "Restore backup",
+"Cancel remaining"); a destructive dialog opens with the focus on Cancel (#1093). Restart, Power off, Restore,
+Cancel remaining, Delete and Reset settings are destructive; Deactivate is a default entry in the row menu and a
+default button on the user page, and danger-solid in its dialog. A trigger that only asks for the confirmation
+has no "…" (Restart, Restore, Reset settings, Deactivate, Delete of a user, a rule or a file); one that leads to a
+page asking for more input keeps it (the device's Delete…, which asks what happens to its backups). The Reset
+settings strip keeps its frame, neutral, and its trigger is a default button. A quick command of the console that
+interrupts the device (Restart 1) is a link to the confirmation of the header's button, offered to whoever gets
+that button (the restart routes are admin-only), never a submit that sends at once; the typed line is unchanged.
 
 ![Buttons, desktop, light](../design/styleguide/buttons-desktop-light.png)
 
@@ -361,6 +368,8 @@ Also: [desktop, dark](../design/styleguide/tabs-desktop-dark.png) · [phone, lig
 
 A row menu is a `<details>` with the ⋯ button and a 250 px panel (radius 10, `--shadow-lg`); items are links or buttons (`400 13px`), destructive ones in danger-fg after a rule, disabled ones in text-3 with the reason on a second line (a `<button type="button" aria-disabled="true">` that carries the reason in its own text and no action, so Tab still reaches it). It is a plain disclosure, not an ARIA menu: no `role="menu"` or `role="menuitem"` (they promise arrow keys and roving focus that `menu.js` does not have; a source test fails when a template claims them), and the trigger is named by its row, `Actions for <name>` (#1074). `menu.js` keeps one menu open, closes on Escape and on a click elsewhere; `up` opens above the button (the server marks the last rows, the script decides by the viewport). The style guide shows menus open in the flow with `data-static`, which every script leaves alone.
 
+A destructive action of a row is an entry of its row menu, in danger-fg, not a red link beside the row's own text: a cached firmware file has one, its Delete (#1093); the action of the whole list ("Delete 6 unused") is a default button at the end of the list.
+
 Component: `ui.RowMenu(label, items, up)`, the shell's user menu and drawer. `ui.MenuButton(label, title)` is the ⋯ button alone (the `<summary>`), for a menu whose items are not a plain list of links (the device list's, whose entries post).
 
 ![Menus, desktop, light](../design/styleguide/menus-desktop-light.png)
@@ -369,7 +378,7 @@ Also: [desktop, dark](../design/styleguide/menus-desktop-dark.png) · [phone, li
 
 ### Dialogs
 
-A confirmation dialog has the title (`600 16px`), the consequence, optionally the list of what changes or a command input, Cancel and the verb (danger-solid for destructive actions, primary otherwise); it posts with the CSRF token. `dialog.js` opens it from any `[data-dialog]` and closes the menu it was opened from; without JavaScript the trigger's link goes to the confirmation page (`ui.ConfirmPage`, the same look). The step-up dialog ("Confirm it's you") offers the identity provider's re-authentication and, for local accounts, the password.
+A confirmation dialog has the title (`600 16px`), the consequence, optionally the list of what changes or a command input, Cancel and the verb (danger-solid for destructive actions, primary otherwise); it posts with the CSRF token. `dialog.js` opens it from any `[data-dialog]` and closes the menu it was opened from. A dialog whose verb is danger-solid opens with the focus on its Cancel (the first `[data-close]`), so Enter on a dialog that just opened never runs the action. A shared dialog (`dlg-row`, `dlg-txn`, the rules' delete dialog) is filled from the `data-dlg-*` attributes of its opener: title, text, action, verb, `data-dlg-dismiss` and `data-dlg-field-<name>` (the hidden input `data-fill-field="<name>"`, emptied by an opener without it); `data-dlg-danger` makes the verb danger-solid and its absence primary, on every open. The dialog and the page of an action ask one question: both take their words from one builder (`confirmwords.go`), and the page draws no card heading that repeats its title (`ConfirmData.Heading` only when it differs from `Title`); without JavaScript the trigger's link goes to the confirmation page (`ui.ConfirmPage`, the same look). The step-up dialog ("Confirm it's you") offers the identity provider's re-authentication and, for local accounts, the password.
 
 Component: `ui.Dialog(DialogData{...})`, `ui.StepUp(StepUpData{...})`, `ui.ConfirmPage(ConfirmData{...})`.
 

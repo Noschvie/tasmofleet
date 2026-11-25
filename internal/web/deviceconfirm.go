@@ -182,7 +182,8 @@ func (h *handler) deviceRestartConfirm(w http.ResponseWriter, r *http.Request) {
 // dialog's wording: Restart sends Restart 1.
 func (h *handler) renderDeviceConfirm(w http.ResponseWriter, r *http.Request, c deviceConfirmData) {
 	dev := c.Device
-	title := "Restart " + dev.Name + "?"
+	words := restartWords(dev.Name)
+	title := words.Title
 	v := h.view(r, strings.TrimSuffix(title, "?"), "device", nil)
 	devPath := "/devices/" + strconv.FormatInt(int64(dev.ID), 10)
 	v.Crumbs = []ui.Crumb{{Label: dev.Name, Path: devPath}, {Label: "Restart"}}
@@ -191,10 +192,10 @@ func (h *handler) renderDeviceConfirm(w http.ResponseWriter, r *http.Request, c 
 		addr += ":" + strconv.Itoa(dev.Port)
 	}
 	h.show(w, r, http.StatusOK, "device_confirm", v, ui.ConfirmPage(ui.ConfirmData{
-		Title: title, Heading: "Restart device",
+		Title:  title,
 		Text:   "Sends Restart 1 to " + dev.Name + ". The device is offline for a few seconds while it reboots, and its health shows offline until it reports again.",
 		Facts:  []ui.KVRow{{Key: "Address", Value: addr, Mono: true}},
-		Action: v.Base + devPath + "/restart", CSRF: v.CSRF, Verb: "Restart device",
+		Action: v.Base + devPath + "/restart", CSRF: v.CSRF, Verb: words.Verb, Danger: true,
 		CancelHref: v.Base + devPath, CancelLabel: "Cancel",
 	}))
 }

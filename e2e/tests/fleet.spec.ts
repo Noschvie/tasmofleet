@@ -136,8 +136,8 @@ test("device list: the bulk bar offers switching, asks first for several devices
   await deviceBox(page, "plug-4m-http").check();
   await expect(bar).toContainText("2 devices selected");
   await bar.getByRole("button", { name: "Power off", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Switch off 2 devices" })).toBeVisible(); // the scope page: nothing sent yet
-  await page.getByRole("button", { name: "Switch off 2 devices" }).click();
+  await expect(page.getByRole("button", { name: "Power off 2 devices" })).toBeVisible(); // the scope page: nothing sent yet
+  await page.getByRole("button", { name: "Power off 2 devices" }).click();
   await expect(page.getByRole("heading", { name: "Power off finished", level: 1 })).toBeVisible();
   await expect(page.locator(".bk-rrow").filter({ hasText: "lamp-1m" })).toContainText("Succeeded");
   await expect(page.locator(".bk-rrow").filter({ hasText: "plug-4m-http" })).toContainText("Succeeded");

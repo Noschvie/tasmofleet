@@ -1014,7 +1014,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Dialog(ui.DialogData{ID: "sg-dlg-restart", Title: "Restart 3 devices?", Body: "Relays switch off for a few seconds. Connected lights will flicker.", Changes: []ui.KVRow{{Key: "Balcony Windowsill", Value: "Restart 1"}, {Key: "Kitchen Plug", Value: "Restart 1"}, {Key: "Hallway Light", Value: "Restart 1"}}, Action: v.Base + "/styleguide", CSRF: v.CSRF, Verb: "Restart 3 devices", Static: true}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Dialog(ui.DialogData{ID: "sg-dlg-restart", Title: "Restart 3 devices?", Body: "Relays switch off for a few seconds. Connected lights will flicker.", Changes: []ui.KVRow{{Key: "Balcony Windowsill", Value: "Restart 1"}, {Key: "Kitchen Plug", Value: "Restart 1"}, {Key: "Hallway Light", Value: "Restart 1"}}, Action: v.Base + "/styleguide", CSRF: v.CSRF, Verb: "Restart 3 devices", Danger: true, Static: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1178,7 +1178,7 @@ func styleguidePage(v sgView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = ui.Console(ui.ConsoleData{Title: "Console · MQTT + HTTP · 192.168.20.12", Action: v.Base + "/styleguide", CSRF: v.CSRF, Lines: []ui.ConsoleLine{{Time: "09:52:01", Text: "Power", Kind: "cmd"}, {Time: "09:52:01", Text: `{"POWER":"ON"}`}, {Time: "09:52:07", Text: "Status 5", Kind: "cmd"}, {Time: "09:52:07", Text: `{"StatusNET":{"Hostname":"balcony","IPAddress":"192.168.20.12"}}`}, {Time: "09:52:15", Text: "Reset 1", Kind: "cmd"}, {Time: "09:52:15", Text: "Refused: Reset is not on the command allowlist.", Kind: "err"}}, Quick: []string{"Power", "Status 5", "Status 11", "Restart 1"}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Console(ui.ConsoleData{Title: "Console · MQTT + HTTP · 192.168.20.12", Action: v.Base + "/styleguide", CSRF: v.CSRF, Lines: []ui.ConsoleLine{{Time: "09:52:01", Text: "Power", Kind: "cmd"}, {Time: "09:52:01", Text: `{"POWER":"ON"}`}, {Time: "09:52:07", Text: "Status 5", Kind: "cmd"}, {Time: "09:52:07", Text: `{"StatusNET":{"Hostname":"balcony","IPAddress":"192.168.20.12"}}`}, {Time: "09:52:15", Text: "Reset 1", Kind: "cmd"}, {Time: "09:52:15", Text: "Refused: Reset is not on the command allowlist.", Kind: "err"}}, Quick: []ui.QuickCmd{{Command: "Power"}, {Command: "Status 5"}, {Command: "Status 11"}, {Command: "Restart 1", Href: v.Base + "/styleguide"}}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

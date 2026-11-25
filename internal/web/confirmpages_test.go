@@ -60,8 +60,8 @@ func TestRuleDeleteConfirmPage(t *testing.T) {
 		t.Fatalf("opening the page saved a version: %d", len(mem.vs))
 	}
 	_, list := e.do(t, "GET", "/policy", "admin", nil)
-	if !strings.Contains(list, `href="/tf/policy/rules/delete?id=`+id+`" data-dialog="dlg-rule-`+id+`"`) {
-		t.Errorf("the Delete opener has no href:\n%s", list)
+	if !strings.Contains(list, `href="/tf/policy/rules/delete?id=`+id+`" data-dialog="dlg-rule-delete" data-dlg-field-id="`+id+`"`) {
+		t.Errorf("the Delete opener has no href, or does not name its rule for the shared dialog:\n%s", list)
 	}
 }
 

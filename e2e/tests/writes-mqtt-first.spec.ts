@@ -81,12 +81,12 @@ test("a backup and a restore of a device on TasmoFleet's broker go over MQTT fir
   await expect(page.getByText(/Backup taken over MQTT/)).toBeVisible({ timeout: 30_000 });
 
   await page.goto(app.url + "/devices/1/backups");
-  await page.getByRole("link", { name: "Restore…" }).first().click();
+  await page.getByRole("link", { name: "Restore", exact: true }).first().click();
   await expect(page.locator(".rs-path")).toContainText("MQTT first");
   await expect(page.locator(".rs-cred")).toContainText("broker ACL");
   await expect(page.locator('input[name="lockout_ok"]')).toHaveCount(0);
   await page.getByLabel(/I understand/).check();
-  await page.getByRole("button", { name: "Restore and restart" }).click();
+  await page.getByRole("button", { name: "Restore backup" }).click();
   await expect(page).toHaveURL(/\/restores\/\d+$/);
   await expect(page.locator("#restore-status")).toContainText("Restore finished.", { timeout: 180_000 });
   await expect(page.locator("#restore-status")).toContainText("uploaded over MQTT");

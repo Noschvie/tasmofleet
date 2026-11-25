@@ -865,12 +865,12 @@ func backupRowItem(p backupsView, b backupRow) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if b.Restore != "" && p.RestoreBlocked != "" {
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restore…", Disabled: true, Attrs: templ.Attributes{"title": p.RestoreBlocked, "aria-disabled": "true", "aria-describedby": "bk-restore-why"}}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restore", Disabled: true, Attrs: templ.Attributes{"title": p.RestoreBlocked, "aria-disabled": "true", "aria-describedby": "bk-restore-why"}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else if b.Restore != "" {
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restore…", Href: b.Restore}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Restore", Href: b.Restore}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

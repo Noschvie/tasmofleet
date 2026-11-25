@@ -200,9 +200,9 @@ templ backupRowItem(p backupsView, b backupRow) {
 					@ui.Button(ui.Btn{Label: "Download", Href: b.Download, Attrs: templ.Attributes{"title": downloadHelp(b)}})
 				}
 				if b.Restore != "" && p.RestoreBlocked != "" {
-					@ui.Button(ui.Btn{Label: "Restore…", Disabled: true, Attrs: templ.Attributes{"title": p.RestoreBlocked, "aria-disabled": "true", "aria-describedby": "bk-restore-why"}})
+					@ui.Button(ui.Btn{Label: "Restore", Disabled: true, Attrs: templ.Attributes{"title": p.RestoreBlocked, "aria-disabled": "true", "aria-describedby": "bk-restore-why"}})
 				} else if b.Restore != "" {
-					@ui.Button(ui.Btn{Label: "Restore…", Href: b.Restore})
+					@ui.Button(ui.Btn{Label: "Restore", Href: b.Restore})
 				}
 				if b.DeleteText != "" {
 					@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: p.Base + "/backups/" + bkStr(b.ID) + "/delete", Dialog: "dlg-bkdel", Class: "bk-del", Attrs: backupDeleteAttrs(p, b)})

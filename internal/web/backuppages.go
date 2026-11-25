@@ -90,6 +90,7 @@ func backupDeleteAttrs(p backupsView, b backupRow) templ.Attributes {
 		"data-dlg-shown":  ui.StampText(b.Taken, ui.StampDateTimeSec),
 		"data-dlg-action": p.Base + "/backups/" + bkStr(b.ID) + "/delete",
 		"data-dlg-verb":   "Delete backup",
+		"data-dlg-danger": true, // the dialog's verb is danger-solid; dialog.js sets the tone from the opener
 	}
 }
 
@@ -467,14 +468,14 @@ func (h *handler) confirmRunDeletion(w http.ResponseWriter, r *http.Request, d m
 		n = len(ids)
 	}
 	c := actionConfirm{
-		Title: "Delete " + plural(n, "backup") + "?", Heading: "Delete " + plural(n, "backup"),
+		Title:  "Delete " + plural(n, "backup") + "?",
 		Text:   plural(n, "backup") + " of " + d.Name + " (dump, snapshot and decoded copy of each) will be deleted. This cannot be undone.",
 		Crumbs: []ui.Crumb{{Label: d.Name, Path: devPath(d.ID, "")}, {Label: "Backups", Path: back}},
 		Last:   "Delete selected", Action: fmt.Sprintf("/devices/%d/backups/delete", d.ID), Verb: "Delete " + plural(n, "backup"),
 		CancelHref: back, CancelLabel: "Cancel",
 	}
 	if prune {
-		c.Title, c.Heading, c.Last, c.Verb = "Prune "+plural(n, "backup")+" now?", "Prune "+plural(n, "backup"), "Prune now", "Prune "+plural(n, "backup")
+		c.Title, c.Last, c.Verb = "Prune "+plural(n, "backup")+" now?", "Prune now", "Prune "+plural(n, "backup")
 		if k, ok := h.backupKeeper(); ok {
 			c.Text = pruneText(backupRetentionView{Keep: k.Retention().Keep, MaxAge: k.Retention().MaxAge}) + " This cannot be undone."
 		}
