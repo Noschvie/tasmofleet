@@ -34,11 +34,11 @@ devices, saved as static pages (actions are disabled).
 
 ## What it does
 
-- **Fleet overview**: every device with state, firmware and chip family, and what needs attention, on one dashboard.
-- **Guarded firmware updates**: over MQTT first, as server-side jobs with a check before every upgrade.
+- **Fleet overview**: every device with state, firmware and chip family, and a dashboard of what needs attention.
+- **Guarded firmware updates**: server-side jobs that keep running when you close the browser, with a check before every upgrade.
 - **Backups with diff and restore**: scheduled and before every update, compared side by side.
 - **Settings policy with drift**: rules per chip family, tag or device, and "Make compliant" as one transaction.
-- **Home Assistant app** (experimental) and an **Unraid template**, next to Docker.
+- **Docker** and an **Unraid template**; a **Home Assistant app** is experimental and not published yet.
 
 ![A firmware update of four devices: pick them, review, start, watch each device's progress](https://hellwand.github.io/tasmofleet/assets/demo.webp)
 
