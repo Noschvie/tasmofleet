@@ -32,6 +32,16 @@ binary with an embedded SQLite database. All screenshots show simulated devices;
 **[live demo](https://hellwand.github.io/tasmofleet/demo/)** is the real UI with a simulated fleet of 60
 devices, saved as static pages (actions are disabled).
 
+## What it does
+
+- **Fleet overview**: every device with state, firmware and chip family, and what needs attention, on one dashboard.
+- **Guarded firmware updates**: over MQTT first, as server-side jobs with a check before every upgrade.
+- **Backups with diff and restore**: scheduled and before every update, compared side by side.
+- **Settings policy with drift**: rules per chip family, tag or device, and "Make compliant" as one transaction.
+- **Home Assistant app** (experimental) and an **Unraid template**, next to Docker.
+
+![A firmware update of four devices: pick them, review, start, watch each device's progress](https://hellwand.github.io/tasmofleet/assets/demo.webp)
+
 ## Why TasmoFleet
 
 Built on a home fleet of a few dozen devices, as an alternative to
@@ -59,8 +69,6 @@ import from TasmoAdmin.
 | Device list                                                                   | Policy rule editor                                                                                 |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | ![Device list with status, firmware and chip columns](https://hellwand.github.io/tasmofleet/assets/devices.png) | ![Policy rule editor suggesting commands from the Tasmota catalogue](https://hellwand.github.io/tasmofleet/assets/policy-editor.png) |
-
-![A firmware update of four devices: pick them, review, start, watch each device's progress](https://hellwand.github.io/tasmofleet/assets/demo.webp)
 
 ## Quick start (Docker)
 
