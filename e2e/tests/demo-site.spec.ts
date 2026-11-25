@@ -2,6 +2,7 @@ import {
   test,
   expect,
   type APIRequestContext,
+  type Browser,
   type Page,
 } from "@playwright/test";
 import {
@@ -71,66 +72,184 @@ test("static demo site", async ({ browser }) => {
   }
 });
 
+/**
+ * pace names every pause that only paces an animation: how long a screen stays in view or how long the
+ * pointer waits between two clicks. They never wait for a state; states are waited for through the DOM.
+ */
+const pace = {
+  dashboard: 2500, // the first screen, before the first click
+  afterNav: 800, // a page just opened, before the next action
+  betweenPicks: 450, // between two ticked boxes
+  beforeReview: 800, // all ticked, before the review button
+  review: 2000, // the review page is read
+  ending: 3000, // the finished transaction stays in view
+  tourStart: 600, // the tour's dashboard is on screen while its page loads, so this is only the rest
+  screen: 1300, // a screen of the tour
+  list: 600, // the outdated list of the tour, which only leads to the device
+  backups: 1500, // the backup list is what the tour shows, so it is read a little longer
+  picked: 800, // the new update with the device ticked (the review's wait comes on top)
+  progress: 1300, // the tour ends on the transaction page while the job progresses
+};
+
 test("update animation", async ({ browser }) => {
   test.setTimeout(20 * 60_000);
   const stack = await startVisualStack("fleet", browser, true);
-  const videoDir = join(root, "e2e/test-results/demo-video");
-  rmSync(videoDir, { recursive: true, force: true });
   try {
-    const setup = await browser.newContext({ extraHTTPHeaders: pageAdmin });
-    await setTheme(await setup.newPage(), stack, "light");
-    await setup.close();
-    const context = await browser.newContext({
-      extraHTTPHeaders: pageAdmin,
-      viewport: { width: 1280, height: 760 },
-      recordVideo: { dir: videoDir, size: { width: 1280, height: 760 } },
+    await recordVideo(browser, stack, "demo", async (page) => {
+      await page.goto(stack.app.url + "/");
+      await page.waitForTimeout(pace.dashboard);
+      // the dashboard's way to the new update: the Updates entry of the navigation
+      await page
+        .getByRole("navigation")
+        .getByRole("link", { name: /^Updates/ })
+        .first()
+        .click();
+      await page.waitForTimeout(pace.afterNav);
+      await pickForUpdate(page, stack.app.url, []);
+      for (const n of ["Attic Dimmer", "Attic Fan", "Basement LED Strip", "Basement Switch"]) {
+        await page.getByLabel(`Select ${n}`, { exact: true }).check();
+        await page.waitForTimeout(pace.betweenPicks);
+      }
+      await page.waitForTimeout(pace.beforeReview);
+      await page.getByRole("button", { name: "Review update" }).click();
+      await page.waitForTimeout(pace.review);
+      await page
+        .getByRole("button", { name: "Start update", exact: true })
+        .click();
+      await expect(page).toHaveURL(/\/transactions\/\d+$/);
+      await expect(txnState(page)).toHaveText("Completed", { timeout: 300_000 });
+      await page.waitForTimeout(pace.ending);
     });
-    // pages and htmx answers get the static site's address rewrite (not the SSE stream, which never ends)
-    const addr = addressRewriter();
-    await context.route(
-      (u) => u.origin === new URL(stack.app.url).origin && !u.pathname.startsWith("/static/") && !u.pathname.startsWith("/events"),
-      async (r) => {
-        const res = await r.fetch({ maxRedirects: 0 });
-        const type = res.headers()["content-type"] ?? "";
-        if (!type.startsWith("text/html")) return r.fulfill({ response: res });
-        return r.fulfill({ response: res, body: addr(await res.text()) });
-      },
-    );
-    const page = await context.newPage();
-    const started = Date.now();
-    await page.goto(stack.app.url + "/");
-    await page.waitForTimeout(2500);
-    // the dashboard's way to the new update: the Updates entry of the navigation
-    await page
-      .getByRole("navigation")
-      .getByRole("link", { name: /^Updates/ })
-      .first()
-      .click();
-    await page.waitForTimeout(800);
-    await pickForUpdate(page, stack.app.url, []);
-    for (const n of ["Attic Dimmer", "Attic Fan", "Basement LED Strip", "Basement Switch"]) {
-      await page.getByLabel(`Select ${n}`, { exact: true }).check();
-      await page.waitForTimeout(450);
-    }
-    await page.waitForTimeout(800);
-    await page.getByRole("button", { name: "Review update" }).click();
-    await page.waitForTimeout(2000);
-    await page
-      .getByRole("button", { name: "Start update", exact: true })
-      .click();
-    await expect(page).toHaveURL(/\/transactions\/\d+$/);
-    await expect(txnState(page)).toHaveText("Completed", { timeout: 300_000 });
-    await page.waitForTimeout(3000);
-    const seconds = (Date.now() - started) / 1000;
-    const video = page.video();
-    await context.close();
-    const webm = await video!.path();
-    console.log(`demo video: ${seconds.toFixed(0)} s, ${webm}`);
-    copyFileSync(webm, join(root, "e2e/test-results/demo.webm"));
   } finally {
     await stack.stop();
   }
 });
+
+/** The tour's device: online, ESP32, behind the latest release, nothing else in the way (no deviation, no proposal). */
+const tourDevice = "Bedroom Plug";
+
+/** backupRows are the rows of a device's Backups tab (one tick box each). */
+const backupRows = (page: Page) => page.getByRole("checkbox", { name: /^Select the backup of / });
+
+test("tour animation", async ({ browser }) => {
+  test.setTimeout(20 * 60_000);
+  const stack = await startVisualStack("fleet", browser, true);
+  try {
+    // Off camera: two backups through the device list's bulk bar (the Backups tab then has a list to show).
+    // Each run is waited for to Completed, so the second one cannot overlap the first.
+    const setup = await browser.newContext({ extraHTTPHeaders: pageAdmin, viewport: { width: 1280, height: 860 } });
+    const prep = await setup.newPage();
+    await prep.goto(stack.app.url + "/devices");
+    const id = await prep.getByRole("checkbox", { name: `Select ${tourDevice}`, exact: true }).first().getAttribute("value");
+    await prep.goto(`${stack.app.url}/devices/${id}/backups`);
+    const before = await backupRows(prep).count();
+    for (let i = 0; i < 2; i++) {
+      await prep.goto(stack.app.url + "/devices");
+      await prep.getByRole("checkbox", { name: `Select ${tourDevice}`, exact: true }).check();
+      await prep.locator("[data-bulkbar]").getByRole("button", { name: "Back up", exact: true }).click();
+      await prep.getByRole("button", { name: /^Back up/ }).last().click();
+      await expect(prep).toHaveURL(/\/devices\/bulk\/result\/\d+/);
+      // the result page's title says "Backups finished" only when the run is over; the row says how it ended
+      await expect(prep.getByRole("heading", { name: "Backups finished" })).toBeVisible({ timeout: 120_000 });
+      await expect(prep.getByRole("region", { name: "Result per device" })).toContainText("Succeeded");
+    }
+    // a skipped backup must fail the run, not leave a thinner list on camera
+    await prep.goto(`${stack.app.url}/devices/${id}/backups`);
+    await expect(backupRows(prep)).toHaveCount(before + 2);
+    await setup.close();
+
+    const txn = await recordVideo(browser, stack, "tour", async (page) => {
+      await page.goto(stack.app.url + "/");
+      await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
+      await page.waitForTimeout(pace.tourStart);
+      // Needs attention lists what is wrong, not what is merely old: the outdated devices are one tile away
+      await page.getByRole("link", { name: /Firmware behind/ }).click();
+      await expect(page.getByRole("link", { name: tourDevice, exact: true })).toBeVisible();
+      await page.waitForTimeout(pace.list);
+      await page.getByRole("link", { name: tourDevice, exact: true }).click();
+      await expect(page.getByRole("heading", { name: tourDevice })).toBeVisible();
+      await page.waitForTimeout(pace.screen);
+      // the device's own Backups tab (the Devices menu has a Backups entry of the fleet too)
+      await page.locator(`a[href="${new URL(page.url()).pathname}/backups"]`).first().click();
+      await expect(page).toHaveURL(/\/devices\/\d+\/backups$/);
+      await expect(backupRows(page).first()).toBeVisible();
+      await page.waitForTimeout(pace.backups);
+      await page.getByRole("button", { name: /^Update to / }).click();
+      await page.waitForTimeout(pace.picked);
+      await page.getByRole("button", { name: "Review update" }).click();
+      await page.waitForTimeout(pace.screen);
+      await page.getByRole("button", { name: "Start update", exact: true }).click();
+      await expect(page).toHaveURL(/\/transactions\/\d+$/);
+      await page.waitForTimeout(pace.progress);
+      return new URL(page.url()).pathname;
+    });
+
+    // Off camera: a failing update must fail the run, so no picture of a broken flow is published.
+    const done = await browser.newContext({ extraHTTPHeaders: pageAdmin });
+    const check = await done.newPage();
+    await check.goto(stack.app.url + txn);
+    await expect(txnState(check)).toHaveText("Completed", { timeout: 300_000 });
+    await done.close();
+  } finally {
+    await stack.stop();
+  }
+});
+
+/**
+ * recordVideo runs a scene of the website's animation on a light-theme page that records a video of the
+ * stack's UI (pages and htmx answers get the static site's address rewrite) and copies it to
+ * e2e/test-results/<name>.webm for the ffmpeg conversion of make demo-media. Every animation has a video
+ * folder of its own, so two of them can be recorded in parallel. The scene's value is returned after the
+ * recording context is closed (what the test checks off camera).
+ */
+async function recordVideo<T>(
+  browser: Browser,
+  stack: VisualStack,
+  name: string,
+  scene: (page: Page) => Promise<T>,
+): Promise<T> {
+  const videoDir = join(root, `e2e/test-results/${name}-video`);
+  rmSync(videoDir, { recursive: true, force: true });
+  const setup = await browser.newContext({ extraHTTPHeaders: pageAdmin });
+  await setTheme(await setup.newPage(), stack, "light");
+  await setup.close();
+  const context = await browser.newContext({
+    extraHTTPHeaders: pageAdmin,
+    viewport: { width: 1280, height: 760 },
+    recordVideo: { dir: videoDir, size: { width: 1280, height: 760 } },
+  });
+  // pages and htmx answers get the static site's address rewrite (not the SSE stream, which never ends)
+  const addr = addressRewriter();
+  await context.route(
+    (u) => u.origin === new URL(stack.app.url).origin && !u.pathname.startsWith("/static/") && !u.pathname.startsWith("/events"),
+    async (r) => {
+      const res = await r.fetch({ maxRedirects: 0 });
+      // Chromium does not route the request that follows a fulfilled redirect, so the page behind a form post's
+      // 303 (the transaction page after Start update) would show the simulator's loopback addresses. The
+      // redirect is followed here instead: the post's own navigation is dropped and its target is opened, which
+      // is routed. (The post itself was sent once, by the fetch above.)
+      if (res.status() >= 300 && res.status() < 400 && r.request().isNavigationRequest()) {
+        const to = new URL(res.headers()["location"] ?? "/", r.request().url()).href;
+        await r.abort("aborted");
+        await r.request().frame().page().goto(to);
+        return;
+      }
+      const type = res.headers()["content-type"] ?? "";
+      if (!type.startsWith("text/html")) return r.fulfill({ response: res });
+      return r.fulfill({ response: res, body: addr(await res.text()) });
+    },
+  );
+  const page = await context.newPage();
+  const started = Date.now();
+  const result = await scene(page);
+  const seconds = (Date.now() - started) / 1000;
+  const video = page.video();
+  await context.close();
+  const webm = await video!.path();
+  console.log(`${name} video: ${seconds.toFixed(0)} s, ${webm}`);
+  copyFileSync(webm, join(root, `e2e/test-results/${name}.webm`));
+  return result;
+}
 
 /** setTheme stores the admin's theme as the user menu does (POST /prefs/theme). */
 async function setTheme(

@@ -35,9 +35,9 @@ remembers to renew it, and the project page showed the UI of 0.28.0 next to a de
 
 - `make pages` (`pages.yml`, run by `release.yml` after the GitHub release and by hand) runs `make demo` (the
   published demo, documentation addresses) and `make demo-media` (the Playwright run of
-  `e2e/tests/demo-site.spec.ts` with `DEMO_MEDIA=1`: the cleaned-up fleet, four screenshots and a video, which
-  `ffmpeg` converts to the animation) from the tagged commit. The pictures land in `dist/pages/assets/`:
-  `dashboard.png`, `devices.png`, `device-settings.png`, `policy-editor.png`, `demo.webp`. So the website, the demo
+  `e2e/tests/demo-site.spec.ts` with `DEMO_MEDIA=1`: the cleaned-up fleet, four screenshots and two videos, which
+  `ffmpeg` converts to the animations) from the tagged commit. The pictures land in `dist/pages/assets/`:
+  `dashboard.png`, `devices.png`, `device-settings.png`, `policy-editor.png`, `demo.webp`, `tour.webp`. So the website, the demo
   and the pictures always show the UI of the release that was published, and `site/assets` keeps only fonts, the
   wordmarks and the favicon. `scripts/pages-check.mjs` fails `make pages` when `site/index.html` links a file the
   artifact lacks, and `make scripts-test` fails when a picture is committed under `site/`.

@@ -383,7 +383,7 @@ demo: build
 	cd e2e && nice -n 10 npx playwright test --project=demo --workers=1 -g "static demo site"
 
 # The GitHub Pages artifact (pages.yml): the website in site/ at the root, the demo in demo/ and the
-# website's pictures in assets/ (the screenshots and the update animation of demo-media, so they show the
+# website's pictures in assets/ (the screenshots and the animations of demo-media, so they show the
 # UI of the build that is published, #859). Fails when site/index.html is missing, so the root can never be
 # published empty, and when the page links a file the artifact lacks (scripts/pages-check.mjs).
 pages: demo demo-media
@@ -399,14 +399,17 @@ pages: demo demo-media
 # The website's pictures in dist/media (not committed; make pages publishes them as assets/, the README
 # links the published files): screenshots of the cleaned-up fleet (DEMO_MEDIA) taken from a static demo
 # of their own (dist/media-site, never published: the published demo uses documentation addresses) and
-# the update animation (demo.webp, recorded with Playwright, converted with ffmpeg).
+# the two animations (demo.webp: a firmware update of four devices; tour.webp: dashboard to device page, its
+# backups and an update; recorded with Playwright, converted with ffmpeg through one filter).
 demo-media: build
-	@command -v ffmpeg >/dev/null || { echo "demo-media: ffmpeg is not installed (the update animation is converted with it)" >&2; exit 1; }
+	@command -v ffmpeg >/dev/null || { echo "demo-media: ffmpeg is not installed (the animations are converted with it)" >&2; exit 1; }
 	rm -rf dist/media dist/media-site
 	mkdir -p dist/media
 	cd e2e && DEMO_MEDIA=1 DEMO_OUT="$(CURDIR)/dist/media-site" DEMO_MEDIA_OUT="$(CURDIR)/dist/media" nice -n 10 npx playwright test --project=demo --workers=2
-	nice -n 10 ffmpeg -loglevel error -y -i e2e/test-results/demo.webm \
-	  -vf "fps=8,scale=960:-1:flags=lanczos" -c:v libwebp_anim -lossless 0 -q:v 60 -compression_level 6 -loop 0 dist/media/demo.webp
+	for n in demo tour; do \
+	  nice -n 10 ffmpeg -loglevel error -y -i e2e/test-results/$$n.webm \
+	    -vf "fps=8,scale=960:-1:flags=lanczos" -c:v libwebp_anim -lossless 0 -q:v 60 -compression_level 6 -loop 0 dist/media/$$n.webp || exit 1; \
+	done
 	@ls -l dist/media
 
 vuln:

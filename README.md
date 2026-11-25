@@ -40,7 +40,7 @@ devices, saved as static pages (actions are disabled).
 - **Settings policy with drift**: rules per chip family, tag or device, and "Make compliant" as one transaction.
 - **Docker** and an **Unraid template**; a **Home Assistant app** is experimental and not published yet.
 
-![A firmware update of four devices: pick them, review, start, watch each device's progress](https://hellwand.github.io/tasmofleet/assets/demo.webp)
+![A tour: the dashboard, a device behind the latest release, its backups, then its update from review to the running transaction](https://hellwand.github.io/tasmofleet/assets/tour.webp)
 
 ## Why TasmoFleet
 
