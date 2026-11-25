@@ -1,0 +1,115 @@
+# Design system base values against Apple HIG and WCAG 2.2
+
+Status: reference check of [the design system](design-system.md) (#1170). Values taken at commit `9f414cec`
+(`docs/spec/design-system.md` and `internal/web/static/app.css`), the head of the 0.47.2 and 0.47.3 changes,
+which give every table header a 38 px `--color-surface-2` band and drop the pressed fill of `button.danger`.
+Nothing here changes a value: each row that is weaker than its reference either names the proposed value or
+says which issue already owns it.
+
+The table lives in this file, not in `design-system.md`, because another package edits that file in the same
+release (0.48.0); #1102 links this file from `design-system.md`.
+
+**The bar** (owner's rule in #1170): the reference value is the default. A weaker value stays only with a
+reason that names a concrete, measured cost of the reference value on a named TasmoFleet screen. "Denser",
+"looks better", "the prototype had it" and "consistency" are not reasons. No row below keeps a weaker value:
+where a cost was measured, it is reported next to the proposed change for the decision, not as a reason to
+keep the old value.
+
+## References
+
+| Short name | Source | What it gives |
+| --- | --- | --- |
+| HIG Accessibility | <https://developer.apple.com/design/human-interface-guidelines/accessibility>, read 2026-11-25 (last change on Apple's site 2025-06-09) | Vision: default and minimum text size (iOS and iPadOS 17 / 11 pt, macOS 13 / 10 pt); contrast (up to 17 pt 4.5:1, 18 pt 3:1, bold 3:1, "values from WCAG Level AA"). Mobility: control size, default and minimum (iOS and iPadOS 44x44 / 28x28 pt, macOS 28x28 / 20x20 pt); spacing "about 12 points of padding around elements that include a bezel", "about 24 points" around elements without one |
+| HIG Typography | <https://developer.apple.com/design/human-interface-guidelines/typography>, read 2026-11-25 (last change 2025-12-16) | Specifications: iOS "Large (default)" text styles (Body 17/22, Headline 17/22, Subhead 15/20, Footnote 13/18, Caption 1 12/16, Caption 2 11/13, Title 1 28/34, Title 2 22/28, Title 3 20/25) and macOS built-in text styles (Body 13/16, Headline 13/16, Callout 12/15, Subheadline 11/14, Footnote 10/13, Title 1 22/26, Title 2 17/22, Title 3 15/20, Large Title 26/32), size/leading in points |
+| WCAG 2.2 | <https://www.w3.org/TR/WCAG22/> (W3C Recommendation) | 1.4.3 Contrast (Minimum) AA: text 4.5:1, large text (24 px, or 18.66 px bold) 3:1. 1.4.6 Contrast (Enhanced) AAA: 7:1 and 4.5:1. 1.4.8 Visual Presentation AAA: line spacing at least 1.5 within paragraphs. 1.4.11 Non-text Contrast AA: 3:1 for what identifies a component or its state, and for graphics. 1.4.12 Text Spacing AA: no loss of content or function with line height 1.5, paragraph spacing 2, letter spacing 0.12 and word spacing 0.16 (times the font size). 2.4.7 Focus Visible AA. 2.4.11 Focus Not Obscured (Minimum) AA: the focused component is not entirely hidden by author content. 2.4.13 Focus Appearance AAA: an indicator at least as large as a 2 CSS px thick perimeter of the component, with 3:1 between its focused and unfocused pixels. 2.5.5 Target Size (Enhanced) AAA: 44x44 CSS px. 2.5.8 Target Size (Minimum) AA: 24x24 CSS px, or a 24 px circle on the target's centre that touches no other target or circle (spacing exception); inline targets are exempt |
+
+Reading rules: 1 pt is 1 CSS px. Apple has no web-app page, so phone widths (below `45rem`, where
+`app.css` switches every control to 44 px) are compared with the iOS figures and wider screens with the macOS
+figures. WCAG figures apply at every width. Text pairs are held to 4.5:1 (AA) and 7:1 (AAA) whatever their
+size: the only text above the large-text limit is the 22 px page title and the 28 px stat value.
+
+**How the numbers were made.** Contrast: a script reads the token blocks of `app.css` (light block and the
+explicit dark block), converts every value (hex, `oklch()`, `rgb()`, `color-mix()` in `srgb` and `oklab`,
+mixes with `transparent`) to 8-bit sRGB, composites any alpha onto the surface it sits on and computes the
+WCAG ratio. Out-of-gamut `oklch()` values (light `--color-accent-hover`, `--color-accent-bg`,
+`--color-accent-fg`, `--color-warn-bg`, `--color-danger-bg`; dark `--color-danger-fg`) are clipped per
+channel. Headless Chromium then painted every token and pair and read the pixels back: all 72 token values (36
+colour tokens, two themes) and 62 of the 64 pairs agree to the unit; the two pairs with translucent layers
+(the console placeholder and the sort icon) differ by one unit per channel, and the browser's value is the one
+in the table. Sizes, focus and text spacing were measured in a local instance (simulated fleet of 27 devices)
+on `/styleguide`, the device list and a device page at 375x667 and 1280x800; target sizes also on the system
+settings page (`/settings/system`). The focus walk presses Tab until it reaches an element it has already
+focused (the same element, not one that looks the same), so it covers every row of the device list. The
+script, its output and the screenshot pairs are kept outside the repository (the PR names them).
+
+Verdicts: **equal or stronger**; **weaker (AA)**: a WCAG AA conformance failure; **weaker (HIG/AAA)**:
+weaker only than Apple's figure or WCAG AAA; **not required**: the criterion does not ask for this value;
+**no figure**: neither reference gives a number. "L" and "D" are the light and dark theme.
+
+## The table
+
+| # | Value | Ours | Reference | Verdict | Reason or proposed change |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Control height, desktop (`--ctl`, `--ctl-sm`, `--ctl-lg`) | 34 / 32 / 40 px (`app.css` `:root`) | HIG Accessibility, macOS: default 28x28, minimum 20x20 pt | equal or stronger | - |
+| 2 | Control height, desktop | 34 / 32 / 40 px | WCAG 2.5.8: 24x24 | equal or stronger | - |
+| 3 | Control height, desktop | 34 / 32 / 40 px; chips 28; link buttons 32 | WCAG 2.5.5: 44x44 | weaker (HIG/AAA) | Change: 44 px at every width (`--ctl`, `--ctl-sm`, `--ctl-lg` take the phone value). Measured at 1280x800 with the three tokens at 44 px: device list 11 rows fully in view before and after (page 10 px taller), device page 34 px taller, style guide 317 px taller; no row lost |
+| 4 | Control height, phone | 44 px for all three tokens (`app.css` phone block) | HIG Accessibility, iOS: 44x44 default; WCAG 2.5.5: 44x44 | equal or stronger | Measured at 375x667: 104, 98, 20 and 12 of the controls on the style guide, device list, device page and system settings page are 44 px high |
+| 5 | Table row target | at least 44 px, both widths | HIG iOS 44 (phone), macOS 28 (desktop); WCAG 2.5.5: 44 | equal or stronger | - |
+| 6 | Info button target | drawn 16 px, hit box 24x24 on desktop (`.uinfo::after`), 44 px on phones | HIG macOS: default 28x28; WCAG 2.5.8: 24 | weaker (HIG/AAA) | 2.5.8: equal. Change: hit box 28x28 on desktop (HIG default); 44 by row 3 |
+| 7 | "Reset to default" target | 24 px high at every width (`.srst` `min-height: 24px`) | HIG iOS: default 44, minimum 28 (phone); macOS default 28 (desktop); WCAG 2.5.8: 24 | weaker (HIG/AAA) | 2.5.8: equal. Change: `--ctl-sm` (44 px) on phones, 28 px on desktop. Not measured: it is on the settings pages, not on the three measured pages |
+| 8 | Checkbox | design system: 16 px; `app.css` draws 18 px (`input[type=checkbox]`); measured: row select target (`label.hit`) 22x17 px and header box 15x15 px on the device list at 1280 | WCAG 2.5.8: 24, or the spacing exception; HIG macOS: minimum 20x20 | weaker (HIG/AAA) | 2.5.8: equal (measured: the 24 px circles of the row boxes touch no other target). Change: the select target 28x28 on desktop (HIG default). The design system's 16 px does not match the 18 px drawn |
+| 9 | Power switch target | 34x20 drawing in a 48x44 target | HIG iOS 44, macOS 28; WCAG 2.5.5: 44 | equal or stronger | - |
+| 10 | Sortable table header links, desktop | 16 px high (`th .sortlink`); measured on the device list at 1280: "Wi-Fi" 29x16 and "Power" 35x16 are less than 12 px from a column resize handle | WCAG 2.5.8: 24x24 or the spacing exception | weaker (AA) | Change: the sort link fills the header cell, at least 24 px high (the header band is 38 px), so it no longer needs the spacing exception |
+| 11 | Compact controls under 24 px, desktop | measured at 1280: Copy button 20 px (`.ukv dd.ukv-copy .btn.btn-sm`, also `.fw-sum .btn.btn-sm`), device-header update button 22 px (`.devhd-upd button`), crumb links 18 px, table cell links 17 px | WCAG 2.5.8: 24 or spacing; HIG macOS: minimum 20, default 28 | weaker (HIG/AAA) | 2.5.8: equal (measured: all pass the spacing exception). Change: at least 28 px high (HIG default) via the control tokens. The 20 px Copy button also contradicts the design system's "small 32 px" |
+| 12 | Controls under 44 px, phone | measured at 375: toast close button 15x30 (declared 30x30 in `.toast .toast-x`; it shrinks in its flex row), device-header update button 22 px high, the sign-in brand link 22 px, an accent badge link 20 px (style guide) | HIG iOS: default 44, minimum 28; WCAG 2.5.5: 44 | weaker (HIG/AAA) | 2.5.8: equal (measured: no spacing conflict). Change: these take `--ctl-sm` (44 px) like every other phone control; the toast close button keeps its width (`flex: none`) |
+| 13 | Space between buttons | 8 px | HIG Accessibility: about 12 pt padding around bezeled elements | weaker (HIG/AAA) | Change: 12 px (`--sp-12`) |
+| 14 | Card gap, card padding, page gutter | 16, 16, `clamp(12px, 2.4cqw, 32px)` | neither HIG nor WCAG gives a figure | no figure | - |
+| 15 | Body text, desktop (`--fs-base`) | 14 px | HIG macOS: default 13 pt | equal or stronger | - |
+| 16 | Body text, phone | 14 px (`--fs-base`), list rows and inputs 13.5 (`--fs-body`), buttons 13 (`--fs-ui`) | HIG iOS: default 17 pt (Body 17/22) | weaker (HIG/AAA) | Change below `45rem`: `--fs-base`, `--fs-body`, `--fs-ui` and `--fs-h2` 17 px (Body, Headline), `--fs-meta` 15 (Subhead), `--fs-small` 13 (Footnote), `--fs-badge` 12 (Caption 1). Measured at 375x667 with every size times 17/14: the device list grows 565 px (13 %) and the device page 328 px; the first screen of the device list still ends at the top of the first device card, about 13 px lower |
+| 17 | Secondary text, desktop | 13.5, 13, 12.5, 12 px | HIG macOS: Callout 12, Subheadline 11 | equal or stronger | - |
+| 18 | Smallest text size of the scale | 11.5 px (`--fs-badge`) | HIG iOS minimum 11 pt, macOS minimum 10 pt | equal or stronger | - |
+| 19 | Sizes below the scale, as built | `app.css`: 10 px (3 declarations), 10.5 px (3, e.g. the info button glyph), 11 px (13) | HIG iOS: minimum 11 pt | weaker (HIG/AAA) | Existing: #1100 folds 10, 10.5 and 11 px into `--fs-badge` 11.5 |
+| 20 | Page title and other titles | h1 22 px (600), error 26, sign-in 20, dialog 16 | HIG macOS Title 1 22; iOS Title 2 22 | equal or stronger | - |
+| 21 | Body line height | 1.45 (`--lh-body`) | HIG macOS Body 16/13 = 1.23, iOS Body 22/17 = 1.29; WCAG 1.4.8 (AAA): 1.5 in paragraphs | weaker (HIG/AAA) | HIG: stronger. Change: 1.5 (WCAG 1.4.8) |
+| 22 | Heading line height | 1.15 (`--lh-tight`, h1 to h4 in `app.css`) | HIG macOS Headline 16/13 = 1.23, Title 3 20/15 = 1.33; iOS Headline 22/17 = 1.29 | weaker (HIG/AAA) | Change: 1.3 |
+| 23 | Title line heights | page, error and sign-in titles 1.2, dialog title 1.3 | HIG macOS Title 1 26/22 = 1.18; iOS Title 2 28/22 = 1.27, Title 3 25/20 = 1.25 | weaker (HIG/AAA) | Desktop: equal or stronger. Change: 1.3 (the value of row 22) |
+| 24 | Stat tile value line height | `600 28px/1` (`--fs-stat`) | HIG iOS Title 1 34/28 = 1.21; macOS Large Title 32/26 = 1.23 | weaker (HIG/AAA) | Change: 1.2 |
+| 25 | Text spacing override | measured with the 1.4.12 values on the style guide, the device list and a device page, 375 and 1280, light and dark: no new clipping and no horizontal page scroll except one case | WCAG 1.4.12: no loss of content | weaker (AA) | The device list's name link clamps to two lines (`table.devtable td.dv-name > a`, `-webkit-line-clamp: 2`); with the override a 48-character name needs three and loses its end at 1280. Change: the name wraps in full (no clamp) |
+| 26 | `--color-text` on bg, surface, surface-2, surface-3 | L 16.50, 17.99, 16.03, 14.64; D 15.37, 14.37, 13.37, 11.66 | WCAG 1.4.3 4.5:1, 1.4.6 7:1 | equal or stronger | - |
+| 27 | `--color-text` on a pressed button (`color-mix(in srgb, text 14 %, surface)`) | L 13.48; D 9.96 | 1.4.3, 1.4.6 | equal or stronger | - |
+| 28 | `--color-text-2` on bg, surface | L 7.20, 7.85; D 8.88, 8.30 | 1.4.3, 1.4.6 | equal or stronger | - |
+| 29 | `--color-text-2` on surface-2 (inset blocks, and the header text of every table on its surface-2 band) | L 6.997 (shown as 7.00); D 7.72 | 1.4.6: 7:1 | weaker (HIG/AAA) | AA met. Change: light `--color-text-2` `#47525d` (7.11) |
+| 30 | `--color-text-3` on bg, surface, surface-2 | L 5.29, 5.77, 5.14; D 6.92, 6.47, 6.02 | 1.4.3 4.5:1; 1.4.6 7:1 | weaker (HIG/AAA) | AA met. Change: `--color-text-3` light `#47525d` (7.11 on surface-2), dark `#a1abb5` (7.12 on surface-2). In light this equals the proposed text-2: the two levels would then differ by size and weight only |
+| 31 | `--color-accent-fg` (links) on bg, surface, surface-2, accent-bg | L 6.80, 7.42, 6.61, 6.41; D 10.29, 9.62, 8.95, 8.10 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: light `oklch(0.425 0.13 250)` (7.08 on accent-bg) |
+| 32 | `--color-accent` as text on surface | L 5.97; D 6.70 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: light `oklch(0.44 0.13 250)` (7.11, also 7.11 under white on-accent text), dark `oklch(0.715 0.12 250)` (7.10). Light then equals today's `--color-accent-hover`, which has to go darker |
+| 33 | `--color-on-accent` on accent (primary button) | L 5.97; D 7.18 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: by row 32 |
+| 34 | `--color-on-accent` on accent-hover | L 7.75; D 9.24 | 1.4.3, 1.4.6 | equal or stronger | - |
+| 35 | White label on `--color-danger-solid` | L 6.08; D 5.28 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: `--color-danger-solid` light `oklch(0.485 0.19 27)` (7.05), dark `oklch(0.485 0.17 25)` (7.02) |
+| 36 | White label on a hovered or pressed danger-solid button (background `--color-danger`, `.btn.btn-danger-solid:hover`) | L 4.72; D 3.13 | 1.4.3: 4.5:1 | weaker (AA) | Dark fails AA. Change: the hover and pressed background is a darker shade, not `--color-danger`: light `oklch(0.47 0.19 27)` (7.57), dark `oklch(0.47 0.17 25)` (7.47) |
+| 37 | `--color-ok-fg` on ok-bg, surface | L 6.48, 7.41; D 8.27, 10.02 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: light `oklch(0.42 0.1 155)` (7.09) |
+| 38 | `--color-warn-fg` on warn-bg, surface | L 6.24, 7.04; D 8.99, 11.26 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: light `oklch(0.44 0.1 65)` (7.07) |
+| 39 | `--color-danger-fg` on danger-bg, surface, a hovered or pressed danger button (`.btn:hover` and `.btn:active` fill surface-2) | L 6.00, 6.84, 6.10; D 7.16, 8.80, 8.19 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met; dark meets 7:1 on all three. Change: light `oklch(0.45 0.17 27)` (7.14 on danger-bg, 8.13 on surface, 7.25 on surface-2) |
+| 40 | `--color-neutral-fg` on neutral-bg, surface | L 6.18, 7.13; D 7.22, 8.90 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: light `#464f5a` (7.20) |
+| 41 | Terminal: `--color-term-fg`, `-cmd`, `-err` on term-bg | L 12.77, 9.94, 9.06; D 13.78, 10.73, 9.78 | 1.4.3, 1.4.6 | equal or stronger | - |
+| 42 | Terminal: `--color-term-dim` on term-bg | L 5.98; D 6.45 | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: `--color-term-dim` `#99a3af` (7.10 on the light theme's term-bg, more on the dark one) |
+| 43 | Console input placeholder (`color-mix(in srgb, term-fg 62 %, transparent)` on the console input) | L 5.23; D 5.54 (browser) | 1.4.3, 1.4.6 | weaker (HIG/AAA) | AA met. Change: 75 % (L 7.08, D 7.58, computed by the script) |
+| 44 | `--color-control-border` (boundary of inputs, selects, outlined buttons, chips, segments) on surface, bg, surface-2 | L 3.51, 3.22, 3.13; D 3.69, 3.95, 3.44 | 1.4.11: 3:1 | equal or stronger | Matches the values the design system states (deviation 13) |
+| 45 | `--color-border-strong` (card and panel edges, tag outline, the dashed edge of the firmware drop zone `.fw-drop`) on surface | L 1.67; D 1.75 | 1.4.11 | not required | A card edge identifies no component; a tag is named by its text. The drop zone is identified by its own text ("Drop a .bin or .bin.gz here to add custom firmware, or choose a file"), so its edge is not needed to find it, and its "choose a file" link does the same without dragging; while a file is dragged over it, its state is the accent edge on accent-bg (accent against accent-bg L 5.16, D 5.64) |
+| 46 | Accent fills that mark a state: checked switch track, checkbox, tab underline, selected chip border, on surface, bg, surface-2, surface-3, accent-bg | L 5.97, 5.48, 5.32, 4.86, 5.16; D 6.70, 7.17, 6.24, 5.44, 5.64 | 1.4.11: 3:1 | equal or stronger | - |
+| 47 | White knob on a checked accent track (`.utoggle`, `.pwr`, `.swtrack`, `.devsw`) | L 5.97; D 2.66 | 1.4.11: 3:1 | weaker (AA) | Dark fails. Change: the planned `--color-knob` (#1099) is `#0b1015` in dark (7.18 on accent, 3.96 on the unchecked track, 12.06 on the proposed warn track) and `#fff` in light |
+| 48 | White knob on an unchecked filled track (`--color-control-border`) | L 3.51; D 4.83 | 1.4.11 | equal or stronger | Matches the design system's "3.5:1 or more" |
+| 49 | Checked `.sf-warn` switch: `--color-warn` track on surface, white knob on it | track L 2.19, D 9.46; knob L 2.19, D 1.89 | 1.4.11: 3:1 | weaker (AA) | Change: the checked `.sf-warn` track uses `--color-warn-fg` (L 7.04 on surface and under the white knob; D 11.26, and 12.06 under the dark knob of row 47) |
+| 50 | Status dots (`--t` of ok, warn, danger, neutral) on surface | L 3.29, 2.19, 4.72, 2.62; D 7.70, 9.46, 5.71, 3.81 | 1.4.11 | not required | The dot repeats the word next to it (usage rule "colour is never the whole message"), so it is not needed to identify the state |
+| 51 | Health and compliance bar segments (`--t`) on their track (surface-2) | online L 2.93 D 7.16; offline L 4.21 D 5.31; unknown L 2.33 D 3.55; online next to offline L 1.43 D 1.35 | 1.4.11: 3:1 | weaker (AA) | Existing: the open follow-up the design system names (Steps and progress). The design system's "2.2 to 2.7:1" matches the transaction bar's track (surface-3: ok 2.68, neutral 2.13), not this one |
+| 52 | Transaction bar segments (`--t-fg`) on surface-3 | done L 6.03 D 8.13; failed L 5.57 D 7.14; running L 6.04 D 7.81 | 1.4.11 | equal or stronger | - |
+| 53 | Focus visible | `:focus-visible` draws `2px solid var(--color-accent)` | WCAG 2.4.7 | equal or stronger | Measured: every Tab stop (650 on the three pages at both widths, every row of the device list included) draws an outline or a ring on the element or on what is drawn for it |
+| 54 | Focus ring, offset 2px (design system "More tokens", planned with #1099) | 2 px accent outside the control; accent against the ground it covers: L 4.86 to 5.97, D 5.44 to 7.17 | WCAG 2.4.13: area of a 2 px perimeter, 3:1 change | equal or stronger | - |
+| 55 | Focus ring of inputs, selects, textareas as built | offset -1px: 1 px outside (accent on the ground, 5.48 or more) and 1 px over the border (control-border to accent: L 1.70, D 1.81) | WCAG 2.4.13 | weaker (HIG/AAA) | Existing: #1099 moves every ring to the one planned ring (offset 2px). Not a new follow-up |
+| 56 | Focus ring inside a clipping container | offset -2px (menu items, column handles, status bar links, segments; the planned tokens keep -2px there) | WCAG 2.4.13: at least the area of a 2 px perimeter | weaker (HIG/AAA) | A 2 px ring inside the box is smaller than a 2 px perimeter by 16 px² (on a 100x34 item: 520 against 536 px²). Change: the inside ring 3 px wide |
+| 57 | Focus not hidden by the fixed bars | measured with Tab: at 375x667 the row menu button of 8 device cards on the device list and 16 controls of the style guide end entirely under the status bar; at 1280x800 every control of 2 rows of the device list (5 each), one info button on the device page and 7 controls of the style guide | WCAG 2.4.11: not entirely hidden | weaker (AA) | Change: `html { scroll-padding-block: var(--header-h) calc(var(--sb-h) + var(--sp-8)) }` or the same for the bars that cover content, so a focused control scrolls clear of the sticky header and the status bar |
+| 58 | Focus not hidden by pinned table columns | measured with Tab on the device list at 1280x800: the "Wi-Fi" sort link ends entirely under the pinned "Power" header cell (`position: sticky`, `right: var(--prN)`); the browser does not scroll the table, because the link lies inside the scroller's visible width | WCAG 2.4.11: not entirely hidden | weaker (AA) | Change: the table's scroller keeps the width of its pinned cells as scroll padding (`scroll-padding-inline` on `.tablescroll`, set where `tables.js` sets `--plN` and `--prN`). Tried in the page with the 120 px of the right-pinned cells: the browser then scrolls the table and the focused link is fully visible |
+| 59 | Sort icon (`.sortmark`, text-2 at opacity 0.85; accent on the sorted column) on the header band (surface-2) | L 4.84, sorted 5.32; D 5.90 (browser), sorted 6.24 | 1.4.11: 3:1 | equal or stronger | Matches the design system's "3:1 against the header" |
+| 60 | Setting switch target | design system: 38 x 22 (`.utoggle`; the whole row is the label: measured 447x61 at 1280, 302x81 at 375 on the style guide); the system settings page draws 34 x 20 (`.swtrack`), hit area `label.swhit` measured 34x21 at 1280 and 44x46 at 375; its title label (18 px high) also toggles it | HIG macOS: default 28x28, minimum 20x20; HIG iOS: 44; WCAG 2.5.8: 24 or spacing; 2.5.5: 44 | weaker (HIG/AAA) | 2.5.8: equal (measured: no other target within 40 px of the track's centre). Phone: equal. Change: `.swhit` at least 28 px high on desktop (HIG default); 44 by row 3. The design system's 38 x 22 does not match the 34 x 20 drawn on the system settings page |
+
+Out of scope on purpose: iOS Safari zooms a page when an input with text under 16 px gets focus; neither HIG
+nor WCAG states that, so it is not a row.
