@@ -208,8 +208,16 @@ test("without scripts: confirmation page for Remove, Send test reloads with the 
     await expect(row).toHaveCount(1);
     await row.getByRole("button", { name: "Send test" }).click();
     await expect(p.locator("#card-notify-push [data-push-id]")).toContainText("Push test: failed", { timeout: 20_000 });
-    await p.locator("#card-notify-push [data-push-id]").getByRole("link", { name: "Remove" }).click();
-    await expect(p.getByRole("heading", { name: "Remove this browser" })).toBeVisible();
+    const removeLink = p.locator("#card-notify-push [data-push-id]").getByRole("link", { name: "Remove" });
+    // the dialog's question; the server renders it, so it is there without scripts
+    const question = await removeLink.getAttribute("data-dlg-title");
+    expect(question).toMatch(/^Remove .+\?$/);
+    await removeLink.click();
+    // Why (#1093): dialog and page ask one question and the page shows it once, as its title. The person
+    // without scripts must read the same question the dialog asks, and the card must not repeat it in a
+    // second heading of its own.
+    await expect(p.getByRole("heading", { level: 1, name: question!, exact: true })).toBeVisible();
+    await expect(p.locator("section.confirm-card").getByRole("heading")).toHaveCount(0);
     await p.getByRole("button", { name: "Remove" }).click();
     await expect(p.locator("#card-notify-push")).toContainText("No browser is subscribed yet.");
   } finally {
