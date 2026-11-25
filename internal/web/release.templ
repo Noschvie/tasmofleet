@@ -170,43 +170,15 @@ templ relFiles(v view, p releasePage) {
 				<span class="rel-file-t">
 					<span class="rel-file-n">@ui.Soft(f.Name)</span>
 					<span class="rel-file-m" title={ devNames(f.UsedBy, tooltipMax) }>{ fileMeta(f) }</span>
-					@downloadWhy(why)
 				</span>
-				switch {
-					case f.Missing:
-						@ui.Badge(ui.ToneDanger, "Not offered upstream")
-					case f.Cached:
-						@ui.Badge(ui.ToneOK, "Cached")
-					case p.Fetching[p.Version+"/"+f.Name]:
-						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: v.Base + "/firmware/prefetch/" + p.Run})
-					case why != "":
-						<span class="fw-file-fail">
-							@ui.Badge(ui.ToneDanger, "Download failed")
-							if v.IsAdmin {
-								@relFetchButton(v, p.Version, f.Name, "Retry")
-							}
-						</span>
-					case v.IsAdmin:
-						@relFetchButton(v, p.Version, f.Name, "Prefetch")
-					default:
-						<span class="fw-file-nc">Not cached</span>
-				}
+				@fwFileState(v, p.firmwarePage, p.Version, f, why, "release")
+				@downloadWhy(why)
 			</div>
 		}
 		if len(p.Rel.Files) == 0 {
 			<p class="rel-empty">No device in this fleet needs a file from this release.</p>
 		}
 	</section>
-}
-
-templ relFetchButton(v view, release, file, label string) {
-	<form method="post" action={ templ.SafeURL(v.Base + "/firmware/fetch") } class="fw-fetch">
-		<input type="hidden" name="csrf" value={ v.CSRF }/>
-		<input type="hidden" name="release" value={ release }/>
-		<input type="hidden" name="filename" value={ file }/>
-		<input type="hidden" name="from" value="release"/>
-		<button type="submit" class="btn btn-sm" aria-label={ label + " " + file }>{ label }</button>
-	</form>
 }
 
 // relOlder is "Still on older versions" with the way to update them.

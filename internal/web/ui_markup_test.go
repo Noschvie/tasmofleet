@@ -48,7 +48,7 @@ var markupExemptions = []markupBlock{
 	{Name: "#1092 buttons: firmware", Files: map[string]map[string]int{
 		"firmware.templ":        {"btn": 8},
 		"firmware_manage.templ": {"btn": 6},
-		"release.templ":         {"btn": 3},
+		"release.templ":         {"btn": 2},
 	}},
 	{Name: "#1092 buttons: accounts", Files: map[string]map[string]int{
 		"accountpages.templ": {"btn": 8},

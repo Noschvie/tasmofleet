@@ -145,26 +145,31 @@ templ fwPrefetchStatus(pv prefetchView) {
 		<p>State: <strong>{ prefetchState(pv) }</strong>, { prefetchCounts(pv) }.</p>
 		<progress max={ strconv.Itoa(pv.Total) } value={ strconv.Itoa(pv.Done) }></progress>
 		for _, it := range pv.Run.Items {
-			<div class="fw-file">
+			<div class="fw-file fw-file-run">
 				<span class="fw-file-n">@ui.Soft(it.File)</span>
 				<span class="fw-file-s">
 					if it.Size > 0 {
 						{ sizeNoWrap(it.Size) }
 					}
 				</span>
-				switch it.State {
-					case firmware.PrefetchCached:
-						if it.Already {
-							@ui.Badge(ui.ToneOK, "already cached")
-						} else {
-							@ui.Badge(ui.ToneOK, "cached")
-						}
-					case firmware.PrefetchFailed:
-						@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneDanger, Label: "failed: " + safeErr(it.Err), Title: safeErr(it.Err)})
-					case firmware.PrefetchFetching:
-						@ui.Badge(ui.ToneAccent, "fetching")
-					default:
-						@ui.Badge(ui.ToneNeutral, it.State)
+				<span class="fw-file-st">
+					switch it.State {
+						case firmware.PrefetchCached:
+							if it.Already {
+								@ui.Badge(ui.ToneOK, "already cached")
+							} else {
+								@ui.Badge(ui.ToneOK, "cached")
+							}
+						case firmware.PrefetchFailed:
+							@ui.Badge(ui.ToneDanger, "failed")
+						case firmware.PrefetchFetching:
+							@ui.Badge(ui.ToneAccent, "fetching")
+						default:
+							@ui.Badge(ui.ToneNeutral, it.State)
+					}
+				</span>
+				if it.State == firmware.PrefetchFailed {
+					@downloadWhy(safeErr(it.Err))
 				}
 			</div>
 		}

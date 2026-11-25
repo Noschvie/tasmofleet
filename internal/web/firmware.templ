@@ -349,7 +349,9 @@ templ fwRelLinks(v view, p firmwarePage, r releaseView) {
 	</span>
 }
 
-// fwFileRow is one file of the selected release: name, chip, devices, size and its state.
+// fwFileRow is one file of the selected release: name, chip, devices, size and its state. The row is a grid
+// (app.css .fw-file): every cell has its own column, so the chip, the devices and the size start at one x in every row
+// whatever the state's width is (#1094).
 templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
 	{{ why := failedWhy(p.Failed, p.Fetching, r.Version+"/"+f.Name, f) }}
 	<div class="fw-file">
@@ -361,27 +363,37 @@ templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
 				{ sizeNoWrap(f.Size) }
 			}
 		</span>
+		@fwFileState(v, p, r.Version, f, why, "")
+		@downloadWhy(why)
+	</div>
+}
+
+// fwFileState is the state cell of a file row, the one cell of the row that changes: not offered upstream, cached, being
+// fetched, download failed (with Retry), Prefetch, or Not cached. The Firmware page and the release page (from is
+// "release": the answer of Prefetch and Retry is that page) both draw it, so a file looks the same on both and the cell
+// has the one fixed width of its list.
+templ fwFileState(v view, p firmwarePage, release string, f fileView, why, from string) {
+	<span class="fw-file-st">
 		switch {
 			case f.Missing:
 				@ui.Badge(ui.ToneDanger, "Not offered upstream")
 			case f.Cached:
 				@ui.Badge(ui.ToneOK, "Cached")
-			case p.Fetching[r.Version+"/"+f.Name]:
+			case p.Fetching[release+"/"+f.Name]:
 				@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: v.Base + "/firmware/prefetch/" + p.Run})
 			case why != "":
 				<span class="fw-file-fail">
 					@ui.Badge(ui.ToneDanger, "Download failed")
 					if v.IsAdmin {
-						@fwFetchButton(v, r.Version, f.Name, "Retry")
+						@fwFetchButton(v, release, f.Name, "Retry", from)
 					}
 				</span>
 			case v.IsAdmin:
-				@fwFetchButton(v, r.Version, f.Name, "Prefetch")
+				@fwFetchButton(v, release, f.Name, "Prefetch", from)
 			default:
 				<span class="fw-file-nc">Not cached</span>
 		}
-		@downloadWhy(why)
-	</div>
+	</span>
 }
 
 // failedWhy is the reason a file's download failed, "" when the file shows another state (not offered upstream, cached,
@@ -430,11 +442,15 @@ func devNames(ds []deviceRef, limit int) string {
 	return b.String()
 }
 
-templ fwFetchButton(v view, release, file, label string) {
+// fwFetchButton is Prefetch or Retry for one file; from "release" makes the answer the release page.
+templ fwFetchButton(v view, release, file, label, from string) {
 	<form method="post" action={ templ.SafeURL(v.Base + "/firmware/fetch") } class="fw-fetch">
 		<input type="hidden" name="csrf" value={ v.CSRF }/>
 		<input type="hidden" name="release" value={ release }/>
 		<input type="hidden" name="filename" value={ file }/>
+		if from != "" {
+			<input type="hidden" name="from" value={ from }/>
+		}
 		<button type="submit" class="btn btn-sm" aria-label={ label + " " + file }>{ label }</button>
 	</form>
 }

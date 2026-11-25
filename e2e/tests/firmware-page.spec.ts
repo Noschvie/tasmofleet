@@ -1,7 +1,9 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { pickForUpdate, startUpdate } from "../support/updates";
 import { join } from "node:path";
 import { test, expect } from "../support/fixtures";
+import { designFixturePath, loadDesignFixture } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Firmware page against the devenv fleet and its fake upstream: prefetch the
@@ -200,4 +202,130 @@ test("after a check the page is whole; phone dialog names stay whole", async ({ 
     els.filter((el) => el.getBoundingClientRect().height > 1.6 * parseFloat(getComputedStyle(el).lineHeight || "24")).map((el) => el.textContent),
   );
   expect(broken, "device names that wrap onto a second line").toEqual([]);
+});
+
+// Why (#1094): a file row's state (Cached, Prefetch, Download failed with Retry) has a different width, and the rows
+// were flex lines, so the chip, the devices and the size moved with it (the chip started at 910, 895 or 801 px in one
+// list). The rows are a grid with a fixed state column: whatever a row says, its cells start where the others do.
+// The failed download needs the devenv's control server, which only the design fixture has, so this block runs its own
+// stack: the fleet of the file above has no way to make a download fail.
+test.describe("file rows keep their columns", () => {
+  test.describe.configure({ mode: "serial" });
+  let fxApp: App;
+  let fxEnv: Devenv;
+  test.beforeAll(async () => {
+    test.setTimeout(180_000);
+    fxEnv = await startDevenv(["-design-fixture", designFixturePath]);
+    const fwPort = await freePort();
+    fxApp = await startApp({
+      env: {
+        TASMOFLEET_AUTH_MODE: "header",
+        TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
+        TASMOFLEET_ADMIN_GROUPS: "adm",
+        TASMOFLEET_MQTT_URL: fxEnv.vars.TASMOFLEET_MQTT_URL,
+        TASMOFLEET_POLL_INTERVAL: "5s",
+        TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: fxEnv.vars.DEVENV_UPSTREAM_GITHUB_URL,
+        TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
+        TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
+      },
+    });
+    // one ESP32-C3, two ESP32 and two ESP8266: four files for the newest release
+    const fx = loadDesignFixture();
+    const online = (chip: string, n: number) => fx.devices.filter((d) => d.chip === chip && d.status === "online").slice(0, n);
+    const rows = [...online("ESP32-C3", 1), ...online("ESP32", 2), ...online("ESP8266", 2)].map((d, i) => {
+      const [host, port] = fxEnv.devices[d.name].addr.split(":");
+      return `${i + 1},"${d.name}",${host},,,bulb_1,1,1,0,0,1,${port},"${d.name}",0,${fxEnv.devices[d.name].topic},0`;
+    });
+    const dir = mkdtempSync(join(tmpdir(), "tasmofleet-fwrows-"));
+    writeFileSync(join(dir, "devices.csv"), rows.join("\n") + "\n");
+    expect(fxApp.cli(["import", "tasmoadmin", dir])).toContain("created:");
+  });
+  test.afterAll(async () => {
+    await fxApp?.stop();
+    await fxEnv?.stop();
+  });
+
+  async function feed(state: "dl-down" | "up") {
+    const r = await fetch(`${fxEnv.vars.DEVENV_CONTROL_URL}/fixture/feed/${state}`, { method: "POST" });
+    expect(r.status).toBe(204);
+  }
+  /** left edges (px) of every element the locator matches. */
+  const lefts = (loc: import("@playwright/test").Locator) => loc.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().left));
+  async function expectOneColumn(loc: import("@playwright/test").Locator, what: string) {
+    const xs = await lefts(loc);
+    expect(xs.length, `${what}: rows`).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...xs) - Math.min(...xs), `${what} start at ${xs.map(Math.round).join(", ")}`).toBeLessThanOrEqual(1);
+  }
+
+  test("Firmware page: the chip and the state start at one x whether a file is cached, failed or to prefetch", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(fxApp.url + "/firmware");
+    const rows = page.locator("#release .fw-file");
+    await expect(rows).toHaveCount(4, { timeout: 60_000 });
+    await rows.nth(0).getByRole("button", { name: /^Prefetch / }).click();
+    await expect(rows.nth(0).locator(".bdg", { hasText: "Cached" })).toBeVisible();
+    await feed("dl-down");
+    try {
+      await rows.nth(1).getByRole("button", { name: /^Prefetch / }).click();
+      await expect(rows.nth(1).locator(".bdg", { hasText: "Download failed" })).toBeVisible();
+      await expect(rows.nth(2).getByRole("button", { name: /^Prefetch / })).toBeVisible();
+    } finally {
+      await feed("up");
+    }
+    await expectOneColumn(page.locator("#release .fw-file-c"), "the chips");
+    await expectOneColumn(page.locator("#release .fw-file-d"), "the device counts");
+    await expectOneColumn(page.locator("#release .fw-file-st > *"), "the states");
+  });
+
+  test("release page: the state starts at one x whether a file is cached, failed or to prefetch", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(fxApp.url + "/firmware/releases/14.3.0");
+    const rows = page.locator(".rel-files .rel-file");
+    await expect(rows).toHaveCount(4, { timeout: 60_000 });
+    await expect(rows.nth(0).locator(".bdg", { hasText: "Cached" })).toBeVisible(); // by the test above
+    await feed("dl-down");
+    try {
+      await rows.nth(2).getByRole("button", { name: /^Prefetch / }).click();
+      await expect(rows.nth(2).locator(".bdg", { hasText: "Download failed" })).toBeVisible();
+      await expect(rows.nth(1).getByRole("button", { name: /^Prefetch / })).toBeVisible();
+    } finally {
+      await feed("up");
+    }
+    await expectOneColumn(page.locator(".rel-files .fw-file-st > *"), "the states");
+    // Why: between 800 and 1199 px the release card is narrow, but the state still sits beside the name (the page's
+    // rule that puts a Firmware-page state under its name must not reach this list), and the reason spans the row.
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const failed = rows.nth(2);
+    const name = await failed.locator(".rel-file-n").boundingBox();
+    const state = await failed.locator(".fw-file-st").boundingBox();
+    const why = await failed.locator(".fw-file-why").boundingBox();
+    expect(state!.x, "the state is beside the name").toBeGreaterThan(name!.x + name!.width - 1);
+    expect(why!.y, "the reason is under the state").toBeGreaterThanOrEqual(state!.y + state!.height - 1);
+  });
+
+  test("prefetch run page: the size and the state start at one x whether a file was cached or failed", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(fxApp.url + "/firmware/releases/14.3.0");
+    await feed("dl-down");
+    try {
+      await page.getByRole("button", { name: "Prefetch for my fleet" }).click();
+      await expect(page.getByText(/State: finished with errors\b/)).toBeVisible({ timeout: 60_000 });
+    } finally {
+      await feed("up");
+    }
+    const rows = page.locator("#prefetch .fw-file");
+    await expect(rows.locator(".bdg", { hasText: "already cached" })).toHaveCount(1);
+    await expect(rows.locator(".bdg", { hasText: /^failed$/ })).toHaveCount(3);
+    // the reason of each failure is a line of its row, in words
+    await expect(rows.locator(".fw-file-why")).toHaveCount(3);
+    await expectOneColumn(page.locator("#prefetch .fw-file-st > *"), "the states");
+    const sizes = await lefts(page.locator("#prefetch .fw-file-s"));
+    expect(Math.max(...sizes) - Math.min(...sizes), "the sizes").toBeLessThanOrEqual(1);
+  });
 });

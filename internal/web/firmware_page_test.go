@@ -642,3 +642,69 @@ func TestFirmwareBulkDeleteStandsInTheCardFooter(t *testing.T) {
 		t.Errorf("the footer lacks the bulk delete:\n%s", f)
 	}
 }
+
+// Why (#1094): the state of a file (Cached, Prefetch, Download failed with Retry, ...) is the one cell of a row that
+// changes width. It has its own cell, fw-file-st, which the stylesheet gives a fixed column, so the other cells of the
+// row stay where they are; the Firmware page and the release page draw it from the same template, so a file cannot look
+// different on the two. The release page's Prefetch and Retry keep answering with the release page (from=release).
+func TestFileStateHasItsOwnCellOnBothPages(t *testing.T) {
+	admin := view{IsAdmin: true, CSRF: "tok", Base: "/tf"}
+	for _, tc := range []struct {
+		name   string
+		v      view
+		f      fileView
+		failed map[string]string
+		want   string
+	}{
+		{"cached", admin, fileView{Name: "tasmota.bin", Cached: true, Size: 1}, nil, "Cached"},
+		{"not offered", admin, fileView{Name: "tasmota.bin", Missing: true}, nil, "Not offered upstream"},
+		{"prefetch", admin, fileView{Name: "tasmota.bin"}, nil, "Prefetch tasmota.bin"},
+		{"failed", admin, fileView{Name: "tasmota.bin"}, map[string]string{"16.1.0/tasmota.bin": "boom"}, "Download failed"},
+		{"retry", admin, fileView{Name: "tasmota.bin"}, map[string]string{"16.1.0/tasmota.bin": "boom"}, "Retry tasmota.bin"},
+		{"operator", view{Base: "/tf"}, fileView{Name: "tasmota.bin"}, nil, "Not cached"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var fw, rel strings.Builder
+			p := firmwarePage{Failed: tc.failed}
+			if err := fwFileRow(tc.v, p, releaseView{Version: "16.1.0"}, tc.f).Render(context.Background(), &fw); err != nil {
+				t.Fatal(err)
+			}
+			rp := releasePage{firmwarePage: p, Version: "16.1.0", Rel: &releaseView{Version: "16.1.0", Files: []fileView{tc.f}}}
+			if err := relFiles(tc.v, rp).Render(context.Background(), &rel); err != nil {
+				t.Fatal(err)
+			}
+			for page, html := range map[string]string{"Firmware page": fw.String(), "release page": rel.String()} {
+				cell := strings.Index(html, `<span class="fw-file-st">`)
+				if cell < 0 || strings.Index(html, tc.want) < cell {
+					t.Errorf("%s: %q is not inside the state cell:\n%s", page, tc.want, html)
+				}
+			}
+			if strings.Contains(fw.String(), `name="from"`) {
+				t.Errorf("the Firmware page's form must answer with the Firmware page:\n%s", fw.String())
+			}
+			if strings.Contains(rel.String(), `action="/tf/firmware/fetch"`) && !strings.Contains(rel.String(), `name="from" value="release"`) {
+				t.Errorf("the release page's form must answer with the release page:\n%s", rel.String())
+			}
+		})
+	}
+}
+
+// The reason a download failed is a line of the whole row under the state (#1094), on the release page as on the
+// Firmware page: inside the name block it was squeezed beside the state column and sat above the state on a phone.
+func TestReleasePageFailureReasonFollowsTheStateCell(t *testing.T) {
+	v := view{IsAdmin: true, CSRF: "tok", Base: "/tf"}
+	rp := releasePage{
+		firmwarePage: firmwarePage{Failed: map[string]string{"16.1.0/tasmota.bin": "boom"}},
+		Version:      "16.1.0",
+		Rel:          &releaseView{Version: "16.1.0", Files: []fileView{{Name: "tasmota.bin"}}},
+	}
+	var b strings.Builder
+	if err := relFiles(v, rp).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	st, why := strings.Index(html, `<span class="fw-file-st">`), strings.Index(html, `<span class="fw-file-why">boom</span>`)
+	if st < 0 || why < st {
+		t.Errorf("the reason must follow the state cell:\n%s", html)
+	}
+}

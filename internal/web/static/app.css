@@ -10351,30 +10351,38 @@ html:has(dialog#dlg-txn:modal) body {
   min-height: 0;
   font-size: 12.5px;
 }
+/* A file row is a grid, not a flex line (#1094): every cell has its own column, so the chip, the devices and the size
+   start at one x in every row whatever the state's width is. The cells are placed in DOM order; the state column is
+   wide enough for "Download failed" next to Retry, and the reason of a failure spans the row under it. */
 .fw-file {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 80px 64px 176px;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 4px 10px;
   padding: 8px 0;
   border-top: var(--hair-w) solid var(--color-border);
 }
+/* The prefetch run page lists name, size and state only. */
+.fw-file-run {
+  grid-template-columns: minmax(0, 1fr) 64px 176px;
+}
 .fw-file-n {
-  flex: 1 1 160px;
   font: 500 12.5px var(--font-mono);
   overflow-wrap: anywhere;
 }
 .fw-file-c,
 .fw-file-d {
-  width: 80px;
   font-size: 12.5px;
   color: var(--color-text-2);
 }
 .fw-file-s {
-  width: 60px;
   font: 400 12px var(--font-mono);
   color: var(--color-text-3);
   white-space: nowrap;
+}
+.fw-file-st {
+  justify-self: start;
+  min-width: 0;
 }
 .fw-file .bdg {
   height: 22px;
@@ -10397,11 +10405,26 @@ html:has(dialog#dlg-txn:modal) body {
 /* Why a download failed (#1073): its own line under the file, the width of the row. */
 .fw-file-why {
   display: block;
-  flex: 0 0 100%;
+  grid-column: 1 / -1;
   margin: 0;
   font-size: 12.5px;
   color: var(--color-danger-fg);
   overflow-wrap: anywhere;
+}
+/* Where the card is narrow (a phone, and every width below the page's two-column layout at 75rem, where the release card is
+   at most about 520 px) the row is three lines: name and chip, devices and size, the state. */
+@media (max-width: 74.99rem) {
+  .fw-file,
+  .fw-file-run {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .fw-file-c,
+  .fw-file-s {
+    justify-self: end;
+  }
+  .fw-file > .fw-file-st {
+    grid-column: 1 / -1;
+  }
 }
 .fw-fetch {
   margin: 0;
@@ -14787,12 +14810,19 @@ button.pol-chip-x {
   font-size: 12.5px;
 }
 .rel-file {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
   align-items: center;
-  justify-content: space-between;
   gap: var(--sp-10);
   padding: var(--sp-10) 0;
   border-top: var(--hair-w) solid var(--color-border);
+}
+/* The release card is 300 to 350 px wide up to 50rem, too narrow for a name next to the state column: the state goes under. */
+@media (max-width: 49.99rem) {
+  .rel-file {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-6);
+  }
 }
 .rel-file:first-of-type {
   border-top: 0;
@@ -14809,10 +14839,6 @@ button.pol-chip-x {
 .rel-file-m {
   font-size: 11.5px;
   color: var(--color-text-2);
-}
-.rel-file-t .fw-file-why {
-  flex: none;
-  margin-top: var(--sp-4);
 }
 .rel-orow {
   display: flex;

@@ -486,6 +486,14 @@ row's end. Where the card is a half column or narrower (below `75rem`) the devic
 and badge, then the words below them. A state change is worded by what caused it: a change seen on the device's
 LWT topic (Offline from the broker's last will, Online from the device itself) reads "MQTT LWT topic".
 
+The lists of firmware files (the Firmware page, the release page and the prefetch run) are no table either, but they
+keep their columns: each row is a grid, and the state of a file (Cached, Prefetch, Download failed with Retry, Not
+cached) has a column of its own with a fixed width, so the other cells start at one x in every row whatever the state
+says. The reason a download failed is a line that spans the row under it, never a longer badge. Where the card is a
+phone or a half column (below `75rem`) a file on the Firmware page or the prefetch run is three lines (name and chip,
+devices and size, the state); the release card keeps its two columns (name, state) down to `50rem` and puts the state
+under the name below that. On every page the reason spans the row under the state.
+
 Under the table: the pager (`ui.Pager(PagerData)`; `newPager` in `pager.go` builds the model and keeps the filters in
 every link): Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small buttons (`ui.Button`,
 `Small`). A page that cannot be reached (Previous on the first page, Next on the last) is a disabled button. The

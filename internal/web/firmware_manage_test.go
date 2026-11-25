@@ -351,13 +351,15 @@ func TestFirmwarePrefetchFetchesExactlyTheFleetFiles(t *testing.T) {
 }
 
 // Why: a refused download (cross-check failure) is reported on its file and
-// does not hide the others.
+// does not hide the others. The reason is a line of the file's row, in words.
 func TestFirmwarePrefetchShowsFailuresPerFile(t *testing.T) {
 	fw := &fakeMgrFW{releases: baseRelease(), failFile: "tasmota32.bin"}
 	e := fwEnv(t, fw)
 	r, _ := e.do(t, "POST", "/firmware/prefetch", "admin", url.Values{"release": {"16.1.0"}})
 	body := waitFinished(t, e, strings.TrimPrefix(r.Header.Get("Location"), "/tf"))
-	if !strings.Contains(body, "failed: firmware: SHA-256 differs between sources") || !strings.Contains(body, "3 of 4 files cached, 1 failed") {
+	// the badge is short, so the state column of the row stays one width; the reason is visible text under the row, not
+	// a title a phone never shows (#1073, #1094)
+	if !strings.Contains(body, `>failed</span>`) || !strings.Contains(body, `<span class="fw-file-why">firmware: SHA-256 differs between sources</span>`) || !strings.Contains(body, "3 of 4 files cached, 1 failed") {
 		t.Errorf("page:\n%s", body)
 	}
 }
