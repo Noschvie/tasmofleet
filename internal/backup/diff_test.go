@@ -3,6 +3,7 @@ package backup
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -509,6 +510,36 @@ func TestSnapshotDriftIgnoresSensorReadings(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, want := fmtChanges(changes), "Status1.StatusPRM.GroupTopic|\"tasmotas\"|\"other\"\nStatus6.StatusMQT.MqttHost|\"a\"|\"b\"\n"; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+// Why (#1245): an ESP32 with PSRAM reports its free PSRAM as Status4.StatusMEM.PsrFree, and it changes on
+// every read like Heap. The skip list named a key Tasmota never sends, so every read showed a drift row that
+// buries real changes. Only the readings go: the static StatusMEM values (PsrMax, ProgramSize, which change
+// with a firmware update) are still compared, so a filter that grows too broad fails here.
+func TestSnapshotDriftIgnoresFreePSRAM(t *testing.T) {
+	mem := func(psrFree, psrMax, program int) []byte {
+		return []byte(fmt.Sprintf(`{"Status4":{"StatusMEM":{"ProgramSize":%d,"Heap":46,"PsrMax":%d,"PsrFree":%d,"FlashSize":4096}}}`, program, psrMax, psrFree))
+	}
+	a, b := mem(0, 8192, 2182), mem(2048, 8192, 2182)
+	for name, fn := range map[string]func(a, b []byte) ([]Change, error){"drift": snapshotDrift, "compare": SnapshotCompare} {
+		changes, err := fn(a, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range changes {
+			if c.Path == "Status4.StatusMEM.PsrFree" {
+				t.Errorf("%s lists the free PSRAM: %+v", name, c)
+			}
+		}
+	}
+	// the static memory values next to it are still drift
+	changes, err := snapshotDrift(a, mem(2048, 4096, 2200))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmtChanges(changes), "Status4.StatusMEM.ProgramSize|2182|2200\nStatus4.StatusMEM.PsrMax|8192|4096\n"; got != want {
 		t.Errorf("got %q want %q", got, want)
 	}
 }

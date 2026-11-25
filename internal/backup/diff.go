@@ -242,7 +242,7 @@ var (
 	volatileSnapshotKeys = map[string]bool{
 		"Time": true, "Uptime": true, "UptimeSec": true, "Heap": true, "LoadAvg": true, "MqttCount": true,
 		"RSSI": true, "Signal": true, "StartupUTC": true, "BootCount": true, "SaveCount": true, "SaveAddress": true,
-		"RestartReason": true, "StackLowMark": true, "PsrFreeMem": true, "FreeMem": true, "Free": true,
+		"RestartReason": true, "StackLowMark": true, "PsrFree": true, "FreeMem": true, "Free": true,
 		"UTC": true, "Local": true, "Sunrise": true, "Sunset": true, "Sleep": true, "SleepMode": true,
 	}
 	volatileSnapshotPrefixes = []string{"Status7.", "Status8.", "Status10.", "Status11."}
