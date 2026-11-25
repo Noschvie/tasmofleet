@@ -478,6 +478,14 @@ hook on the rows gets data attributes on the body through `BodyAttrs` (`data-rul
 button's `Attrs`. Guard t of the layout guards (`e2e/support/layout.ts`, `headerStyleProblems`) compares the
 header cells of every table page with the base style.
 
+The transaction history is such a table (`.upd-htab`, no `Key`, a `sr-only` caption, fixed column widths, the
+transaction id a `ui.RowHead` that holds the row's one link; on a phone each row is a card and a tap anywhere on it
+follows that link). A list of events that is a log, not data to compare (the activity of a device and of a user), is
+no table but keeps one column for the state: time | what, which wraps in its own column | the state badge, at the
+row's end. Where the card is a half column or narrower (below `75rem`) the device activity row has two lines: time
+and badge, then the words below them. A state change is worded by what caused it: a change seen on the device's
+LWT topic (Offline from the broker's last will, Online from the device itself) reads "MQTT LWT topic".
+
 Under the table: the pager (`ui.Pager(PagerData)`; `newPager` in `pager.go` builds the model and keeps the filters in
 every link): Previous, "Page 1 of 6, 139 events", Next, then the page sizes; all small buttons (`ui.Button`,
 `Small`). A page that cannot be reached (Previous on the first page, Next on the last) is a disabled button. The

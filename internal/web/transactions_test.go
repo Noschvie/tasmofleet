@@ -439,3 +439,60 @@ func TestTransactionsPageIsTitledTransactionsNotUpdateTransactions(t *testing.T)
 		t.Errorf("the device-filtered list lost its title: %s", between(body, "<h1>", "</h1>"))
 	}
 }
+
+// txHistoryRow is the row of one transaction in the History table of /transactions: the <tr> whose
+// first cell links to it. The Scheduled section above also links ids, so a page-wide search would
+// find the wrong row.
+func txHistoryRow(t *testing.T, body, id string) string {
+	t.Helper()
+	table := between(body, `<table class="upd-htab"`, `</table>`)
+	for _, tr := range strings.Split(table, "<tr>") {
+		if strings.Contains(tr, `>`+id+`</a>`) {
+			return tr
+		}
+	}
+	t.Fatalf("no row of %s in the history table: %s", id, table)
+	return ""
+}
+
+// Why (#1094, A4-022): the History was a list of whole-row links, each its own grid, so on a phone the result
+// badge started where that row's own text ended and sat at another x on every row. A table gives the result a
+// column of its own; a screen reader reads it as a table with a name, column heads and the transaction as the
+// head of its row, and the id is the one link of the row (no link around a table row).
+func TestTransactionsHistoryIsATableWithTheResultInItsOwnColumn(t *testing.T) {
+	e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+	ran := time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
+	j6 := schedJob(32, 6, 3, model.JobSucceeded, ran)
+	j6.UpdatedAt = ran.Add(10 * time.Second)
+	j5 := schedJob(33, 5, 3, model.JobFailed, ran.Add(-24*time.Hour))
+	j5.UpdatedAt = ran.Add(-24*time.Hour + time.Minute)
+	jobs.jobs = []model.Job{j6, j5}
+	_, body := e.do(t, "GET", "/transactions", "operator", nil)
+	table := between(body, `<table class="upd-htab"`, `</table>`)
+	if table == "" {
+		t.Fatalf("the History is no table: %s", plain(body))
+	}
+	if !strings.Contains(table, `<caption class="sr-only">Transaction history</caption>`) {
+		t.Errorf("the table has no name for a screen reader (the heading above it is not its caption): %s", table)
+	}
+	for _, h := range []string{"ID", "What", "Devices", "Result", "Started by"} {
+		if !strings.Contains(table, `<th scope="col">`+h+`</th>`) {
+			t.Errorf("column head %q is no th scope=col: %s", h, table)
+		}
+	}
+	if strings.Contains(body, `class="upd-hrow"`) {
+		t.Errorf("a History row is still a whole-row link (a.upd-hrow)")
+	}
+	for _, id := range []string{"TX-0006", "TX-0005"} {
+		row := txHistoryRow(t, body, id)
+		if !strings.Contains(row, `<th scope="row"><a class="upd-hid" href="/tf/transactions/`) {
+			t.Errorf("%s: the id is not the row head with the link: %s", id, row)
+		}
+		if n := strings.Count(row, "<a "); n != 1 {
+			t.Errorf("%s: %d links in the row, want the id only: %s", id, n, row)
+		}
+		if !strings.Contains(between(row, `data-label="Result">`, `</td>`), `class="bdg t-`) {
+			t.Errorf("%s: the result badge is not in the cell labelled Result: %s", id, row)
+		}
+	}
+}

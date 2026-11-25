@@ -63,6 +63,10 @@ func TestHealthDetailOnlyWhenItAddsInformation(t *testing.T) {
 		{model.SourceHTTP, "", ""},
 		{model.SourceMQTT, "MQTT", ""},
 		{model.SourceHTTP, "http poll: credentials rejected", "http poll: credentials rejected"},
+		// #1094: the stored token of a state change that the LWT topic caused ("mqtt lwt", also in rows written
+		// before this version) reads as words; any other detail is shown as it is
+		{model.SourceMQTT, "mqtt lwt", "MQTT LWT topic"},
+		{model.SourceHTTP, "change 3", "change 3"},
 	} {
 		if got := healthDetail(c.src, c.detail); got != c.want {
 			t.Errorf("healthDetail(%q,%q) = %q, want %q", c.src, c.detail, got, c.want)

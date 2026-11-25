@@ -113,7 +113,7 @@ func TestHistoryDatesALateStartedUpdateByItsRealStart(t *testing.T) {
 		30: {eventOf(30, began, model.JobScheduled, model.JobQueued, "start_due", "planned for Fri, Nov 6 at 08:49, started 4m0s after it")},
 	}
 	_, body := e.do(t, "GET", "/transactions", "operator", nil)
-	r := between(body, `<span class="upd-hid">TX-0006</span>`, `</a>`)
+	r := txHistoryRow(t, body, "TX-0006")
 	if !strings.Contains(r, `datetime="2026-11-06T08:53:00Z"`) || strings.Contains(r, `08:49`) {
 		t.Errorf("the row of a late start shows the planned time: %s", r)
 	}
@@ -130,7 +130,7 @@ func TestHistoryKeepsThePlannedTimeOfAnUpdateThatNeverBegan(t *testing.T) {
 	j.NotStarted, j.UpdatedAt = true, due.Add(72*time.Minute)
 	jobs.jobs = []model.Job{j}
 	_, body := e.do(t, "GET", "/transactions", "operator", nil)
-	r := between(body, `<span class="upd-hid">TX-0008</span>`, `</a>`)
+	r := txHistoryRow(t, body, "TX-0008")
 	if !strings.Contains(r, `datetime="2026-11-05T03:00:00Z"`) {
 		t.Errorf("the row of a plan that never began lost its planned time: %s", r)
 	}
@@ -151,7 +151,7 @@ func TestHistoryOfAMixedBatchKeepsThePlannedTimeUnderWasDue(t *testing.T) {
 		30: {eventOf(30, began, model.JobScheduled, model.JobQueued, "start_due", "planned for Fri, Nov 6 at 08:49, started 4m0s after it")},
 	}
 	_, body := e.do(t, "GET", "/transactions", "operator", nil)
-	r := between(body, `<span class="upd-hid">TX-0006</span>`, `</a>`)
+	r := txHistoryRow(t, body, "TX-0006")
 	if !strings.Contains(r, `datetime="2026-11-06T08:49:00Z"`) || strings.Contains(r, `08:53`) {
 		t.Errorf("a \"was due\" row shows a time that is not the planned one: %s", r)
 	}

@@ -810,6 +810,8 @@ func healthDetail(source model.HealthSource, detail string) string {
 	switch strings.ToLower(d) {
 	case "", s, s + " poll ok", s + " ok":
 		return ""
+	case health.DetailMQTTLWT:
+		return "MQTT LWT topic" // the will topic carries Offline (the broker's will) and Online (the device's own message): the topic is true for both
 	}
 	return d
 }

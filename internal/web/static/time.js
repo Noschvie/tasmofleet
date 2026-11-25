@@ -43,12 +43,17 @@
     var now = new Date();
     var days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
       new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
-    if (days === 0) return "Today " + fmt("time", HM).format(d);
-    if (days === 1) return "Yesterday " + fmt("time", HM).format(d);
+    // The clock time is bound with no-break spaces: "10:17 PM" must not wrap before the meridiem.
+    var clock = fmt("time", HM).format(d);
+    var hm = clock.replace(/\s/g, "\u00a0");
+    if (days === 0) return "Today " + hm;
+    if (days === 1) return "Yesterday " + hm;
     var sameYear = d.getFullYear() === now.getFullYear();
-    return fmt(sameYear ? "day-year" : "day-old", sameYear
+    var t = fmt(sameYear ? "day-year" : "day-old", sameYear
       ? Object.assign({ day: "numeric", month: "short" }, HM)
       : Object.assign({ day: "numeric", month: "short", year: "numeric" }, HM)).format(d);
+    // only the clock time at the end is bound: the date part may still wrap
+    return t.slice(-clock.length) === clock ? t.slice(0, -clock.length) + hm : t;
   }
   // clock-day: today's instant is the bare clock time, any other day is dayText (#422). The server's
   // fallback is ui.StampClockOrDayText.

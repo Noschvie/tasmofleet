@@ -102,7 +102,7 @@ func TestTransactionsHistoryWordsTheOutcomesOfPlannedUpdates(t *testing.T) {
 	if strings.Contains(body, "sched-h") {
 		t.Errorf("nothing waits for its start, yet an empty Scheduled section is drawn")
 	}
-	row := func(id string) string { return between(body, `<span class="upd-hid">`+id+`</span>`, `</a>`) }
+	row := func(id string) string { return txHistoryRow(t, body, id) }
 	if r := row("TX-0008"); !strings.Contains(r, `bdg t-warn">Not started<`) || !strings.Contains(plain(r), "was due") {
 		t.Errorf("TX-0008 (not started) reads: %s", r)
 	}
@@ -630,7 +630,7 @@ func TestAPlanCancelledAfterItsStartTimeNeverRanAndOffersNoRetry(t *testing.T) {
 		t.Errorf("a device that never ran offers its own Retry: %s", text)
 	}
 	_, list := e.do(t, "GET", "/transactions", "operator", nil)
-	if r := between(list, `<span class="upd-hid">TX-0007</span>`, `</a>`); !strings.Contains(plain(r), "was due") || strings.Contains(plain(r), "· scheduled") {
+	if r := txHistoryRow(t, list, "TX-0007"); !strings.Contains(plain(r), "was due") || strings.Contains(plain(r), "· scheduled") {
 		t.Errorf("History reads the cancelled plan as one that ran: %s", plain(r))
 	}
 	resp, rbody := e.do(t, "POST", "/transactions/7/retry", "admin", url.Values{})

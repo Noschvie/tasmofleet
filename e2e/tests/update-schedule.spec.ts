@@ -111,7 +111,7 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   // listed as Cancelled, no longer scheduled
   await page.goto(app.url + "/transactions");
   await expect(page.locator("section.upd-sched")).toHaveCount(0);
-  const hist = page.locator("section.upd-hist .upd-hrow", { hasText: id });
+  const hist = page.locator("section.upd-hist tbody tr", { hasText: id });
   await expect(hist.locator(".bdg")).toHaveText("Cancelled");
   await expect(hist).toContainText("was due");
 

@@ -89,17 +89,27 @@ templ txList(p txListView) {
 			if len(p.History) > 0 {
 			<section class="ulist upd-hist" aria-labelledby="hist-h">
 				<div class="ulist-head"><h2 id="hist-h">History</h2></div>
-				<div class="upd-hhead" aria-hidden="true"><span>ID</span><span>What</span><span>Devices</span><span>Result</span><span>Started by</span></div>
-				for _, h := range p.History {
-					<a class="upd-hrow" href={ templ.SafeURL(h.Href) }>
-						<span class="upd-hid">{ h.ID }</span>
-						<span class="upd-htitle">{ h.Title }</span>
-						<span class="upd-hn">{ h.Devices }</span>
-						<span class="upd-hst">
-							@ui.Badge(h.Tone, h.Result)
-						</span>
-						<span class="upd-hwho">{ h.By } · { h.WhenLabel }<time datetime={ h.At } data-ts={ ui.StampDay.Key }>{ h.When }</time>{ h.Suffix }</span>
-					</a>
+				@ui.Table(ui.TableData{
+					Class:   "upd-htab",
+					Caption: "Transaction history",
+					Cols: []ui.TableCol{
+						{Label: "ID", Col: "c-id"}, {Label: "What", Col: "c-what"}, {Label: "Devices", Col: "c-n"},
+						{Label: "Result", Col: "c-res"}, {Label: "Started by", Col: "c-who"},
+					},
+				}) {
+					for _, h := range p.History {
+						<tr>
+							@ui.RowHead(ui.RowHeadData{}) {
+								<a class="upd-hid" href={ templ.SafeURL(h.Href) }>{ h.ID }</a>
+							}
+							<td class="upd-htitle" data-label="What">{ h.Title }</td>
+							<td class="upd-hn" data-label="Devices">{ h.Devices }</td>
+							<td class="upd-hst" data-label="Result">
+								@ui.Badge(h.Tone, h.Result)
+							</td>
+							<td class="upd-hwho" data-label="Started by"><span>{ h.By } · { h.WhenLabel }<time datetime={ h.At } data-ts={ ui.StampDay.Key }>{ h.When }</time>{ h.Suffix }</span></td>
+						</tr>
+					}
 				}
 			</section>
 			}

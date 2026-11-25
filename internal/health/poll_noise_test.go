@@ -88,6 +88,37 @@ func TestFirstPollAfterReplayedWillIsABaselineNotAHistoryRow(t *testing.T) {
 	}
 }
 
+// Why (#1094): the Activity list words this detail ("MQTT LWT topic") by comparing it with DetailMQTTLWT, and the
+// state changes already in people's databases carry the text "mqtt lwt". The tracker must keep storing it, or the
+// old and the new rows would read differently and the list would show the raw text again.
+func TestOnlineWillIsStoredWithTheDetailTheUIWords(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	failAll(h, errDown)
+	for range DefaultOfflineAfter {
+		h.advance(6 * time.Minute)
+		h.step()
+	}
+	h.want(1, model.HealthOffline)
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	h.want(1, model.HealthOnline)
+	for len(h.svc.work) > 0 { // the writer of Run is not running: persist what the message queued
+		(<-h.svc.work)()
+	}
+	var details []string
+	h.st.mu.Lock()
+	for _, e := range h.st.events {
+		if e.To == model.HealthOnline {
+			details = append(details, e.Detail)
+		}
+	}
+	h.st.mu.Unlock()
+	if len(details) != 1 || details[0] != "mqtt lwt" || DetailMQTTLWT != "mqtt lwt" {
+		t.Fatalf("details of the online change: %q (exported %q), want [mqtt lwt]", details, DetailMQTTLWT)
+	}
+}
+
 // quietCase is one poll interval for the quiet-device tests (#669). POLL_INTERVAL has no upper limit, and a quiet
 // device's contact comes from polls that are up to 20 % late, so the long intervals are tested at the jitter's
 // latest point (rand 0.99) as well as at its middle.

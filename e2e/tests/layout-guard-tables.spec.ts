@@ -3,7 +3,8 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { cutCellProblems, headerStyleProblems, hoverRowProblems, layoutGuards, rowCoverProblems } from "../support/layout";
-import { root } from "../support/stack";
+import { App, Devenv, freePort, root, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
+import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 
 // Guards s and r (table cells and rows, #821) and the line-wise guard o, on built pages: each guard must
 // report the defect it exists for and stay quiet where the page is right. Without these a guard that
@@ -146,4 +147,136 @@ test("t: the header cells of every table frame the app draws share one style in 
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), scheme);
     expect(await headerStyleProblems(page), `${scheme}: one header style`).toEqual([]);
   }
+});
+
+// Why (#1094, A4-022 and A7-013): the transaction history and the user's activity were a row each, laid out
+// on its own, so a status badge sat where that row's text happened to end: at another x on every row, on a phone
+// and on a desktop. A column of badges has to read as a column. What "one x" means follows the layout: the
+// History's Result column is left-aligned on a desktop (the left edges agree) and the phone card puts the badge at
+// the right edge of the row; the activity list ends every row with its badge (the right edges agree).
+test.describe("status badges of the history and the activity lists stand in one column (#1094)", () => {
+  const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
+  let app: App;
+  let env: Devenv;
+  test.beforeAll(async ({ browser }) => {
+    test.setTimeout(420_000);
+    env = await startDevenv(realisticDevenvArgs);
+    const fwPort = await freePort();
+    app = await startApp({
+      env: {
+        TASMOFLEET_AUTH_MODE: "header",
+        TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
+        TASMOFLEET_ADMIN_GROUPS: "adm",
+        TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
+        TASMOFLEET_POLL_INTERVAL: "5s",
+        TASMOFLEET_POLICY_LIVE_INTERVAL: "0",
+        TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_GITHUB_URL,
+        TASMOFLEET_POLICY_RULES: realisticPolicyRules,
+        TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
+        TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
+      },
+    });
+    app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)]);
+    // the seed starts updates and backs up devices as adam: the history and his activity have rows before any page is opened
+    const p = await browser.newPage({ extraHTTPHeaders: adam });
+    try {
+      await seedRealisticData(p, app, env);
+    } finally {
+      await p.close();
+    }
+  });
+  test.afterAll(async () => {
+    await app?.stop();
+    await env?.stop();
+  });
+
+  /** edges are the x of the given edge of every element that matches, from the first paint of the page (no waiting on a live swap). */
+  const edges = (page: Page, selector: string, edge: "left" | "right") =>
+    page.locator(selector).evaluateAll((els, e) => els.map((el) => Math.round(el.getBoundingClientRect()[e as "left" | "right"] * 10) / 10), edge);
+
+  for (const width of [375, 1280]) {
+    test(`the Result badges of the transaction history agree at ${width}px`, async ({ page }) => {
+      await page.setExtraHTTPHeaders(adam);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(app.url + "/transactions");
+      const sel = ".upd-hist .bdg"; // the History section: its only badges are the results
+      await expect(page.locator(sel).nth(1), "the seed has at least two transactions").toBeVisible();
+      const xs = await edges(page, sel, width < 720 ? "right" : "left");
+      expect(Math.max(...xs) - Math.min(...xs), `${width < 720 ? "right" : "left"} edges ${xs}`).toBeLessThanOrEqual(1);
+    });
+
+    test(`the status badges of the user's activity end at one x at ${width}px`, async ({ page }) => {
+      await page.setExtraHTTPHeaders(adam);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(app.url + "/users/principal/adam");
+      const sel = ".ud-activity .ud-act > .bdg";
+      await expect(page.locator(sel).nth(1), "adam has at least two audited actions").toBeVisible();
+      const xs = await edges(page, sel, "right");
+      expect(Math.max(...xs) - Math.min(...xs), `right edges ${xs}`).toBeLessThanOrEqual(1);
+    });
+  }
+
+  // Why: the time has a fixed track so the text column keeps one x. The seed only has rows from today ("Today
+  // 10:17 PM"), but the list holds every audited action: "Yesterday 10:17 PM" and "19 Aug 2025, 08:02 PM" are longer
+  // and must wrap inside the track, not run over the action text next to it.
+  // The stamps come from the page's own formatter in a 12-hour locale; the meridiem must stay with its clock time.
+  test.describe("12-hour locale", () => {
+    test.use({ locale: "en-US" });
+    for (const width of [375, 1280]) {
+      test(`a long time of the user's activity stays in its own column at ${width}px`, async ({ page }) => {
+        await page.setExtraHTTPHeaders(adam);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(app.url + "/users/principal/adam");
+        const when = page.locator(".ud-activity .ud-act .ud-act-when");
+        await expect(when.first()).toBeVisible();
+        const gaps = await page.locator(".ud-activity .ud-act").evaluateAll((rows) => {
+          const at = (back: number) => {
+            const d = new Date();
+            d.setDate(d.getDate() - back);
+            d.setHours(22, 17, 0, 0);
+            return d.toISOString();
+          };
+          const older = new Date(new Date().getFullYear() - 1, 7, 19, 22, 17).toISOString();
+          const kinds = [
+            { kind: "today", iso: at(0) },
+            { kind: "yesterday", iso: at(1) },
+            { kind: "older", iso: older },
+          ];
+          const fmt = (window as unknown as { tasmofleetFormatTime: (iso: string, key: string) => string }).tasmofleetFormatTime;
+          return rows.map((row, i) => {
+            const w = row.querySelector(".ud-act-when") as HTMLElement;
+            const t = row.querySelector(".ud-act-text") as HTMLElement;
+            const k = kinds[i % kinds.length];
+            w.textContent = fmt(k.iso, "day");
+            const node = w.firstChild as Text;
+            const top = (needle: string) => {
+              const at = node.data.indexOf(needle);
+              const r = document.createRange();
+              r.setStart(node, at);
+              r.setEnd(node, at + needle.length);
+              return r.getBoundingClientRect().top;
+            };
+            return {
+              kind: k.kind,
+              text: w.textContent,
+              over: w.scrollWidth - w.clientWidth,
+              lines: w.clientHeight / parseFloat(getComputedStyle(w).fontSize),
+              gap: t.getBoundingClientRect().left - w.getBoundingClientRect().right,
+              clockTop: top("10:17"),
+              meridiemTop: top("PM"),
+            };
+          });
+        });
+        expect(new Set(gaps.map((g) => g.kind)).size, "all three kinds of stamp were checked").toBe(3);
+        for (const g of gaps) {
+          expect(g.over, `${g.text} must not run past its column`).toBeLessThanOrEqual(0);
+          expect(g.gap, `${g.text} must end before the action text`).toBeGreaterThan(0);
+          // The meridiem must not be cut off from its clock time by a line break.
+          expect(g.meridiemTop, `${g.text}: PM must stay on the line of 10:17`).toBe(g.clockTop);
+          // The most common stamp fits the track in one line.
+          if (g.kind === "today") expect(g.lines, `${g.text} must stay on one line`).toBeLessThan(1.8);
+        }
+      });
+    }
+  });
 });

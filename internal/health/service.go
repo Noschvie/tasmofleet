@@ -29,6 +29,12 @@ const (
 	DefaultPollInterval = 5 * time.Minute
 	DefaultPollParallel = 4
 
+	// detailMQTT starts the detail of a state change that an MQTT message caused: "mqtt " and the kind of the message.
+	detailMQTT = "mqtt "
+	// DetailMQTTLWT is the detail of a state change caused by a message on the device's LWT topic (the broker's last will or the device's own Online). The UI words it
+	// ("MQTT LWT topic"); it compares against this value, so the two cannot drift apart.
+	DetailMQTTLWT = detailMQTT + string(mqttbus.KindLWT)
+
 	maxBackoff    = 30 * time.Minute
 	jitterFrac    = 0.2
 	tickEvery     = 5 * time.Second
@@ -775,7 +781,7 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile, mqttbus.KindCommand:
 		// A sign of life only; nothing to merge.
 	}
-	tr, changed := s.evaluate(ds, now, model.SourceMQTT, "mqtt "+string(m.Kind))
+	tr, changed := s.evaluate(ds, now, model.SourceMQTT, detailMQTT+string(m.Kind))
 	if !changed {
 		s.publish(ds)
 	}

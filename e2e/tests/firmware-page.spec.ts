@@ -164,7 +164,7 @@ test("a file held by a running update cannot be deleted", async ({ page }) => {
   // the batch still finishes: nothing was pulled away from the device
   await expect(async () => {
     await page.goto(app.url + "/transactions");
-    await expect(page.locator(".upd-hrow").first()).toContainText("Completed", { timeout: 2_000 });
+    await expect(page.locator("section.upd-hist tbody tr").first()).toContainText("Completed", { timeout: 2_000 });
   }).toPass({ timeout: 200_000 });
 });
 

@@ -274,6 +274,14 @@ export function tablePages(ctx: TableContext): TablePage[] {
     { name: "policy deviations", stack: "fleet", path: () => "/policy/deviations", sites: [site("policydev.templ", "policyDevTable")] },
     { name: "policy rule", stack: "fleet", path: () => "/policy/rules/r1", sites: [site("policyrule.templ", "ruleDevicesCard")] },
     {
+      name: "transactions history",
+      stack: "fleet",
+      path: () => "/transactions",
+      sites: [site("transactions.templ", "txList")],
+      widths: [1280],
+      note: "below 45rem the history is phone cards (a table without .dense), which have no columns; layout-guard-tables.spec.ts checks the result column there",
+    },
+    {
       name: "transaction retry",
       stack: "fleet",
       path: () => "/transactions",

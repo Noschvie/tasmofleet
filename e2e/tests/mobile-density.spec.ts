@@ -54,7 +54,7 @@ async function phonePages(page: import("@playwright/test").Page): Promise<Record
   const rule = await page.locator("td.p1 a").first().getAttribute("href");
   expect(rule).toBeTruthy();
   await page.goto(app.url + "/transactions");
-  const tx = await page.locator("a.upd-hrow").first().getAttribute("href");
+  const tx = await page.locator(".upd-htab a.upd-hid").first().getAttribute("href");
   expect(tx).toBeTruthy();
   return {
     dashboard: "/",
@@ -255,8 +255,8 @@ test("phone: a tap anywhere on a transaction row opens it", async ({ page }) => 
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 375, height: SCREEN });
   await page.goto(app.url + "/transactions");
-  const row = page.locator("a.upd-hrow").first();
-  const href = await row.getAttribute("href");
+  const row = page.locator(".upd-htab tbody tr").first();
+  const href = await row.locator("a.upd-hid").getAttribute("href");
   const box = (await row.boundingBox())!;
   await page.mouse.click(box.x + box.width - 6, box.y + box.height - 6); // the row's corner, away from any text
   await expect(page).toHaveURL(new RegExp(href!.replace(/^.*\/transactions\//, "/transactions/") + "$"));

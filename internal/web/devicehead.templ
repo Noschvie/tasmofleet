@@ -410,7 +410,8 @@ templ devActList(rows []devActRow, base string) {
 			<li>
 				<time class="dev-act-at" { ui.StampAttrs(r.At, ui.StampDateTimeSec)... }>{ ui.StampText(r.At, ui.StampDateTimeSec) }</time>
 				if e := r.Event; e != nil {
-					<span class="dev-act-what">
+					<span class="dev-act-what"><span class="dev-act-more">{ string(e.Source) }{ healthMore(e.Source, e.Detail) }</span></span>
+					<span class="dev-act-st">
 						<span class="sr-only">From </span>
 						@ui.Badge(uiTone(e.From), label(e.From))
 						{ " " }
@@ -419,18 +420,22 @@ templ devActList(rows []devActRow, base string) {
 						<span class="sr-only">to </span>
 						@ui.Badge(uiTone(e.To), label(e.To))
 					</span>
-					<span class="dev-act-more">{ string(e.Source) }{ healthMore(e.Source, e.Detail) }</span>
 				} else if j := r.Job; j != nil {
-					<span class="dev-act-what"><a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Transaction #{ strconv.FormatInt(int64(j.BatchID), 10) }</a> @ui.Badge(uiTone(j.State), label(j.State))</span>
-					<span class="dev-act-more">
-						if r.Note != "" {
-							{ r.Note }
-						} else {
-							{ j.Target() }
-						}
-						if j.LastError != "" {
-							· <span class="reason" title={ tip(j.LastError) }>{ humanReason(j.LastError) }</span>
-						}
+					<span class="dev-act-what">
+						<a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Transaction #{ strconv.FormatInt(int64(j.BatchID), 10) }</a>
+						<span class="dev-act-more">
+							if r.Note != "" {
+								{ r.Note }
+							} else {
+								{ j.Target() }
+							}
+							if j.LastError != "" {
+								· <span class="reason" title={ tip(j.LastError) }>{ humanReason(j.LastError) }</span>
+							}
+						</span>
+					</span>
+					<span class="dev-act-st">
+						@ui.Badge(uiTone(j.State), label(j.State))
 					</span>
 				}
 			</li>

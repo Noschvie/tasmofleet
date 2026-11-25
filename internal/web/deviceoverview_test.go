@@ -711,12 +711,41 @@ func TestLiveRefreshLeavesAnUnchangedActivityBoxAlone(t *testing.T) {
 func TestActivityRowReadsFromOnlineToOffline(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.History = &fakeHistory{events: stateChanges(1)} })
 	_, body := e.do(t, "GET", "/devices/1", "operator", nil)
-	want := `<span class="dev-act-what"><span class="sr-only">From </span><span class="bdg t-ok">Online</span> <span aria-hidden="true">→</span> <span class="sr-only">to </span><span class="bdg t-danger">Offline</span></span>`
+	want := `<span class="dev-act-st"><span class="sr-only">From </span><span class="bdg t-ok">Online</span> <span aria-hidden="true">→</span> <span class="sr-only">to </span><span class="bdg t-danger">Offline</span></span>`
 	if !strings.Contains(regexp.MustCompile(`\s+`).ReplaceAllString(body, " "), want) {
 		t.Errorf("the state change must read as words:\n%s", sliceBetween(body, `<ul class="dev-act">`, `</ul>`))
 	}
 	if strings.Contains(body, `aria-label="to"`) {
 		t.Error(`aria-label="to" on a span is ignored by screen readers`)
+	}
+}
+
+// Why (#1094, A2-017): the badge sat inside the text span, straight after the link, so it moved with the text and
+// touched it. Each row has its own element for the state, after the text, which the page lays out in a column of its
+// own: the badges of every row end at one x. The text span holds the words only.
+func TestActivityRowKeepsTheBadgeInItsOwnElementAfterTheText(t *testing.T) {
+	jobs := []model.Job{{ID: 1, BatchID: 141, DeviceID: 1, State: model.JobSucceeded, TargetRelease: "16.0.0", UpdatedAt: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)}}
+	e := setupWith(t, func(d *Deps) {
+		d.History = fakeHistory{stateChanges(1)}
+		d.Jobs, d.OTA = &fakeJobs{jobs: jobs}, &fakeOTA{}
+	})
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	list := sliceBetween(body, `<ul class="dev-act">`, `</ul>`)
+	rows := regexp.MustCompile(`(?s)<li>.*?</li>`).FindAllString(list, -1)
+	if len(rows) != 2 {
+		t.Fatalf("%d rows, want a transaction and a state change:\n%s", len(rows), list)
+	}
+	for _, row := range rows {
+		what := sliceBetween(row, `<span class="dev-act-what">`, `<span class="dev-act-st">`)
+		if what == "" || strings.Contains(what, `class="bdg`) {
+			t.Errorf("the text span is missing or holds a badge, or the badge is not after it:\n%s", row)
+		}
+		if st := sliceBetween(row, `<span class="dev-act-st">`, `</li>`); !strings.Contains(st, `class="bdg t-`) {
+			t.Errorf("no badge in the state element:\n%s", row)
+		}
+	}
+	if !strings.Contains(rows[0], `>Transaction #141</a>`) {
+		t.Errorf("the transaction link is not in the text span:\n%s", rows[0])
 	}
 }
 
