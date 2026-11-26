@@ -532,7 +532,7 @@ func TestBannerProps(t *testing.T) {
 		}).Render(templ.WithChildren(ctx, kids), w)
 	}))
 	for _, want := range []string{
-		`<div class="banner tone-accent cmd-check x" id="b1" role="status" data-flash data-cooldown>`,
+		`<div class="banner t-accent cmd-check x" id="b1" role="status" data-flash data-cooldown>`,
 		`<span class="banner-dot pulse" aria-hidden="true"></span>`,
 		`<div class="banner-text"><b>Lead.</b> Text <ul class="banner-list"><li>one</li></ul></div>`,
 		`<a class="banner-btn" href="/x" data-dialog="dlg" data-live-retry hx-post="/p">Open</a>`,
@@ -1094,5 +1094,24 @@ func TestStampedPlainIsTheElementsFallbackText(t *testing.T) {
 	}
 	if got := (Stamped{Lead: "a ", At: at, Text: "Today 14:17", Tail: " b"}).Plain(); got != "a Today 14:17 b" {
 		t.Errorf("a relative fallback text is kept: %q", got)
+	}
+}
+
+// Why: banners and toasts take their colour from the one tone class set (.t-ok ... .t-accent) that badges and dots
+// use. A banner that wrote a class of its own from the tone name left a tone nobody styled with no colour at all, and a name
+// outside the five (a typo, the old "bad" or "info") drew nothing and said nothing; Tone.class() draws it neutral.
+func TestBannerAndToastTakeTheToneClassOfTheTone(t *testing.T) {
+	for tone, class := range map[Tone]string{
+		ToneOK: "t-ok", ToneWarn: "t-warn", ToneDanger: "t-danger", ToneNeutral: "t-neutral", ToneAccent: "t-accent",
+		Tone("bad"): "t-neutral", Tone("info"): "t-neutral", Tone(""): "t-neutral",
+	} {
+		b := comp(t, Banner(BannerData{Tone: tone, Text: "x"}))
+		if !strings.Contains(b, `<div class="banner `+class+`"`) {
+			t.Errorf("banner of tone %q: want class %s in %s", tone, class, b)
+		}
+		ts := comp(t, ToastStatic(ToastData{Tone: tone, Text: "x"}))
+		if !strings.Contains(ts, `<div class="toast `+class+` has-x"`) {
+			t.Errorf("toast of tone %q: want class %s in %s", tone, class, ts)
+		}
 	}
 }

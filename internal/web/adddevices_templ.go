@@ -400,7 +400,7 @@ func addManualForm(f addManualView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\"><div class=\"add-note tone-accent\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\">Prefilled from ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\"><div class=\"add-note t-accent\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\">Prefilled from ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -487,7 +487,7 @@ func addManualForm(f addManualView) templ.Component {
 			}
 		}
 		if f.Tested != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"add-note tone-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Connected.</b> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"add-note t-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Connected.</b> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -846,7 +846,7 @@ func discoveredBody(p discView) templ.Component {
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
 		if p.Off {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"add-note tone-warn\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>MQTT discovery is switched off.</b> Only network scans find new devices.</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<div class=\"add-note t-warn\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>MQTT discovery is switched off.</b> Only network scans find new devices.</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3318,7 +3318,7 @@ func scanBox(b scanBodyView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if b.Running {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 276, "<div class=\"add-note tone-accent\" role=\"status\"><span class=\"add-note-dot pulse\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scanning ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 276, "<div class=\"add-note t-accent\" role=\"status\"><span class=\"add-note-dot pulse\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scanning ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3375,7 +3375,7 @@ func scanBox(b scanBodyView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if b.HasScan && b.Summary != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 281, "<div class=\"add-note tone-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scan finished.</b> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 281, "<div class=\"add-note t-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scan finished.</b> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -3868,7 +3868,7 @@ func scanProgress(b scanBodyView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else if b.HasScan {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 331, "<div class=\"add-note tone-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scan finished.</b> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 331, "<div class=\"add-note t-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Scan finished.</b> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -4817,7 +4817,7 @@ func importBodyPart(b importBody) templ.Component {
 			}
 		}
 		if b.Report != nil {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "<div class=\"add-note tone-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Import finished.</b> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 423, "<div class=\"add-note t-ok\" role=\"status\"><span class=\"add-note-dot\" aria-hidden=\"true\"></span> <span class=\"add-note-text\"><b>Import finished.</b> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

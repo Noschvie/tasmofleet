@@ -55,7 +55,7 @@ func TestBulkCommandPreviewThenRun(t *testing.T) {
 		t.Fatalf("command box: %d %s", resp.StatusCode, body)
 	}
 	resp, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", "  Status   2 "))
-	if resp.StatusCode != 200 || !strings.Contains(body, "Send to 1 device") || !strings.Contains(body, "1 device run · 1 skipped") || strings.Contains(body, `class="banner tone-danger"`) {
+	if resp.StatusCode != 200 || !strings.Contains(body, "Send to 1 device") || !strings.Contains(body, "1 device run · 1 skipped") || strings.Contains(body, `class="banner t-danger"`) {
 		t.Fatalf("preview: %d %s", resp.StatusCode, body)
 	}
 	if len(fb.reqs) != 0 {
@@ -84,7 +84,7 @@ func TestBulkCommandPreviewNamesTheConsequence(t *testing.T) {
 	e, _ := bulkEnv(t)
 	for _, cmd := range []string{"Reset 1", "Backlog Power1 ON; WifiConfig 2", "Status 0"} {
 		_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", cmd))
-		if !strings.Contains(body, `class="banner tone-danger"`) {
+		if !strings.Contains(body, `class="banner t-danger"`) {
 			t.Errorf("%q: no consequence: %s", cmd, body)
 		}
 	}

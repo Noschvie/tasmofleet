@@ -185,7 +185,7 @@ test("a switch that cannot be sent says which device and relay it is", async ({ 
   await expect(toggle).toBeVisible({ timeout: 30_000 });
   await page.route(/\/power\/\d+$/, (route) => route.abort("failed"));
   await toggle.click();
-  const toast = page.locator("#toasts .toast.tone-danger");
+  const toast = page.locator("#toasts .toast.t-danger");
   await expect(toast).toContainText("plug-4m-http relay 1 was not sent: no connection");
   await expect(toggle).toBeEnabled();
   // renamed and clicked in one task, so a live reload of the table cannot put the name back in between
@@ -226,7 +226,7 @@ test("a switch redrawn by a live update while its click fails still says it was 
     await route.abort("failed");
   });
   await toggle.click();
-  const toast = page.locator("#toasts .toast.tone-danger").filter({ hasText: "relay 1 was not sent: no connection" });
+  const toast = page.locator("#toasts .toast.t-danger").filter({ hasText: "relay 1 was not sent: no connection" });
   await expect(toast).toHaveCount(1);
   await expect(toast).toContainText("plug-4m-http relay 1");
   await expect(row.getByRole("switch", { name: /relay 1$/ })).toBeEnabled();

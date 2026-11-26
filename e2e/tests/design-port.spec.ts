@@ -176,7 +176,7 @@ for (const [name, size] of [["desktop", { width: 1280, height: 900 }], ["phone",
     expect(new Set(tabBoxes).size, "tabs on one line").toBe(1);
     // "Show failure" raises a toast that stays until dismissed
     await page.getByRole("button", { name: "Show failure" }).click();
-    const toast = page.locator("#toasts .toast.tone-danger");
+    const toast = page.locator("#toasts .toast.t-danger");
     await expect(toast).toBeVisible();
     await toast.getByRole("button", { name: "Dismiss" }).click();
     await expect(toast).toHaveCount(0);

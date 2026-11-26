@@ -66,7 +66,7 @@ func TestDevicePageOffersTheDeviceNameWhenItDiffersFromAHandSetName(t *testing.T
 func TestNameOfferBannerHasOneActionAndKeepSitsInTheNameRow(t *testing.T) {
 	e := nameSetup(t)
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	i := strings.Index(body, `class="banner tone-warn name-offer"`)
+	i := strings.Index(body, `class="banner t-warn name-offer"`)
 	if i < 0 {
 		t.Fatalf("no name offer banner:\n%s", body)
 	}

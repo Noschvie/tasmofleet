@@ -132,14 +132,14 @@ func TestCancelLogLineReadsAsOneSentence(t *testing.T) {
 func TestBulkCommandPreviewOfARestartNamesTheConsequence(t *testing.T) {
 	e, _ := bulkEnv(t)
 	_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Restart 1"))
-	if !strings.Contains(body, `class="banner tone-danger"`) || !strings.Contains(body, "offline for a few seconds") {
+	if !strings.Contains(body, `class="banner t-danger"`) || !strings.Contains(body, "offline for a few seconds") {
 		t.Errorf("no consequence for a restart: %s", body)
 	}
 	if !strings.Contains(body, `class="btn btn-danger-solid">Restart 1 device</button>`) {
 		t.Errorf("the confirming button repeats the verb and tone: %s", body)
 	}
 	_, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Status 2"))
-	if strings.Contains(body, `class="banner tone-danger"`) || !strings.Contains(body, `class="btn btn-primary">Send to 1 device</button>`) {
+	if strings.Contains(body, `class="banner t-danger"`) || !strings.Contains(body, `class="btn btn-primary">Send to 1 device</button>`) {
 		t.Errorf("a read command stays neutral: %s", body)
 	}
 }

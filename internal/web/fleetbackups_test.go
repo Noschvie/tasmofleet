@@ -338,7 +338,7 @@ func TestStatusBarBackupLinksToPageAndSaysSkipped(t *testing.T) {
 			t.Errorf("skipped only: bar lacks %q: %s", want, calm)
 		}
 	}
-	for _, bad := range []string{"t-warn", "t-bad", "sb-warn", "failed"} {
+	for _, bad := range []string{"t-warn", "t-danger", "failed"} {
 		if strings.Contains(calm, bad) {
 			t.Errorf("skipped only must stay calm, found %q", bad)
 		}

@@ -139,7 +139,7 @@ func TestCatalogueChecksWarnButOnlyAnUnknownCommandIsRefused(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	fleetOf(e, esp8266("new1", "16.0.0", "tasmota"), esp8266("old1", "13.4.0", "tasmota"), esp8266("old2", "13.4.0", "tasmota"))
 	_, b := e.do(t, "GET", "/policy/rules/value-control?command=JsonPP", "admin", nil)
-	for _, w := range []string{"JsonPP is not a command in Tasmota 13.4.0 (2 devices)", "tone-warn", "command exists", "not a command in Tasmota 13.4.0", "old1 and old2 show as", "applies to the other 1 device"} {
+	for _, w := range []string{"JsonPP is not a command in Tasmota 13.4.0 (2 devices)", "banner t-warn", "command exists", "not a command in Tasmota 13.4.0", "old1 and old2 show as", "applies to the other 1 device"} {
 		if !strings.Contains(b, w) {
 			t.Errorf("version warning lacks %q:\n%s", w, b)
 		}
@@ -150,7 +150,7 @@ func TestCatalogueChecksWarnButOnlyAnUnknownCommandIsRefused(t *testing.T) {
 		t.Fatal("a version warning must not block saving")
 	}
 	_, b = e.do(t, "GET", "/policy/rules/value-control?command=SetOption200", "admin", nil)
-	if !strings.Contains(b, "outside 0 to 177") || !strings.Contains(b, "tone-warn") {
+	if !strings.Contains(b, "outside 0 to 177") || !strings.Contains(b, "banner t-warn") {
 		t.Errorf("index warning:\n%s", b)
 	}
 	saveRule(t, e, url.Values{"command": {"SetOption200"}, "want": {"1"}, "name": {"far"}, "version": {strconv.Itoa(len(mem.vs))}})
@@ -166,7 +166,7 @@ func TestCatalogueChecksWarnButOnlyAnUnknownCommandIsRefused(t *testing.T) {
 		t.Fatal("nothing may be saved for it")
 	}
 	_, b = e.do(t, "GET", "/policy/rules/value-control?command=NoSuchCmdAnywhere", "admin", nil)
-	if !strings.Contains(b, "tone-danger") || !strings.Contains(b, "cannot be saved") {
+	if !strings.Contains(b, "banner t-danger") || !strings.Contains(b, "cannot be saved") {
 		t.Errorf("the refusal shows live:\n%s", b)
 	}
 }
@@ -187,7 +187,7 @@ func TestCatalogueValueProblemsWarnAndTheRuleIsStillSaved(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	for want, warn := range map[string]string{"1": "1 is below the minimum of 2.", "9999": "9999 is above the maximum of 3600.", "2.5": "2.5 is not a whole number.", "abc": "Enter a number."} {
 		_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {want}}), "HX-Request", "true")
-		if !strings.Contains(body, `id="want-check"`) || !strings.Contains(body, warn) || !strings.Contains(body, "tone-warn") || !strings.Contains(body, "You can still save") {
+		if !strings.Contains(body, `id="want-check"`) || !strings.Contains(body, warn) || !strings.Contains(body, "banner t-warn") || !strings.Contains(body, "You can still save") {
 			t.Errorf("preview of %q lacks the warning %q:\n%s", want, warn, body)
 		}
 		saveRule(t, e, url.Values{"command": {"BlinkTime"}, "want": {want}, "name": {"x" + want}, "version": {strconv.Itoa(len(mem.vs))}})
@@ -196,7 +196,7 @@ func TestCatalogueValueProblemsWarnAndTheRuleIsStillSaved(t *testing.T) {
 		t.Fatalf("every value must be saved, got %d rules", len(ruleIDs(t, mem)))
 	}
 	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {"10"}}), "HX-Request", "true")
-	if strings.Contains(body, "tone-warn") {
+	if strings.Contains(body, "banner t-warn") {
 		t.Error("an in-range value has no warning")
 	}
 	// Latitude takes decimals

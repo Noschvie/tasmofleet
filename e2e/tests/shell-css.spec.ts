@@ -652,3 +652,93 @@ test("every framed box is rounded (no v1 square corners left)", async ({
     ).toEqual([]);
   }
 });
+
+// Why: a media query in px ignores the root font size, and a width picked per component makes layouts switch at
+// points nobody can name. The design system lists the widths (Usage rules, Breakpoints): phone up to 44.99rem,
+// tablet from 45rem to 74.99rem, desktop from 75rem, and the component widths 50.99, 60, 64.99 and
+// 72/71.99rem. The same list is in internal/web/tokens_test.go (breakpointList), which judges the stylesheet
+// text; this test judges what the browser parsed, so a width that arrives some other way (a second stylesheet, an @import) is caught too. A new
+// width is added in the design system and in both places or not at all (#1102).
+test("every media query width is rem and on the breakpoint list", async ({
+  page,
+}) => {
+  await open(page, "/styleguide", 1280);
+  const found = await page.evaluate(() => {
+    const out: string[] = [];
+    const walk = (rules: CSSRuleList) => {
+      for (const r of Array.from(rules)) {
+        if (r instanceof CSSMediaRule) out.push(r.conditionText);
+        if ("cssRules" in r) walk((r as CSSGroupingRule).cssRules);
+      }
+    };
+    for (const s of Array.from(document.styleSheets)) walk(s.cssRules);
+    return out;
+  });
+  expect(found.length, "the walker saw the app's media queries").toBeGreaterThan(
+    100,
+  );
+  const list: Record<string, string[]> = {
+    "min-width": ["45rem", "72rem", "75rem"],
+    "max-width": ["44.99rem", "50.99rem", "60rem", "64.99rem", "71.99rem", "74.99rem"],
+  };
+  const off = [...new Set(found)].filter((q) => {
+    if (/^\(prefers-[a-z-]+: [a-z-]+\)$/.test(q)) return false;
+    const conds = [...q.matchAll(/\((min|max)-width:\s*([^)]*?)\s*\)/g)];
+    const rest = q
+      .replace(/\((min|max)-width:\s*[^)]*\)/g, "")
+      .replace(/and/g, "")
+      .trim();
+    return (
+      conds.length === 0 ||
+      rest !== "" ||
+      conds.some((c) => !list[`${c[1]}-width`].includes(c[2]))
+    );
+  });
+  expect(off, "media queries off the breakpoint list").toEqual([]);
+});
+
+// Why: a toast, a banner and a note draw their dot and border from the one tone system (.t-ok ... .t-accent).
+// toast.js once wrote a class of the old tone family for whatever name it was given, so "info" (form.js, "Still working") and a name
+// nobody styled got the success green by default; now the five names draw their own tone and any other name is
+// neutral, the same as ui.Tone.class() on the server. A tone that paints nothing would show a failure as a calm dot.
+test("a live toast takes the colour of its tone, and an unknown name is neutral", async ({
+  page,
+}) => {
+  await open(page, "/styleguide", 1280);
+  const got = await page.evaluate(() => {
+    const colour = (token: string) => {
+      const e = document.createElement("i");
+      e.style.background = `var(${token})`;
+      document.body.append(e);
+      const c = getComputedStyle(e).backgroundColor;
+      e.remove();
+      return c;
+    };
+    const out: Record<string, { cls: string; dot: string; want: string }> = {};
+    const toast = (window as unknown as { tfToast: (t: string, tone?: string) => void }).tfToast;
+    for (const [name, token] of [
+      ["ok", "--color-ok"],
+      ["accent", "--color-accent"],
+      ["warn", "--color-warn"],
+      ["danger", "--color-danger"],
+      ["neutral", "--color-neutral"],
+      ["info", "--color-neutral"],
+      ["bad", "--color-neutral"],
+    ]) {
+      toast(`toast ${name}`, name);
+      const t = [...document.querySelectorAll<HTMLElement>("#toasts .toast")].find((e) => e.textContent!.includes(`toast ${name}`))!;
+      out[name] = {
+        cls: [...t.classList].filter((c) => c.startsWith("t-")).join(" "),
+        dot: getComputedStyle(t.querySelector(".toast-dot")!).backgroundColor,
+        want: colour(token),
+      };
+    }
+    return out;
+  });
+  for (const [name, g] of Object.entries(got)) {
+    expect(g.dot, `toast "${name}" (${g.cls})`).toBe(g.want);
+  }
+  expect(got.ok.cls).toBe("t-ok");
+  expect(got.accent.cls).toBe("t-accent");
+  expect(got.info.cls, "an unknown name is drawn neutral").toBe("t-neutral");
+});

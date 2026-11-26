@@ -58,7 +58,7 @@ func TestOneRejectedFieldShowsOnlyItsInlineError(t *testing.T) {
 	if !strings.Contains(login, "Wrong username or password. 4 attempts left before further attempts are delayed.") {
 		t.Errorf("login: the attempts line is not part of the field error: %s", login)
 	}
-	if strings.Contains(login, "banner tone-danger") {
+	if strings.Contains(login, "banner t-danger") {
 		t.Error("login: a retryable wrong sign-in shows the error in a banner as well as at the password")
 	}
 	if strings.Contains(inputTag(t, login, "username"), "aria-invalid") {

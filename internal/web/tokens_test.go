@@ -803,3 +803,82 @@ func TestDurationTokensStopUnderReducedMotion(t *testing.T) {
 		}
 	}
 }
+
+// breakpointList is the width list of design-system.md, Usage rules, Breakpoints: phone up to 44.99rem, tablet
+// from 45rem to 74.99rem, desktop from 75rem, and the component widths (60rem the bulk bar, 72rem the audit table,
+// 50.99rem a half-width card on a narrow tablet, 64.99rem the six dashboard tiles). The same list is in e2e/tests/shell-css.spec.ts (the browser's view of the
+// stylesheet); a new width is added in all three places or not at all.
+var breakpointList = map[string]map[string]bool{
+	"min-width": {"45rem": true, "72rem": true, "75rem": true},
+	"max-width": {"44.99rem": true, "50.99rem": true, "60rem": true, "64.99rem": true, "71.99rem": true, "74.99rem": true},
+}
+
+var (
+	mediaCondRe = regexp.MustCompile(`\(\s*(min-width|max-width)\s*:\s*([^)]*?)\s*\)`)
+	mediaPrefRe = regexp.MustCompile(`^\(\s*prefers-[a-z-]+\s*:\s*[a-z-]+\s*\)$`)
+)
+
+// offListMedia returns every @media prelude of css whose width is not on the breakpoint list: a width in px (px
+// ignores the root font size), a rem value off the list, or a condition that is neither a width nor a user
+// preference.
+func offListMedia(css string) []string {
+	var bad []string
+	preludes, _ := cssPreludes(stripCSSComments(css))
+	for _, p := range preludes {
+		q, ok := strings.CutPrefix(strings.TrimSpace(p), "@media")
+		if !ok {
+			continue
+		}
+		q = strings.Join(strings.Fields(q), " ")
+		if mediaPrefRe.MatchString(q) {
+			continue
+		}
+		rest := q
+		fine := true
+		for _, m := range mediaCondRe.FindAllStringSubmatch(q, -1) {
+			fine = fine && breakpointList[m[1]][m[2]]
+			rest = strings.Replace(rest, m[0], "", 1)
+		}
+		if rest = strings.TrimSpace(strings.ReplaceAll(rest, "and", "")); rest != "" || !fine || !mediaCondRe.MatchString(q) {
+			bad = append(bad, "@media "+q)
+		}
+	}
+	return bad
+}
+
+// Why: a width picked per component ignores the root font size (px) and makes layouts switch at points nobody
+// can name, so the page jumps between 1090 and 1100 px for no reason a reader of the design system can find. Every
+// width is the phone, tablet or desktop edge or a documented component width (#1102).
+func TestMediaQueriesUseTheBreakpointList(t *testing.T) {
+	css := readRepoFile(t, "static/app.css")
+	if n := strings.Count(css, "@media"); n < 100 {
+		t.Fatalf("found %d @media rules in app.css, the walker lost its way", n)
+	}
+	for _, q := range offListMedia(css) {
+		t.Errorf("app.css has %q, which is not on the breakpoint list (design-system.md, Breakpoints): fold it into the list", q)
+	}
+}
+
+// Why: the guard above would pass on everything if it judged nothing; it must see a px query, a one-off rem width
+// and a width hidden in a range, and pass the list's own widths.
+func TestMediaQueryGuardJudges(t *testing.T) {
+	for _, q := range []string{
+		"(max-width: 719px)", "(min-width: 70rem)", "(min-width: 45rem) and (max-width: 63.99rem)",
+		"(max-width:44.99rem) and (min-width: 52rem)", "(orientation: portrait)", "screen",
+	} {
+		if got := offListMedia("@media " + q + " {\n  .a {\n    color: red;\n  }\n}"); len(got) != 1 {
+			t.Errorf("@media %s: judged %v, want it off the list", q, got)
+		}
+	}
+	for _, q := range []string{
+		"(max-width: 44.99rem)", "(min-width: 45rem) and (max-width: 74.99rem)", "(min-width: 75rem)",
+		"(max-width: 60rem)", "(max-width: 71.99rem)", "(min-width: 72rem)", "(prefers-reduced-motion: reduce)",
+	} {
+		if got := offListMedia("@media " + q + " {\n  .a {\n    color: red;\n  }\n}"); len(got) != 0 {
+			t.Errorf("@media %s: judged %v, want it on the list", q, got)
+		}
+	}
+	if got := offListMedia("/* @media (max-width: 719px) { } */\n.a { color: red; }"); len(got) != 0 {
+		t.Errorf("a media query inside a comment is judged: %v", got)
+	}
+}

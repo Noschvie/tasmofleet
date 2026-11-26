@@ -86,7 +86,7 @@ func TestStatusBarBrokerState(t *testing.T) {
 		{"connected", BrokerInfo{Enabled: true, Connected: true, Host: "mqtt.lab.home:1883", Since: since},
 			[]string{"<b>Broker</b>", "mqtt.lab.home:1883"}, []string{"Broker disconnected", "t-warn"}},
 		{"down", BrokerInfo{Enabled: true, Host: "mqtt.lab.home:1883", Since: since},
-			[]string{"<b>Broker disconnected</b>", "mqtt.lab.home:1883", "since", "t-warn", "sb-edge sb-warn", "Broker disconnected"}, nil},
+			[]string{"<b>Broker disconnected</b>", "mqtt.lab.home:1883", "since", "sb-edge t-warn", "Broker disconnected"}, nil},
 		{"off", BrokerInfo{}, nil, []string{"Broker", "mqtt"}},
 	} {
 		e := setupWith(t, func(d *Deps) { d.MQTTStatus = func() BrokerInfo { return c.info } })
@@ -198,12 +198,12 @@ func TestStatusBarBackupRun(t *testing.T) {
 	}
 	check("all ok", run(58, 0),
 		[]string{"<b>Scheduled backup</b>", "58 backed up", "All good"},
-		[]string{"t-bad", "t-warn", "sb-bad", "sb-warn", "failed"})
+		[]string{"t-danger", "t-warn", "failed"})
 	check("partly failed", run(27, 8),
-		[]string{"<b>Scheduled backup</b>", "19 backed up", "8 failed", "t-warn", "sb-edge sb-warn", "Backup partly failed"},
-		[]string{"Backup failed", "Scheduled backup failed", "t-bad", "sb-bad"})
+		[]string{"<b>Scheduled backup</b>", "19 backed up", "8 failed", "sb-edge t-warn", "Backup partly failed"},
+		[]string{"Backup failed", "Scheduled backup failed", "t-danger"})
 	check("none ok", run(58, 58),
-		[]string{"<b>Scheduled backup failed</b>", "0 backed up · 58 failed", "t-bad", "sb-edge sb-bad", "Last backup failed"},
+		[]string{"<b>Scheduled backup failed</b>", "0 backed up · 58 failed", "sb-edge t-danger", "Last backup failed"},
 		[]string{"t-warn"})
 	e := setupWith(t, func(d *Deps) {
 		d.ScheduledBackup = func() BackupRunInfo { return BackupRunInfo{Running: true, Done: 12, Total: 58} }

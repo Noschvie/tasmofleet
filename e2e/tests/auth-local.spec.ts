@@ -46,7 +46,7 @@ test("local sign-in works and wrong passwords are refused", { tag: "@core" }, as
   await page.getByRole("button", { name: "Sign in" }).click();
   // one error, under the password field (#1098), not a banner as well
   await expect(page.locator(".ufield-err")).toContainText("Wrong username or password");
-  await expect(page.locator(".banner.tone-danger")).toHaveCount(0);
+  await expect(page.locator(".banner.t-danger")).toHaveCount(0);
   // UX review #38: the name stays, the cursor is in the password field
   // (by name: the password's label also holds its error text, which says "username")
   await expect(page.locator('input[name="username"]')).toHaveValue("breakglass");

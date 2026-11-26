@@ -372,21 +372,6 @@ func dashTxnTitle(t txView) string {
 	return t.Release
 }
 
-// toneOf maps a transaction tone to a component tone.
-func toneOf(t string) ui.Tone {
-	switch t {
-	case "ok":
-		return ui.ToneOK
-	case "info":
-		return ui.ToneAccent
-	case "warn":
-		return ui.ToneWarn
-	case "bad":
-		return ui.ToneDanger
-	}
-	return ui.ToneNeutral
-}
-
 // dashTxnActive is the one rule for a card: the transaction still has jobs at work or waiting (the rule dashResult
 // words as "Running").
 func dashTxnActive(t txView) bool { return t.Running+t.Queued > 0 }
@@ -420,7 +405,7 @@ func dashTxnCard(base string, now time.Time, t txView) ui.TxnData {
 		}
 	}
 	at := txBeganAt(t, time.Time{})
-	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: t.Outcome, StateTone: toneOf(t.Tone), Summary: strings.Join(parts, " · "),
+	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: t.Outcome, StateTone: t.Tone, Summary: strings.Join(parts, " · "),
 		OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Href: fmt.Sprintf("%s/transactions/%d", base, t.ID),
 		Started: at, StartedText: ui.StampRelativeText(now, at)}
 }

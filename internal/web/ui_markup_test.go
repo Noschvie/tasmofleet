@@ -166,7 +166,7 @@ func TestMarkupTestFindsPlantedCopiesAndStaleEntries(t *testing.T) {
 	}
 	for class, src := range map[string]string{
 		"bdg":    `<span class="bdg t-ok">x</span>`,
-		"banner": `<div class="banner tone-warn">x</div>`,
+		"banner": `<div class="banner t-warn">x</div>`,
 		"ucard":  `<section class={ "r2", "ucard" }>x</section>`,
 	} {
 		if got := markupFindings(map[string]string{"c.templ": src}, nil); len(got) != 1 || !strings.Contains(got[0], `class="`+class+`"`) {

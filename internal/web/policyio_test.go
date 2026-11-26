@@ -102,7 +102,7 @@ func TestPolicyIOPreviewListsEveryFateAndWarnsAboveTheButton(t *testing.T) {
 	if gone < 0 || !strings.Contains(pv[strings.LastIndex(pv[:gone], `class="pio-row"`):gone], ">Removed<") {
 		t.Errorf("the removed rule is not listed by name under Removed:\n%s", pv)
 	}
-	banner, button := strings.Index(pv, `class="banner tone-warn"`), strings.Index(pv, "Replace rules with these 3")
+	banner, button := strings.Index(pv, `class="banner t-warn"`), strings.Index(pv, "Replace rules with these 3")
 	if banner < 0 || button < 0 || banner > button {
 		t.Fatalf("the warn banner (at %d) must come before the button (at %d):\n%s", banner, button, pv)
 	}
@@ -126,7 +126,7 @@ func TestPolicyIOPreviewOfAnUnchangedFileOffersNoReplace(t *testing.T) {
 	_, out := e.do(t, "GET", "/policy/io/export", "admin", nil)
 	_, body := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {out}})
 	pv := section(t, body, "pio-h")
-	if !strings.Contains(pv, ">Unchanged<") || !strings.Contains(pv, "No difference") || strings.Contains(pv, `name="confirm"`) || strings.Contains(pv, "tone-warn") {
+	if !strings.Contains(pv, ">Unchanged<") || !strings.Contains(pv, "No difference") || strings.Contains(pv, `name="confirm"`) || strings.Contains(pv, "t-warn") {
 		t.Errorf("an unchanged file:\n%s", pv)
 	}
 }
@@ -144,7 +144,7 @@ func TestPolicyIOReorderedFileCanBeReplaced(t *testing.T) {
 	n := len(mem.vs)
 	_, body := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {ba}})
 	pv := section(t, body, "pio-h")
-	if strings.Contains(pv, "No difference") || !strings.Contains(pv, `class="banner tone-warn"`) || !strings.Contains(pv, "Replace rules with these 2") || !strings.Contains(pv, "their order") {
+	if strings.Contains(pv, "No difference") || !strings.Contains(pv, `class="banner t-warn"`) || !strings.Contains(pv, "Replace rules with these 2") || !strings.Contains(pv, "their order") {
 		t.Fatalf("a reordered file must offer the replace and say why:\n%s", pv)
 	}
 	if r, _ := e.do(t, "POST", "/policy/io/import", "admin", url.Values{"csrf": {"tok"}, "json": {ba}, "confirm": {"1"}}); r.StatusCode != 303 || len(mem.vs) != n+1 {

@@ -417,7 +417,7 @@ func pageBanners(t *testing.T, body string) []string {
 	if i < 0 {
 		t.Fatalf("no firmware page in:\n%s", body)
 	}
-	return regexp.MustCompile(`(?s)<div class="banner tone-[a-z]+".*?</div>(?:\s*<button[^>]*>[^<]*</button>)?`).FindAllString(body[i:], -1)
+	return regexp.MustCompile(`(?s)<div class="banner t-[a-z]+".*?</div>(?:\s*<button[^>]*>[^<]*</button>)?`).FindAllString(body[i:], -1)
 }
 
 // Why (#1090): one failed check was drawn three times (a header status with its own Try again, a danger banner
@@ -476,14 +476,14 @@ func TestFirmwareFailedCheckIsOneWarnBanner(t *testing.T) {
 				t.Fatalf("%d banners, want exactly 1:\n%s", len(banners), strings.Join(banners, "\n---\n"))
 			}
 			b := banners[0]
-			if !strings.Contains(b, "tone-warn") || strings.Contains(b, `role="alert"`) || !strings.Contains(b, "Could not check for new releases.") || !strings.Contains(b, c.text) {
+			if !strings.Contains(b, "t-warn") || strings.Contains(b, `role="alert"`) || !strings.Contains(b, "Could not check for new releases.") || !strings.Contains(b, c.text) {
 				t.Errorf("the banner is not the warn banner with its lead and %q:\n%s", c.text, b)
 			}
 			page := body[strings.Index(body, `class="page-firmware"`):]
 			if n := strings.Count(page, ">Try again<"); n != 1 {
 				t.Errorf("%d Try again buttons, want 1", n)
 			}
-			if strings.Contains(page, "tone-danger") || strings.Contains(page, "t-danger") {
+			if strings.Contains(page, "t-danger") {
 				t.Error("a failed check is drawn as danger")
 			}
 			for _, leak := range []string{"answered 503", "127.0.0.1", "source override", "Service Unavailable", "context canceled", "Check failed"} {

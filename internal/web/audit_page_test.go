@@ -277,7 +277,7 @@ func TestAuditResultIsTheDesignSystemBadge(t *testing.T) {
 			Action: "device.update", Target: "device:1", Result: r.result, Detail: r.detail})
 	}
 	_, body := e.do(t, "GET", "/audit?since=all", "admin", nil)
-	if strings.Contains(body, `class="badge`) || strings.Contains(body, "tone-bad") {
+	if strings.Contains(body, `class="badge`) {
 		t.Errorf("the audit page still renders the pre-v2 badge")
 	}
 	// newest first: the events were added newest first, and "when" sorts descending by default

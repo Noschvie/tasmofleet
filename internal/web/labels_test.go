@@ -30,7 +30,7 @@ func TestLabelFallbackHumanisesUnknownValues(t *testing.T) {
 	if got := label("some_new-state"); got != "Some new state" {
 		t.Fatalf("got %q", got)
 	}
-	if got := tone("some_new-state"); got != "neutral" {
+	if got := tone("some_new-state"); got != ui.ToneNeutral {
 		t.Fatalf("tone %q", got)
 	}
 }
@@ -120,19 +120,46 @@ func TestEventTextDoesNotShowExpectedSilenceAsError(t *testing.T) {
 func TestTransactionOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		total, done, running, queued, failed, canceled int
-		want, tone                                     string
+		want                                           string
+		tone                                           ui.Tone
 	}{
-		{3, 3, 0, 0, 0, 0, "Succeeded", "ok"},
-		{3, 2, 0, 0, 1, 0, "Succeeded on 2 of 3", "warn"},
-		{3, 1, 1, 1, 0, 0, "Running", "info"},
-		{3, 0, 0, 0, 3, 0, "Failed", "bad"},
-		{2, 0, 0, 0, 1, 1, "Failed", "bad"},
-		{2, 0, 0, 0, 0, 2, "Cancelled", "neutral"},
-		{2, 1, 0, 0, 0, 1, "Succeeded on 1 of 2", "warn"},
+		{3, 3, 0, 0, 0, 0, "Succeeded", ui.ToneOK},
+		{3, 2, 0, 0, 1, 0, "Succeeded on 2 of 3", ui.ToneWarn},
+		{3, 1, 1, 1, 0, 0, "Running", ui.ToneAccent},
+		{3, 0, 0, 0, 3, 0, "Failed", ui.ToneDanger},
+		{2, 0, 0, 0, 1, 1, "Failed", ui.ToneDanger},
+		{2, 0, 0, 0, 0, 2, "Cancelled", ui.ToneNeutral},
+		{2, 1, 0, 0, 0, 1, "Succeeded on 1 of 2", ui.ToneWarn},
 	} {
 		got, tone := txOutcome(tc.total, tc.done, tc.running, tc.queued, tc.failed, tc.canceled)
 		if got != tc.want || tone != tc.tone {
 			t.Errorf("%+v: got %q/%q", tc, got, tone)
 		}
+	}
+}
+
+// Why: Tone.class() draws a tone it does not know as neutral, silently, so a name that is not one of the design
+// system's five ("bad" and "info" were the old ones) would turn a failure grey with no error anywhere. Every value of
+// the tone map is one of the five; the check is on the set, not on the type, because ui.Tone("bad") compiles.
+func TestBadgeTonesAreDesignSystemTones(t *testing.T) {
+	five := map[ui.Tone]bool{ui.ToneOK: true, ui.ToneWarn: true, ui.ToneDanger: true, ui.ToneNeutral: true, ui.ToneAccent: true}
+	for state, tn := range tones {
+		if !five[tn] {
+			t.Errorf("tones[%q] = %q, which is not ok, warn, danger, neutral or accent", state, tn)
+		}
+	}
+	// a failure is the danger tone and a state in progress the accent tone, wherever they are looked up
+	if got := tone("failed"); got != ui.ToneDanger {
+		t.Errorf("tone(failed) = %q, want danger", got)
+	}
+	if got := tone("sending"); got != ui.ToneAccent {
+		t.Errorf("tone(sending) = %q, want accent", got)
+	}
+	// the status badge keeps a state in progress neutral (it always did); a failure stays danger
+	if got := stateTone("sending"); got != ui.ToneNeutral {
+		t.Errorf("stateTone(sending) = %q, want neutral", got)
+	}
+	if got := stateTone("offline"); got != ui.ToneDanger {
+		t.Errorf("stateTone(offline) = %q, want danger", got)
 	}
 }

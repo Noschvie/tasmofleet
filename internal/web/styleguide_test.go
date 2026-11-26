@@ -17,10 +17,10 @@ func TestStyleguideShowsStatesAndOpenOverlays(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/styleguide", "operator", nil)
 	for name, want := range map[string]string{
-		"ok banner":         `class="banner tone-ok" role="status"`,
-		"info banner":       `class="banner tone-accent" role="status"`,
-		"warn banner":       `class="banner tone-warn" role="status"`,
-		"failure banner":    `class="banner tone-danger" role="alert"`,
+		"ok banner":         `class="banner t-ok" role="status"`,
+		"info banner":       `class="banner t-accent" role="status"`,
+		"warn banner":       `class="banner t-warn" role="status"`,
+		"failure banner":    `class="banner t-danger" role="alert"`,
 		"failure toast":     `<span class="toast-text">Restart failed on Laundry Ceiling Light: timed out</span>`,
 		"live states":       `class="live-pill lp-off"`,
 		"toast trigger":     `data-toast="Settings saved" data-toast-tone="ok"`,

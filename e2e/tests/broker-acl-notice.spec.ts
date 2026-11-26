@@ -49,8 +49,8 @@ async function expectShortNotice(scope: Page | Locator): Promise<void> {
   const notice = aclNotice(scope);
   await expect(notice).toHaveCount(1);
   await expect(notice).toBeVisible();
-  await expect(notice).toHaveClass(/\btone-warn\b/);
-  await expect(notice).not.toHaveClass(/\btone-danger\b/);
+  await expect(notice).toHaveClass(/\bt-warn\b/);
+  await expect(notice).not.toHaveClass(/\bt-danger\b/);
   await expect(notice.locator("b")).toHaveText(ACL_LEAD);
   await expect(notice.locator(".banner-text")).toHaveText(`${ACL_LEAD} ${sentence}`);
   const weight = await notice.locator(".banner-text").evaluate((e) => Number(getComputedStyle(e).fontWeight));

@@ -73,7 +73,7 @@ templ addManualForm(f addManualView) {
 		<input type="hidden" name="csrf" value={ f.CSRF }/>
 		if f.Prefill != nil {
 			<input type="hidden" name="prefilled" value={ f.Prefill.Source }/>
-			<div class="add-note tone-accent" role="status">
+			<div class="add-note t-accent" role="status">
 				<span class="add-note-dot" aria-hidden="true"></span>
 				<span class="add-note-text">
 					Prefilled from { f.Prefill.Source }:
@@ -89,7 +89,7 @@ templ addManualForm(f addManualView) {
 			</div>
 		}
 		if f.Tested != nil {
-			<div class="add-note tone-ok" role="status">
+			<div class="add-note t-ok" role="status">
 				<span class="add-note-dot" aria-hidden="true"></span>
 				<span class="add-note-text">
 					<b>Connected.</b> { testedText(*f.Tested) } Nothing was added yet.
@@ -180,7 +180,7 @@ templ discBanners(p discView) {
 // select.js counts per form stay beside it.
 templ discoveredBody(p discView) {
 	if p.Off {
-		<div class="add-note tone-warn" role="status">
+		<div class="add-note t-warn" role="status">
 			<span class="add-note-dot" aria-hidden="true"></span>
 			<span class="add-note-text"><b>MQTT discovery is switched off.</b> Only network scans find new devices.</span>
 			if p.Settings != "" {
@@ -587,7 +587,7 @@ templ scanBox(b scanBodyView) {
 			}
 		</form>
 		if b.Running {
-			<div class="add-note tone-accent" role="status">
+			<div class="add-note t-accent" role="status">
 				<span class="add-note-dot pulse" aria-hidden="true"></span>
 				<span class="add-note-text">
 					<b>Scanning { b.Ranges }.</b> { strconv.Itoa(b.Done) } of { strconv.Itoa(b.Total) } addresses.
@@ -595,7 +595,7 @@ templ scanBox(b scanBodyView) {
 				</span>
 			</div>
 		} else if b.HasScan && b.Summary != "" {
-			<div class="add-note tone-ok" role="status">
+			<div class="add-note t-ok" role="status">
 				<span class="add-note-dot" aria-hidden="true"></span>
 				<span class="add-note-text">
 					<b>Scan finished.</b> { b.BoxSummary }
@@ -704,7 +704,7 @@ templ scanProgress(b scanBodyView) {
 			<div class="add-progress-found">Found { strconv.Itoa(b.Found) } Tasmota devices so far</div>
 		</div>
 	} else if b.HasScan {
-		<div class="add-note tone-ok" role="status">
+		<div class="add-note t-ok" role="status">
 			<span class="add-note-dot" aria-hidden="true"></span>
 			<span class="add-note-text"><b>Scan finished.</b> { b.Summary }</span>
 		</div>
@@ -924,7 +924,7 @@ templ importBodyPart(b importBody) {
 			</section>
 		}
 		if b.Report != nil {
-			<div class="add-note tone-ok" role="status">
+			<div class="add-note t-ok" role="status">
 				<span class="add-note-dot" aria-hidden="true"></span>
 				<span class="add-note-text"><b>Import finished.</b> { b.Report.Summary }</span>
 			</div>

@@ -226,7 +226,7 @@ func TestNotStartedTransactionPage(t *testing.T) {
 	if class, word := txnState(t, body); word != "Not started" || !strings.Contains(class, "t-warn") {
 		t.Errorf("badge %q (%s), want Not started in the warn tone", word, class)
 	}
-	banner := between(body, `class="banner tone-warn"`, `</div></div>`)
+	banner := between(body, `class="banner t-warn"`, `</div></div>`)
 	for _, want := range []string{"Not started.", "TasmoFleet was down at the planned start", "Thu, Nov 5 at 03:00", "was not back within 60 minutes", "came back at", "04:12", "No device was changed, and this update will not start later."} {
 		if !strings.Contains(plain(banner), want) {
 			t.Errorf("the warning lacks %q: %s", want, plain(banner))

@@ -617,7 +617,7 @@ templ ErrorSummary(n int) {
 
 // ToastStatic is a toast drawn in the flow (the style guide); toast.js makes the live ones.
 templ ToastStatic(t ToastData) {
-	<div class={ "toast", "tone-" + string(t.Tone), "has-x" }>
+	<div class={ "toast", t.Tone.class(), "has-x" }>
 		<span class="toast-dot"></span>
 		<span class="toast-text">{ t.Text }</span>
 		if t.Action != "" {

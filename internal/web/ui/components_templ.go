@@ -4687,7 +4687,7 @@ func ToastStatic(t ToastData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var219 = []any{"toast", "tone-" + string(t.Tone), "has-x"}
+			var templ_7745c5c3_Var219 = []any{"toast", t.Tone.class(), "has-x"}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var219...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

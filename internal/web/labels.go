@@ -73,26 +73,25 @@ func resultCounts(succeeded, failed, cancelled int) string {
 	return strings.Join(parts, " · ")
 }
 
-// tones maps values to the status tone the badge is drawn in: ok, warn, bad,
-// info (in progress) or neutral. Tone always comes with a glyph and the text,
-// never colour alone.
-var tones = map[string]string{
-	"online": "ok", "succeeded": "ok", "upgrade": "ok", "create": "ok",
-	"stale": "warn", "reinstall": "warn", "downgrade": "warn", "conflict": "warn", "address-change": "warn", "merge": "warn",
-	"offline": "bad", "auth_failed": "bad", "failed": "bad", "skip": "neutral",
-	"created": "ok", "updated": "warn", "skipped": "neutral", // import result lines (the plan says create, merge, skip)
-	"queued": "neutral", "cancelled": "neutral", "unknown": "neutral",
-	"done": "ok", "sending": "info", "waiting": "info", "verifying": "info",
-	"applying": "info", "preflight": "info", "backup": "info", "set_ota_url": "info", "upgrade_issued": "info", "safeboot_switch": "info", "safeboot_recover": "info",
-	"await_reboot": "info", "verify": "info", "restore_ota_url": "info", "new": "info",
+// tones maps values to the design system tone the badge is drawn in: ok, warn, danger, accent (in progress)
+// or neutral. Tone always comes with a glyph and the text, never colour alone.
+var tones = map[string]ui.Tone{
+	"online": ui.ToneOK, "succeeded": ui.ToneOK, "upgrade": ui.ToneOK, "create": ui.ToneOK,
+	"stale": ui.ToneWarn, "reinstall": ui.ToneWarn, "downgrade": ui.ToneWarn, "conflict": ui.ToneWarn, "address-change": ui.ToneWarn, "merge": ui.ToneWarn,
+	"offline": ui.ToneDanger, "auth_failed": ui.ToneDanger, "failed": ui.ToneDanger, "skip": ui.ToneNeutral,
+	"created": ui.ToneOK, "updated": ui.ToneWarn, "skipped": ui.ToneNeutral, // import result lines (the plan says create, merge, skip)
+	"queued": ui.ToneNeutral, "cancelled": ui.ToneNeutral, "unknown": ui.ToneNeutral,
+	"done": ui.ToneOK, "sending": ui.ToneAccent, "waiting": ui.ToneAccent, "verifying": ui.ToneAccent,
+	"applying": ui.ToneAccent, "preflight": ui.ToneAccent, "backup": ui.ToneAccent, "set_ota_url": ui.ToneAccent, "upgrade_issued": ui.ToneAccent, "safeboot_switch": ui.ToneAccent, "safeboot_recover": ui.ToneAccent,
+	"await_reboot": ui.ToneAccent, "verify": ui.ToneAccent, "restore_ota_url": ui.ToneAccent, "new": ui.ToneAccent,
 }
 
 // tone returns the badge tone of a value (neutral when not listed).
-func tone(v any) string {
+func tone(v any) ui.Tone {
 	if t, ok := tones[asString(v)]; ok {
 		return t
 	}
-	return "neutral"
+	return ui.ToneNeutral
 }
 
 // asString accepts plain and named string types (model.HealthState, ...).
@@ -516,15 +515,11 @@ func testNote(label, msg string) testNoteView {
 	return testNoteView{Label: label, Msg: msg, Failed: strings.HasPrefix(msg, "failed")}
 }
 
-// stateTone is the design system tone (ui.Tone) of a state: ok, warn, danger or neutral.
+// stateTone is the design system tone of a state as a status badge draws it: ok, warn, danger or neutral. A state
+// that is in progress (accent in tones) stays neutral here, as it always has.
 func stateTone(v any) ui.Tone {
-	switch tone(v) {
-	case "ok":
-		return ui.ToneOK
-	case "warn":
-		return ui.ToneWarn
-	case "bad":
-		return ui.ToneDanger
+	if t := tone(v); t != ui.ToneAccent {
+		return t
 	}
 	return ui.ToneNeutral
 }

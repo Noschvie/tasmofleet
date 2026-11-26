@@ -139,7 +139,7 @@ test("an index out of range warns and the rule can still be saved", { tag: "@cor
   await draft(page, "Far option");
   await page.locator("#rule-command").fill("SetOption200");
   await page.locator("#rule-command").dispatchEvent("change");
-  await expect(page.locator("#command-check .banner")).toHaveClass(/tone-warn/);
+  await expect(page.locator("#command-check .banner")).toHaveClass(/t-warn/);
   await page.locator("#want-control label").filter({ hasText: /^On$/ }).click();
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy(\?|$)/);
@@ -175,7 +175,7 @@ test("a number value follows the catalogue: range, step, and a value outside it 
   await want.fill("1");
   const warn = page.locator("#want-check");
   await expect(warn).toContainText("1 is below the minimum of 2.");
-  await expect(warn.locator(".banner")).toHaveClass(/tone-warn/);
+  await expect(warn.locator(".banner")).toHaveClass(/t-warn/);
   await expect(warn).toContainText("You can still save");
   await want.fill("1.5");
   await expect(warn).toContainText("1.5 is not a whole number.");
@@ -221,7 +221,7 @@ test("a version warning does not stop the save", { tag: "@core" }, async ({ page
   await draft(page, "Power lock");
   await page.locator("#rule-command").fill("PowerLock");
   await page.locator("#rule-command").dispatchEvent("change");
-  await expect(page.locator("#command-check .banner")).toHaveClass(/tone-warn/);
+  await expect(page.locator("#command-check .banner")).toHaveClass(/t-warn/);
   await page.locator("#want").fill("0");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy(\?|$)/);
@@ -252,7 +252,7 @@ test("a command that no Tasmota version of the fleet has is refused with the ver
   await draft(page, "Nothing");
   await page.locator("#rule-command").fill("NoSuchCmdAnywhere");
   await page.locator("#rule-command").dispatchEvent("change");
-  await expect(page.locator("#command-check .banner")).toHaveClass(/tone-danger/);
+  await expect(page.locator("#command-check .banner")).toHaveClass(/t-danger/);
   await page.locator("#want").fill("1");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page.locator("#err-command")).toContainText("NoSuchCmdAnywhere is not a command in any Tasmota version in your fleet (16.0.0, 14.4.1, 13.4.0).");

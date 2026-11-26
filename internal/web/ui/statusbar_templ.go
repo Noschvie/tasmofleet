@@ -373,7 +373,7 @@ func sbWide(d ShellData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var14 = []any{"sb-dot", templ.KV("warn", !b.Connected)}
+				var templ_7745c5c3_Var14 = []any{"sb-dot", templ.KV("t-warn", !b.Connected)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var14...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -501,7 +501,7 @@ func sbWide(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var18 = []any{"sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial())}
+					var templ_7745c5c3_Var18 = []any{"sb-i", "sb-stale", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var18...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -522,7 +522,7 @@ func sbWide(d ShellData) templ.Component {
 					var templ_7745c5c3_Var20 string
 					templ_7745c5c3_Var20, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(b.Href)).ResolveURL(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 97, Col: 125}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 97, Col: 128}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 					if templ_7745c5c3_Err != nil {
@@ -563,7 +563,7 @@ func sbWide(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var21 = []any{"sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial())}
+					var templ_7745c5c3_Var21 = []any{"sb-i", "sb-stale", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var21...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -936,7 +936,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var39 = []any{"sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial())}
+			var templ_7745c5c3_Var39 = []any{"sb-dot", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var39...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -1112,7 +1112,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var46 = []any{"sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial())}
+			var templ_7745c5c3_Var46 = []any{"sb-dot", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 			templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var46...)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -1464,7 +1464,7 @@ func sbNarrow(d ShellData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var60 = []any{"sb-dot", templ.KV("warn", !b.Connected)}
+				var templ_7745c5c3_Var60 = []any{"sb-dot", templ.KV("t-warn", !b.Connected)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var60...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -1595,7 +1595,7 @@ func sbNarrow(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var65 = []any{"sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial())}
+					var templ_7745c5c3_Var65 = []any{"sb-i", "sb-row", "sb-stale", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var65...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -1616,7 +1616,7 @@ func sbNarrow(d ShellData) templ.Component {
 					var templ_7745c5c3_Var67 string
 					templ_7745c5c3_Var67, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(b.Href)).ResolveURL(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 220, Col: 136}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 220, Col: 139}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 					if templ_7745c5c3_Err != nil {
@@ -1657,7 +1657,7 @@ func sbNarrow(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var68 = []any{"sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial())}
+					var templ_7745c5c3_Var68 = []any{"sb-i", "sb-row", "sb-stale", templ.KV("t-danger", b.none()), templ.KV("t-warn", b.partial())}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var68...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

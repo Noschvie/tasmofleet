@@ -46,7 +46,7 @@ test("bulk send command: scope, preview, send as a transaction, result per devic
   await page.getByRole("textbox", { name: "Command" }).fill("Status 2");
   await page.getByRole("button", { name: "Send to 1 device" }).click();
   await expect(page.getByRole("heading", { name: "Send Status 2 to 1 device?" })).toBeVisible(); // nothing sent yet
-  await expect(page.locator(".banner.tone-danger")).toHaveCount(0); // a read command names no consequence
+  await expect(page.locator(".banner.t-danger")).toHaveCount(0); // a read command names no consequence
   await page.getByRole("button", { name: "Send to 1 device" }).click();
 
   await expect(page).toHaveURL(/\/devices\/bulk\/result\/\d+/);

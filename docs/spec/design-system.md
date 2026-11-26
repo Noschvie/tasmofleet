@@ -7,8 +7,10 @@ Mono, one blue accent (`oklch` hue 250), light and dark as equal themes. The pro
 `design/v2/README.md`); the v1 Modernist component layer (`.button`, `.badge`, `.card`, `.empty-state`,
 `.stats`, `.tabs`, `.theme-switch`, `.navpanel`, `.tone-info`, `.tone-bad`) was removed from `app.css` (#1069):
 `TestNoPreV2ComponentSelectors` in `internal/web/legacycss_test.go` fails when one of them comes back in the
-stylesheet or in a template, and `TestBulkBarIsOneBlock` keeps the bulk bar in one block. `.notice` and the
-`.tone-ok`, `.tone-warn` and `.tone-neutral` banner classes are still used (#1091 and #1102 replace them).
+stylesheet or in a template, and `TestBulkBarIsOneBlock` keeps the bulk bar in one block. The parallel tone
+classes (`.tone-*`, `.t-bad`, the `--tone`, `--banner-*` and `--note-*` variables) are gone too (#1102):
+`TestNoParallelToneClasses` fails when one comes back in the stylesheet, a template, Go, a script or an e2e
+spec. `.notice` is still used (#1091 replaces it).
 Wording follows the prototype
 (plan D14) except for the rows of the wording table below.
 
@@ -26,12 +28,15 @@ sample data only (D17). If a component is not on the style guide, it is not part
 | Components | `internal/web/ui/components.templ` (props in `components.go`), CSS block "Components (design v2, WP F4)" in `app.css` |
 | Style guide page | `internal/web/styleguide.templ` (`sgSections` lists the sections), route `GET /styleguide` |
 | Style guide screenshots | `docs/design/styleguide/`, written by `make styleguide-docs` |
+| Base values against Apple HIG and WCAG | [design-references.md](design-references.md): one row per value (control sizes, type, contrast, focus, targets), the reference it is held to and, where it is weaker, the reason or the proposed change (#1170) |
 | Pages without a prototype screen | templ pages built from the components (plan 3.3), e.g. the notice page (`messagepage.templ`) and the retry page; the live device cells are `cells.templ` |
 | Tables, Columns chooser, bulk bar | `tableprefs.go`, `tables.js`, `select.js`, the bulk bar partials (WP F5) |
 | Prototype source | `design/v2/` (`template.html`, `prototype-tokens.css`; the self-contained bundle is kept outside the repository) |
 | Fonts | `internal/web/static/geist-latin*.woff2`, `geist-mono-latin*.woff2` (OFL, see `NOTICE`), same origin; versioned with `?v=<hash>` and preloaded |
 
 ## Tokens
+
+Where a value here is weaker than Apple's HIG or WCAG 2.2, [design-references.md](design-references.md) rates it: the text and fill pairs in rows 26 to 43 (the white label on a hovered danger-solid button, row 36, is an AA failure).
 
 Names are the prototype's with the app's `--color-` prefix (`--bg` is `--color-bg`). Values are copied
 verbatim, `oklch()` included. Light is `:root, [data-theme="light"]`; dark is
@@ -117,11 +122,15 @@ shadow, layer above 4, transition duration, radius or focus ring written as a li
 | Marks | `--r-mark: 2px` |
 | Other | `--lh-tight` 1.15, `--grid-cols` 12, `--busy-ring` (the busy indicator's ring) |
 
+The focus ring is held to HIG and WCAG in [design-references.md](design-references.md), rows 55 to 58: inputs, a ring inside a clipping container, and focus hidden by the fixed bars or by pinned table columns are weaker than the reference.
+
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
 width including the scrollbar, which is what the prototype's root measures, and fixed elements
 (bulk bar, toasts, drawer) stay positioned against the window.
 
 ## Type
+
+[design-references.md](design-references.md) rates the type values against HIG and WCAG: phone body size (row 16), the sizes below the scale (row 19) and the line heights (rows 21 to 25).
 
 Body is `400 14px/1.45 var(--font-sans)`. Font sizes are the `--fs-*` tokens; a component writes
 `font: <weight> var(--fs-x)[/<line-height>] var(--font-sans|--font-mono)` or `font-size: var(--fs-x)`. Weights
@@ -148,6 +157,8 @@ set the heading sizes, so a heading needs no size of its own unless the table gi
 | Mono values (addresses, versions, ids) | `400 12.5px var(--font-mono)`; transaction ids `500 12px`; a version in a tile `600 14px` |
 
 ## Spacing, shape and layout
+
+[design-references.md](design-references.md) rates control heights, hit boxes, the checkbox, table header links and button spacing against HIG and WCAG (rows 3, 6 to 8 and 10 to 13).
 
 - Spacing tokens are named by pixel value (`--sp-N`); the prototype is not on a 4 px grid and nothing
   is rounded. The gaps that recur: 8 between buttons, 10 inside cards, 16 between cards
@@ -217,6 +228,8 @@ Component: shell (`live.js`), `ui.LivePill` (style guide).
 Also: [desktop, dark](../design/styleguide/live-desktop-dark.png) · [phone, light](../design/styleguide/live-phone-light.png) · [phone, dark](../design/styleguide/live-phone-dark.png)
 
 ### Buttons
+
+The white label on a hovered or pressed danger-solid button fails WCAG AA in the dark theme: [design-references.md](design-references.md), row 36.
 
 Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, padding 14), danger (outlined text in danger-fg), danger-solid (the confirming button of a destructive dialog), ghost, link (text only, 32 px target) and the icon button (⋯). Height `--ctl` (34 px, 44 px on phones), small 32 px (44 px on phones). A Btn with `Href` is a link (it only navigates or opens the dialog named by `Dialog`); without it a `type=button` that never submits by accident. One action, one component; the confirming button repeats the trigger's verb and tone.
 
@@ -328,6 +341,8 @@ A setting that has a stored value shows "Reset to default" after its label, in w
 Also: [desktop, dark](../design/styleguide/forms-desktop-dark.png) · [phone, light](../design/styleguide/forms-phone-light.png) · [phone, dark](../design/styleguide/forms-phone-dark.png)
 
 ### Choices and switches
+
+The white knob on a checked accent track and the checked warn switch fail WCAG AA, and the setting switch target is below HIG: [design-references.md](design-references.md), rows 47, 49 and 60.
 
 Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. There are two switches and no third (#1096). A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`; on a phone its target reaches 44 x 44): `ui.Toggle(ToggleData{Name, Value, ID, Label, Text, On, Disabled, Attrs})` draws the setting's card with a `Label`, and the switch alone without one, for a setting whose label is drawn elsewhere (System settings and the broker's TLS, named by their `<label for>`; the rule editor's Enabled). It posts `Value` ("true" unless a page names another) when on and nothing when off. The power switch of a row, a card, the header and a relay is `ui.PowerSwitch(PowerSwitchData{Label or LabelledBy, On, Disabled, Submit, Class, Attrs})`, 34 x 20 inside a 48 x 44 px target (44 px wide where a row has several relays), disabled while the device is offline. Every switch has one off state, the `--color-control-border` fill, and the accent when on (a setting that warns takes `--color-warn`). `Attrs` of both are `hx-*`, `data-*`, `aria-describedby` and the like; `role`, `aria-checked`, `checked` and the keys the component writes are its own. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
 
@@ -480,6 +495,8 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
 
 ### Data tables
 
+Sort links in a header are smaller than WCAG 2.5.8 asks and pinned columns can hide a focused cell: [design-references.md](design-references.md), rows 10 and 58.
+
 A table sits in a card frame edge to edge (no inner padding), with a hairline under the header and between
 rows. Header cells are `500 12px` text-2, sentence case, on a `--color-surface-2` band 38 px tall: the prototype's
 header and the one style of every table (the base `thead th` rule; no page paints another). A sortable header
@@ -618,15 +635,33 @@ same ring until the page arrives.
   layout guard (a) checks every fixed or sticky element.
 - **Breakpoints** are rem, never px: phone up to `44.99rem` (720 px, the prototype's `S.w < 720`; the
   Columns chooser and `tables.js` use the same 45rem), tablet `45rem`-`74.99rem` (two balanced card
-  columns), desktop from `75rem` (card stacks side by side). Component breakpoints: `60rem` (the bulk bar
-  folds into one Actions menu), `72rem` (audit table layout, two-column settings grid). Any other width
-  needs a line here with its reason. The app still has about 20 other queries and two in px;
-  #1102 folds them into this list and makes `shell-css.spec.ts` fail on a px media query.
-- **Tones.** There are five: ok, warn, danger, neutral, accent. The classes are `.t-ok` ... `.t-accent`;
-  each sets `--t` (fill: dots, bars), `--t-bg` and `--t-fg` (text). Badges, dots, avatars, banners, toasts,
-  notes and the status bar read these three variables. The names "bad", "info", "success" and "error" are
-  not used (the parallel `.tone-*` classes go with #1102). One exception: the transaction bar (`ui.SegBar`)
-  fills with `--t-fg`, because `--t` on its track measures 2.2 to 2.7:1 and a graphic needs 3:1 (#1073).
+  columns), desktop from `75rem` (card stacks side by side). Component breakpoints, each with its reason:
+  `60rem` (the bulk bar folds into one Actions menu); `72rem` (`71.99rem` and below: the audit table drops
+  its fixed layout); `50.99rem` (a half-width card of the tablet range: the TLS row of the MQTT card drops
+  under the host, and the files of a release put the state under the name; above it the card is wide enough
+  and a fold into the tablet width would stack both for no reason, and a file name such as
+  `tasmota-minimal.bin.gz` wraps in the two-column row at 720 to 799 px); `64.99rem` (six dashboard tiles
+  show as 3 + 3 below it; six fit one row from about 1040 px, and the tablet width would keep 3 + 3 up to
+  1199 px). Any other width needs a line here with its reason.
+  `TestMediaQueriesUseTheBreakpointList` (`internal/web/tokens_test.go`) fails on a px query and on a width
+  that is not in this list, and `shell-css.spec.ts` ("every media query width is rem and on the breakpoint
+  list") judges the same list on what the browser parsed; a new width is added here and in both places.
+  The widths that were on none of these (68.75, 96, 36, 30, 70, 84, 63.99, 52 and 49.99 rem, and 719 and
+  640 px) folded into the list in #1102; the queries of the rules that style classes no page uses any more
+  (`.cols`, `.sysform fieldset.fgrid`, `.kv-row`) went instead.
+- **Tones.** There are five: ok, warn, danger, neutral, accent. The classes are `.t-ok` ... `.t-accent`
+  (the `Tone` of `ui`, `Tone.class()`); each sets `--t` (fill: dots, bars, borders), `--t-bg` and `--t-fg`
+  (text). Badges, dots, avatars, banners, toasts, notes and the status bar read these three variables
+  and no other: there is no `--banner-*`, `--note-*` or `--tone`. The names "bad", "info", "success" and
+  "error" are not tone names: not in a `.t-*` class, a `ui.Tone`, a toast tone (`tfToast`, `data-toast-tone`, the
+  `HX-Trigger` toast) or a script (`toast.js` draws a name outside the five as neutral, as `Tone.class()` does); a state that is
+  in progress is accent, a failure danger. The status bar's dot, edge and tinted item take `t-warn` and
+  `t-danger` like everything else (the old `sb-warn`, `sb-bad`, `.warn` and `.bad` are gone). Two
+  exceptions, both named: the transaction bar (`ui.SegBar`) fills with `--t-fg`, because `--t` on its track
+  measures 2.2 to 2.7:1 and a graphic needs 3:1 (#1073); and a neutral banner (`.banner.t-neutral`, a state
+  that is neither good nor bad, such as a deactivated user) keeps its grey surface (`--color-surface-3`
+  with `--color-text-2`) instead of the neutral badge's pair. How the fills measure against their grounds is
+  in [design-references.md](design-references.md) (rows 50 to 52).
 - **A title is an addition, colour is never the whole message.** A `title` attribute may repeat visible text,
   never be the only place that says something: a phone has no hover, a keyboard and most screen readers
   never show it. A state, a count's meaning or a failure's reason is text on the page (a word, a short

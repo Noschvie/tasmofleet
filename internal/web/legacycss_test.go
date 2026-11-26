@@ -106,11 +106,6 @@ func TestNoPreV2ComponentSelectors(t *testing.T) {
 	classRe := regexp.MustCompile(`\.([A-Za-z_][\w-]*)`)
 	preludes, _ := cssPreludes(stripCSSComments(string(raw)))
 	for _, p := range preludes {
-		// toast.js names its toast "toast tone-<tone>" at run time ("info" for a note that is not a result,
-		// form.js), so this one rule keeps the class until the toast has its own tone names (#1102)
-		if strings.Contains(p, ".toast.tone-info") {
-			continue
-		}
 		for _, m := range classRe.FindAllStringSubmatch(p, -1) {
 			if removed[m[1]] {
 				t.Errorf("app.css has a rule for the removed v1 class .%s: %s", m[1], strings.Join(strings.Fields(p), " "))
@@ -177,5 +172,82 @@ func TestBulkBarIsOneBlock(t *testing.T) {
 	}
 	if n == 0 {
 		t.Error("no bulk bar rule found: the test would pass on nothing")
+	}
+}
+
+// toneFamilies are the class names and custom properties of the tone systems that #1102 folded into one: the
+// legacy .tone-* classes (banner, toast, add-note, --tone, --tone-text) and the status bar's .t-bad, and the
+// "info" tone that is the accent. The one system is .t-ok, .t-warn, .t-danger, .t-neutral, .t-accent with
+// --t, --t-bg and --t-fg (design-system.md, Usage rules, Tones). \b before t-bad keeps gt-bad (a GPU table row) out.
+var (
+	oldToneRe = regexp.MustCompile(`(?:\b|\\b)(?:tone-|t-bad\b|t-info\b)|--(?:tone|banner|note)\b`)
+	// a tone passed as a string to the toast: data-toast-tone="info", tfToast(text, "info"), {"tone": "info"}
+	oldToastToneRe = regexp.MustCompile(`data-toast-tone="(?:info|bad|success|error)"|tfToast\([^)]*,\s*["'](?:info|bad|success|error)["']\)|"tone":\s*"(?:info|bad)"`)
+)
+
+// Why: two class sets for one idea drift apart (the banner's neutral already differed from the badge's), and a
+// tone name outside the five renders as nothing or as neutral without an error. One name and one variable trio
+// everywhere is what keeps a new component from picking a third. The scan covers the stylesheet, templates,
+// Go, scripts and the specs, so a class the e2e specs wait for cannot go back either.
+func TestNoParallelToneClasses(t *testing.T) {
+	seen := 0
+	roots := []string{".", "../../e2e/tests", "../../e2e/support"}
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if d.Name() == "node_modules" || d.Name() == "test-results" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			name := d.Name()
+			switch {
+			case strings.HasSuffix(name, "_templ.go"), strings.HasSuffix(name, ".min.js"), name == "legacycss_test.go":
+				return nil // generated; vendored; this file names the forbidden words
+			case !strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, ".templ") && !strings.HasSuffix(name, ".js") &&
+				!strings.HasSuffix(name, ".css") && !strings.HasSuffix(name, ".ts"):
+				return nil
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			seen++
+			for i, line := range strings.Split(string(src), "\n") {
+				if m := oldToneRe.FindString(line); m != "" {
+					t.Errorf("%s:%d names %q: the tone classes are .t-ok, .t-warn, .t-danger, .t-neutral and .t-accent (bad is danger, info is accent), the variables --t, --t-bg and --t-fg", path, i+1, m)
+				}
+				if m := oldToastToneRe.FindString(line); m != "" {
+					t.Errorf("%s:%d passes the toast a tone outside ok, warn, danger, neutral and accent: %s", path, i+1, m)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if seen < 200 {
+		t.Fatalf("the scan read %d files, it lost its way", seen)
+	}
+}
+
+// Why: the guard must see what it is for: the old class in each file kind, and pass gt-bad.
+func TestToneGuardJudges(t *testing.T) {
+	for _, s := range []string{
+		`.banner.tone-warn {`, `class="add-note tone-ok"`, `c := "banner tone-" + x`, `.sb-i.t-bad {`, `var(--banner-bg)`,
+		`--tone: red;`, `/\btone-warn\b/`, `t.className = "toast tone-" + tone;`, `window.tfToast(NOTE, "info");`, `data-toast-tone="info"`,
+	} {
+		if !oldToneRe.MatchString(s) && !oldToastToneRe.MatchString(s) {
+			t.Errorf("the tone guard does not see %q", s)
+		}
+	}
+	for _, s := range []string{`templ.KV("gt-bad", r.Bad)`, `.t-danger {`, `--t-bg: var(--color-ok-bg);`, `window.tfToast(x, "danger");`, `tone: "accent"`} {
+		if oldToneRe.MatchString(s) || oldToastToneRe.MatchString(s) {
+			t.Errorf("the tone guard flags %q", s)
+		}
 	}
 }

@@ -98,7 +98,7 @@ test("a console command whose arguments the audit hides names its transport befo
   await expect(confirm).toContainText("The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands, and without a broker ACL that is every client of the broker.");
   // #840, #1078: and the confirmation shows the broker ACL notice, the short warn banner of every page
   await expect(aclNotice(confirm)).toBeVisible();
-  await expect(aclNotice(confirm)).toHaveClass(/\btone-warn\b/);
+  await expect(aclNotice(confirm)).toHaveClass(/\bt-warn\b/);
   await expect(aclNotice(confirm).locator("b")).toHaveText(ACL_LEAD);
   await confirm.getByRole("link", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
@@ -310,7 +310,7 @@ test("the broker ACL notice stands by Back up when the backup goes over MQTT", a
   }).toPass({ timeout: 90_000, intervals: [3_000] });
   const notice = aclNotice(page.locator("#devhd"));
   await expect(notice).toHaveCount(1);
-  await expect(notice).toHaveClass(/\btone-warn\b/);
+  await expect(notice).toHaveClass(/\bt-warn\b/);
   // the notice is under the Back up button, not beside it, and nothing runs off the page
   const buttonBox = await page.getByRole("button", { name: "Back up", exact: true }).boundingBox();
   const noticeBox = await notice.boundingBox();

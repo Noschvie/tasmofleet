@@ -532,9 +532,9 @@ func between(s, from, to string) string {
 // before the conversion is aria-hidden on the decorative dot (a dot is no content a screen reader should meet).
 func TestConnBannersKeepTheirMarkupThroughBanner(t *testing.T) {
 	want := `<div class="conn-banners">` +
-		`<div class="banner tone-warn conn-banner conn-re" role="status"><span class="banner-dot pulse" aria-hidden="true"></span>` +
+		`<div class="banner t-warn conn-banner conn-re" role="status"><span class="banner-dot pulse" aria-hidden="true"></span>` +
 		`<div class="banner-text"><b>Reconnecting…</b> Live updates are paused; values may be out of date.</div></div>` +
-		`<div class="banner tone-danger conn-banner conn-off" role="alert"><span class="banner-dot" aria-hidden="true"></span>` +
+		`<div class="banner t-danger conn-banner conn-off" role="alert"><span class="banner-dot" aria-hidden="true"></span>` +
 		`<div class="banner-text"><b>Connection to the server lost.</b> Live updates are paused; values shown are from <time data-live-since>the last page load</time>. ` +
 		`<span aria-hidden="true">Retrying in <span data-live-next data-visual-mask>8</span> s.</span><span class="sr-only">Retrying automatically.</span></div>` +
 		`<button type="button" class="banner-btn" data-live-retry>Retry now</button></div></div>`
@@ -555,8 +555,8 @@ func TestShellFlashAndSetupNoticeAreBanners(t *testing.T) {
 	d.Flash, d.Banner, d.Nav = "Saved.", "No device networks.", "devices"
 	got := render(t, d)
 	for _, want := range []string{
-		`<div class="banner tone-ok" role="status" data-flash><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Saved.</div></div>`,
-		`<div class="banner tone-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No device networks. <a href="/setup">Open the setup</a></div></div>`,
+		`<div class="banner t-ok" role="status" data-flash><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">Saved.</div></div>`,
+		`<div class="banner t-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No device networks. <a href="/setup">Open the setup</a></div></div>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the shell lacks %q", want)

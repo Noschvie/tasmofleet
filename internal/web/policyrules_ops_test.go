@@ -364,12 +364,12 @@ func TestPolicyPageConflictBanner(t *testing.T) {
 	if strings.Contains(body, "pol-conf") {
 		t.Error("the conflict notes still use their own look (pol-conf)")
 	}
-	i := strings.Index(body, `<div class="banner tone-accent" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text"><b>Rules overlap.</b>`)
+	i := strings.Index(body, `<div class="banner t-accent" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text"><b>Rules overlap.</b>`)
 	if i < 0 {
 		t.Fatalf("no accent banner with the lead Rules overlap.:\n%s", body)
 	}
 	end := i + strings.Index(body[i:], "</ul>")
-	if n := strings.Count(body[i:end], "<li>"); n != 2 || strings.Count(body, `class="banner tone-accent"`) != 1 {
+	if n := strings.Count(body[i:end], "<li>"); n != 2 || strings.Count(body, `class="banner t-accent"`) != 1 {
 		t.Errorf("want one accent banner holding the 2 conflicts as list items, got %d items", n)
 	}
 }

@@ -1797,7 +1797,7 @@ func devActList(rows []devActRow, base string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Badge(uiTone(e.From), label(e.From)).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Badge(tone(e.From), label(e.From)).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1831,7 +1831,7 @@ func devActList(rows []devActRow, base string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Badge(uiTone(e.To), label(e.To)).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Badge(tone(e.To), label(e.To)).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1935,7 +1935,7 @@ func devActList(rows []devActRow, base string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Badge(uiTone(j.State), label(j.State)).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Badge(tone(j.State), label(j.State)).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

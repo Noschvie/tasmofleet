@@ -21,21 +21,6 @@ import (
 // Back up, Edit and Delete, the offline banner and the device tabs. Its data is deviceTabs,
 // built by headOf for the overview, the settings, the console, the drift and the backups tab.
 
-// uiTone maps the badge tone of a value (labels.go) to the tone of the design system.
-func uiTone(v any) ui.Tone {
-	switch tone(v) {
-	case "ok":
-		return ui.ToneOK
-	case "warn":
-		return ui.ToneWarn
-	case "bad":
-		return ui.ToneDanger
-	case "info":
-		return ui.ToneAccent
-	}
-	return ui.ToneNeutral
-}
-
 // devPath is the path of a device page below the base: "/devices/7" plus the rest.
 func devPath(id model.DeviceID, rest string) string {
 	return "/devices/" + strconv.FormatInt(int64(id), 10) + rest

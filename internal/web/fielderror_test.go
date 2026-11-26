@@ -75,7 +75,7 @@ func TestPasswordPagesShowTheErrorAtTheField(t *testing.T) {
 		if strings.Contains(inputTag(t, body, "current"), "autofocus") {
 			t.Errorf("forced=%v: focus stayed on Current password", forced)
 		}
-		if strings.Contains(body, `class="banner tone-danger"`) {
+		if strings.Contains(body, `class="banner t-danger"`) {
 			t.Errorf("forced=%v: the page banner repeats the field error", forced)
 		}
 	}

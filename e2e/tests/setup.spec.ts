@@ -99,8 +99,8 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
   await page.goto(app.url + "/devices");
   const banner = page.locator(".banner[role=status]", { hasText: "No device networks are configured" });
   await expect(banner).toBeVisible();
-  await expect(banner).toHaveClass(/\btone-warn\b/);
-  await expect(banner).not.toHaveClass(/\btone-ok\b/);
+  await expect(banner).toHaveClass(/\bt-warn\b/);
+  await expect(banner).not.toHaveClass(/\bt-ok\b/);
   await page.goto(app.url + "/setup");
 
   // The suggestions are only a proposal; nothing is configured until the admin finishes.

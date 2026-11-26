@@ -350,17 +350,17 @@ func TestOverridableRisksAreWarningsNotErrors(t *testing.T) {
 	e, _, rs := newDiffEnv(t)
 	rs.assess = restore.Assessment{Family: true, Detail: "the chip family of the backup could not be checked (no decoded backup)"}
 	_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
-	if !hasBanner(body, "tone-warn", "The chip family of the backup could not be checked") {
+	if !hasBanner(body, "t-warn", "The chip family of the backup could not be checked") {
 		t.Errorf("restore confirm:\n%s", body)
 	}
-	if hasBanner(body, "tone-danger", "The chip family") {
+	if hasBanner(body, "t-danger", "The chip family") {
 		t.Error("an overridable risk is drawn as an error")
 	}
 	e2, _, rr := newAdminEnv(t)
 	rr.preview.Detail = "the chip family of the backup could not be checked (no decoded backup)"
 	rr.preview.Family = true
 	_, body = e2.do(t, "GET", "/devices/1/replace/preview?address=10.0.0.9", "admin", nil)
-	if !hasBanner(body, "tone-warn", "The chip family of the backup could not be checked") || hasBanner(body, "tone-danger", "The chip family") {
+	if !hasBanner(body, "t-warn", "The chip family of the backup could not be checked") || hasBanner(body, "t-danger", "The chip family") {
 		t.Errorf("replace confirm:\n%s", body)
 	}
 }
@@ -389,7 +389,7 @@ func TestReplaceRefusalDoesNotRepeatTheStandingWarning(t *testing.T) {
 	if n := strings.Count(body, "still answers"); n != 1 {
 		t.Errorf("the message appears %d times, want once:\n%s", n, body)
 	}
-	if !hasBanner(body, "tone-danger", "The old device still answers at its address.") || !strings.Contains(body, `role="alert"`) {
+	if !hasBanner(body, "t-danger", "The old device still answers at its address.") || !strings.Contains(body, `role="alert"`) {
 		t.Errorf("the refusal is not shown as the error:\n%s", body)
 	}
 }

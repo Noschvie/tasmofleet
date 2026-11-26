@@ -745,19 +745,6 @@ small.error {
   cursor: pointer;
 }
 
-.tone-ok {
-  --tone: var(--color-ok);
-  --tone-text: var(--color-ok-fg);
-}
-.tone-warn {
-  --tone: var(--color-warn);
-  --tone-text: var(--color-warn-fg);
-}
-
-.tone-neutral {
-  --tone: var(--color-neutral);
-  --tone-text: var(--color-neutral-fg);
-}
 .summary {
   margin: var(--sp-8) 0 0;
   font-size: var(--fs-ui);
@@ -2182,15 +2169,6 @@ details.job-log > summary {
     width: 14rem;
   }
 }
-@media (min-width: 68.75rem) {
-  .cols.side {
-    grid-template-columns: 16rem minmax(0, 1fr);
-  }
-  .cols .sticky {
-    position: sticky;
-    top: 1rem;
-  }
-}
 
 .audittable {
   table-layout: fixed;
@@ -2290,7 +2268,7 @@ details.job-log > summary {
   max-height: 24rem;
   overflow: auto;
 }
-@media (max-width: 72rem) {
+@media (max-width: 71.99rem) {
   .audittable {
     table-layout: auto;
   }
@@ -2304,31 +2282,15 @@ details.job-log > summary {
   flex-direction: column;
   align-items: flex-start;
 }
-@media (min-width: 68.75rem) {
-  .cols.opts {
-    grid-template-columns: 23rem minmax(0, 1fr);
-  }
-}
 .cols.opts .stack {
   max-width: none;
 }
 .cols.opts fieldset {
   margin-top: 0;
 }
-@media (max-width: 68.74rem) {
-  .cols.opts .sticky {
-    margin-bottom: var(--sp-16);
-  }
-}
 .sysform fieldset.fgrid {
   background: var(--color-surface);
   padding: var(--sp-16) var(--sp-20) var(--sp-20);
-}
-@media (min-width: 68.75rem) {
-  .sysform fieldset.fgrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-16) var(--sp-24);
-  }
 }
 .sysform label {
   display: grid;
@@ -2350,17 +2312,6 @@ details.job-log > summary {
 }
 .savebar[hidden] {
   display: none !important;
-}
-@media (min-width: 68.75rem) {
-  .cols.disco {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (min-width: 96rem) {
-  .cols.disco {
-    grid-template-columns: 23rem minmax(0, 1fr);
-    gap: 0 var(--sp-20);
-  }
 }
 .rule-editor {
   display: grid;
@@ -2964,13 +2915,6 @@ button.chip-x {
 .kv-row.is-changed .kv-val > select {
   border-color: var(--color-accent);
   box-shadow: inset 3px 0 0 var(--color-accent);
-}
-@media (max-width: 36rem) {
-  .kv-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-2);
-    padding: var(--sp-6) 0;
-  }
 }
 label.is-changed > input:not([type="checkbox"]),
 label.is-changed > select {
@@ -3861,13 +3805,11 @@ header.top {
   height: 2px;
   background: transparent;
 }
-.sb-edge.sb-warn {
-  background: var(--color-warn);
+.sb-edge.t-warn,
+.sb-edge.t-danger {
+  background: var(--t);
 }
-.sb-edge.sb-bad {
-  background: var(--color-danger);
-}
-html[data-live="reconnecting"] .sb-edge:not(.sb-bad) {
+html[data-live="reconnecting"] .sb-edge:not(.t-danger) {
   background: var(--color-warn);
 }
 html[data-live="offline"] .sb-edge {
@@ -3944,25 +3886,18 @@ a.sb-i:hover {
   background: var(--color-accent);
   animation: tf-pulse var(--pulse) ease-in-out infinite;
 }
-.sb-dot.warn {
-  background: var(--color-warn);
+.sb-dot.t-warn,
+.sb-dot.t-danger {
+  background: var(--t);
 }
-.sb-dot.bad {
-  background: var(--color-danger);
+.sb-i.t-warn,
+.sb-i.t-danger {
+  background: var(--t-bg);
+  color: var(--t-fg);
 }
-.sb-i.t-warn {
-  background: var(--color-warn-bg);
-  color: var(--color-warn-fg);
-}
-.sb-i.t-warn b {
-  color: var(--color-warn-fg);
-}
-.sb-i.t-bad {
-  background: var(--color-danger-bg);
-  color: var(--color-danger-fg);
-}
-.sb-i.t-bad b {
-  color: var(--color-danger-fg);
+.sb-i.t-warn b,
+.sb-i.t-danger b {
+  color: var(--t-fg);
 }
 .sb-prog {
   display: inline-block;
@@ -4541,31 +4476,23 @@ nav.crumbs a {
   margin: 0 0 var(--sp-14);
   max-width: 820px; /* the reading width, also above a full-width table or stack (design-system.md, Inline banners) */
   border-radius: var(--r-banner);
-  border: var(--hair-w) solid var(--banner-line);
-  background: var(--banner-bg);
-  color: var(--banner-fg);
+  border: var(--hair-w) solid var(--t);
+  background: var(--t-bg);
+  color: var(--t-fg);
   font-size: var(--fs-ui);
 }
-.banner.tone-ok {
-  --banner-line: var(--color-ok);
-  --banner-bg: var(--color-ok-bg);
-  --banner-fg: var(--color-ok-fg);
-}
-.banner.tone-warn {
-  --banner-line: var(--color-warn);
-  --banner-bg: var(--color-warn-bg);
-  --banner-fg: var(--color-warn-fg);
-}
-.banner.tone-danger {
-  --banner-line: var(--color-danger);
-  --banner-bg: var(--color-danger-bg);
-  --banner-fg: var(--color-danger-fg);
+/* the one named exception to the tone tokens (design-system.md, Tones): a neutral banner is a state that is neither
+   good nor bad (a deactivated user) and keeps the grey surface it always had; the neutral badge's pair is lighter */
+.banner.t-neutral {
+  --t: var(--color-border-strong);
+  --t-bg: var(--color-surface-3);
+  --t-fg: var(--color-text-2);
 }
 .banner-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--banner-line);
+  background: var(--t);
   flex: none;
 }
 .banner-dot.pulse {
@@ -4599,9 +4526,9 @@ nav.crumbs a {
   height: var(--ctl);
   padding: 0 var(--sp-12);
   border-radius: var(--r-control);
-  border: var(--hair-w) solid var(--banner-line);
+  border: var(--hair-w) solid var(--t);
   background: var(--color-surface);
-  color: var(--banner-fg);
+  color: var(--t-fg);
   font: 500 var(--fs-ui) var(--font-sans);
   text-box: normal;
 }
@@ -4673,16 +4600,7 @@ html[data-live="offline"] .pghead-stale {
   height: 8px;
   border-radius: 50%;
   flex: none;
-  background: var(--color-ok);
-}
-.toast.tone-info .toast-dot {
-  background: var(--color-accent);
-}
-.toast.tone-warn .toast-dot {
-  background: var(--color-warn);
-}
-.toast.tone-danger .toast-dot {
-  background: var(--color-danger);
+  background: var(--t);
 }
 .toast-text {
   min-width: 0;
@@ -4717,6 +4635,35 @@ html[data-live="offline"] .pghead-stale {
   100% {
     background-position: 300px 0;
   }
+}
+
+/* tones: the five classes of the design system (design-system.md, Usage rules, Tones). Each sets --t (the fill:
+   dots, bars, borders), --t-bg and --t-fg (the text pair). Badges, status dots, the avatar, banners, toasts,
+   notes and the status bar read these three variables and nothing else. */
+.t-ok {
+  --t: var(--color-ok);
+  --t-bg: var(--color-ok-bg);
+  --t-fg: var(--color-ok-fg);
+}
+.t-warn {
+  --t: var(--color-warn);
+  --t-bg: var(--color-warn-bg);
+  --t-fg: var(--color-warn-fg);
+}
+.t-danger {
+  --t: var(--color-danger);
+  --t-bg: var(--color-danger-bg);
+  --t-fg: var(--color-danger-fg);
+}
+.t-neutral {
+  --t: var(--color-neutral);
+  --t-bg: var(--color-neutral-bg);
+  --t-fg: var(--color-neutral-fg);
+}
+.t-accent {
+  --t: var(--color-accent);
+  --t-bg: var(--color-accent-bg);
+  --t-fg: var(--color-accent-fg);
 }
 
 /* page header: title and subtitle left, the page's buttons right */
@@ -4906,12 +4853,6 @@ button.btn[aria-disabled="true"]:focus-visible {
   align-items: center;
 }
 
-/* badges, status dots, avatar: the tone classes (.t-ok, .t-warn, .t-danger, .t-neutral: About, F3) plus the accent */
-.t-accent {
-  --t: var(--color-accent);
-  --t-bg: var(--color-accent-bg);
-  --t-fg: var(--color-accent-fg);
-}
 .bdg {
   display: inline-flex;
   align-items: center;
@@ -5027,12 +4968,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   overflow-wrap: anywhere;
 }
 
-/* inline banners: the info tone and an action that is a link (the other tones are the shell's) */
-.banner.tone-accent {
-  --banner-line: var(--color-accent);
-  --banner-bg: var(--color-accent-bg);
-  --banner-fg: var(--color-accent-fg);
-}
+/* inline banners: an action that is a link */
 .banner a.banner-btn {
   display: inline-flex;
   align-items: center;
@@ -6843,26 +6779,6 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   background: var(--t-bg);
   color: var(--t-fg);
 }
-.t-ok {
-  --t: var(--color-ok);
-  --t-bg: var(--color-ok-bg);
-  --t-fg: var(--color-ok-fg);
-}
-.t-warn {
-  --t: var(--color-warn);
-  --t-bg: var(--color-warn-bg);
-  --t-fg: var(--color-warn-fg);
-}
-.t-danger {
-  --t: var(--color-danger);
-  --t-bg: var(--color-danger-bg);
-  --t-fg: var(--color-danger-fg);
-}
-.t-neutral {
-  --t: var(--color-neutral);
-  --t-bg: var(--color-neutral-bg);
-  --t-fg: var(--color-neutral-fg);
-}
 /* the effective configuration: a full-width card of two tables (.cset, shared with Advanced); keys stay on one line on a desktop */
 .about-cfg .cset table {
   table-layout: fixed;
@@ -7479,12 +7395,6 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     border-radius: 50%;
     background: var(--color-neutral);
   }
-  .dcard:has(.dcard-badges .tone-ok) .dcard-dot {
-    background: var(--color-ok);
-  }
-  .dcard:has(.dcard-badges .tone-warn) .dcard-dot {
-    background: var(--color-warn);
-  }
 
   .dcard-main a.dcard-title {
     color: var(--color-text);
@@ -7747,7 +7657,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 .dv-list .dv-vsep {
   display: none;
 }
-@media (min-width: 70rem) {
+@media (min-width: 75rem) {
   .dv-list .dv-vsep {
     display: block;
   }
@@ -8472,12 +8382,12 @@ tr.is-saved > td {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-10);
 }
-@media (max-width: 70rem) {
+@media (max-width: 74.99rem) {
   .dev-relays {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 30rem) {
+@media (max-width: 44.99rem) {
   .dev-relays {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -10629,32 +10539,17 @@ dialog.fw-notes-dlg .fw-dlg-body {
   padding: var(--sp-10) var(--sp-12);
   margin-bottom: var(--sp-12);
   border-radius: var(--r-code);
-  border: var(--hair-w) solid var(--note-line);
-  background: var(--note-bg);
-  color: var(--note-fg);
+  border: var(--hair-w) solid var(--t);
+  background: var(--t-bg);
+  color: var(--t-fg);
   font-size: var(--fs-ui);
-}
-.add-note.tone-ok {
-  --note-line: var(--color-ok);
-  --note-bg: var(--color-ok-bg);
-  --note-fg: var(--color-ok-fg);
-}
-.add-note.tone-warn {
-  --note-line: var(--color-warn);
-  --note-bg: var(--color-warn-bg);
-  --note-fg: var(--color-warn-fg);
-}
-.add-note.tone-accent {
-  --note-line: var(--color-accent);
-  --note-bg: var(--color-accent-bg);
-  --note-fg: var(--color-accent-fg);
 }
 .add-note-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex: none;
-  background: var(--note-line, var(--color-accent));
+  background: var(--t);
 }
 .add-note-dot.pulse {
   animation: tf-pulse 0.9s ease-in-out infinite;
@@ -13756,7 +13651,7 @@ a.pol-tpl {
   gap: var(--sp-16);
   align-items: start;
 }
-@media (min-width: 52rem) {
+@media (min-width: 45rem) {
   .pol-scope-cols {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   }
@@ -14162,11 +14057,6 @@ a.pol-tpl {
 .ud-acts + .ud-grid {
   margin-top: var(--sp-6);
 }
-.banner.tone-neutral {
-  --banner-line: var(--color-border-strong);
-  --banner-bg: var(--color-surface-3);
-  --banner-fg: var(--color-text-2);
-}
 .banner.ud-off b {
   color: var(--color-text-2);
 }
@@ -14550,8 +14440,8 @@ a.pol-tpl {
   padding: var(--sp-10) 0;
   border-top: var(--hair-w) solid var(--color-border);
 }
-/* The release card is 300 to 350 px wide up to 50rem, too narrow for a name next to the state column: the state goes under. */
-@media (max-width: 49.99rem) {
+/* The release card is 300 to 350 px wide up to 50.99rem (a half-width card of the tablet range, like the TLS row of the MQTT card), too narrow for a name next to the state column: the state goes under. */
+@media (max-width: 50.99rem) {
   .rel-file {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-6);
@@ -14698,7 +14588,7 @@ a.pol-tpl {
     align-items: start;
   }
 }
-@media (min-width: 84rem) {
+@media (min-width: 75rem) {
   .pol-page .dev-pair:has(#rule-form) {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
@@ -14713,7 +14603,7 @@ a.pol-tpl {
 .dev-pair .pol-tpls {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-@media (max-width: 63.99rem) {
+@media (max-width: 74.99rem) {
   .dev-pair .pol-tpls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -15077,7 +14967,7 @@ details.devcard > summary {
   font-size: var(--fs-small);
   opacity: 0.9;
 }
-@media (max-width: 719px) {
+@media (max-width: 44.99rem) {
   .cmd-v {
     grid-template-columns: 56px minmax(0, 1fr);
   }
@@ -15197,7 +15087,7 @@ details.devcard > summary {
   color: var(--color-text-3);
   font: 400 var(--fs-badge) var(--font-mono);
 }
-@media (max-width: 640px) {
+@media (max-width: 44.99rem) {
   .stab-boots li {
     grid-template-columns: 78px minmax(0, 1fr);
   }

@@ -120,7 +120,7 @@ test("a running scan: progress ticks leave the scan bar and the table alone, tic
   // the end replaces the whole tab: the ticked row stays ticked there too
   await send(
     "scan-done",
-    `<div id="scan" class="add-scan">${scanbar(true)}<div id="scan-progress"><div class="add-note tone-ok" role="status"><span class="add-note-text"><b>Scan finished.</b></span></div></div><div id="scan-live">${results(row("lamp", 1) + row("plug", 2))}</div></div>`,
+    `<div id="scan" class="add-scan">${scanbar(true)}<div id="scan-progress"><div class="add-note t-ok" role="status"><span class="add-note-text"><b>Scan finished.</b></span></div></div><div id="scan-live">${results(row("lamp", 1) + row("plug", 2))}</div></div>`,
   );
   await expect(page.locator("#scan-now")).toBeVisible();
   await expect(page.getByLabel("Select lamp")).toBeChecked();

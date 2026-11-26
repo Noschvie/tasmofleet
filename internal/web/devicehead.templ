@@ -382,12 +382,12 @@ templ devActList(rows []devActRow, base string) {
 					<span class="dev-act-what"><span class="dev-act-more">{ string(e.Source) }{ healthMore(e.Source, e.Detail) }</span></span>
 					<span class="dev-act-st">
 						<span class="sr-only">From </span>
-						@ui.Badge(uiTone(e.From), label(e.From))
+						@ui.Badge(tone(e.From), label(e.From))
 						{ " " }
 						<span aria-hidden="true">→</span>
 						{ " " }
 						<span class="sr-only">to </span>
-						@ui.Badge(uiTone(e.To), label(e.To))
+						@ui.Badge(tone(e.To), label(e.To))
 					</span>
 				} else if j := r.Job; j != nil {
 					<span class="dev-act-what">
@@ -404,7 +404,7 @@ templ devActList(rows []devActRow, base string) {
 						</span>
 					</span>
 					<span class="dev-act-st">
-						@ui.Badge(uiTone(j.State), label(j.State))
+						@ui.Badge(tone(j.State), label(j.State))
 					</span>
 				}
 			</li>

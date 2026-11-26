@@ -86,9 +86,9 @@ func (s StatusBar) level() statusLevel {
 func (s StatusBar) edgeClass() string {
 	switch s.level() { //nolint:exhaustive // the other levels are the default
 	case statusBad:
-		return "sb-edge sb-bad"
+		return "sb-edge t-danger"
 	case statusWarn:
-		return "sb-edge sb-warn"
+		return "sb-edge t-warn"
 	}
 	return "sb-edge"
 }
@@ -97,9 +97,9 @@ func (s StatusBar) edgeClass() string {
 func (s StatusBar) dotClass() string {
 	switch s.level() { //nolint:exhaustive // the other levels are the default
 	case statusBad:
-		return "sb-dot bad"
+		return "sb-dot t-danger"
 	case statusWarn:
-		return "sb-dot warn"
+		return "sb-dot t-warn"
 	case statusRun:
 		return "sb-dot run"
 	}

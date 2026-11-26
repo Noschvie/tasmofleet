@@ -398,7 +398,7 @@ func TestUpdateAddressOfCredentialedDeviceAsksAgainWhenMACIsUnproven(t *testing.
 		t.Fatalf("no confirmation form: %s", body)
 	}
 	form := body[i : i+j]
-	for _, want := range []string{`name="csrf"`, `name="version" value="v2"`, `name="token"`, `<div class="banner tone-danger add-confirm" role="alert">`, `<button type="submit" class="banner-btn">Update address anyway</button>`, `<a href="/tf/devices/new">go back</a>`} {
+	for _, want := range []string{`name="csrf"`, `name="version" value="v2"`, `name="token"`, `<div class="banner t-danger add-confirm" role="alert">`, `<button type="submit" class="banner-btn">Update address anyway</button>`, `<a href="/tf/devices/new">go back</a>`} {
 		if !strings.Contains(form, want) {
 			t.Errorf("the confirmation lacks %q:\n%s", want, form)
 		}

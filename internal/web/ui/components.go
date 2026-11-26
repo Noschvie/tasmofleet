@@ -444,7 +444,7 @@ type BannerData struct {
 }
 
 func (b BannerData) classes() string {
-	c := "banner tone-" + string(b.Tone)
+	c := "banner " + b.Tone.class()
 	if b.Class != "" {
 		c += " " + b.Class
 	}

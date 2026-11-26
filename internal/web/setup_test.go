@@ -61,7 +61,7 @@ func TestSetupGuidesAFreshInstallAndOnlySuggests(t *testing.T) {
 	if strings.Contains(body, "Open the setup") {
 		t.Fatal("the setup page must not link to itself")
 	}
-	if _, other := e.do(t, "GET", "/devices", "admin", nil); !strings.Contains(other, `<div class="banner tone-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No device networks`) || !strings.Contains(other, "Open the setup") {
+	if _, other := e.do(t, "GET", "/devices", "admin", nil); !strings.Contains(other, `<div class="banner t-warn" role="status"><span class="banner-dot" aria-hidden="true"></span><div class="banner-text">No device networks`) || !strings.Contains(other, "Open the setup") {
 		t.Fatalf("the banner on other pages is a warning with a link: %s", other)
 	}
 	if len(svc.Snapshot().DeviceNetworks) != 0 {

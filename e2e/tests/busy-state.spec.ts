@@ -395,7 +395,7 @@ test("a request that cannot be sent says which control failed", async ({ page })
   await page.goto(app.url + href);
   const btn = page.getByRole("button", { name: "Refresh identity" });
   await btn.click();
-  const toast = page.locator("#toasts .toast.tone-danger");
+  const toast = page.locator("#toasts .toast.t-danger");
   await expect(toast).toContainText("Refresh identity was not sent: no connection");
   await expect(btn).toBeEnabled();
   await expect(btn).not.toHaveAttribute("aria-busy", "true");
@@ -403,7 +403,7 @@ test("a request that cannot be sent says which control failed", async ({ page })
   await page.route("**/import/tasmoadmin", (route) => route.abort("failed"));
   await page.goto(app.url + "/devices/new");
   await page.setInputFiles('input[name="files"]', importCsv);
-  await expect(page.locator("#toasts .toast.tone-danger")).toContainText("Import upload was not sent: no connection");
+  await expect(page.locator("#toasts .toast.t-danger")).toContainText("Import upload was not sent: no connection");
   await expect(page.locator("form.add-drop")).not.toHaveAttribute("aria-busy", "true");
 });
 
@@ -421,7 +421,7 @@ test("a failing preview shows one error toast, not one per keystroke", async ({ 
   await expect.poll(() => sent).toBeGreaterThanOrEqual(1);
   await name.fill("ab");
   await expect.poll(() => sent).toBeGreaterThanOrEqual(2);
-  await expect(page.locator("#toasts .toast.tone-danger")).toHaveCount(1);
+  await expect(page.locator("#toasts .toast.t-danger")).toHaveCount(1);
 });
 
 // Why: htmx has no timeout configured, so this only shows when someone (or a later setting) sets
@@ -441,7 +441,7 @@ test("a request that times out says so", async ({ page }) => {
   });
   const btn = page.getByRole("button", { name: "Refresh identity" });
   await btn.click();
-  await expect(page.locator("#toasts .toast.tone-danger")).toContainText("Refresh identity timed out");
+  await expect(page.locator("#toasts .toast.t-danger")).toContainText("Refresh identity timed out");
   await expect(btn).toBeEnabled();
   await expect(btn).not.toHaveAttribute("aria-busy", "true");
   release();

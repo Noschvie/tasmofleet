@@ -417,7 +417,7 @@
     var n = { timer: 0, close: null };
     n.timer = window.setTimeout(function () {
       if (still() && typeof window.tfToast === "function") {
-        n.close = window.tfToast(NOTE, "info");
+        n.close = window.tfToast(NOTE, "accent");
       }
     }, NOTE_MS);
     notes.set(el, n);

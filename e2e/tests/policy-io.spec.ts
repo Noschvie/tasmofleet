@@ -64,7 +64,7 @@ test("import: every rule has its fate, the warning sits above the button at 375 
   await expect(fate("Leaves")).toContainText("Removed");
 
   const button = preview.getByRole("button", { name: "Replace rules with these 3" });
-  const banner = preview.locator(".banner.tone-warn");
+  const banner = preview.locator(".banner.t-warn");
   await expect(banner).toContainText("replaces all current rules");
   const b = (await banner.boundingBox())!;
   const c = (await button.boundingBox())!;

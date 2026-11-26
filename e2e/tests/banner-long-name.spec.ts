@@ -25,7 +25,7 @@ test("a banner that names a device with an unbreakable name wraps inside the pag
   await expectNoOverflow(page, "policy before the note");
   await page.evaluate((name) => {
     const note = document.createElement("div");
-    note.className = "banner tone-accent";
+    note.className = "banner t-accent";
     note.setAttribute("role", "status");
     note.innerHTML = `<span class="banner-dot"></span><div class="banner-text">Read less than 5 minutes ago, not read again: ${name} (from 12:40), ${name} (from 12:41)</div>`;
     (document.querySelector("main") ?? document.body).prepend(note);

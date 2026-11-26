@@ -1433,7 +1433,7 @@ type txView struct {
 	Failed   int
 	Canceled int
 	Outcome  string
-	Tone     string
+	Tone     ui.Tone
 	// A planned update (#604): Planned jobs wait for their start, NotStarted and Early are the cancelled jobs
 	// that never ran, StartAt is the planned start (zero: started at once).
 	Planned, NotStarted, Early int
@@ -1445,18 +1445,18 @@ type txView struct {
 }
 
 // txOutcome words the result of a transaction.
-func txOutcome(total, done, running, queued, failed, canceled int) (text, tone string) {
+func txOutcome(total, done, running, queued, failed, canceled int) (text string, tone ui.Tone) {
 	switch {
 	case running+queued > 0:
-		return label("running"), "info"
+		return label("running"), ui.ToneAccent
 	case done == total:
-		return label(model.JobSucceeded), "ok"
+		return label(model.JobSucceeded), ui.ToneOK
 	case done > 0:
-		return fmt.Sprintf("%s on %d of %d", label(model.JobSucceeded), done, total), "warn"
+		return fmt.Sprintf("%s on %d of %d", label(model.JobSucceeded), done, total), ui.ToneWarn
 	case canceled == total:
-		return label(model.JobCancelled), "neutral"
+		return label(model.JobCancelled), ui.ToneNeutral
 	}
-	return label(model.JobFailed), "bad"
+	return label(model.JobFailed), ui.ToneDanger
 }
 
 // groupTransactions folds jobs into one row per transaction, in the order the
@@ -1510,9 +1510,9 @@ func groupTransactionsBy(jobs []model.Job, never func(model.Job) bool) []txView 
 		switch {
 		case t.Running+t.Queued > 0:
 		case t.Planned > 0:
-			t.Outcome, t.Tone = "Scheduled", "info"
+			t.Outcome, t.Tone = "Scheduled", ui.ToneAccent
 		case t.NotStarted > 0 && t.NotStarted+t.Early == t.Total:
-			t.Outcome, t.Tone = "Not started", "warn"
+			t.Outcome, t.Tone = "Not started", ui.ToneWarn
 		}
 		t.Title = txTitle(t.first, t.Total)
 		out = append(out, *t)
