@@ -177,7 +177,7 @@ func (h *handler) batchCancelConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	back := "/transactions/" + strconv.FormatInt(int64(p.Batch), 10)
 	if !p.Active {
-		http.Error(w, "transaction is not running", http.StatusConflict)
+		http.Error(w, "job is not running", http.StatusConflict)
 		return
 	}
 	if p.Planned > 0 && p.Running+p.Queued+p.Done == 0 { // a plan that has not started: nothing runs, nothing changes

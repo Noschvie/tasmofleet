@@ -69,6 +69,7 @@ func TestNoPageNamesAJobATransaction(t *testing.T) {
 		{"a job", "/transactions/7"},
 		{"a Make compliant job", "/transactions/8"},
 		{"cancel a job", "/transactions/7/cancel"},
+		{"cancel a job that is not running", "/transactions/8/cancel"},
 		{"cancel one device of a job", "/jobs/1/cancel"},
 		{"retry a job", "/transactions/8/retry"},
 		{"a job that does not exist", "/transactions/999"},
