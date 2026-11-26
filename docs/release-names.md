@@ -37,7 +37,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 26. **Cape Agulhas** (assigned to 0.46): Western Cape, South Africa. Lit in 1849; the second oldest lighthouse still operating in South Africa.
 27. **Pigeon Point** (assigned to 0.47): California, USA. Lit in 1872; its 35 m tower ties with Point Arena as the tallest on the US West Coast.
 28. **Kannonzaki** (assigned to 0.48): Yokosuka, Japan. Lit in 1869; the first Western-style lighthouse in Japan, built under the French engineer Leonce Verny.
-29. **South Stack**: off Holy Island, Anglesey, Wales. First lit in 1809; automated since 1983.
+29. **South Stack** (assigned to 0.49): off Holy Island, Anglesey, Wales. First lit in 1809; automated since 1983.
 30. **Sambro Island**: entrance of Halifax Harbour, Nova Scotia, Canada. First lit in 1758; the oldest surviving lighthouse in North America.
 31. **Cape Bruny**: Bruny Island, Tasmania, Australia. Lit in 1838; Australia's second oldest surviving lighthouse tower.
 32. **Roter Sand**: mouth of the Weser, German North Sea. Lit in 1885; the first building erected directly on the open sea floor.
