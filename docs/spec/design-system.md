@@ -80,6 +80,9 @@ fails on any difference.
 | `--shadow-lg` | `0 14px 44px rgba(16, 24, 32, 0.18), 0 2px 6px rgba(16, 24, 32, 0.08)` | `0 14px 44px rgba(0, 0, 0, 0.6)` |
 | `--color-console-rule` | `rgba(255, 255, 255, 0.08)` | same |
 | `--color-console-line` | `rgba(255, 255, 255, 0.14)` | same |
+| `--color-scrim` | `rgb(10 14 18)` | same |
+| `--color-on-danger` | `#fff` | same |
+| `--color-knob` | `#fff` | same |
 <!-- tokens:end -->
 
 `--color-info*` does not exist: informational banners and badges use the accent set
@@ -92,24 +95,26 @@ Theme-independent tokens (all on `:root`):
 | --- | --- |
 | Fonts | `--font-sans: "Geist", ui-sans-serif, system-ui, sans-serif`; `--font-mono: "Geist Mono", ui-monospace, Menlo, monospace`. Body is `400 14px/1.45` (`--fs-base`, `--lh-body`) |
 | Type sizes | `--fs-h1` 22px (weight 600), `--fs-h2-lg` 15px, `--fs-h2` 14px, `--fs-h2-sm` 13px, `--fs-body` 13.5px, `--fs-ui` 13px, `--fs-meta` 12.5px, `--fs-small` 12px, `--fs-badge` 11.5px, `--fs-stat` 28px (the stat tile value, `600 28px/1`, tabular figures; measured in F4) |
-| Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-pill` 999px; dots and avatars use `50%` |
+| Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-mark` 2px, `--r-pill` 999px; dots and avatars use `50%`. `--r-mark` is for marks (a pin, a column handle's focus, a locked checkbox); a bar, a track or a count pill whose ends are round uses `--r-pill`. A radius is never a px value and never a `--sp-*` token |
 | Spacing | `--sp-N` is N pixels, for the values the prototype uses: 1-12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40. The prototype is not on a 4px grid, nothing is rounded |
 | Card gap | `--card-gap`: the space between sibling cards, down and across, on every page: card stacks, the device overview, its tile row. The value is 16 px (`--sp-16`); the token still reads `--sp-12` and the card stacks write 16 px directly until #1101 makes them one. `device-layout.spec.ts` fails when two cards come closer |
 | Controls | `--ctl` 34px (44px on phones), `--ctl-sm` 32px (44px on phones), `--ctl-lg` 40px (44px on phones): the tall button and the full-width row targets (fold summaries, the drawer, row menus), `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
-| Inline values made tokens | `--backdrop`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
+| Inline values made tokens | `--backdrop`, `--color-scrim`, `--color-on-danger`, `--color-knob`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
 | Layers | `--z-sticky` 10, `--z-menu` 20, `--z-header` 30, `--z-header-menu` 40, `--z-dialog` 1000, `--z-toast` 1001 |
 
-More tokens. The ones marked "planned" do not exist in `app.css` yet; #1099 adds them and replaces the
-literals they stand for.
+More tokens. `app.css` writes none of these values anywhere else: `TestStylesheetWritesTokens` fails on a colour,
+shadow, layer above 4, transition duration, radius or focus ring written as a literal outside the token blocks, and
+`TestMoreTokensRowsEqualStylesheet` fails when a value below differs from `app.css`.
 
 | Group | Tokens |
 | --- | --- |
 | Bars | `--sb-line` 32px (status bar row; 44px on phones), `--sb-h` (row + safe area), `--header-h` (sticky header with sub-navigation) |
-| Overlay | `--backdrop` for every `::backdrop`; planned: `--color-scrim: rgb(10 14 18)` mixed 50 % into `--color-bg` for the scrollbar gutter behind a modal |
-| On colours | planned: `--color-on-danger: #fff` (danger-solid text), `--color-knob: #fff` (switch knobs), both themes |
-| Focus | planned: `--focus-ring: 2px solid var(--color-accent)`, `--focus-offset: 2px`; inside a clipping container the offset is `-2px` |
-| Motion | planned: `--dur-fast` 0.12s (hover, press), `--dur-base` 0.15s (switch knob, chevrons), `--dur-slow` 0.6s (progress width), `--pulse` 1.6s (live dot); all stop under `prefers-reduced-motion` |
+| Overlay | `--color-scrim: rgb(10 14 18)`, `--backdrop: color-mix(in srgb, var(--color-scrim) 50%, transparent)` for every `::backdrop` (drawer and dialogs alike); the scrollbar gutter behind a modal paints `color-mix(in srgb, var(--color-bg) 50%, var(--color-scrim))`, which is what the backdrop would make of the page colour |
+| On colours | `--color-on-danger: #fff` (text on `--color-danger-solid`), `--color-knob: #fff` (switch knobs), both themes |
+| Focus | `--focus-ring: 2px solid var(--color-accent)`, `--focus-offset: 2px`: every `:focus-visible`, `:focus-within` and `.is-focus` rule writes `outline: var(--focus-ring)`. Inside a clipping container and on text fields the ring sits inside, `outline-offset: calc(-1 * var(--focus-offset))`. The outlines that mark a state, not focus (an invalid label or checkbox in `--color-danger`, a locked checkbox in `--color-text-3`), are not the ring |
+| Motion | `--dur-fast: 0.12s` (hover, press, chevrons), `--dur-base: 0.15s` (switch knob, status bar chevron), `--dur-slow: 0.6s` (progress width), `--pulse: 1.6s` (live dot). The three durations are `0s` under `prefers-reduced-motion`, so every transition that reads them stops; `--pulse` is not, the live dot's animation is turned off by its own rule. Component-local keyframe durations stay literal: `0.8s` spinners, `0.9s` and `2.4s` busy pulses, `1.4s` shimmer, `1s` indeterminate bar, `0.01s` the busy indicator's delayed show |
+| Marks | `--r-mark: 2px` |
 | Other | `--lh-tight` 1.15, `--grid-cols` 12, `--busy-ring` (the busy indicator's ring) |
 
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
@@ -150,7 +155,8 @@ title) and adds the guard; `--fs-word` (18px: a word as a tile value) exists sin
   (`--card-gap`), 16 card padding and below the page header. Spacing in `gap`, `padding` and `margin`
   uses the `--sp-N` tokens, never a px literal (#1101 replaces the about 420 literals left).
 - Radii: controls 7, cards 10, dialogs and the auth card 12, banners and toasts 9, code 8, menu items
-  6, badges 5, pills 999, dots and avatars 50 %.
+  6, badges 5, marks 2, pills 999 (bars, tracks, count pills), dots and avatars 50 %. Menus use the card
+  radius, 10 (`--r-card`). Always a `--r-*` token.
 - Heights: controls 34 px (44 px on phones), small buttons 32 (44 px on phones), top bar 52,
   sub-navigation 40, phone header 56, row targets 44. A phone target is 44 px because a thumb is not a
   pointer: Apple's HIG asks for 44 pt, WCAG 2.5.5 (AAA) for 44 px, Material for 48 dp. 40 px had no
@@ -163,7 +169,9 @@ title) and adds the guard; `--fs-word` (18px: a word as a tile value) exists sin
   #773).
 - Shadows: `--shadow-lg` for menus, dialogs, toasts and the phone status sheet; `--shadow-bar` for every bar
   fixed to the bottom edge (status bar, bulk bar, save bar, phone action bar); `--shadow-knob` for switch
-  knobs. No other shadow is written (three bars still write theirs as a literal until #1099).
+  knobs. No other shadow is written; an inset indicator (a selected row's edge, the active tab's line) is
+  written with a colour token or `transparent`. The phone status sheet sits above the status bar and takes
+  `--shadow-lg`.
 
 ## Components
 

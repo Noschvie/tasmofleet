@@ -1,0 +1,4 @@
+---
+section: Changed
+---
+The stylesheet writes the design system's values as tokens, and a test now fails when a colour, shadow, layer, duration, radius or focus ring is written as a literal again. Every bar fixed to the bottom edge (status bar, phone action bar, bulk bar) has the same shadow, where three of them had their own; the phone status sheet takes the menu shadow. Every modal dims the page by the same amount (the navigation drawer was 5 % lighter than the dialogs). The keyboard focus ring is one ring on every control: text fields now draw it 1 px further inside, and the narrow marks (a locked checkbox, the backup pin, the column handle's focus) share one 2 px radius. Switch knobs, the white text of a filled danger button, the live dot's pulse and the transition times come from tokens; under "reduce motion" the switch knob, the chevrons and the progress bars no longer animate (#1099)

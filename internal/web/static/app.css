@@ -107,13 +107,14 @@
   --card-gap: var(
     --sp-12
   ); /* between sibling cards, both ways (device overview, pages of cards) */
-  --r-panel: 12px; /* auth card, dialogs, menus */
+  --r-panel: 12px; /* auth card, dialogs */
   --r-banner: 9px;
   --r-code: 8px; /* pre, console, diff */
   --r-sm: 6px;
   --r-badge: 5px;
   --r-xs: 4px;
-  --r-pill: 999px;
+  --r-mark: 2px; /* marks: a pin, a column handle's focus, a locked checkbox */
+  --r-pill: 999px; /* bars, tracks and count pills: the ends are round */
   --hair-w: 1px; /* borders and dividers */
 
   /* controls: one height per size */
@@ -142,11 +143,32 @@
   --z-toast: 1001; /* @kind other: toasts */
 
   /* values the prototype writes inline, the same in both themes */
-  --backdrop: rgba(10, 14, 18, 0.5);
+  --color-scrim: rgb(10 14 18); /* behind every modal; the scrollbar gutter mixes it 50 % into the page colour */
+  --backdrop: color-mix(in srgb, var(--color-scrim) 50%, transparent);
+  --color-on-danger: #fff; /* text on --color-danger-solid */
+  --color-knob: #fff; /* switch knobs */
   --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-bar: 0 -6px 20px rgba(0, 0, 0, 0.08);
   --color-console-rule: rgba(255, 255, 255, 0.08);
   --color-console-line: rgba(255, 255, 255, 0.14);
+
+  /* focus: one ring; inside a clipping container the offset is calc(-1 * var(--focus-offset)) */
+  --focus-ring: 2px solid var(--color-accent);
+  --focus-offset: 2px;
+
+  /* motion: transitions and the live dot; keyframe durations of spinners, busy pulses and shimmer stay with their component */
+  --dur-fast: 0.12s; /* hover, press, chevrons */
+  --dur-base: 0.15s; /* switch knob, bar chevron */
+  --dur-slow: 0.6s; /* progress width */
+  --pulse: 1.6s; /* live dot */
+}
+/* all motion that reads the duration tokens stops */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0s;
+    --dur-base: 0s;
+    --dur-slow: 0s;
+  }
 }
 
 /* ---- light theme (default) --------------------------------------------- */
@@ -340,8 +362,8 @@ a.is-hover {
 }
 :focus-visible,
 .is-focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
@@ -606,8 +628,8 @@ select:focus-visible,
 select.is-focus,
 textarea:focus-visible,
 textarea.is-focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -1px;
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-offset));
   border-color: var(--color-accent);
 }
 input[disabled],
@@ -629,7 +651,7 @@ input[type="checkbox"][disabled] {
 /* a locked checked box is drawn by hand: the native one greys its check mark into the ground in the light theme */
 input[type="checkbox"][disabled]:checked {
   appearance: none;
-  border-radius: 3px;
+  border-radius: var(--r-mark);
   outline: 0;
   background-color: var(--color-text-2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E");
@@ -1105,7 +1127,7 @@ th .sortlink.is-hover {
 .rowmenu-body a.is-focus,
 .rowmenu-body button:focus-visible,
 .rowmenu-body button.is-focus {
-  outline-offset: -2px;
+  outline-offset: calc(-1 * var(--focus-offset));
 }
 .menu a[aria-current="page"],
 .rowmenu-body [aria-current="true"] {
@@ -1210,7 +1232,7 @@ details.fold > summary::after {
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
-  transition: transform 0.12s;
+  transition: transform var(--dur-fast);
 }
 details.fold > summary:has(.meta)::after {
   margin-left: var(--sp-12);
@@ -1608,7 +1630,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     background: var(--color-surface);
     /* the prototype's --border is below the 1.3:1 overlay guard (layout guard g); strong as every menu */
     border: var(--hair-w) solid var(--color-border-strong);
-    border-radius: 10px;
+    border-radius: var(--r-card);
     box-shadow: var(--shadow-lg);
     font: 400 13px / 1.3 var(--font-sans);
     color: var(--color-text);
@@ -1626,7 +1648,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     gap: 6px;
     height: 36px;
     padding: 0 4px 0 8px;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
   }
   .colpanel .colrow[draggable="true"]:hover {
     background: var(--color-surface-2);
@@ -1673,7 +1695,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     align-items: center;
     height: 20px;
     padding: 0 7px;
-    border-radius: 5px;
+    border-radius: var(--r-badge);
     font: 500 11.5px var(--font-sans);
     white-space: nowrap;
     background: var(--color-accent-bg);
@@ -1684,7 +1706,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     min-height: 0;
     height: 26px;
     padding: 0 6px;
-    border-radius: 5px;
+    border-radius: var(--r-badge);
     border: var(--hair-w) solid var(--color-border);
     background: transparent;
     color: var(--color-text-2);
@@ -1713,7 +1735,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     height: 30px;
     padding: 0 10px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--r-control);
     background: none;
     box-shadow: none;
     color: var(--color-accent-fg);
@@ -2003,7 +2025,7 @@ td.wrap {
   height: 100%;
   background: var(--color-accent);
   border-radius: var(--r-xs);
-  transition: width 0.6s ease;
+  transition: width var(--dur-slow) ease;
 }
 .bar.bad {
   border-color: var(--color-danger);
@@ -2418,8 +2440,8 @@ details.job-log > summary {
 }
 .chip:has(input:focus-visible),
 .chip:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 .chip-n {
   color: var(--color-text-2); /* the secondary text colour, never opacity on content (#1071, #1174) */
@@ -2504,7 +2526,7 @@ button.chip-x {
     padding: 0.55rem 0.75rem;
     background: var(--color-surface);
     border-top: 1px solid var(--color-border-strong);
-    box-shadow: 0 -4px 14px rgb(0 0 0 / 0.1);
+    box-shadow: var(--shadow-bar);
   }
   .actionbar p {
     margin: 0;
@@ -2725,7 +2747,7 @@ button.chip-x {
     width: 26px;
     height: 26px;
     padding: 0;
-    border-radius: 5px;
+    border-radius: var(--r-badge);
     font-size: 13px;
     line-height: 1;
     box-shadow: none;
@@ -2857,7 +2879,7 @@ button.chip-x {
     right: 4px;
     width: 1px;
     background: var(--color-border-strong);
-    transition: background-color 0.12s;
+    transition: background-color var(--dur-fast);
   }
   .colhandle:hover::after,
   .colhandle:focus-visible::after,
@@ -2865,9 +2887,9 @@ button.chip-x {
     background: var(--color-accent);
   }
   .colhandle:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
-    border-radius: 2px;
+    outline: var(--focus-ring);
+    outline-offset: calc(-1 * var(--focus-offset));
+    border-radius: var(--r-mark);
   }
   body.is-resizing {
     cursor: col-resize;
@@ -3858,7 +3880,7 @@ header.top {
   bottom: 0;
   background: var(--color-surface);
   border-top: 1px solid var(--color-border-strong);
-  box-shadow: 0 -4px 14px rgb(0 0 0 / 0.07);
+  box-shadow: var(--shadow-bar);
   font: 500 12px/1 var(--font-sans);
   color: var(--color-text-2);
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -3952,7 +3974,7 @@ a.sb-i:hover {
 }
 .sb-dot.run {
   background: var(--color-accent);
-  animation: tf-pulse 1.6s ease-in-out infinite;
+  animation: tf-pulse var(--pulse) ease-in-out infinite;
 }
 .sb-dot.warn {
   background: var(--color-warn);
@@ -3980,18 +4002,18 @@ a.sb-i:hover {
   height: 4px;
   margin: 0 2px;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--r-pill);
   background: var(--color-surface-3);
   vertical-align: middle;
 }
 .sb-prog::-webkit-progress-bar {
   background: var(--color-surface-3);
-  border-radius: 2px;
+  border-radius: var(--r-pill);
 }
 .sb-prog::-webkit-progress-value,
 .sb-prog::-moz-progress-bar {
   background: var(--color-accent);
-  border-radius: 2px;
+  border-radius: var(--r-pill);
 }
 .sb-link {
   color: var(--color-accent-fg);
@@ -4028,7 +4050,7 @@ a.sb-i:hover {
 }
 /* a focused link inside a clipping item keeps its ring inside the item */
 .sb-wide .sb-link:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(-1 * var(--focus-offset));
 }
 
 /* the Live label: one of three, by the stream's state */
@@ -4124,7 +4146,7 @@ html[data-live="offline"] .sb-stale {
   .sb-car {
     color: var(--color-text-3);
     font-size: 10px;
-    transition: transform 0.15s;
+    transition: transform var(--dur-base);
   }
   .sb-narrow[open] .sb-car {
     transform: rotate(180deg);
@@ -4136,7 +4158,7 @@ html[data-live="offline"] .sb-stale {
     bottom: 100%;
     background: var(--color-surface);
     border-top: 1px solid var(--color-border-strong);
-    box-shadow: 0 -10px 24px rgb(0 0 0 / 0.14);
+    box-shadow: var(--shadow-lg);
     padding: var(--sp-4) 0 var(--sp-6);
     /* a landscape phone is short: the sheet scrolls instead of leaving the window at the top */
     max-height: calc(100dvh - var(--sb-h) - var(--sp-16));
@@ -4196,7 +4218,7 @@ summary.um-btn {
   align-items: center;
   gap: var(--sp-8);
   padding: 0 var(--sp-8) 0 var(--sp-4);
-  border-radius: var(--sp-8);
+  border-radius: var(--r-code);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
@@ -4275,7 +4297,7 @@ summary.um-btn::-webkit-details-marker {
   height: 34px;
   padding: 0 var(--sp-10);
   border: 0;
-  border-radius: var(--sp-6);
+  border-radius: var(--r-sm);
   background: none;
   color: var(--color-text);
   font: 400 13px var(--font-sans);
@@ -4371,7 +4393,7 @@ summary.um-btn::-webkit-details-marker {
 .burger > span {
   width: 18px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--r-pill);
   background: currentColor;
 }
 .ph-title {
@@ -4420,14 +4442,14 @@ dialog.drawer {
   overflow: auto;
 }
 dialog.drawer::backdrop {
-  background: rgba(10, 14, 18, 0.45);
+  background: var(--backdrop);
 }
 /* The backdrop stops at the reserved scrollbar gutter, which shows the canvas; the prototype's
    scrim covers the full width. While the drawer is open the canvas takes the scrim-mixed page
    colour, and the body (which then paints its own background) reaches the bottom of the window,
    so nothing is dimmed twice. */
 html:has(dialog.drawer:modal) {
-  background: color-mix(in srgb, var(--color-bg) 55%, rgb(10, 14, 18));
+  background: color-mix(in srgb, var(--color-bg) 50%, var(--color-scrim));
 }
 html:has(dialog.drawer:modal) body {
   min-height: 100vh;
@@ -4460,7 +4482,7 @@ html:has(dialog.drawer:modal) body {
   text-align: left;
   padding: 0 var(--sp-10);
   border: 0;
-  border-radius: var(--sp-8);
+  border-radius: var(--r-code);
   background: transparent;
   color: var(--color-text);
   font: 500 14.5px var(--font-sans);
@@ -4815,14 +4837,14 @@ html[data-live="offline"] .pghead-stale {
   padding: 0 var(--sp-14);
   border-color: var(--color-danger-solid);
   background: var(--color-danger-solid);
-  color: #fff;
+  color: var(--color-on-danger);
   font-weight: 600;
 }
 .btn.btn-danger-solid:hover,
 .btn.btn-danger-solid:active {
   border-color: var(--color-danger);
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-on-danger);
 }
 .btn.btn-ghost {
   border-color: transparent;
@@ -5242,8 +5264,8 @@ button.btn[aria-disabled="true"]:focus-visible {
   background: var(--color-surface-3);
 }
 .useg input:focus-visible + span {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+  outline: var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-offset));
 }
 /* phones: a short choice ("On") is as wide as it is tall, a touch target in both directions */
 @media (max-width: 44.99rem) {
@@ -5303,7 +5325,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   flex: none;
   width: 38px;
   height: 22px;
-  border-radius: 11px;
+  border-radius: var(--r-pill);
   background: var(--color-control-border);
 }
 .utoggle .sw::after,
@@ -5316,9 +5338,9 @@ button.btn[aria-disabled="true"]:focus-visible {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-knob);
   box-shadow: var(--shadow-knob);
-  transition: left 0.15s;
+  transition: left var(--dur-base);
 }
 .utoggle input:checked + .sw,
 .uswitch input:checked + .sw {
@@ -5330,8 +5352,8 @@ button.btn[aria-disabled="true"]:focus-visible {
 }
 .utoggle input:focus-visible + .sw,
 .uswitch input:focus-visible + .sw {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 .utoggle-text b {
   display: block;
@@ -5360,7 +5382,7 @@ button.btn[aria-disabled="true"]:focus-visible {
 .pwr .sw {
   width: 34px;
   height: 20px;
-  border-radius: 10px;
+  border-radius: var(--r-pill);
 }
 .pwr .sw::after {
   left: 2px;
@@ -5444,7 +5466,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   width: 100%;
   height: 8px;
   margin: var(--sp-12) 0 var(--sp-18);
-  border-radius: 4px;
+  border-radius: var(--r-pill);
   background: var(--color-surface-2);
 }
 .health-bar .bar-seg {
@@ -5557,7 +5579,7 @@ a.att-row:hover {
   display: block;
   width: 100%;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--r-pill);
   background: var(--color-surface-3);
 }
 .txn-row-title {
@@ -5577,7 +5599,7 @@ a.att-row:hover {
   display: block;
   width: 80px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--r-pill);
 }
 .mini-bg {
   fill: var(--color-surface-3);
@@ -5604,18 +5626,18 @@ a.att-row:hover {
    A colour mask, so it follows both themes; a strip that fits, or that wraps, carries neither attribute. */
 .utabs[data-more-end],
 .dv-chips[data-more-end] {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--sp-32)), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - var(--sp-32)), transparent);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - var(--sp-32)), transparent);
 }
 .utabs[data-more-start],
 .dv-chips[data-more-start] {
-  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - var(--sp-32)), transparent);
-  mask-image: linear-gradient(to left, #000 calc(100% - var(--sp-32)), transparent);
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - var(--sp-32)), transparent);
 }
 .utabs[data-more-start][data-more-end],
 .dv-chips[data-more-start][data-more-end] {
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--sp-32), #000 calc(100% - var(--sp-32)), transparent);
-  mask-image: linear-gradient(to right, transparent, #000 var(--sp-32), #000 calc(100% - var(--sp-32)), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black var(--sp-32), black calc(100% - var(--sp-32)), transparent);
+  mask-image: linear-gradient(to right, transparent, black var(--sp-32), black calc(100% - var(--sp-32)), transparent);
 }
 .utab {
   display: inline-flex;
@@ -5736,7 +5758,7 @@ dialog.udlg::backdrop {
 /* as for the drawer: the canvas in the reserved scrollbar gutter takes the scrim-mixed page
    colour while a dialog is open (P8: "Confirm it's you" left a light strip on the right) */
 html:has(dialog.udlg:modal) {
-  background: color-mix(in srgb, var(--color-bg) 50%, rgb(10, 14, 18));
+  background: color-mix(in srgb, var(--color-bg) 50%, var(--color-scrim));
 }
 html:has(dialog.udlg:modal) body {
   min-height: 100vh;
@@ -6951,7 +6973,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   align-items: center;
   height: 18px;
   padding: 0 var(--sp-6);
-  border-radius: 9px;
+  border-radius: var(--r-pill);
   font: 500 11px var(--font-sans);
   white-space: nowrap;
   background: var(--color-accent);
@@ -7010,7 +7032,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   .tablewrap > .tablescroll {
     background: var(--color-surface);
     border: var(--hair-w) solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--r-card);
   }
   .tablescroll > table {
     border-collapse: separate;
@@ -7447,7 +7469,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     padding: 6px 6px 10px 2px;
     background: var(--color-surface);
     border: var(--hair-w) solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--r-card);
   }
   .dcard:not(:has(.dcard-sel)) {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -7565,7 +7587,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   background: var(--color-surface);
   color: var(--color-text);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 11px;
+  border-radius: calc(var(--r-panel) - var(--hair-w));
   box-shadow: var(--shadow-bar);
 }
 .bulkbar:has(> .bulk-acts)[hidden] {
@@ -7585,7 +7607,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   min-height: 0;
   height: 34px;
   padding: 0 12px;
-  border-radius: 7px;
+  border-radius: var(--r-control);
   border: var(--hair-w) solid var(--color-control-border);
   background: var(--color-surface);
   box-shadow: none;
@@ -7655,7 +7677,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     color: var(--color-text);
     border-top: var(--hair-w) solid var(--color-border);
     border-radius: 0;
-    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-bar);
   }
   .bulkbar:has(> .bulk-acts) .bulk-count {
     grid-row: 1;
@@ -7680,7 +7702,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   .bulkbar:has(> .bulk-acts) .bulk-acts button {
     height: 44px;
     padding: 0 6px;
-    border-radius: 8px;
+    border-radius: var(--r-code);
     border: var(--hair-w) solid var(--color-control-border);
     background: var(--color-surface);
     color: var(--color-text);
@@ -7724,7 +7746,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   height: var(--ctl);
   padding: 0 10px;
   border: var(--hair-w) solid var(--color-control-border);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--color-surface);
   color: var(--color-text);
   font: 400 13.5px var(--font-sans);
@@ -7770,7 +7792,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   margin: 0;
   padding: 0 2px 0 11px;
   border: var(--hair-w) solid var(--color-control-border);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--color-surface);
   color: var(--color-text-2);
   font: 500 12.5px var(--font-sans);
@@ -7788,7 +7810,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   margin: 0;
   padding: 0 6px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background-color: transparent;
   background-image: none;
   box-shadow: none;
@@ -7815,7 +7837,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   margin: 0;
   padding: 0 8px;
   border: var(--hair-w) solid var(--color-control-border);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background-color: var(--color-surface);
   background-image: none;
   color: var(--color-text);
@@ -7843,7 +7865,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     gap: 6px;
     height: var(--ctl);
     padding: 0 12px;
-    border-radius: 7px;
+    border-radius: var(--r-control);
     font: 500 13px var(--font-sans);
   }
   .dv-cols .colbtn::after {
@@ -7872,7 +7894,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   gap: 8px;
   padding: 32px 16px;
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--r-card);
   background: var(--color-surface);
   text-align: center;
 }
@@ -8137,7 +8159,7 @@ td.pcell .pwr {
   width: 36px;
   height: 32px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--color-text-2);
   font: 600 16px var(--font-sans);
@@ -8159,7 +8181,7 @@ td.pcell .pwr {
   height: var(--ctl);
   min-height: 0;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 /* phone cards: the status badge without its dot (the name carries the dot), MQTT down last */
 .dcards-all {
@@ -8275,7 +8297,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   height: 22px;
   padding: 0 var(--sp-8);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-badge);
   background: var(--color-accent-bg);
   color: var(--color-accent-fg);
   font: 500 12px var(--font-sans);
@@ -8449,7 +8471,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   display: block;
   width: 100%;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--r-pill);
 }
 .itile-bar-track {
   fill: var(--color-surface-3);
@@ -8495,7 +8517,7 @@ tr.is-saved > td {
   margin: 0;
   padding: var(--sp-6) var(--sp-10);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--r-code);
   background: var(--color-surface-2);
 }
 .dev-relay-t {
@@ -8522,7 +8544,7 @@ tr.is-saved > td {
   min-width: 0;
   padding: var(--sp-8) var(--sp-10);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--r-code);
   background: var(--color-surface-2);
 }
 .dev-sensor-l {
@@ -8644,14 +8666,14 @@ tr.is-saved > td {
 .console a.console-clear {
   display: inline-flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   border-color: var(--color-console-line);
   text-decoration: none;
 }
 .console-form input:not([type="checkbox"]):not([type="radio"]) {
   min-width: 0;
   padding: 0 var(--sp-10);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: color-mix(in srgb, var(--color-console-rule) 50%, transparent);
 }
 /* the terminal keeps its own colours in both themes: the global placeholder grey (text-2) is
@@ -8664,7 +8686,7 @@ tr.is-saved > td {
   height: var(--ctl);
   padding: 0 14px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--color-term-cmd);
   color: var(--color-term-bg);
   font: 600 13px var(--font-sans);
@@ -9096,7 +9118,7 @@ nav.crumbs a {
   padding: 10px 12px;
   gap: 10px;
   align-items: flex-start;
-  border-radius: 8px;
+  border-radius: var(--r-code);
 }
 .dd-page .banner-dot {
   margin-top: 5px;
@@ -9138,7 +9160,7 @@ nav.crumbs a {
 }
 .dd-choice .rcard {
   padding: 12px;
-  border-radius: 9px;
+  border-radius: var(--r-banner);
 }
 .dd-choice .rcard input {
   flex: none;
@@ -9192,7 +9214,7 @@ nav.crumbs a {
 }
 .upd-run .seg-bar {
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--r-pill);
 }
 .upd-run .txn-sum {
   font-size: 13px;
@@ -9356,7 +9378,7 @@ nav.crumbs a {
 }
 .upd-prog .seg-bar {
   height: 10px;
-  border-radius: 5px;
+  border-radius: var(--r-pill);
 }
 .upd-counts {
   display: flex;
@@ -9440,7 +9462,7 @@ nav.crumbs a {
   width: auto;
   min-width: 0;
   height: 5px;
-  border-radius: 3px;
+  border-radius: var(--r-pill);
 }
 .upd-row-state .mini-pct {
   font: 400 11.5px var(--font-mono);
@@ -9702,7 +9724,7 @@ nav.crumbs a {
   gap: 2px;
   padding: 10px 12px;
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--r-code);
   background: var(--color-surface);
   cursor: pointer;
 }
@@ -9711,8 +9733,8 @@ nav.crumbs a {
   background: var(--color-accent-bg);
 }
 .upd-relopt:has(input:focus-visible) {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 .upd-relopt input {
   position: absolute;
@@ -10009,7 +10031,7 @@ nav.crumbs a {
 }
 /* the cancel dialog's scrim covers the scrollbar gutter too, like the drawer's (F3) */
 html:has(dialog#dlg-txn:modal) {
-  background: color-mix(in srgb, var(--color-bg) 50%, rgb(10, 14, 18));
+  background: color-mix(in srgb, var(--color-bg) 50%, var(--color-scrim));
 }
 html:has(dialog#dlg-txn:modal) body {
   min-height: 100vh;
@@ -10224,7 +10246,7 @@ html:has(dialog#dlg-txn:modal) body {
 }
 .fw-chip {
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--color-surface-2);
   color: var(--color-text-2);
   font: 400 12px var(--font-mono);
@@ -10529,7 +10551,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   margin: 12px 16px 16px;
   padding: 18px;
   border: 1.5px dashed var(--color-border-strong);
-  border-radius: 9px;
+  border-radius: var(--r-banner);
   text-align: center;
   color: var(--color-text-2);
   font-size: 13px;
@@ -10632,7 +10654,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   flex-wrap: wrap;
   padding: var(--sp-10) var(--sp-12);
   margin-bottom: var(--sp-12);
-  border-radius: 8px;
+  border-radius: var(--r-code);
   border: var(--hair-w) solid var(--note-line);
   background: var(--note-bg);
   color: var(--note-fg);
@@ -11230,7 +11252,7 @@ a.add-card-name {
   width: 100%;
   height: 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--r-pill);
   overflow: hidden;
   appearance: none;
   background: var(--color-surface-3);
@@ -11300,8 +11322,8 @@ a.add-card-name {
   font-weight: 500;
 }
 .add-drop-btn:focus-within {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 /* the real file input covers its button, invisible: clicking the button opens the chooser */
 .add-drop-input {
@@ -11393,7 +11415,7 @@ a.add-card-name {
 .add-head + .utabs .bdg {
   height: 18px;
   padding: 0 var(--sp-6);
-  border-radius: 9px;
+  border-radius: var(--r-pill);
   font-size: 11px;
   background: var(--color-accent);
   color: var(--color-on-accent);
@@ -11483,7 +11505,7 @@ a.add-card-name {
   flex: none;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--color-text-2);
   font: 400 18px var(--font-sans);
@@ -11561,7 +11583,7 @@ a.add-card-name {
   gap: 10px;
   align-items: flex-start;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-code);
   border: var(--hair-w) solid var(--color-warn);
   background: var(--color-warn-bg);
   color: var(--color-warn-fg);
@@ -11593,7 +11615,7 @@ a.add-card-name {
 .bk-cmdline {
   margin-bottom: 12px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-code);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface-2);
   font: 400 12.5px var(--font-mono);
@@ -11897,8 +11919,8 @@ a.bk-namelink:hover {
   margin: 0;
 }
 .srst:has(input:focus-visible) {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
   border-radius: var(--r-xs);
 }
 .srst .srst-off,
@@ -12127,7 +12149,7 @@ a.bk-namelink:hover {
 .sbar-chip {
   font: 500 12px var(--font-sans);
   padding: var(--sp-2) var(--sp-8);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--color-warn-bg);
   color: var(--color-warn-fg);
 }
@@ -12753,7 +12775,7 @@ main.bare {
   flex: 1;
   height: 2px;
   min-width: 8px;
-  border-radius: 1px;
+  border-radius: var(--r-pill);
   background: var(--color-border);
 }
 .setup-steps .is-done .setup-bar {
@@ -12823,7 +12845,7 @@ main.bare {
   padding: 6px 6px 6px 14px;
   margin-bottom: var(--sp-10);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 9px;
+  border-radius: var(--r-banner);
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-bar);
@@ -13007,7 +13029,7 @@ main.bare {
   width: 7px;
   height: 7px;
   border: 1.5px solid currentColor;
-  border-radius: 1px;
+  border-radius: var(--r-mark);
   transform: rotate(45deg);
 }
 .bk-foot {
@@ -13318,7 +13340,7 @@ main.bare {
 .rp-old {
   padding: var(--sp-12);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 9px;
+  border-radius: var(--r-banner);
   background: var(--color-surface-2);
 }
 .rp-old-k {
@@ -13402,7 +13424,7 @@ main.bare {
 .rp-box {
   background: var(--color-surface);
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 9px;
+  border-radius: var(--r-banner);
   overflow: hidden;
 }
 .rp-box-h {
@@ -13522,10 +13544,10 @@ tbody[data-rule-list] > tr.is-drag {
     padding: 0;
   }
   #rules.devcard > table > thead > tr > th:first-child {
-    border-top-left-radius: 9px;
+    border-top-left-radius: var(--r-banner);
   }
   #rules.devcard > table > thead > tr > th:last-child {
-    border-top-right-radius: 9px;
+    border-top-right-radius: var(--r-banner);
   }
   /* the last row's hairline would double the card's own bottom border */
   #rules.devcard > table > tbody > tr:last-child > td {
@@ -13584,7 +13606,7 @@ tbody[data-rule-list] td[data-label="Compliance"] > div > span {
   gap: var(--sp-10);
   padding: var(--sp-24);
   border: var(--hair-w) dashed var(--color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--r-panel);
   background: var(--color-surface);
 }
 .pol-empty h2 {
@@ -13924,7 +13946,7 @@ a.pol-tpl {
   flex-direction: column;
   overflow: hidden;
   border: var(--hair-w) solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--r-code);
 }
 .pol-diff-row {
   display: grid;
@@ -14868,7 +14890,7 @@ details.devcard > summary {
 /* Command field of the rule editor: suggestions, index box, help, fleet check (#269) */
 .cmd-sug {
   position: absolute;
-  z-index: 20;
+  z-index: var(--z-menu);
   top: calc(var(--ctl) + 22px);
   left: 0;
   width: min(520px, calc(100vw - 64px));
@@ -14994,7 +15016,7 @@ details.devcard > summary {
 .cmd-sug-f kbd {
   font: 500 10.5px var(--font-mono);
   border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   padding: 0 4px;
   margin: 0 2px;
   background: var(--color-surface);
@@ -15133,7 +15155,7 @@ details.devcard > summary {
 .stab-note {
   margin: var(--sp-10) 0 var(--sp-8);
   padding: var(--sp-8) var(--sp-12);
-  border-radius: var(--r-badge, 6px);
+  border-radius: var(--r-badge);
   background: var(--t-bg);
   color: var(--t-fg);
   font-size: 13px;
