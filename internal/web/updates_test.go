@@ -348,7 +348,7 @@ func TestTransactionRetryFlow(t *testing.T) {
 		{ID: 3, BatchID: 8, DeviceID: 2, State: model.JobSucceeded, TargetRelease: "16.1.0", CreatedAt: time.Now()},
 	}
 	_, body := e.do(t, "GET", "/transactions/7", "operator", nil)
-	for _, want := range []string{"Retry failed", `/transactions/7/retry?id=2`, "Retried in", `href="/tf/transactions/8"`, `href="/tf/transactions/9"`, "1 done · 1 failed"} {
+	for _, want := range []string{"Retry failed", `/transactions/7/retry?id=2`, "Retried in", `href="/tf/transactions/8"`, `href="/tf/transactions/9"`, "1 succeeded · 1 failed"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail page lacks %q", want)
 		}
@@ -411,7 +411,7 @@ func TestDashboardListsOneRowPerTransaction(t *testing.T) {
 	if n := strings.Count(body, `href="/tf/transactions/4"`); n != 1 {
 		t.Errorf("transaction 4 appears %d times, want one row", n)
 	}
-	for _, want := range []string{">2 done · 1 failed<", "Update to Tasmota 16.1.0", ">Completed<"} {
+	for _, want := range []string{">2 succeeded · 1 failed<", "Update to Tasmota 16.1.0", ">Succeeded<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

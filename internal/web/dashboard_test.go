@@ -247,8 +247,8 @@ func TestDashboardTransactionsCard(t *testing.T) {
 	card := between(body, `<h2>Transactions</h2>`, `</section>`)
 	for _, want := range []string{
 		`<a class="txn-card" href="/tf/transactions/5">`, `TX-0005`, "Update to Tasmota 16.1.0", ">Running<", "1 of 4 done · 1 failed · 1 in progress · 1 waiting",
-		`href="/tf/transactions/4"`, ">Completed<",
-		`href="/tf/transactions/3"`, ">1 done · 1 failed<",
+		`href="/tf/transactions/4"`, ">Succeeded<",
+		`href="/tf/transactions/3"`, ">1 succeeded · 1 failed<",
 		`href="/tf/transactions/2"`, ">Cancelled<",
 	} {
 		if !strings.Contains(card, want) {
@@ -289,7 +289,7 @@ func TestDashboardFinishedNewestTransactionIsARow(t *testing.T) {
 		t.Errorf("a finished transaction is drawn as the progress card: %s", card)
 	}
 	row := between(card, `<a class="att-row txn-row" href="/tf/transactions/2">`, `</a>`)
-	for _, want := range []string{"TX-0002", ">Completed<", `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`} {
+	for _, want := range []string{"TX-0002", ">Succeeded<", `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`} {
 		if !strings.Contains(row, want) {
 			t.Errorf("the newest transaction's row lacks %q: %s", want, card)
 		}

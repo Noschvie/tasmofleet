@@ -122,13 +122,13 @@ func TestTransactionOutcome(t *testing.T) {
 		total, done, running, queued, failed, canceled int
 		want, tone                                     string
 	}{
-		{3, 3, 0, 0, 0, 0, "Completed", "ok"},
-		{3, 2, 0, 0, 1, 0, "Partially completed (2 of 3)", "warn"},
+		{3, 3, 0, 0, 0, 0, "Succeeded", "ok"},
+		{3, 2, 0, 0, 1, 0, "Succeeded on 2 of 3", "warn"},
 		{3, 1, 1, 1, 0, 0, "Running", "info"},
 		{3, 0, 0, 0, 3, 0, "Failed", "bad"},
 		{2, 0, 0, 0, 1, 1, "Failed", "bad"},
 		{2, 0, 0, 0, 0, 2, "Cancelled", "neutral"},
-		{2, 1, 0, 0, 0, 1, "Partially completed (1 of 2)", "warn"},
+		{2, 1, 0, 0, 0, 1, "Succeeded on 1 of 2", "warn"},
 	} {
 		got, tone := txOutcome(tc.total, tc.done, tc.running, tc.queued, tc.failed, tc.canceled)
 		if got != tc.want || tone != tc.tone {

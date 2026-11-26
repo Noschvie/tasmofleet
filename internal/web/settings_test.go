@@ -682,7 +682,7 @@ func TestSettingsTabNeverQuotesTheDeviceInTheFailureLines(t *testing.T) {
 	}
 }
 
-// Why (#947): "Done" says the device took the command; the person also needs to see that it now holds the value.
+// Why (#947): "Succeeded" says the device took the command; the person also needs to see that it now holds the value.
 // The result says per setting "Verified", or "Differs" with the device's own answer, and for a secret only that it
 // was set: its value is never shown.
 func TestTheSettingsResultSaysVerifiedOrShowsTheDevicesAnswer(t *testing.T) {
@@ -693,12 +693,15 @@ func TestTheSettingsResultSaysVerifiedOrShowsTheDevicesAnswer(t *testing.T) {
 	}}
 	e := withSettings(t, fs)
 	_, body := e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "60", "FriendlyName1", "Lamp", "orig.FriendlyName1", "a", "MqttPassword", "fake-pw-947"))
-	for _, want := range []string{">Read back</th>", ">Verified<", ">Differs<", "device has <code>10</code>", ">Set<", "secret, not read back"} {
+	for _, want := range []string{">Read back</th>", ">Succeeded<", ">Verified<", ">Differs<", "device has <code>10</code>", ">Set<", "secret, not read back"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the result lacks %q", want)
 		}
 	}
 	if strings.Contains(body, "fake-pw-947") {
 		t.Fatal("the secret reached the page")
+	}
+	if strings.Contains(body, ">Done<") {
+		t.Error("a setting that took is a result, and a result is Succeeded; Done is the word of a step of a job (#1105)")
 	}
 }

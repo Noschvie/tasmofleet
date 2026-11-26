@@ -27,7 +27,7 @@ var hints = map[string]hint{
 	// an online device that nothing reaches over MQTT
 	"mqtt-down": {Title: "The device answers over HTTP, but nothing arrives over MQTT", Why: "HTTP only"},
 	// OTA job states
-	"queued":           {Title: "Queued: waiting for a free update slot."},
+	"queued":           {Title: "Waiting: no update slot is free yet."},
 	"preflight":        {Title: "Checking: reading the device and the firmware file."},
 	"backup":           {Title: "Backing up: saving the configuration first."},
 	"set_ota_url":      {Title: "Preparing: pointing the device at the firmware server."},

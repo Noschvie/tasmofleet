@@ -326,7 +326,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 		<td data-label="Last result" class="wrap s" if r.ResultTitle() != "" { title={ r.ResultTitle() } }>
 			switch r.Outcome {
 				case model.BackupOutcomeOK:
-					@ui.Badge(ui.ToneOK, "OK")
+					@ui.Badge(ui.ToneOK, "Succeeded")
 				case model.BackupOutcomeFailed:
 					@ui.Badge(ui.ToneDanger, "Failed")
 					<span class="bk-rsn" title={ r.Why.Plain() }>

@@ -82,7 +82,7 @@ func templateCardOf(j jobView, base string, names map[model.JobID]string, bk tmp
 		label string
 		tone  ui.Tone
 	}
-	queued, done := st{"Queued", ui.ToneNeutral}, st{"Done", ui.ToneOK}
+	queued, done := st{label(model.JobQueued), ui.ToneNeutral}, st{"Done", ui.ToneOK}
 	notStarted := st{"Not started", ui.ToneNeutral}
 	failed := st{"Failed", ui.ToneDanger}
 	steps := [4]st{queued, queued, queued, queued}

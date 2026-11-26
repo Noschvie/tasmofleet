@@ -16,7 +16,7 @@ export async function startUpdate(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
 }
 
-/** txnState is the state badge of the open transaction: Running, Completed, Cancelled, "1 done · 1 failed", ... */
+/** txnState is the state badge of the open transaction: Running, Succeeded, Cancelled, "1 succeeded · 1 failed", ... */
 export const txnState = (page: Page) => page.locator("#txn-state");
 
 /** quickPick chooses an entry of the new update's quick selection menu ("All that can be updated", "None", ...). */

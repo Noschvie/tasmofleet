@@ -699,7 +699,7 @@ func TestBulkPowerAsksFirstThenSwitchesReachableDevices(t *testing.T) {
 	if len(f.powers) != 2 || !strings.HasPrefix(f.powers[0], "test:operator|1|1|ON") || !strings.HasPrefix(f.powers[1], "test:operator|1|3|ON") {
 		t.Fatalf("relays 1 and 3 of device 1 (2 is on already), none of device 2: %v", f.powers)
 	}
-	for _, want := range []string{"Power on finished", "Completed", "Has never answered. Not attempted.", "was already on", "Power on finished · 1 succeeded"} {
+	for _, want := range []string{"Power on finished", "Succeeded", "Has never answered. Not attempted.", "was already on", "Power on finished · 1 succeeded"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("result page lacks %q: %s", want, body)
 		}

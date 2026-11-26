@@ -119,7 +119,7 @@ test("templates apply: preview needs the tick, the transaction applies, the tab 
   await expect(page.getByRole("heading", { name: "Apply GPIO template", level: 1 })).toBeVisible();
   const dev = page.locator(".upd-dev", { hasText: "tpl-nous-dev" });
   await expect(dev.getByText("Applied", { exact: true })).toBeVisible({ timeout: 90_000 });
-  await expect(page.locator("#txn-state")).toHaveText("Completed", { timeout: 30_000 });
+  await expect(page.locator("#txn-state")).toHaveText("Succeeded", { timeout: 30_000 });
 
   await readAll(page);
   await page.goto(app.url + "/policy/templates");
@@ -216,7 +216,7 @@ test("templates tab: a verdict that changes between two reads moves no group and
   await page.getByLabel(/I checked the changes/).check();
   await page.getByRole("button", { name: /^Back up, apply and restart 1 device/ }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+/);
-  await expect(page.locator("#txn-state")).toHaveText("Completed", { timeout: 90_000 });
+  await expect(page.locator("#txn-state")).toHaveText("Succeeded", { timeout: 90_000 });
 
   await page.goto(app.url + "/policy/templates");
   await expect(page.locator("p.agebar[aria-busy=true]")).toHaveCount(0, { timeout: 60_000 }); // the page's own read is done and swapped in

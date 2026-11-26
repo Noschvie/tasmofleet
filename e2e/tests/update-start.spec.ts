@@ -105,7 +105,7 @@ test.describe("in a browser at UTC+5:30", () => {
     await expect(page).toHaveURL(/\/transactions\/\d+$/);
     const txnUrl = page.url();
     const row = page.locator(".upd-row").filter({ hasText: "lamp-1m" });
-    await expect(row.locator(".upd-row-state")).toContainText("Planned"); // the job waits; it is not "Queued" or "Checking"
+    await expect(row.locator(".upd-row-state")).toContainText("Planned"); // the job waits; it is not "Waiting" or "Checking"
     await page.waitForTimeout(3000); // an update that was started at once would have left "Planned" by now
     await expect(row.locator(".upd-row-state")).toContainText("Planned");
 

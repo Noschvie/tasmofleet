@@ -194,7 +194,7 @@ func TestStartedOnTimeHasItsLine(t *testing.T) {
 		if !strings.Contains(text, "planned by adam for Tue, Nov 3 at 03:00") || !strings.Contains(text, "started 03:") {
 			t.Errorf("late %s: the header does not say what was planned and when it started: %s", c.late, text)
 		}
-		if _, word := txnState(t, body); word != "Completed" {
+		if _, word := txnState(t, body); word != "Succeeded" {
 			t.Errorf("late %s: badge %q: an update that ran is a normal transaction", c.late, word)
 		}
 		if !strings.Contains(text, "Started as planned (planned for 03:00") && c.late < time.Minute {

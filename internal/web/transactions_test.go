@@ -148,7 +148,7 @@ func TestRetryWaitsForTheTransactionToFinish(t *testing.T) {
 	if !strings.Contains(body, `<p class="pghead-why" id="txn-retry-why">`) {
 		t.Errorf("the reason is not the header's own line: %s", body)
 	}
-	if !strings.Contains(body, "The 1 queued device is skipped.") || !strings.Contains(body, `data-dlg-verb="Cancel remaining"`) {
+	if !strings.Contains(body, "The 1 waiting device is skipped.") || !strings.Contains(body, `data-dlg-verb="Cancel remaining"`) {
 		t.Errorf("Cancel remaining does not say what it skips: %s", body)
 	}
 }
@@ -222,11 +222,11 @@ func TestTxnWording(t *testing.T) {
 		tone                     ui.Tone
 	}{
 		{5, 3, 3, 1, 0, "Running", ui.ToneAccent},
-		{6, 0, 0, 0, 0, "Completed", ui.ToneOK},
-		{30, 0, 0, 1, 0, "30 done · 1 failed", ui.ToneDanger}, // a failure is never green
+		{6, 0, 0, 0, 0, "Succeeded", ui.ToneOK},
+		{30, 0, 0, 1, 0, "30 succeeded · 1 failed", ui.ToneDanger}, // a failure is never green
 		{0, 0, 0, 0, 4, "Cancelled", ui.ToneNeutral},
 		{0, 0, 0, 2, 0, "Failed", ui.ToneDanger},
-		{2, 0, 0, 0, 1, "2 done · 1 cancelled", ui.ToneNeutral},
+		{2, 0, 0, 0, 1, "2 succeeded · 1 cancelled", ui.ToneNeutral},
 	} {
 		got, tone := txResult(c.done, c.run, c.q, c.fail, c.canc)
 		if got != c.want || tone != c.tone {

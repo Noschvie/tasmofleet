@@ -166,7 +166,7 @@ test("a file held by a running update cannot be deleted", async ({ page }) => {
   // the batch still finishes: nothing was pulled away from the device
   await expect(async () => {
     await page.goto(app.url + "/transactions");
-    await expect(page.locator("section.upd-hist tbody tr").first()).toContainText("Completed", { timeout: 2_000 });
+    await expect(page.locator("section.upd-hist tbody tr").first()).toContainText("Succeeded", { timeout: 2_000 });
   }).toPass({ timeout: 200_000 });
 });
 
@@ -320,8 +320,8 @@ test.describe("file rows keep their columns", () => {
       await feed("up");
     }
     const rows = page.locator("#prefetch .fw-file");
-    await expect(rows.locator(".bdg", { hasText: "already cached" })).toHaveCount(1);
-    await expect(rows.locator(".bdg", { hasText: /^failed$/ })).toHaveCount(3);
+    await expect(rows.locator(".bdg", { hasText: "Already cached" })).toHaveCount(1);
+    await expect(rows.locator(".bdg", { hasText: /^Failed$/ })).toHaveCount(3);
     // the reason of each failure is a line of its row, in words
     await expect(rows.locator(".fw-file-why")).toHaveCount(3);
     await expectOneColumn(page.locator("#prefetch .fw-file-st > *"), "the states");

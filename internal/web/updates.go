@@ -1202,10 +1202,10 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 		p.SubPre, p.SubAt = "started from Policy by "+who+" on ", first.CreatedAt
 		p.SubPost = " · " + h.templateFacts(r, b.Batch) + plural(b.Total, "device") + ", one at a time"
 		p.Bar.Stopped = b.Canceled
-		p.CancelText = "The device being changed finishes its current step; the " + plural(b.Queued, "queued device") + " will not be started."
+		p.CancelText = "The device being changed finishes its current step; the " + plural(b.Queued, "waiting device") + " will not be started."
 		// A failed template is not re-run: the person checks the devices again and gets a fresh preview.
 		p.RetryN = 0
-		p.State = strings.NewReplacer("done", "applied", "cancelled", "stopped").Replace(p.State)
+		p.State = strings.NewReplacer("succeeded", "applied", "cancelled", "stopped").Replace(p.State)
 		if !b.Active && b.Failed+b.Canceled > 0 {
 			c := h.templateCheckAgain(r, b.Batch, b.Jobs)
 			p.CheckAgain = &c
@@ -1294,7 +1294,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 // cancelText is what "Cancel remaining" does, in the dialog and on its page without JavaScript.
 func cancelText(queued int) string {
 	return "Devices that are already flashing finish their update, the others stop after their current step. The " +
-		plural(queued, "queued device") + " " + map[bool]string{true: "is", false: "are"}[queued == 1] + " skipped."
+		plural(queued, "waiting device") + " " + map[bool]string{true: "is", false: "are"}[queued == 1] + " skipped."
 }
 
 // selectedJob is the device whose log is open: the one named by ?job=, else the first failed
@@ -1448,15 +1448,15 @@ type txView struct {
 func txOutcome(total, done, running, queued, failed, canceled int) (text, tone string) {
 	switch {
 	case running+queued > 0:
-		return "Running", "info"
+		return label("running"), "info"
 	case done == total:
-		return "Completed", "ok"
+		return label(model.JobSucceeded), "ok"
 	case done > 0:
-		return fmt.Sprintf("Partially completed (%d of %d)", done, total), "warn"
+		return fmt.Sprintf("%s on %d of %d", label(model.JobSucceeded), done, total), "warn"
 	case canceled == total:
-		return "Cancelled", "neutral"
+		return label(model.JobCancelled), "neutral"
 	}
-	return "Failed", "bad"
+	return label(model.JobFailed), "bad"
 }
 
 // groupTransactions folds jobs into one row per transaction, in the order the

@@ -23,7 +23,7 @@ var labels = map[string]string{
 	// relay states
 	"ON": "On", "OFF": "Off",
 	// OTA job states
-	"queued": "Queued", "preflight": "Checking", "backup": "Backing up",
+	"queued": "Waiting", "running": "Running", "skipped": "Skipped", "preflight": "Checking", "backup": "Backing up",
 	"set_ota_url": "Preparing", "upgrade_issued": "Flashing", "await_reboot": "Rebooting", "safeboot_switch": "Restarting into safeboot", "safeboot_recover": "Switching back",
 	"applying": "Applying", "apply": "Sending the commands", "done": "Done", "verify": "Verifying", "restore_ota_url": "Cleaning up",
 	"succeeded": "Succeeded", "failed": "Failed", "cancelled": "Cancelled",
@@ -55,6 +55,22 @@ func label(v any) string {
 		return l
 	}
 	return humanLabel(s)
+}
+
+// resultCounts is the result of a transaction whose devices ended differently: the counts in the result
+// words, "30 succeeded · 1 failed". A word with no device is left out. The words come from labels, so the
+// counts and the badge of a single device name an outcome the same way.
+func resultCounts(succeeded, failed, cancelled int) string {
+	var parts []string
+	for _, p := range []struct {
+		n     int
+		state model.JobState
+	}{{succeeded, model.JobSucceeded}, {failed, model.JobFailed}, {cancelled, model.JobCancelled}} {
+		if p.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", p.n, strings.ToLower(label(p.state))))
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 // tones maps values to the status tone the badge is drawn in: ok, warn, bad,

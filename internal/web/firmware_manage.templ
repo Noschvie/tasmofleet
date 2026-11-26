@@ -156,16 +156,18 @@ templ fwPrefetchStatus(pv prefetchView) {
 					switch it.State {
 						case firmware.PrefetchCached:
 							if it.Already {
-								@ui.Badge(ui.ToneOK, "already cached")
+								@ui.Badge(ui.ToneOK, "Already cached")
 							} else {
-								@ui.Badge(ui.ToneOK, "cached")
+								@ui.Badge(ui.ToneOK, "Cached")
 							}
 						case firmware.PrefetchFailed:
-							@ui.Badge(ui.ToneDanger, "failed")
+							@ui.Badge(ui.ToneDanger, "Failed")
 						case firmware.PrefetchFetching:
-							@ui.Badge(ui.ToneAccent, "fetching")
+							@ui.Badge(ui.ToneAccent, "Fetching")
+						case firmware.PrefetchPending:
+							@ui.Badge(ui.ToneNeutral, label("waiting"))
 						default:
-							@ui.Badge(ui.ToneNeutral, it.State)
+							@ui.Badge(ui.ToneNeutral, label(it.State))
 					}
 				</span>
 				if it.State == firmware.PrefetchFailed {

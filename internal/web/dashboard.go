@@ -425,33 +425,26 @@ func dashTxnCard(base string, now time.Time, t txView) ui.TxnData {
 		Started: at, StartedText: ui.StampDayText(now, at)}
 }
 
-// dashResult is a transaction's result in the prototype's words: Completed, Cancelled, Failed,
-// or the counts when it ended mixed ("30 done · 1 failed").
+// dashResult is a transaction's result in the design system's words: Succeeded, Cancelled, Failed,
+// or the counts when it ended mixed ("30 succeeded · 1 failed").
 func dashResult(t txView) (string, ui.Tone) {
 	switch {
 	case t.Running+t.Queued > 0:
-		return "Running", ui.ToneAccent
+		return label("running"), ui.ToneAccent
 	case t.Done == t.Total:
-		return "Completed", ui.ToneOK
+		return label(model.JobSucceeded), ui.ToneOK
 	case t.NotStarted > 0 && t.NotStarted+t.Early == t.Total:
 		return "Not started", ui.ToneWarn
 	case t.Canceled == t.Total:
-		return "Cancelled", ui.ToneNeutral
+		return label(model.JobCancelled), ui.ToneNeutral
 	case t.Done == 0 && t.Canceled == 0:
-		return "Failed", ui.ToneDanger
-	}
-	parts := []string{fmt.Sprintf("%d done", t.Done)}
-	if t.Failed > 0 {
-		parts = append(parts, fmt.Sprintf("%d failed", t.Failed))
-	}
-	if t.Canceled > 0 {
-		parts = append(parts, fmt.Sprintf("%d cancelled", t.Canceled))
+		return label(model.JobFailed), ui.ToneDanger
 	}
 	tone := ui.ToneWarn
 	if t.Failed > 0 {
 		tone = ui.ToneDanger
 	}
-	return strings.Join(parts, " · "), tone
+	return resultCounts(t.Done, t.Failed, t.Canceled), tone
 }
 
 func dashTxnRow(base string, now time.Time, t txView) ui.TxnRowData {

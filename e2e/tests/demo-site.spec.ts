@@ -117,7 +117,7 @@ test("update animation", async ({ browser }) => {
         .getByRole("button", { name: "Start update", exact: true })
         .click();
       await expect(page).toHaveURL(/\/transactions\/\d+$/);
-      await expect(txnState(page)).toHaveText("Completed", { timeout: 300_000 });
+      await expect(txnState(page)).toHaveText("Succeeded", { timeout: 300_000 });
       await page.waitForTimeout(pace.ending);
     });
   } finally {
@@ -136,7 +136,7 @@ test("tour animation", async ({ browser }) => {
   const stack = await startVisualStack("fleet", browser, true);
   try {
     // Off camera: two backups through the device list's bulk bar (the Backups tab then has a list to show).
-    // Each run is waited for to Completed, so the second one cannot overlap the first.
+    // Each run is waited for to Succeeded, so the second one cannot overlap the first.
     const setup = await browser.newContext({ extraHTTPHeaders: pageAdmin, viewport: { width: 1280, height: 860 } });
     const prep = await setup.newPage();
     await prep.goto(stack.app.url + "/devices");
@@ -188,7 +188,7 @@ test("tour animation", async ({ browser }) => {
     const done = await browser.newContext({ extraHTTPHeaders: pageAdmin });
     const check = await done.newPage();
     await check.goto(stack.app.url + txn);
-    await expect(txnState(check)).toHaveText("Completed", { timeout: 300_000 });
+    await expect(txnState(check)).toHaveText("Succeeded", { timeout: 300_000 });
     await done.close();
   } finally {
     await stack.stop();

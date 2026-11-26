@@ -625,7 +625,7 @@ func TestBadgeOfKeepsTheClassesAPageSelectsOn(t *testing.T) {
 	}{
 		{"tone and label", BadgeData{Tone: ToneOK, Label: "Cached"}, `<span class="bdg t-ok">Cached</span>`},
 		{"class and title", BadgeData{Tone: ToneWarn, Label: "3 off policy", Class: "dv-devs", Title: "Differs from the policy"}, `<span class="bdg t-warn dv-devs" title="Differs from the policy">3 off policy</span>`},
-		{"large with an id", BadgeData{Tone: ToneNeutral, Label: "Completed", Large: true, ID: "txn-state"}, `<span id="txn-state" class="bdg t-neutral bdg-lg">Completed</span>`},
+		{"large with an id", BadgeData{Tone: ToneNeutral, Label: "Succeeded", Large: true, ID: "txn-state"}, `<span id="txn-state" class="bdg t-neutral bdg-lg">Succeeded</span>`},
 		{"large and class", BadgeData{Tone: ToneOK, Label: "Done", Large: true, Class: "bk-state"}, `<span class="bdg t-ok bdg-lg bk-state">Done</span>`},
 		{"link", BadgeData{Tone: ToneAccent, Label: "Fetching…", Class: "fw-fetching", Href: "/firmware/prefetch/7"}, `<a class="bdg t-accent fw-fetching" href="/firmware/prefetch/7">Fetching…</a>`},
 		{"unknown tone", BadgeData{Tone: "t-bogus", Label: "x"}, `<span class="bdg t-neutral">x</span>`},

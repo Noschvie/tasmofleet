@@ -1641,7 +1641,7 @@ func fleetRowView(v fleetView, r fleetRow) templ.Component {
 		}
 		switch r.Outcome {
 		case model.BackupOutcomeOK:
-			templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "OK").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "Succeeded").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

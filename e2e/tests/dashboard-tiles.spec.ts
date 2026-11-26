@@ -147,7 +147,7 @@ test("a finished transaction is a compact row with a time on the dashboard, not 
   await expect(page).toHaveURL(/\/devices\/bulk\/result\/\d+/);
   const batch = page.url().match(/bulk\/result\/(\d+)/)![1];
   await page.goto(`${app.url}/transactions/${batch}`);
-  await expect(page.locator("#txn-state")).toHaveText("Completed", { timeout: 60_000 });
+  await expect(page.locator("#txn-state")).toHaveText("Succeeded", { timeout: 60_000 });
 
   await page.goto(app.url + "/");
   const mine = page.locator(`a[href$="/transactions/${batch}"]`);

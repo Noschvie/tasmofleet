@@ -196,7 +196,7 @@ test("a cancelled transaction can be retried; both transactions link to each oth
   await expect(page.getByText(/Retried in/)).toBeVisible();
   await expect(page.getByRole("link", { name: /TX-\d+/ }).first()).toBeVisible();
   await page.goto(retry);
-  await expect(txnState(page)).toHaveText("Completed", { timeout: 200_000 });
+  await expect(txnState(page)).toHaveText("Succeeded", { timeout: 200_000 });
 });
 
 test("address links open the device page without credentials", { tag: "@core" }, async ({ page }) => {
@@ -342,7 +342,7 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
 
   // The log of a device is persisted with the job: timestamped lines, still there after a reload.
   await page.reload();
-  await expect(txnState(page)).toHaveText("Completed");
+  await expect(txnState(page)).toHaveText("Succeeded");
   await expect(page.locator("#log-lines .upd-log-at").first()).toHaveText(/^\d\d:\d\d:\d\d$/);
 
   // the staged flow changes OtaUrl twice; it must be back where it was

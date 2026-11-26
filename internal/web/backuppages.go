@@ -278,7 +278,7 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, j := range jobs {
 			p.Jobs = append(p.Jobs, restoreRow{Href: fmt.Sprintf("%s/restores/%d", v.Base, j.ID), Actor: h.pr.Text(j.Actor),
-				State: label(j.State), Detail: sentence(j.Detail), Started: j.CreatedAt, Tone: restoreTone(j.State)})
+				State: restoreLabel(j.State), Detail: sentence(j.Detail), Started: j.CreatedAt, Tone: restoreTone(j.State)})
 		}
 	}
 	v.Flash = backupsNotice(r)
@@ -369,6 +369,15 @@ func backupsNotice(r *http.Request) string {
 		return "Backup released: the retention may prune it again."
 	}
 	return bulkNotice(q)
+}
+
+// restoreLabel is the badge word of a restore job state: a finished restore is Succeeded, as every other result
+// (the shared "done" word is the step of an update job).
+func restoreLabel(state string) string {
+	if state == store.RestoreDone {
+		return label(model.JobSucceeded)
+	}
+	return label(state)
 }
 
 // restoreTone is the badge tone of a restore job state.

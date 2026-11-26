@@ -328,6 +328,7 @@ type bulkResultView struct {
 	Took, By            string
 	Batch               model.BatchID // 0: no transaction (power is switched in the request)
 	OK, Failed, Skipped int
+	Cancelled           int // counted in Failed too (the tile), named apart in the header
 	Rows                []bulkResultRow
 	CanRetry            bool
 	Toast               string // power: the toast of the finished run
@@ -395,10 +396,14 @@ func (v bulkResultView) State() (ui.Tone, string) {
 	switch {
 	case v.Running:
 		return ui.ToneAccent, "Running"
+	case v.Failed > 0 && v.OK == 0 && v.Cancelled == 0:
+		return ui.ToneDanger, label(model.JobFailed)
+	case v.Failed > 0 && v.OK == 0 && v.Cancelled == v.Failed:
+		return ui.ToneDanger, label(model.JobCancelled)
 	case v.Failed > 0:
-		return ui.ToneDanger, fmt.Sprintf("Finished · %d failed", v.Failed)
+		return ui.ToneDanger, resultCounts(v.OK, v.Failed-v.Cancelled, v.Cancelled)
 	}
-	return ui.ToneOK, "Completed"
+	return ui.ToneOK, label(model.JobSucceeded)
 }
 
 // ToastTone is the tone of the finished run's toast.
@@ -562,8 +567,9 @@ func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) b
 	case model.JobCancelled:
 		row.Label, row.Tone, row.Group = "Cancelled", ui.ToneNeutral, bulkGroupFailed // counted in the Failed tile
 		rv.Failed++
+		rv.Cancelled++
 	case model.JobQueued:
-		row.Label, row.Tone = "Queued", ui.ToneNeutral
+		row.Label, row.Tone = label(model.JobQueued), ui.ToneNeutral
 	case model.JobScheduled:
 		row.Label, row.Tone = "Planned", ui.ToneNeutral // waits for its start (#604)
 	default:

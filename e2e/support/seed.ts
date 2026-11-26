@@ -50,13 +50,13 @@ export async function seedRealisticData(page: Page, app: App, env: Devenv): Prom
   await page.getByRole("link", { name: "Retry failed" }).click();
   await page.getByRole("button", { name: /Start retry of 1 device/ }).click();
   await expect(page.getByText(/Retry of/)).toBeVisible();
-  await expect(txnState(page)).toHaveText("Completed", { timeout: 200_000 });
+  await expect(txnState(page)).toHaveText("Succeeded", { timeout: 200_000 });
 
   // A second transaction with a long unbreakable device name next to the
   // retried one: long names are what stretch the transactions list.
   await pickForUpdate(page, app.url, ["workshop-ceiling-spotlight-controller-north-wing", "lamp-1m"]);
   await startUpdate(page);
-  await expect(txnState(page)).toHaveText("Completed", { timeout: 200_000 });
+  await expect(txnState(page)).toHaveText("Succeeded", { timeout: 200_000 });
 
   // Names as long as real ones, so the Name column is judged on real lengths.
   for (const [from, to] of Object.entries(renamedDevices)) await renameDevice(page, app, from, to);
@@ -531,7 +531,7 @@ async function seedFinishedUpdate(page: Page, app: App, fx: DesignFixture): Prom
   await expect(page.getByText(/State: finished\b/)).toBeVisible({ timeout: 180_000 });
   await pickForUpdate(page, app.url, [outdated.name]);
   await startUpdate(page);
-  await expect(txnState(page)).toHaveText("Completed", { timeout: 200_000 });
+  await expect(txnState(page)).toHaveText("Succeeded", { timeout: 200_000 });
 }
 
 /**

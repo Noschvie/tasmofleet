@@ -259,12 +259,12 @@ templ txnBody(p txnPage) {
 							<span><b>{ strconv.Itoa(p.Running) }</b> in progress</span>
 						}
 						if p.Queued > 0 {
-							<span><b>{ strconv.Itoa(p.Queued) }</b> queued</span>
+							<span><b>{ strconv.Itoa(p.Queued) }</b> waiting</span>
 						}
 					} else {
 						<span><b>{ strconv.Itoa(p.Done) }</b> done</span>
 						<span><b>{ strconv.Itoa(p.Running) }</b> in progress</span>
-						<span><b>{ strconv.Itoa(p.Queued) }</b> queued</span>
+						<span><b>{ strconv.Itoa(p.Queued) }</b> waiting</span>
 						<span><b class="upd-bad">{ strconv.Itoa(p.Failed) }</b> failed</span>
 					}
 					if p.Planned > 0 {

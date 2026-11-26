@@ -446,7 +446,7 @@ func TestBackupsTabHasNoteColumnAndRestoreBadge(t *testing.T) {
 	bk.list[0].Note = "replacement hardware, before replace"
 	rs.jobs = map[store.RestoreID]restore.Job{1: {ID: 1, DeviceID: 1, State: store.RestoreDone, Actor: "admin", CreatedAt: time.Now()}}
 	_, body := e.do(t, "GET", "/devices/1/backups", "admin", nil)
-	for _, want := range []string{`<div class="bk-detail">replacement hardware, before replace · Tasmota 15.6.0 · 4.0 KiB</div>`, `<span class="bdg t-ok">Done</span>`} {
+	for _, want := range []string{`<div class="bk-detail">replacement hardware, before replace · Tasmota 15.6.0 · 4.0 KiB</div>`, `<span class="bdg t-ok">Succeeded</span>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q:\n%s", want, body)
 		}

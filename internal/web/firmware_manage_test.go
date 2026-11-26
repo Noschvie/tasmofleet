@@ -359,7 +359,7 @@ func TestFirmwarePrefetchShowsFailuresPerFile(t *testing.T) {
 	body := waitFinished(t, e, strings.TrimPrefix(r.Header.Get("Location"), "/tf"))
 	// the badge is short, so the state column of the row stays one width; the reason is visible text under the row, not
 	// a title a phone never shows (#1073, #1094)
-	if !strings.Contains(body, `>failed</span>`) || !strings.Contains(body, `<span class="fw-file-why">firmware: SHA-256 differs between sources</span>`) || !strings.Contains(body, "3 of 4 files cached, 1 failed") {
+	if !strings.Contains(body, `>Failed</span>`) || !strings.Contains(body, `<span class="fw-file-why">firmware: SHA-256 differs between sources</span>`) || !strings.Contains(body, "3 of 4 files cached, 1 failed") {
 		t.Errorf("page:\n%s", body)
 	}
 }

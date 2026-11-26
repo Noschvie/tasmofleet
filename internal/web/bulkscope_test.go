@@ -57,7 +57,7 @@ func TestBulkResultCountsAndListsEveryDevice(t *testing.T) {
 		t.Fatalf("%d %s", resp.StatusCode, body)
 	}
 	for _, want := range []string{
-		"Command finished", "Finished · 1 failed", "› Rule1 ***", "Retry failed (1)", `href="/tf/transactions/7/retry"`,
+		"Command finished", ">Failed<", "› Rule1 ***", "Retry failed (1)", `href="/tf/transactions/7/retry"`,
 		">kitchen<", ">attic<", "Offline. Not attempted.", `<div class="bk-tile-v">1</div>`,
 	} {
 		if !strings.Contains(body, want) {
@@ -97,7 +97,7 @@ func TestBulkResultFollowsARunningTransaction(t *testing.T) {
 	}
 	e = resultEnv(t, model.Job{ID: 1, BatchID: 9, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now})
 	_, body = e.do(t, "GET", "/devices/bulk/result/9", "admin", nil)
-	if !strings.Contains(body, "Backups finished") || !strings.Contains(body, "Completed") || strings.Contains(body, "Retry failed") {
+	if !strings.Contains(body, "Backups finished") || !strings.Contains(body, "Succeeded") || strings.Contains(body, "Retry failed") {
 		t.Errorf("backup result: %s", body)
 	}
 }

@@ -49,7 +49,7 @@ test("settings form: operators are refused, admins see named SetOptions and appl
   await expect(page.getByText("Applied immediately and saved to the device once.")).toBeVisible();
   await page.getByRole("button", { name: "Save to device" }).click();
   await expect(page.getByRole("heading", { name: "Result" })).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: "TelePeriod 60" })).toContainText(/done/i);
+  await expect(page.getByRole("row").filter({ hasText: "TelePeriod 60" })).toContainText(/succeeded/i);
   // #947: the value is read back from the device after the write
   await expect(page.getByRole("row").filter({ hasText: "TelePeriod 60" })).toContainText("Verified");
 

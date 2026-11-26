@@ -706,28 +706,33 @@ func fwPrefetchStatus(pv prefetchView) templ.Component {
 				switch it.State {
 				case firmware.PrefetchCached:
 					if it.Already {
-						templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "already cached").Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "Already cached").Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					} else {
-						templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "cached").Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.Badge(ui.ToneOK, "Cached").Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
 					}
 				case firmware.PrefetchFailed:
-					templ_7745c5c3_Err = ui.Badge(ui.ToneDanger, "failed").Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.Badge(ui.ToneDanger, "Failed").Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				case firmware.PrefetchFetching:
-					templ_7745c5c3_Err = ui.Badge(ui.ToneAccent, "fetching").Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.Badge(ui.ToneAccent, "Fetching").Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				case firmware.PrefetchPending:
+					templ_7745c5c3_Err = ui.Badge(ui.ToneNeutral, label("waiting")).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				default:
-					templ_7745c5c3_Err = ui.Badge(ui.ToneNeutral, it.State).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.Badge(ui.ToneNeutral, label(it.State)).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -759,7 +764,7 @@ func fwPrefetchStatus(pv prefetchView) templ.Component {
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(fwURL(pv.Base, "release", pv.Run.Release))).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware_manage.templ`, Line: 177, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware_manage.templ`, Line: 179, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 				if templ_7745c5c3_Err != nil {

@@ -332,7 +332,7 @@ func (h *handler) auditOptions(p *auditPage) {
 	for _, w := range p.Windows {
 		p.SinceOpts = append(p.SinceOpts, opt(w.Value, capitalize(w.Label), p.Since))
 	}
-	p.ResultOpts = []ui.Option{opt("", "Any result", p.Result), opt("ok", "OK", p.Result), opt("error", "Refused or failed", p.Result)}
+	p.ResultOpts = []ui.Option{opt("", "Any result", p.Result), opt("ok", "Succeeded", p.Result), opt("error", "Refused or failed", p.Result)}
 }
 
 // auditKeptDays is the audit retention in whole days; 0 when the settings are not available.

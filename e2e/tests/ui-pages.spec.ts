@@ -234,7 +234,7 @@ for (const m of modes) {
     await look("bulk-run-done");
     // the transaction page keeps every device's log
     await page.goto(page.url().replace(/\/devices\/bulk\/result\/(\d+).*$/, "/transactions/$1"));
-    await expect(page.locator("#txn-state")).toHaveText("Completed", { timeout: 60_000 });
+    await expect(page.locator("#txn-state")).toHaveText("Succeeded", { timeout: 60_000 });
     await expect.poll(() => page.locator("#log-lines").evaluate((e) => Math.max(...[...e.querySelectorAll(".upd-log-t")].map((l) => (l.textContent ?? "").length))), { timeout: 30_000 }).toBeGreaterThan(150);
     await look("bulk-run-transaction");
     // a run that failed: the device with a web password rejects the command (a refused login proves nothing ran,
@@ -247,7 +247,7 @@ for (const m of modes) {
     await page.getByRole("button", { name: "Send to 1 device" }).click();
     await expect(page.getByRole("heading", { name: "Send Json *** to 1 device?" })).toBeVisible();
     await page.getByRole("button", { name: "Send to 1 device" }).click();
-    await expect(page.getByText("Finished · 1 failed", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".bk-state").getByText("Failed", { exact: true })).toBeVisible({ timeout: 60_000 });
     await look("bulk-run-failed");
     await page.goto(app.url + "/firmware");
     await look("firmware");

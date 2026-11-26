@@ -56,33 +56,24 @@ func policySettings(commands string) string {
 	return strings.Join(out, ", ")
 }
 
-// txResult is the result badge of a transaction: Running, Completed, Cancelled, Failed, or what
-// came of the devices when they differ ("30 done · 1 failed").
+// txResult is the result badge of a transaction: Running, Succeeded, Cancelled, Failed, or what
+// came of the devices when they differ ("30 succeeded · 1 failed").
 func txResult(done, running, queued, failed, canceled int) (string, ui.Tone) {
 	total := done + running + queued + failed + canceled
 	switch {
 	case running+queued > 0:
-		return "Running", ui.ToneAccent
+		return label("running"), ui.ToneAccent
 	case done == total:
-		return "Completed", ui.ToneOK
+		return label(model.JobSucceeded), ui.ToneOK
 	case canceled == total:
-		return "Cancelled", ui.ToneNeutral
+		return label(model.JobCancelled), ui.ToneNeutral
 	case failed == total:
-		return "Failed", ui.ToneDanger
-	}
-	var parts []string
-	for _, p := range []struct {
-		n    int
-		word string
-	}{{done, "done"}, {failed, "failed"}, {canceled, "cancelled"}} {
-		if p.n > 0 {
-			parts = append(parts, strconv.Itoa(p.n)+" "+p.word)
-		}
+		return label(model.JobFailed), ui.ToneDanger
 	}
 	if failed > 0 {
-		return strings.Join(parts, " · "), ui.ToneDanger
+		return resultCounts(done, failed, canceled), ui.ToneDanger
 	}
-	return strings.Join(parts, " · "), ui.ToneNeutral
+	return resultCounts(done, failed, canceled), ui.ToneNeutral
 }
 
 // jobBadge is the short state of one device of a transaction, the word of its badge: what the
@@ -96,7 +87,7 @@ func jobBadge(j model.Job) (string, ui.Tone) {
 	case model.JobScheduled:
 		return "Planned", ui.ToneNeutral // waits for its start time (#603), not queued for a slot; the transaction as a whole reads "Scheduled"
 	case model.JobQueued:
-		return "Queued", ui.ToneNeutral
+		return label(model.JobQueued), ui.ToneNeutral
 	case model.JobPreflight:
 		return "Checking", ui.ToneAccent
 	case model.JobBackup:
@@ -140,7 +131,7 @@ func changeBadge(s model.JobState) (string, ui.Tone) {
 	case model.JobCancelled:
 		return "Cancelled", ui.ToneNeutral
 	case model.JobQueued:
-		return "Queued", ui.ToneNeutral
+		return label(model.JobQueued), ui.ToneNeutral
 	}
 	return "Applying", ui.ToneAccent
 }

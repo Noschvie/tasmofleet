@@ -113,7 +113,7 @@ async function openTxnLog(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Send to 2 devices" }).click();
   await expect(page).toHaveURL(/\/devices\/bulk\/result\/\d+/);
   await page.goto(page.url().replace(/\/devices\/bulk\/result\/(\d+).*$/, "/transactions/$1")); // the transaction page keeps the logs
-  await expect(txnState(page)).toHaveText("Completed", { timeout: 60_000 });
+  await expect(txnState(page)).toHaveText("Succeeded", { timeout: 60_000 });
 
   const second = page.locator(".upd-row").nth(1);
   const name = (await second.locator(".upd-row-name").innerText()).trim();
