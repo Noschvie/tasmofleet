@@ -85,20 +85,20 @@ for (const width of [320, 375, 430, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       const href = await deviceHref(page, "esp32-dimmer");
       await page.goto(app.url + href);
-      await expect(page.locator(".dev-tile").first()).toBeVisible();
-      await expect(page.locator(".dev-tile")).toHaveCount(4); // the phone layout with a half-width Reachability tile
+      await expect(page.locator(".itile").first()).toBeVisible();
+      await expect(page.locator(".itile")).toHaveCount(4); // the phone layout with a half-width Reachability tile
       // freeze the live refresh (it would put the real wording back) and show the wording under test
       await page.evaluate(([v, s]) => {
         document.querySelector("#devlive")?.removeAttribute("hx-trigger");
-        document.querySelector("[data-tile=reach] .dev-tile-v")!.textContent = v;
-        document.querySelector("[data-tile=reach] .dev-tile-s")!.textContent = s;
+        document.querySelector("[data-tile=reach] .itile-v")!.textContent = v;
+        document.querySelector("[data-tile=reach] .itile-s")!.textContent = s;
       }, [value, sub]);
       await page.evaluate(() => document.fonts.ready);
       const bad = await page.evaluate(() => {
         const out: string[] = [];
-        for (const tile of document.querySelectorAll(".dev-tile")) {
+        for (const tile of document.querySelectorAll(".itile")) {
           const t = tile.getBoundingClientRect();
-          for (const el of tile.querySelectorAll(".dev-tile-l, .dev-tile-v, .dev-tile-s")) {
+          for (const el of tile.querySelectorAll(".itile-l, .itile-v, .itile-s")) {
             const range = document.createRange();
             range.selectNodeContents(el);
             for (const r of range.getClientRects()) {

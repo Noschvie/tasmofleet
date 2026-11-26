@@ -284,22 +284,28 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 		rank := -1
 		switch shownState(r) {
 		case model.HealthOffline:
-			rank, it.Tone, it.Text = 0, ui.ToneDanger, "Offline"
+			// the badge says Offline, so the text only says since when
+			rank = 0
 			if seen := lastContact(r.Device, r.Health); !seen.IsZero() {
-				it.Text += " · last seen " + agoWords(now, seen)
+				it.Text = "Last seen " + agoWords(now, seen)
 			}
 		case model.HealthUnknown:
-			rank, it.Tone, it.Text = 1, ui.ToneNeutral, "Has not answered since it was added"
+			rank, it.Text = 1, "Has not answered since it was added"
 		case model.HealthAuthFailed:
-			rank, it.Tone, it.Text = 2, ui.ToneDanger, "Refuses the stored web login"
+			rank, it.Text = 2, "Refuses the stored web login"
 		case model.HealthStale:
-			rank, it.Tone = 3, ui.ToneWarn
+			rank = 3
 			it.Text = "No message since " + agoWords(now, r.Health.LastSeen)
 			if ch := channelsOf(now, window, r.Health); len(ch) == 2 && ch[0].Tone == "bad" && ch[1].Tone == "ok" {
 				it.Text = "MQTT unreachable · HTTP works"
 			}
 		case model.HealthOnline:
 			// answers: only a policy deviation can put it on the list (below)
+		}
+		if rank >= 0 {
+			// the colour of a connection problem is the badge's, from the one state table (#1097)
+			b := statusBadgeOf(shownState(r), "")
+			it.Status = &b
 		}
 		if sp := stabProblem(r.Stab); rank < 0 && sp != nil {
 			rank, it.Tone, it.Text = 4, ui.ToneDanger, stabAttention(*sp)

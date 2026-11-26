@@ -111,6 +111,15 @@ func (t Tone) class() string {
 	return "t-neutral"
 }
 
+// classOrNone is the tone's class, or no class for no tone at all: a value that carries no state keeps the text colour,
+// where class() would draw it neutral.
+func (t Tone) classOrNone() string {
+	if t == "" {
+		return ""
+	}
+	return t.class()
+}
+
 // Btn is a button or a link that looks like one. Kind is "" (default), "primary", "danger"
 // (outlined), "danger-solid", "danger-link" (text in the danger colour: a row's Delete), "ghost" or "link" (text
 // only). Tall is the large size of a sign-in or start button. With Href it is a link (it only
@@ -242,6 +251,19 @@ func (b BadgeData) classes() string {
 		c += " " + b.Class
 	}
 	return c
+}
+
+// StatusBadgeData is the connection status of a device (#1097): a tinted badge with a dot and the word, the one look
+// of Online, Offline, Stale, Unknown and Auth failed on the device list, its phone cards, the device header and the
+// dashboard's attention list. State is the machine word (data-state): the list's script reads it to switch the row's
+// actions, so it is the health state itself and never the label. Tone and Label are what the page decided; the
+// component has no state table of its own, so the colour and the word cannot drift apart between pages. Title is the
+// hint on hover. Everything is text, never markup, and the output is deterministic (live.js memoises swapped fragments).
+type StatusBadgeData struct {
+	State string
+	Tone  Tone
+	Label string
+	Title string
 }
 
 // ChipData is a chip (#1095): a pill that filters or picks. It has three shapes, chosen by which field is set:
@@ -582,10 +604,44 @@ type AttProposal struct {
 	Version                        string
 }
 
-// AttItem is a "Needs attention" device: a dot, the name and the reason, a link to it.
+// AttItem is a "Needs attention" entry: the name and the reason, a link to it. A device whose connection is the
+// reason carries Status, its status badge, and its colour is the badge's; an entry that is not a connection state (a
+// weak signal, a policy deviation, the broker's ACL) has no Status and keeps the dot in Tone.
 type AttItem struct {
 	Tone             Tone
 	Name, Text, Href string
+	Status           *StatusBadgeData
+}
+
+// InfoTileData is one info tile (#1097): a label, a value, a hint, and now and then a bar or a button. It is no link,
+// unlike StatTile, and it describes one thing (a device, a rule), where a stat tile counts the fleet. Key is the
+// tile's name (data-tile), which the live refresh and the tests find it by. Word says the value is a word ("MQTT ·
+// HTTP", "Ethernet"): 600 18px; a number ("-70 dBm", "12 / 14") is --fs-stat. A word that is a state takes Tone, the
+// colour of its text variant. Note is a component beside the label ("Last reported"); the tile's children (a form
+// with one small button) follow the hint. The hint is Hint, or HintPrefix and the instant HintAt (HintAtText is its
+// fallback text, time.js shows it in the browser's zone like a day stamp). Everything else is text, never markup.
+type InfoTileData struct {
+	Key, Label, Value, Hint string
+	Tone                    Tone
+	Word                    bool
+	Mask                    bool // a reading the pixel comparison cannot reproduce: data-visual-mask on the value and the bar
+	Bar                     int  // a signal quality 0..100; 0 draws no bar
+	BarTone                 Tone
+	HintPrefix              string
+	HintAt                  time.Time
+	HintAtText              string
+	Note                    templ.Component
+}
+
+func (t InfoTileData) valueClass() string {
+	c := "itile-v"
+	if t.Word {
+		c += " itile-word"
+	}
+	if tc := t.Tone.classOrNone(); tc != "" {
+		c += " " + tc
+	}
+	return c
 }
 
 // TxnData is a transaction card: id, title, state badge, the three-colour progress and a summary.

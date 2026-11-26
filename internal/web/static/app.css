@@ -72,6 +72,7 @@
   --fs-small: 12px; /* hints, field help, table headers */
   --fs-badge: 11.5px; /* badges, counters, pills */
   --fs-stat: 28px; /* stat tile number: 600 28px/1, tabular (measured in WP F4) */
+  --fs-word: 18px; /* info tile value that is a word ("MQTT · HTTP"): 600 18px (#1097) */
   --lh-tight: 1.15; /* @kind other */
   --lh-body: 1.45; /* @kind other */
   --grid-cols: 12; /* @kind other */
@@ -5484,6 +5485,11 @@ a.att-row:hover {
 .att-item .sdot-dot {
   margin-top: 6px;
 }
+/* a connection status is the badge at the row's end, after the text (#1097) */
+.att-item .dv-st {
+  flex: none;
+  align-self: flex-start;
+}
 .att-text {
   flex: 1 1 180px;
   min-width: 0;
@@ -8245,23 +8251,6 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
-.devhd-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 var(--sp-8);
-  border-radius: 5px;
-  font: 500 12px var(--font-sans);
-  background: var(--t-bg);
-  color: var(--t-fg);
-}
-.devhd-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--t);
-}
 .devhd-meta {
   display: flex;
   flex-wrap: wrap;
@@ -8396,29 +8385,22 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 }
 /* one row, equal width; a tile that does not apply is not built, so the row has no holes. Three
    across between phone and desktop, two on a phone */
-.dev-tiles {
+.itiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--sp-10);
 }
 @media (max-width: 44.99rem) {
-  .dev-tiles {
+  .itiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  /* "MQTT · HTTP" must fit a half-width tile at 320 px (#420): the smaller size keeps it on one line,
-     and it may wrap at a space (no nowrap) rather than run past the tile edge when text is larger.
-     A lone last tile takes the whole row */
-  .dev-tile-v {
-    font-size: 20px;
-  }
-  .dev-tile[data-tile="reach"] .dev-tile-v {
-    font-size: 17px;
-  }
-  .dev-tile:last-child:nth-child(odd) {
+  /* "MQTT · HTTP" must fit a half-width tile at 320 px (#420): a word may wrap at a space (no nowrap) rather than run
+     past the tile edge when text is larger. A lone last tile takes the whole row */
+  .itile:last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
 }
-.dev-tile {
+.itile {
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
@@ -8428,7 +8410,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-card);
 }
-.dev-tile-l {
+.itile-l {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -8440,7 +8422,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .devcard-head .dev-stale {
   margin-right: auto;
 }
-.dev-tile-v {
+.itile-v {
   font: 600 var(--fs-stat) / 1 var(--font-sans);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -8448,25 +8430,31 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   color: var(--t-fg, var(--color-text));
   overflow-wrap: anywhere;
 }
-.dev-tile-s {
+/* a word is smaller than a number and sets in the line height of text, so "Login refused" wraps without touching itself */
+.itile-word {
+  font-size: var(--fs-word);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.itile-s {
   font-size: 12px;
   color: var(--color-text-3);
   overflow-wrap: anywhere;
 }
-.dev-tile-fix {
+.itile-act {
   align-self: flex-start;
   margin-top: var(--sp-4);
 }
-.dev-bar {
+.itile-bar {
   display: block;
   width: 100%;
   height: 6px;
   border-radius: 3px;
 }
-.dev-bar-track {
+.itile-bar-track {
   fill: var(--color-surface-3);
 }
-.dev-bar-fill {
+.itile-bar-fill {
   fill: var(--t, var(--color-warn));
 }
 /* the console's dim lines are a log line kind, not a state. Opacity on text that carries a state (offline, not
@@ -13471,20 +13459,6 @@ main.bare {
 .pol-inline {
   display: contents;
 }
-.pol-line {
-  display: flex;
-  align-items: center;
-  gap: 6px var(--sp-12);
-  flex-wrap: wrap;
-  min-height: 46px;
-  padding: 6px 6px 6px var(--sp-14);
-  margin: -4px 0 var(--sp-14);
-  border-radius: 9px;
-  border: var(--hair-w) solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-2);
-  font-size: 13px;
-}
 /* the summary under the title of Rules and Deviating devices (#1086): the fleet counts as one sentence and the live
    check (its state, Run now, Pause). No frame: on a phone the frame and its padding cost 40 px of the 400 the rule
    list may start at. One row on a desktop; on a phone the sentence above the live check, whose state text shares the
@@ -13529,45 +13503,9 @@ main.bare {
   font-weight: 600;
   color: var(--t-fg, var(--color-text));
 }
-.pol-line-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--color-ok);
-  animation: tf-pulse 2.4s ease-in-out infinite;
-}
-.pol-line-text {
-  flex: 1;
-  min-width: 220px;
-}
 .pol-line-acts {
   display: flex;
   gap: 6px;
-}
-.pol-line .pol-line-btn {
-  height: 32px;
-}
-.pol-line .pol-line-ghost {
-  background: transparent;
-}
-.pol-line-paused {
-  background: var(--color-neutral-bg);
-  border-color: var(--color-border-strong);
-  color: var(--color-neutral-fg);
-}
-.pol-line-paused .pol-line-dot {
-  background: var(--color-neutral);
-  animation: none;
-}
-.pol-line-failed {
-  background: var(--color-danger-bg);
-  border-color: var(--color-danger);
-  color: var(--color-danger-fg);
-}
-.pol-line-failed .pol-line-dot {
-  background: var(--color-danger);
-  animation: none;
 }
 /* overview: the live-check tile's buttons, the rule table (handle, dragged row, setting column,
    compliance bar beside its numbers) */
@@ -14149,15 +14087,6 @@ a.pol-tpl {
   font-size: 13px;
 }
 @media (max-width: 44.99rem) {
-  /* the status line's 32 px buttons get a touch target (e2e smallTargets) */
-  .pol-line .pol-line-btn {
-    position: relative;
-  }
-  .pol-line .pol-line-btn::after {
-    content: "";
-    position: absolute;
-    inset: calc((32px - var(--ctl-sm)) / 2) 0;
-  }
   .pol-two {
     grid-template-columns: minmax(0, 1fr);
   }

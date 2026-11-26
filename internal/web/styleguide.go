@@ -1,6 +1,11 @@
 package web
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
+)
 
 // styleguide is /styleguide: the prototype's "UI states" screen and the gallery of every
 // component (design v2, WP F4). It shows sample data only, so every signed-in user may open it
@@ -10,4 +15,10 @@ func (h *handler) styleguide(w http.ResponseWriter, r *http.Request) {
 	v := h.view(r, "Styleguide", "styleguide", nil)
 	v.Live = true
 	h.show(w, r, http.StatusOK, "styleguide", v, styleguidePage(sgView{Base: v.Base, CSRF: v.CSRF, Shell: shellData(v)}))
+}
+
+// sgOffline is the status of the style guide's offline sample device, as the dashboard's attention list shows it.
+func sgOffline() *ui.StatusBadgeData {
+	b := statusBadgeOf(model.HealthOffline, "")
+	return &b
 }

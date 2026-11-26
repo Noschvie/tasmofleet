@@ -134,7 +134,7 @@ test("a device that never answered says Unknown once (#1082)", async ({ page }) 
   await page.setExtraHTTPHeaders(adam);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: dead, exact: true }).first().click();
-  await expect(page.locator(".devhd-state")).toHaveText("Unknown");
+  await expect(page.locator("#devhd .dv-st")).toHaveText("Unknown");
   await expect(page.locator("#devhd-notyet")).toContainText("has not answered yet");
   await expect(page.locator("#devhd-off")).toHaveCount(0);
   await expect(page.locator("[data-tile=reach]")).toContainText("Unknown");

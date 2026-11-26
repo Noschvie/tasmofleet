@@ -243,7 +243,7 @@ func TestPolicyHistoryRunNowStaysOnTheTab(t *testing.T) {
 	if r.StatusCode != 200 || !strings.Contains(body, `id="history"`) || !strings.Contains(body, "Live check finished") {
 		t.Fatalf("run now on the history tab: %d\n%s", r.StatusCode, body)
 	}
-	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, `class="dev-tiles"`, " compliant", "Not judged"} {
+	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, `class="itiles"`, " compliant", "Not judged"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the history tab carries %q: rule counts do not belong above the saved versions", bad)
 		}

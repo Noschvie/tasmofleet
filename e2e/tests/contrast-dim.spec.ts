@@ -89,7 +89,7 @@ for (const width of [1280, 375]) {
         await openOffline(page, device);
         await expectReadable(page, "#devlive, #identity, #devconn");
         // and the state is said in words
-        await expect(page.locator("#devlive .dev-tile-l [data-stale]").first()).toBeVisible();
+        await expect(page.locator("#devlive .itile-l [data-stale]").first()).toBeVisible();
         await expect(page.locator("#identity [data-stale]")).toBeVisible();
         await expect(page.locator("#devconn [data-stale]")).toBeVisible();
       });

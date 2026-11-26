@@ -19,12 +19,14 @@ import (
 // title is only an addition); the reason comes from the hints entry the title comes from, and
 // this one render serves the page and the event stream.
 templ (h *handler) statusCell(hl model.Health) {
-	<span class={ "bdg", "dv-st", uiToneClass(hl.State) } data-state={ string(hl.State) } title={ h.hint(hl.State) }><span class="dv-dot" aria-hidden="true"></span>{ label(hl.State) }</span>
+	@ui.StatusBadge(statusBadgeOf(hl.State, h.hint(hl.State)))
 	if why := h.why(hl.State); why != "" {
 		<span class="dv-why">{ why }</span>
 	}
 	if h.mqttDown(hl) {
-		<span class="bdg t-warn dv-mdown" title={ h.hint("mqtt-down") }>MQTT down<span class="dv-mdown-why">{ " · " + h.why("mqtt-down") }</span></span>
+		@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: "MQTT down", Class: "dv-mdown", Title: h.hint("mqtt-down")}) {
+			<span class="dv-mdown-why">{ " · " + h.why("mqtt-down") }</span>
+		}
 	}
 }
 

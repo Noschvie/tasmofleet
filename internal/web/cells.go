@@ -6,6 +6,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // Helpers of the live cells (cells.templ).
@@ -35,6 +36,13 @@ func reachableNow(st model.HealthState) bool {
 // mqttDown: the device answers, but not over MQTT (the "MQTT down" badge).
 func (h *handler) mqttDown(hl model.Health) bool {
 	return hl.State == model.HealthOnline && h.channels(hl)[0].Tone == "bad"
+}
+
+// statusBadgeOf is the connection status of a device as ui.StatusBadge draws it: the health state is the machine word
+// (data-state), its label the word and stateTone the colour. The device list, its phone cards, the device header and
+// the dashboard's attention list all build it here, so the one status reads the same on every page (#1097).
+func statusBadgeOf(state model.HealthState, title string) ui.StatusBadgeData {
+	return ui.StatusBadgeData{State: string(state), Tone: stateTone(state), Label: label(state), Title: title}
 }
 
 // hint is the tooltip of a state or tag, why the short reason shown as text beside the state (#1073).

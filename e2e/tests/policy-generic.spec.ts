@@ -89,7 +89,7 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await page.getByRole("button", { name: "Check now" }).click();
   await expect(page.getByText("Live check finished")).toBeVisible({ timeout: 60_000 });
   await expect(devRow).toContainText("live ·");
-  await expect(page.locator("[data-tile='deviate'] .dev-tile-v")).not.toHaveText("0");
+  await expect(page.locator("[data-tile='deviate'] .itile-v")).not.toHaveText("0");
   await shot("preview-flags");
 
   // The same on the policy overview: its banner names the deviation and has the one action Show, which leads to the

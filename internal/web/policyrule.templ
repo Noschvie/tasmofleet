@@ -184,13 +184,9 @@ templ ruleLine_(line string, oob bool) {
 
 // ruleTilesRow is the four tiles; the preview swaps them out-of-band so they describe the draft.
 templ ruleTilesRow(tiles []ruleTile, oob bool) {
-	<div id="rule-tiles" class="dev-tiles" if oob { hx-swap-oob="true" }>
+	<div id="rule-tiles" class="itiles" if oob { hx-swap-oob="true" }>
 		for _, t := range tiles {
-			<div class="dev-tile" data-tile={ t.Key }>
-				<div class="dev-tile-l">{ t.Label }</div>
-				<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
-				<div class="dev-tile-s">{ t.Sub }</div>
-			</div>
+			@ui.InfoTile(ui.InfoTileData{Key: t.Key, Label: t.Label, Value: t.Value, Tone: t.Tone, Hint: t.Sub})
 		}
 	</div>
 }

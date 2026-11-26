@@ -2,6 +2,7 @@ package web
 
 import (
 	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -159,6 +160,13 @@ templ styleguidePage(v sgView) {
 				@ui.BadgeMark(ui.ToneWarn, markReject, "Reject")
 			</div>
 			<div class="sg-row">
+				@ui.StatusBadge(statusBadgeOf(model.HealthOnline, ""))
+				@ui.StatusBadge(statusBadgeOf(model.HealthStale, ""))
+				@ui.StatusBadge(statusBadgeOf(model.HealthOffline, ""))
+				@ui.StatusBadge(statusBadgeOf(model.HealthUnknown, ""))
+				@ui.StatusBadge(ui.StatusBadgeData{State: "updating", Tone: ui.ToneAccent, Label: "Updating"})
+			</div>
+			<div class="sg-row">
 				@ui.StatusDot(ui.ToneOK, "Online")
 				@ui.StatusDot(ui.ToneDanger, "Offline")
 				@ui.StatusDot(ui.ToneNeutral, "Unknown")
@@ -175,7 +183,7 @@ templ styleguidePage(v sgView) {
 					@ui.KV([]ui.KVRow{{Key: "Address", Value: "192.168.20.12", Mono: true}, {Key: "MAC", Value: "02:00:5E:9B:3E:01", Mono: true}, {Key: "Firmware", Value: "Tasmota 14.2.0", Mono: true}, {Key: "Module", Value: "Sonoff Basic (1)"}})
 				}
 				@ui.ListCard("Needs attention", "All devices", v.Base+"/styleguide") {
-					@ui.AttentionList(nil, []ui.AttItem{{Tone: ui.ToneDanger, Name: "Garage Door Sensor", Text: "Offline for 3 h", Href: v.Base + "/styleguide"}}, v.CSRF)
+					@ui.AttentionList(nil, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, v.CSRF)
 				}
 			</div>
 		}
@@ -216,11 +224,18 @@ templ styleguidePage(v sgView) {
 				@ui.StatTile(ui.StatTileData{Tone: ui.ToneAccent, Label: "Can update", Value: "19", Hint: "to 14.3.0", Href: v.Base + "/styleguide"})
 			</div>
 			@ui.HealthBar(54, 4, 2)
+			<div class="itiles">
+				@ui.InfoTile(ui.InfoTileData{Key: "sg-reach", Label: "Reachability", Value: "MQTT · HTTP", Word: true, Tone: ui.ToneOK, Hint: "Connected · Reachable"})
+				@ui.InfoTile(ui.InfoTileData{Key: "sg-wifi", Label: "Wi-Fi signal", Value: "-70 dBm", Bar: 60, BarTone: ui.ToneWarn, Hint: "60 % · Workshop · ch 6"})
+				@ui.InfoTile(ui.InfoTileData{Key: "sg-policy", Label: "Policy", Value: "1 / 2", Tone: ui.ToneWarn, Hint: "TelePeriod 60 → 300"}) {
+					@ui.Button(ui.Btn{Label: "Make compliant…", Type: "button", Class: "itile-act"})
+				}
+			</div>
 		}
 		@sgSec("lists") {
 			<div class="sg-cols">
 				@ui.ListCard("Needs attention", "All devices", v.Base+"/styleguide") {
-					@ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Tone: ui.ToneDanger, Name: "Garage Door Sensor", Text: "Offline for 3 h", Href: v.Base + "/styleguide"}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF)
+					@ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF)
 				}
 				@ui.ListCard("Transactions", "History", v.Base+"/styleguide") {
 					@ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", StartedText: "Today 17:20", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"})

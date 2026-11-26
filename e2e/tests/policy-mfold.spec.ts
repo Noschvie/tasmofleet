@@ -49,7 +49,7 @@ test("desktop: the policy overview is a summary line, tabs and a table without f
   await page.goto(app.url + "/policy");
   await expect(page.locator(".pol-sum")).toHaveCount(1);
   await expect(page.locator(".pol-sum-line")).toHaveCount(1);
-  await expect(page.locator(".dev-tiles")).toHaveCount(0);
+  await expect(page.locator(".itiles")).toHaveCount(0);
   await expect(page.locator("nav.utabs")).toBeVisible();
   await expect(page.locator("section#rules table.dense tbody tr").first()).toBeVisible();
   await page.locator("td.p1 a").first().click();

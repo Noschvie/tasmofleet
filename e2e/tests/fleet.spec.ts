@@ -313,7 +313,7 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   const second = await page.context().newPage();
   await second.setExtraHTTPHeaders(operator);
   await second.goto(`${app.url}/devices/${lampId}`);
-  await expect(second.locator(".devhd-state")).toHaveText("Updating");
+  await expect(second.locator("#devhd .dv-st")).toHaveText("Updating");
   const consoleTab = second.locator("nav.utabs [aria-disabled=true]", { hasText: "Console" });
   await expect(consoleTab, "the tab stays, disabled, with the reason as its title").toHaveAttribute("title", /Unavailable while/);
   await expect(second.getByRole("button", { name: "Back up", exact: true }), "nothing that needs the device is offered while it is held").toBeDisabled();

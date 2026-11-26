@@ -35,6 +35,16 @@ func comp(t *testing.T, c templ.Component) string {
 	return b.String()
 }
 
+// compKids renders c with kid as its children.
+func compKids(t *testing.T, c, kid templ.Component) string {
+	t.Helper()
+	var b strings.Builder
+	if err := c.Render(templ.WithChildren(context.Background(), kid), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
 const hostile = `<script>alert(1)</script>" onmouseover="x`
 
 // Why: components carry text from devices, users and release feeds (names, notes, command
@@ -86,6 +96,10 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"PowerLabelledBy":  PowerSwitch(PowerSwitchData{LabelledBy: h, Class: h, Submit: true, Attrs: templ.Attributes{"title": h, "hx-post": h}}),
 		"StatTile":         StatTile(StatTileData{Label: h, Value: h, Hint: h, Href: "/x"}),
 		"Attention":        AttentionList([]AttProposal{{Name: h, Text: h, Primary: h, Secondary: h, PrimaryAction: "/a", SecondaryAction: "/b"}}, []AttItem{{Name: h, Text: h, Href: "/x"}}, h),
+		"AttentionStatus":  AttentionList(nil, []AttItem{{Name: h, Text: h, Href: "/x", Status: &StatusBadgeData{State: h, Tone: Tone(h), Label: h, Title: h}}}, h),
+		"StatusBadge":      StatusBadge(StatusBadgeData{State: h, Tone: Tone(h), Label: h, Title: h}),
+		"InfoTile":         InfoTile(InfoTileData{Key: h, Label: h, Value: h, Tone: Tone(h), Word: true, Mask: true, Bar: 40, BarTone: Tone(h), Hint: h}),
+		"InfoTileAt":       InfoTile(InfoTileData{Key: h, Label: h, Value: h, HintPrefix: h, HintAt: time.Unix(1700000000, 0), HintAtText: h}),
 		"TxnCard":          TxnCard(TxnData{ID: h, Title: h, State: h, Summary: h, StartedText: h, Href: "/x", OK: 1, Total: 1}),
 		"TxnRow":           TxnRow(TxnRowData{ID: h, Title: h, Result: h, When: h, Href: "/x"}),
 		"Dialog":           Dialog(DialogData{ID: "d", Title: h, Body: h, Command: h, Changes: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Verb: h}),
@@ -990,5 +1004,48 @@ func TestSwitchAttrsRefuseWhatTheComponentOwns(t *testing.T) {
 	}
 	if got := comp(t, Toggle(ToggleData{Name: "n", Attrs: templ.Attributes{"title": "t"}})); strings.Contains(got, "title") {
 		t.Errorf("a title on the input: %s", got)
+	}
+}
+
+// Why (#1097): the device list's script reads data-state to switch a row's actions, and the phone card's CSS reads
+// the t-<tone> class of .dv-st; the badge keeps both, in the class order the swapped fragments have always had
+// (live.js memoises them as strings), and the dot is decoration for a screen reader.
+func TestStatusBadgeKeepsTheHooksOfTheListCells(t *testing.T) {
+	got := comp(t, StatusBadge(StatusBadgeData{State: "offline", Tone: ToneDanger, Label: "Offline", Title: "No answer"}))
+	want := `<span class="bdg dv-st t-danger" data-state="offline" title="No answer"><span class="dv-dot" aria-hidden="true"></span>Offline</span>`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	if bare := comp(t, StatusBadge(StatusBadgeData{State: "online", Tone: ToneOK, Label: "Online"})); strings.Contains(bare, "title=") {
+		t.Errorf("no hint, no title attribute: %s", bare)
+	}
+}
+
+// Why (#1097): a word value is set smaller than a number, a tile without a tone keeps the text colour (a neutral
+// tone would grey the Power reading), and the tile's children (Make compliant) and the note beside the label render.
+func TestInfoTileSetsWordsAndNumbersApart(t *testing.T) {
+	word := comp(t, InfoTile(InfoTileData{Key: "reach", Label: "Reachability", Value: "MQTT · HTTP", Word: true, Tone: ToneOK, Hint: "Connected"}))
+	if !strings.Contains(word, `<div class="itile-v itile-word t-ok">MQTT · HTTP</div>`) || !strings.Contains(word, `data-tile="reach"`) {
+		t.Errorf("word tile: %s", word)
+	}
+	num := comp(t, InfoTile(InfoTileData{Key: "power", Label: "Power", Value: "12 W", Hint: "now"}))
+	if !strings.Contains(num, `<div class="itile-v">12 W</div>`) {
+		t.Errorf("a number without a tone has the one class: %s", num)
+	}
+	note := templ.ComponentFunc(func(_ context.Context, w io.Writer) error { _, err := io.WriteString(w, "<i>note</i>"); return err })
+	kid := templ.ComponentFunc(func(_ context.Context, w io.Writer) error { _, err := io.WriteString(w, "<b>kid</b>"); return err })
+	full := compKids(t, InfoTile(InfoTileData{Key: "k", Label: "L", Value: "1", Note: note}), kid)
+	if !strings.Contains(full, "L <i>note</i>") && !strings.Contains(full, "L<i>note</i>") || !strings.Contains(full, "<b>kid</b></div>") {
+		t.Errorf("note beside the label, children after the hint: %s", full)
+	}
+}
+
+// Why (#1097): the MQTT-down reason sits inside its badge, after the word, in both shapes of the badge.
+func TestBadgeOfRendersChildrenAfterTheLabel(t *testing.T) {
+	kid := templ.ComponentFunc(func(_ context.Context, w io.Writer) error { _, err := io.WriteString(w, "<i>why</i>"); return err })
+	for _, b := range []BadgeData{{Tone: ToneWarn, Label: "MQTT down", Class: "dv-mdown"}, {Tone: ToneWarn, Label: "MQTT down", Href: "/x"}} {
+		if got := compKids(t, BadgeOf(b), kid); !strings.Contains(got, "MQTT down<i>why</i></") {
+			t.Errorf("children do not follow the label: %s", got)
+		}
 	}
 }

@@ -87,7 +87,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   const cmdY = await yOf("#rule-command");
   const list = section.locator("[data-scope-list]");
   const boxH = (await list.boundingBox())!.height;
-  const tiles = page.locator("[data-tile='applies'] .dev-tile-v");
+  const tiles = page.locator("[data-tile='applies'] .itile-v");
   const total = Object.keys(env.devices).length;
   await expect(tiles).toHaveText(String(total));
   await expect(section.locator("#scope-summary")).toContainText(`${total} devices`);
@@ -128,7 +128,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   await expect(section.locator("[data-except-chips] label.chip")).toHaveCount(1);
   const exceptShape = await chipShape(section.locator("[data-except-chips] label.chip"));
   // the tile and the line under the title follow the exception, not only the section's own summary
-  await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("1 exception");
+  await expect(page.locator("[data-tile='applies'] .itile-s")).toContainText("1 exception");
   await expect(page.locator("#rule-line")).toContainText("1 exception");
   await expect(page.locator("#rule-line")).toContainText("ESP8266, tag lights, 2 devices");
   await expect(section.locator("#scope-summary")).toContainText("ESP8266, tag “lights” or 2 picked devices, minus 1 exception");
@@ -159,7 +159,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   // unticking the exception removes its chip and, saved, the exception
   await saved.locator("[data-except-chips] label.chip").click();
   await expect(saved.locator("[data-except-chips] label.chip")).toHaveCount(0);
-  await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("0 exceptions");
+  await expect(page.locator("[data-tile='applies'] .itile-s")).toContainText("0 exceptions");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy\?ok=saved/);
   await page.goto(ruleURL);

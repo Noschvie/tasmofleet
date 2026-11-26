@@ -132,7 +132,7 @@ func powerTiles(t health.Telemetry) []tile {
 // linkTile is the Wi-Fi signal tile, or the Link tile of a wired device (no signal, Wi-Fi off).
 func linkTile(in overviewIn) tile {
 	if in.Facts.Wired {
-		return tile{Key: "link", Label: "Link", Value: "Ethernet", Sub: "Wi-Fi off"}
+		return tile{Key: "link", Label: "Link", Value: "Ethernet", Word: true, Sub: "Wi-Fi off"}
 	}
 	hl, t, f := in.Health, in.Tele, in.Facts
 	dbm, has := t.SignalDBm, t.HasSignal
@@ -239,7 +239,7 @@ func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.T
 // channel is left.
 func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time, other bool) tile {
 	r := reachOf(d, hl, hs, now)
-	tl := tile{Key: "reach", Label: "Reachability"}
+	tl := tile{Key: "reach", Label: "Reachability", Word: true}
 	switch {
 	case hl.State == model.HealthAuthFailed:
 		tl.Value, tl.Tone, tl.Sub = "Login refused", ui.ToneDanger, r.HTTPWord
@@ -302,11 +302,11 @@ func policyTile(c *policyCard, off bool) *tile {
 		return nil
 	}
 	if c.Rules == 0 {
-		return &tile{Key: "policy", Label: "Policy", Value: "None", Tone: ui.ToneNeutral, Sub: "No rules apply to this device"}
+		return &tile{Key: "policy", Label: "Policy", Value: "None", Word: true, Tone: ui.ToneNeutral, Sub: "No rules apply to this device"}
 	}
 	tl := tile{Key: "policy", Label: "Policy", Value: fmt.Sprintf("%d / %d", max(c.Rules-len(c.Deviations)-c.Unknown, 0), c.Rules), Tone: ui.ToneOK}
 	if c.Unknown >= c.Rules {
-		tl.Value = "Not read"
+		tl.Value, tl.Word = "Not read", true
 	}
 	switch {
 	case len(c.Deviations) > 0:

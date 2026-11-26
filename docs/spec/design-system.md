@@ -124,7 +124,7 @@ only. A size that is not in the table below is not used; a new one needs a token
 declarations in `app.css` still write literal sizes and off-scale weights; #1100 moves them to the tokens,
 adds the planned ones (`--fs-title-sm` 16px: dialog title and a card that is the page's subject;
 `--fs-empty` 17px: empty state heading; `--fs-auth` 20px: sign-in card title; `--fs-error` 26px: error page
-title; `--fs-word` 18px: a word as a tile value) and adds the guard. The recurring sizes:
+title) and adds the guard; `--fs-word` (18px: a word as a tile value) exists since #1097. The recurring sizes:
 
 | Use | Font |
 | --- | --- |
@@ -135,6 +135,7 @@ title; `--fs-word` 18px: a word as a tile value) and adds the guard. The recurri
 | Empty state heading | `600 17px` |
 | Card and section heading (h2) | `600 14px` (`--fs-h2`); `600 13px` (`--fs-h2-sm`) in device overview cards; `600 15px` (`--fs-h2-lg`) in release notes only |
 | Stat tile value | `600 28px/1` (`--fs-stat`), tabular figures, -0.02em |
+| Info tile value that is a word | `600 18px/1.25` (`--fs-word`), -0.01em |
 | List rows, inputs | `400 13.5px` |
 | Buttons, tabs | `500 13px` (primary `600 13px`); tabs and top-bar groups `500 13.5px` |
 | Field labels, secondary lines | `500 12.5px` / `400 12.5px` |
@@ -252,9 +253,13 @@ fragment is the same string every time. A page never writes `class="bdg` itself:
 fails on it, and its exemption blocks list what is still hand-written (they only shrink).
 
 Badge labels are sentence case ("Update", "Failed"). A device's connection status is a badge with the dot
-before the word, `ui.StatusBadge`, wherever it is shown (device list, device header, dashboard attention
-list); the bare `ui.StatusDot` marks a tone where no status word is needed (stat tiles). `ui.StatusBadge`
-is added by #1097.
+before the word, `ui.StatusBadge(StatusBadgeData{State, Tone, Label, Title})`, wherever it is shown (device
+list and its phone cards, device header, dashboard attention list): one class set (`bdg dv-st t-<tone>`) and
+`data-state` carrying the health state, which the list's script reads. The page builds it from the one state table
+(`statusBadgeOf`), so the colour and the word cannot differ between pages; the header says "Updating" in the accent
+tone while an operation holds the device. The bare `ui.StatusDot` marks a tone where no status word is needed
+(stat tiles); an attention entry that is no connection state (weak signal, policy deviation, the broker's ACL)
+keeps the dot.
 
 A badge that stands for an outcome the user may want to tell apart without the colour carries a glyph before its
 word: Create `+`, Merge `⇄`, Reject `–` in the import plan, `ui.BadgeMark(tone, mark, label)`. The glyph is
@@ -265,7 +270,7 @@ cell of the device list shows the short reason of every state but Online under i
 `hints` (`internal/web/hints.go`) that also holds the tooltip. "Update 14.3.0" and "1 off policy" say which
 update and what differs; the title repeats them as an extra.
 
-Component: `ui.Badge(tone, label)`, `ui.BadgeMark(tone, mark, label)`, `ui.StatusDot(tone, label)`, `ui.Avatar(name, username)`.
+Component: `ui.Badge(tone, label)`, `ui.BadgeMark(tone, mark, label)`, `ui.StatusBadge(StatusBadgeData)`, `ui.StatusDot(tone, label)`, `ui.Avatar(name, username)`.
 
 ![Badges, status dots and avatars, desktop, light](../design/styleguide/badges-desktop-light.png)
 
@@ -323,22 +328,28 @@ Also: [desktop, dark](../design/styleguide/controls-desktop-dark.png) · [phone,
 
 ### Stat tiles and fleet health
 
-A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The device overview tiles (`.dev-tile-v`) follow this; `shell-css.spec.ts` guards it.
+A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The info tile values (`.itile-v`, numbers and words) follow this; `shell-css.spec.ts` guards it.
 
-An info tile (device overview, rule page) is not a link: label, value, hint and optionally a bar or up
-to two small buttons. A number uses `--fs-stat`; a word ("Running", "MQTT · HTTP") uses `600 18px`
-(`--fs-word`). Values in a tone use the tone's `-fg` token. Today it is the `.dev-tile` markup;
-#1097 makes it the component `ui.InfoTile`.
+An info tile (device overview, rule page) is `ui.InfoTile(InfoTileData{Key, Label, Value, Tone, Word, Mask, Bar,
+BarTone, Hint, ...})`. It is not a link: label, value, hint and optionally a bar, a note beside the label ("Last
+reported") or a small button (its children). It describes one device or one rule, where a stat tile counts the
+fleet. A number uses `--fs-stat`; a word ("Ethernet", "MQTT · HTTP", "Login refused") is set with `Word` and uses
+`600 18px` (`--fs-word`); the page says which it is, the component never guesses from the text. Values in a tone use
+the tone's `-fg` token; a value without a tone keeps the text colour. `Key` is `data-tile`, which the live refresh
+and the tests find a tile by; the row of tiles is a layout `div.itiles` (the live region `#devlive`, the rule page's
+`#rule-tiles`). On a phone the row has two columns and a lone last tile takes the whole row; "MQTT · HTTP" must
+still fit half a tile at 320 px.
 
 The Policy header is no tile row (#1086). Rules and Deviating devices show one summary block under the title (`.pol-sum`, no
 frame): the fleet counts as one sentence ("52 of 60 compliant · 3 deviating · 6 not judged", `policy.FleetTally`, the numbers
 in their tone's `-fg` text colour) and the live check (state, when it ran, Run now, Pause or Resume, Retry now), the state text
 sharing a phone row with the buttons so the rule list starts above 400 px at 375. After a failed live check the counts are left
-out and the state says why. History and GPIO templates show no rule counts at all: "Not judged" is the word of the rules, the
+out and the state says why. A paused check is in the warn tone with its word, never grey (grey reads as "fine"), and the deviating
+count then says "(values from 02:28 PM)", the time of the newest live reading, so a stale number is marked where it stands. History and GPIO templates show no rule counts at all: "Not judged" is the word of the rules, the
 templates page says "Can’t be compared", and Import / export (#1088) is a tab of the same shell with no summary and no Deviating badge (it judges no device); its Export and Import cards are full width, and the replace note of the import is a warn banner above the button. The Rules count lives in the tab badge. `shell-css.spec.ts` guards the text contrast of
 the summary in both themes and `policy-overview.spec.ts` the phone height.
 
-Component: `ui.StatTile(StatTileData{...})`, `ui.HealthBar(ok, off, unk)`; `ui.ComplianceBar(match, deviate, unknown)` draws a policy rule's compliance the same way.
+Component: `ui.StatTile(StatTileData{...})`, `ui.InfoTile(InfoTileData{...})`, `ui.HealthBar(ok, off, unk)`; `ui.ComplianceBar(match, deviate, unknown)` draws a policy rule's compliance the same way.
 
 ![Stat tiles and fleet health, desktop, light](../design/styleguide/tiles-desktop-light.png)
 
@@ -346,7 +357,8 @@ Also: [desktop, dark](../design/styleguide/tiles-desktop-dark.png) · [phone, li
 
 ### Attention list and transactions
 
-"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with a dot, the reason and ›. The transaction card is for a transaction that is still at work (#1199): it shows id, title, state badge on the right, the progress (done, failed, running; each state has its own shape, see Steps and progress), a summary and when it started ("started Today 17:20", a `<time>` day stamp; the word is outside the element). A finished transaction (completed, failed, cancelled, mixed, not started) is a compact row: id, title, result badge on the right and the time it ran. The dashboard lists four entries: every active transaction as a card first, then the finished ones as rows; the state decides, never the position, and the dashboard switches on its own re-fetch when a transaction ends. A row's progress is a mini bar with the percentage.
+"Needs attention" lists address-change proposals first, with two inline actions (POST forms with the CSRF token), then devices with the reason and ›: a device whose connection is the reason ends in its status badge, any other
+entry starts with the dot of its tone. The transaction card is for a transaction that is still at work (#1199): it shows id, title, state badge on the right, the progress (done, failed, running; each state has its own shape, see Steps and progress), a summary and when it started ("started Today 17:20", a `<time>` day stamp; the word is outside the element). A finished transaction (completed, failed, cancelled, mixed, not started) is a compact row: id, title, result badge on the right and the time it ran. The dashboard lists four entries: every active transaction as a card first, then the finished ones as rows; the state decides, never the position, and the dashboard switches on its own re-fetch when a transaction ends. A row's progress is a mini bar with the percentage.
 
 Component: `ui.AttentionList`, `ui.TxnCard`, `ui.TxnRow`, `ui.SegBar`, `ui.MiniBar`.
 
@@ -623,7 +635,8 @@ same ring until the page arrives.
   and only shrinks, like the card-widths list. Cards are all through `ui.CardOf` (#1092); the buttons of the
   shell, the device pages, the backups pages and the policy pages are through `ui.Button` and the system
   settings badge through `ui.BadgeOf`. The blocks left are the other button groups (updates, firmware,
-  accounts, system, add devices and the style guide's toast demo), and `#1097 status badge`. No banner of any page is hand-written (#1091), and no form summary (#1098).
+  accounts, system, add devices and the style guide's toast demo). The device status badges are through
+  `ui.StatusBadge` and the MQTT-down badge through `ui.BadgeOf` (#1097). No banner of any page is hand-written (#1091), and no form summary (#1098).
 - **Folds.** `details.fold` holds something secondary and is closed at every width unless it has
   `open` (account and user editing, a rule's Unjudged devices).
   The system container settings are no fold any more (#350). The phone-only `details.m-fold` of the

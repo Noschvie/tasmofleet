@@ -136,7 +136,7 @@ test("device pages: one header with the tabs on every tab; Back up returns to it
     await expect(page.locator("nav.utabs a[aria-current=page]"), sub).toHaveText(tab);
     await expect(page.locator("nav.crumbs [aria-current=page]"), sub).toHaveText("lamp-1m");
     await expect(page.locator("h1"), `${sub}: one device header on every tab`).toHaveText("lamp-1m");
-    await expect(page.locator(".devhd-state"), sub).toBeVisible();
+    await expect(page.locator("#devhd .dv-st"), sub).toBeVisible();
   }
   await page.goto(deviceURL + "/console");
   await page.getByRole("button", { name: "Back up", exact: true }).click();

@@ -62,7 +62,7 @@ func TestNeverAnsweredDeviceSaysUnknownAndNothingStale(t *testing.T) {
 	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOffline, Since: time.Now()} // the tracker's Offline, no answer ever
 	_, body := e.do(t, "GET", "/devices/2", "admin", nil)
 
-	if !strings.Contains(body, `<span class="devhd-state t-neutral"><span class="devhd-dot" aria-hidden="true"></span>Unknown</span>`) {
+	if !strings.Contains(body, `<span class="bdg dv-st t-neutral" data-state="unknown"><span class="dv-dot" aria-hidden="true"></span>Unknown</span>`) {
 		t.Errorf("the badge is not a neutral Unknown:\n%s", between(body, `class="devhd-name"`, `</div>`))
 	}
 	if reach := between(body, `data-tile="reach"`, "</div></div>"); !strings.Contains(reach, ">Unknown<") || strings.Contains(reach, "Offline") {

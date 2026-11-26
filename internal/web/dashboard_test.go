@@ -127,7 +127,7 @@ func TestDashboardNeedsAttention(t *testing.T) {
 	order := []string{
 		"Shed Light", "New device · 10.0.0.88 · Network scan", "/tf/discovery/proposals/30/dismiss", ">Ignore<", "/tf/discovery/proposals/30/accept", ">Add<",
 		"kitchen", "Address changed · 10.0.0.1 → 10.0.0.11", ">Ignore<", "/tf/discovery/proposals/31/accept", ">Apply<",
-		"hallway", "Offline · last seen 5h ago",
+		"hallway", "Last seen 5h ago", ">Offline</span>",
 		"annex", "Has not answered since it was added",
 		"porch", "Refuses the stored web login",
 		"kitchen", "TelePeriod 60 → 300",

@@ -66,9 +66,6 @@ var markupExemptions = []markupBlock{
 	{Name: "#1092 buttons: style guide", Files: map[string]map[string]int{
 		"styleguide.templ": {"btn": 3},
 	}},
-	{Name: "#1097 status badge", Files: map[string]map[string]int{
-		"cells.templ": {"bdg": 2},
-	}},
 }
 
 // markupCounts is the number of hand-written component classes per class in one template.

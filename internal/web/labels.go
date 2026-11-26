@@ -513,9 +513,6 @@ func stateTone(v any) ui.Tone {
 	return ui.ToneNeutral
 }
 
-// uiToneClass is the class form of stateTone: t-ok, t-warn, t-danger or t-neutral.
-func uiToneClass(v any) string { return toneClass(stateTone(v)) }
-
 // chipLabel is a chip family as people write it: "esp32c3" is "ESP32-C3", "esp8266" "ESP8266".
 func chipLabel(f model.ChipFamily) string {
 	s := strings.ToUpper(string(f))

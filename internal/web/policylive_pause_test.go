@@ -177,7 +177,7 @@ func TestPolicyLiveLineShowsAFailure(t *testing.T) {
 		t.Error("no Make compliant without a report")
 	}
 	// the counts of a fleet that was not read are left out, not shown as zeros that look like a result
-	for _, bad := range []string{"pol-sum-line", " compliant", " deviating", "needs the live check", `class="dev-tiles"`} {
+	for _, bad := range []string{"pol-sum-line", " compliant", " deviating", "needs the live check", `class="itiles"`} {
 		if strings.Contains(body, bad) {
 			t.Errorf("a failed live check shows no fleet counts, found %q", bad)
 		}

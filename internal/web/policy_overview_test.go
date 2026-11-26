@@ -14,7 +14,7 @@ import (
 // tileValue is the big number of the tile data-tile=key.
 func tileValue(t *testing.T, body, key string) string {
 	t.Helper()
-	m := regexp.MustCompile(`data-tile="` + key + `"><div class="dev-tile-l">[^<]*</div><div class="dev-tile-v[^"]*">([^<]*)</div><div class="dev-tile-s">([^<]*)</div>`).FindStringSubmatch(body)
+	m := regexp.MustCompile(`data-tile="` + key + `"><div class="itile-l">[^<]*</div><div class="itile-v[^"]*">([^<]*)</div><div class="itile-s">([^<]*)</div>`).FindStringSubmatch(body)
 	if m == nil {
 		t.Fatalf("no tile %q in\n%s", key, body)
 	}
@@ -89,7 +89,7 @@ func TestPolicyOverviewSummaryFollowsTheDefinitions(t *testing.T) {
 		if got := tabBadge(t, body, "Deviating devices"); got != "3" {
 			t.Errorf("%s: the Deviating tab says %s, the line 3: the page must not disagree with itself", path, got)
 		}
-		for _, bad := range []string{`class="dev-tiles"`, `data-tile="rules"`, `data-tile="compliant"`, `data-tile="unjudged"`} {
+		for _, bad := range []string{`class="itiles"`, `data-tile="rules"`, `data-tile="compliant"`, `data-tile="unjudged"`} {
 			if strings.Contains(body, bad) {
 				t.Errorf("%s still draws %s: the count tiles are the summary line now", path, bad)
 			}

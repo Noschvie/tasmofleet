@@ -52,6 +52,9 @@ templ policySummary(h policyHead) {
 			<p class="pol-sum-line" data-sum>
 				<span class="t-ok">{ h.Sum.Compliant } compliant</span>
 				{ " · " }<span class={ toneClass(h.Sum.DeviatingTone) }>{ h.Sum.Deviating } deviating</span>
+				if h.Line.State == "paused" && !h.Line.Shown.IsZero() {
+					{ " (values from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>{ ")" }
+				}
 				{ " · " + h.Sum.NotJudged + " not judged" }
 			</p>
 		}
@@ -65,9 +68,6 @@ templ policySummary(h policyHead) {
 				<span role="status">
 					if h.Line.State == "paused" {
 						Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(h.Line.PausedAt, ui.StampClock) }</time>
-						if !h.Line.Shown.IsZero() {
-							{ " · deviations shown are from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>
-						}
 					} else {
 						{ h.Line.Sub }
 					}

@@ -91,7 +91,7 @@ test("a new rule from a template is a draft until Save, then lives at its own id
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "Local timezone",
   );
-  await expect(page.locator(".dev-tile")).toHaveCount(4);
+  await expect(page.locator(".itile")).toHaveCount(4);
   await shot(page, "rule-page");
 
   // a second rule through "Any command"

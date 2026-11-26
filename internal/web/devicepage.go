@@ -63,6 +63,7 @@ type liveView struct {
 type tile struct {
 	Key, Label, Value, Sub string
 	Tone                   ui.Tone // colour of the value
+	Word                   bool    // the value is a word, not a number (ui.InfoTileData.Word)
 	Bar                    int     // Wi-Fi signal quality 0..100; 0 draws no bar
 	BarTone                ui.Tone
 	SubPrefix              string    // "Last restart ": the sub line is this text and the time At
@@ -70,6 +71,16 @@ type tile struct {
 	AtText                 string    // the fallback text of At (StampDay), for a page without JavaScript
 	Fix                    bool      // "Make compliant…" for this device
 	Mask                   bool      // a reading the pixel comparison cannot reproduce
+}
+
+// info is the tile as ui.InfoTile draws it; stale says the values are what the offline device last reported.
+func (t tile) info(stale bool) ui.InfoTileData {
+	d := ui.InfoTileData{Key: t.Key, Label: t.Label, Value: t.Value, Tone: t.Tone, Word: t.Word, Mask: t.Mask,
+		Bar: t.Bar, BarTone: t.BarTone, Hint: t.Sub, HintPrefix: t.SubPrefix, HintAt: t.At, HintAtText: t.AtText}
+	if stale {
+		d.Note = staleLabel(false)
+	}
+	return d
 }
 
 // relayBox is the box of relay switches. Right is the metering line of the box header.

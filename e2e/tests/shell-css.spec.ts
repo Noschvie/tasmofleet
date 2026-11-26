@@ -196,28 +196,30 @@ for (const scheme of ["light", "dark"] as const) {
 // The number carries the device's state, so every tone must be readable in both themes. 4.5:1 is
 // asked (not only 3:1) because a phone tile is 20 px, which is not large text.
 for (const scheme of ["light", "dark"] as const) {
-  test(`stat tile values meet 4.5:1 for every tone (${scheme})`, async ({
+  test(`info tile values, numbers and words, meet 4.5:1 for every tone (${scheme})`, async ({
     page,
   }) => {
     await open(page, "/about", 1280, scheme);
     const tones = ["", "t-ok", "t-warn", "t-danger", "t-neutral", "t-accent"];
     await mount(
       page,
-      `<div class="dev-tiles">${tones
+      `<div class="itiles">${tones
         .map(
           (t) =>
-            `<div class="dev-tile"><div class="dev-tile-l">L</div><div class="dev-tile-v ${t}">12</div></div>`,
+            `<div class="itile"><div class="itile-l">L</div><div class="itile-v ${t}">12</div></div>` +
+            `<div class="itile"><div class="itile-l">L</div><div class="itile-v itile-word ${t}">MQTT</div></div>`,
         )
         .join("")}</div>`,
     );
+    // a number and a word (ui.InfoTile): the word is smaller, so it must read at 4.5:1 as well
     const m = await page.evaluate(() =>
-      [...document.querySelectorAll("#sandbox .dev-tile")].map((tile) => ({
-        tone: tile.querySelector(".dev-tile-v")!.className,
-        fg: getComputedStyle(tile.querySelector(".dev-tile-v")!).color,
+      [...document.querySelectorAll("#sandbox .itile")].map((tile) => ({
+        tone: tile.querySelector(".itile-v")!.className,
+        fg: getComputedStyle(tile.querySelector(".itile-v")!).color,
         bg: getComputedStyle(tile).backgroundColor,
       })),
     );
-    expect(m).toHaveLength(tones.length);
+    expect(m).toHaveLength(tones.length * 2);
     for (const x of m) {
       const ratio = await contrast(page, x.fg, x.bg);
       expect(
@@ -237,7 +239,7 @@ for (const scheme of ["light", "dark"] as const) {
     await mount(
       page,
       `<div class="pol-sum"><p class="pol-sum-line"><span class="t-ok">1 of 2 compliant</span> · <span class="t-warn">1 deviating</span> · 0 not judged</p>` +
-        `<div class="pol-sum-live"><p class="pol-sum-state"><span class="pol-sum-v t-ok">Running</span> · hourly <span class="pol-sum-v t-danger">Failed</span> <span class="pol-sum-v t-neutral">Paused</span></p></div></div>`,
+        `<div class="pol-sum-live"><p class="pol-sum-state"><span class="pol-sum-v t-ok">Running</span> · hourly <span class="pol-sum-v t-danger">Failed</span> <span class="pol-sum-v t-warn">Paused</span></p></div></div>`,
     );
     const m = await page.evaluate(() => {
       // the first opaque background above the summary: it sits on the page, not on a card
@@ -426,11 +428,11 @@ test("the Wi-Fi readings never split over two lines on a phone", async ({
   // the first poll has to land before there is a signal to show
   await expect(async () => {
     await page.goto(app.url + href!.replace(app.url, ""));
-    await expect(wifi.locator(".dev-tile-v", { hasText: /dBm/ })).toHaveCount(1, {
+    await expect(wifi.locator(".itile-v", { hasText: /dBm/ })).toHaveCount(1, {
       timeout: 1000,
     });
   }).toPass({ timeout: 30_000 });
-  const n = await wifi.locator(".dev-tile-v").evaluateAll((els) =>
+  const n = await wifi.locator(".itile-v").evaluateAll((els) =>
     els.map((e) => {
       const r = document.createRange();
       r.selectNodeContents(e);

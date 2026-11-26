@@ -548,7 +548,7 @@ func TestGPIOTemplatesPageSpeaksOfTemplatesNotOfRules(t *testing.T) {
 			t.Errorf("the templates page lacks %q", want)
 		}
 	}
-	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, " compliant", `class="dev-tiles"`} {
+	for _, bad := range []string{`class="pol-sum"`, `id="live-tile"`, " compliant", `class="itiles"`} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the templates page carries the policy header's %q", bad)
 		}

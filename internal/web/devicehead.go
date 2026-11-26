@@ -138,20 +138,13 @@ func (t deviceTabs) moreItems() []ui.MenuItem {
 	return append(items, ui.MenuItem{Label: "Delete", Href: t.Base + devPath(t.ID, "/delete"), Danger: true, Sep: true})
 }
 
-// stateLabel and stateTone are the header's status pill: "Updating" while an operation holds
-// the device (it is silent on purpose), else the health state.
-func (t deviceTabs) stateLabel() string {
+// stateBadge is the header's status badge, the one the device list shows: "Updating" while an operation holds the
+// device (it is silent on purpose, in the accent tone: it is not a health state), else the health state.
+func (t deviceTabs) stateBadge() ui.StatusBadgeData {
 	if t.Updating {
-		return "Updating"
+		return ui.StatusBadgeData{State: "updating", Tone: ui.ToneAccent, Label: "Updating"}
 	}
-	return label(t.Health)
-}
-
-func (t deviceTabs) stateTone() ui.Tone {
-	if t.Updating {
-		return ui.ToneAccent
-	}
-	return uiTone(t.Health)
+	return statusBadgeOf(t.Health, "")
 }
 
 // offline says whether the header shows the offline banner.

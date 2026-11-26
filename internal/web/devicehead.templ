@@ -44,7 +44,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 		<div class="devhd-t">
 			<div class="devhd-name">
 				<h1>{ t.Name }</h1>
-				<span class={ "devhd-state", "t-" + string(t.stateTone()) }><span class="devhd-dot" aria-hidden="true"></span>{ t.stateLabel() }</span>
+				@ui.StatusBadge(t.stateBadge())
 			</div>
 			<div class="devhd-meta">
 				<span data-visual-mask>{ t.Address }</span>
@@ -246,7 +246,7 @@ templ liveRegion(l liveView) {
 			// the reason as the page writes it (the "(SetOption128 0)" kept on one line): live.js puts it into the Identity card's line
 			<template data-ident-why>@keepTogether(l.ReadsOff)</template>
 		}
-		<div class="dev-tiles">
+		<div class="itiles">
 			for _, t := range l.Tiles {
 				@liveTile(t, l)
 			}
@@ -277,36 +277,16 @@ func toneClass(t ui.Tone) string {
 // liveTile is one tile of the live region. Offline it says "Last reported" (the last reported state), except
 // Reachability: its "Offline" is the current state, not a last report (#676, #513, #1071).
 templ liveTile(t tile, l liveView) {
-	<div class="dev-tile" data-tile={ t.Key }>
-		<div class="dev-tile-l">
-			{ t.Label }
-			if tileStale(t, l) {
-				@staleLabel(false)
-			}
-		</div>
-		<div class={ "dev-tile-v", toneClass(t.Tone) } data-visual-mask?={ t.Mask }>{ t.Value }</div>
-		if t.Bar > 0 {
-			<svg class={ "dev-bar", toneClass(t.BarTone) } viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" data-visual-mask>
-				<rect class="dev-bar-track" x="0" y="0" width="100" height="6"></rect>
-				<rect class="dev-bar-fill" x="0" y="0" width={ strconv.Itoa(t.Bar) } height="6"></rect>
-			</svg>
-		}
-		<div class="dev-tile-s">
-			if !t.At.IsZero() {
-				{ t.SubPrefix }<time data-visual-mask { ui.StampAttrs(t.At, ui.StampDay)... }>{ t.AtText }</time>
-			} else {
-				{ t.Sub }
-			}
-		</div>
+	@ui.InfoTile(t.info(tileStale(t, l))) {
 		if t.Fix {
 			<form method="post" action={ templ.SafeURL(l.Base + "/policy/fix") }>
 				<input type="hidden" name="csrf" value={ l.CSRF }/>
 				<input type="hidden" name="only" value={ devID(l.ID) }/>
 				<input type="hidden" name="from" value="device"/>
-				@ui.Button(ui.Btn{Label: "Make compliant…", Type: "submit", Class: "dev-tile-fix"})
+				@ui.Button(ui.Btn{Label: "Make compliant…", Type: "submit", Class: "itile-act"})
 			</form>
 		}
-	</div>
+	}
 }
 
 // relayBoxView is the box of relay switches: always the same four-column box, for one relay as

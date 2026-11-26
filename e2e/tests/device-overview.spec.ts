@@ -91,7 +91,7 @@ for (const width of [375, 1280]) {
     test(`overview renders without overflow at ${width}px ${scheme}`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await openDevice(page, "plug-4m", width);
-      await expect(page.locator(".dev-tile")).not.toHaveCount(0);
+      await expect(page.locator(".itile")).not.toHaveCount(0);
       await expect(page.locator("#identity")).toBeVisible();
       await expect(page.locator("#devconn")).toBeVisible();
       await expect(page.locator("#devact")).toBeVisible();
@@ -139,7 +139,7 @@ test("a pulled plug shows the offline banner and Last reported, disables, and ad
   expect(faded(await textRuns(page, "#devlive, #identity, #devconn")), "no text of an offline device is drawn at half opacity").toEqual([]);
   await expect(page.locator("#identity [data-stale]")).toBeVisible();
   await expect(page.locator("#devconn [data-stale]")).toBeVisible();
-  await expect(page.locator("#devlive .dev-tile-l [data-stale]").first()).toBeVisible();
+  await expect(page.locator("#devlive .itile-l [data-stale]").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh identity" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Restart" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Back up" })).toBeDisabled();
@@ -332,7 +332,7 @@ test("a device with its HTTP API off is not shown as offline", { tag: "@core" },
   await openCards(page);
   await expect(page.locator("#devpaths-facts")).toContainText("SetOption128 1");
   await expect(page.locator("#devpaths-actions")).toContainText("HTTP API off (SetOption128 0)");
-  await expect(page.locator(".devhd-state")).toHaveText("Online");
+  await expect(page.locator("#devhd .dv-st")).toHaveText("Online");
   // #645: nothing on the page tries and fails; the switches and Restart are disabled with the one reason
   await expect(page.locator("#dev-relays-why")).toContainText("HTTP API off (SetOption128 0)");
   await expect(page.locator("#devlive .devrelay-sw").first()).toBeDisabled();
@@ -444,7 +444,7 @@ test("a device with its HTTP API off stays Online after more polls", { tag: "@fu
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
   await page.waitForTimeout(25_000); // a refusal counted as a failure would be polled every 5 s and turn Offline at the 3rd
   await page.goto(app.url + href);
-  await expect(page.locator(".devhd-state")).toHaveText("Online");
+  await expect(page.locator("#devhd .dv-st")).toHaveText("Online");
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off");
   await expect(page.locator("#devhd-why")).toContainText("HTTP API off (SetOption128 0)");
 });

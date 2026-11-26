@@ -47,7 +47,7 @@ func TestDeviceHeaderIsTheSameOnEveryTab(t *testing.T) {
 		if resp.StatusCode != 200 {
 			t.Fatalf("%s: %d", c.path, resp.StatusCode)
 		}
-		for _, want := range []string{`<h1>kitchen</h1><span class="devhd-state t-ok">`, `href="/tf/devices/1/replace">Replace device</a>`, `<nav class="utabs" aria-label="Device pages">`,
+		for _, want := range []string{`<h1>kitchen</h1><span class="bdg dv-st t-ok" data-state="online">`, `href="/tf/devices/1/replace">Replace device</a>`, `<nav class="utabs" aria-label="Device pages">`,
 			`aria-current="page">` + c.section + `</a>`, `<span class="crumb-here" aria-current="page">kitchen</span>`, `data-dialog="dlg-restart"`, `>Back up</button>`, `href="/tf/devices/1/edit">Edit</a>`,
 			`<a class="btn btn-danger" href="/tf/devices/1/delete">Delete</a>`} { // N2: a plain link to the delete page, no dialog
 			if !strings.Contains(body, want) {
@@ -60,7 +60,7 @@ func TestDeviceHeaderIsTheSameOnEveryTab(t *testing.T) {
 	}
 	// An operator keeps the name and the state but never gets the admin-only tab and buttons.
 	_, op := e.do(t, "GET", "/devices/1/console", "operator", nil)
-	if !strings.Contains(op, `<h1>kitchen</h1><span class="devhd-state`) || strings.Contains(op, "Replace device") || strings.Contains(op, ">Edit</a>") || strings.Contains(op, "/devices/1/delete") {
+	if !strings.Contains(op, `<h1>kitchen</h1><span class="bdg dv-st`) || strings.Contains(op, "Replace device") || strings.Contains(op, ">Edit</a>") || strings.Contains(op, "/devices/1/delete") {
 		t.Errorf("operator header:\n%s", op)
 	}
 }

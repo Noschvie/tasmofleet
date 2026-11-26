@@ -383,7 +383,7 @@ func TestPolicyEmptyStateOffersTemplatesAsDraftLinks(t *testing.T) {
 	if n := strings.Count(b, `href="/tf/policy/rules/new?template=`); n != 3 || !strings.Contains(b, `href="/tf/policy/rules/new?template=`+tpls[0].ID+`"`) {
 		t.Errorf("want the first 3 templates as links, got %d:\n%s", n, b)
 	}
-	if !strings.Contains(b, `href="/tf/policy/rules/new">New rule<`) || !strings.Contains(b, "No policy rules yet") || strings.Contains(b, `class="dev-tiles"`) {
+	if !strings.Contains(b, `href="/tf/policy/rules/new">New rule<`) || !strings.Contains(b, "No policy rules yet") || strings.Contains(b, `class="itiles"`) {
 		t.Error("empty state: New rule, the heading, and no tiles without rules")
 	}
 	_, b = e.do(t, "GET", "/policy", "operator", nil)

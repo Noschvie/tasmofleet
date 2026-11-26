@@ -197,7 +197,7 @@ func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 		d.DeviceCmd = &fakeCmd{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<div class="banner tone-warn" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
+	for _, want := range []string{`<div class="banner tone-warn" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="bdg dv-st t-danger" data-state="offline">`,
 		`role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`,
 		`id="devlive" class="devlive" data-off`, `id="identity" class="devcard r2" aria-labelledby="dc-ident"`, `id="devconn" class="devcard r3" aria-labelledby="dc-conn"`,
 		`<button type="button" class="btn" aria-disabled="true" aria-describedby="devhd-off">Restart</button>`} {

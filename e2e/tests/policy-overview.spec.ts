@@ -126,7 +126,7 @@ test("phone: the first rule starts above 412 px, under one summary line", async 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(app.url + "/policy");
   await expect(page.locator(".pol-sum-line")).toHaveText("0 of 0 compliant · 0 deviating · 0 not judged");
-  await expect(page.locator(".dev-tile")).toHaveCount(0);
+  await expect(page.locator(".itile")).toHaveCount(0);
   const top = await page.locator("section#rules tbody tr").first().evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
   expect(top, "the first rule row starts above y = 412").toBeLessThan(412);
   // the two live-check buttons stay inside the screen and are the 44 px a phone control is

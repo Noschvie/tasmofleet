@@ -560,7 +560,7 @@ func TestOfflineDeviceSaysLastReported(t *testing.T) {
 	})
 	tiles := func(body string) map[string]string {
 		got := map[string]string{}
-		for _, m := range regexp.MustCompile(`(?s)<div class="dev-tile" data-tile="(\w+)"><div class="dev-tile-l">(.*?)</div>`).FindAllStringSubmatch(body, -1) {
+		for _, m := range regexp.MustCompile(`(?s)<div class="itile" data-tile="(\w+)"><div class="itile-l">(.*?)</div>`).FindAllStringSubmatch(body, -1) {
 			got[m[1]] = m[0]
 		}
 		return got

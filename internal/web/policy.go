@@ -117,8 +117,9 @@ type liveLine struct {
 	Value string // the big word: "Every 1 h", "Paused", "Failed"
 	Tone  ui.Tone
 	Sub   string // idle and failed: the line under it
-	// Paused: "Live check paused by <PausedBy> at <PausedAt>[ · deviations shown are from <Shown>]".
-	// The times are components so that time.js shows them in the browser's zone.
+	// Paused: "Live check paused by <PausedBy> at <PausedAt>"; Shown is when the newest live value was read, which the
+	// deviating count in the summary names ("values from <Shown>"). The times are components so that time.js shows
+	// them in the browser's zone.
 	PausedBy        string
 	PausedAt, Shown time.Time
 	CanPause        bool // Pause / Resume are shown (admin, and the pause service exists)
@@ -428,7 +429,7 @@ func (h *handler) liveLine(rep PolicyReport, repErr error, admin bool) *liveLine
 	now := h.d.Clock.Now()
 	if h.d.PolicyLivePause != nil {
 		if s := h.d.PolicyLivePause.State(); s.Paused {
-			l.State, l.Value, l.Tone = "paused", "Paused", ui.ToneNeutral
+			l.State, l.Value, l.Tone = "paused", "Paused", ui.ToneWarn // warn, not grey: a paused check reads as "fine" in grey (#1097)
 			l.PausedBy, l.PausedAt, l.Shown = h.pr.Text(s.By), s.At, last
 			return l
 		}
