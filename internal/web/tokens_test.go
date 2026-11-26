@@ -569,6 +569,63 @@ func TestStylesheetWritesTokens(t *testing.T) {
 			}
 		})
 	})
+
+	// Why: a font size written as a literal is how the stylesheet got six heading sizes and eleven rem
+	// sizes between 12.8 and 16.8 px that no token has: each rule copied a neighbour's number. A size
+	// is a --fs-* token, so one heading level is one size everywhere and a change of the scale reaches
+	// every rule. An em size (font-size: 0.92em on code, 0.9em on .shortid, 0.85em on .dv-readat) is
+	// relative to the text it sits in and stays; it is the only length a size may still be written in.
+	t.Run("font sizes are --fs-* tokens", func(t *testing.T) {
+		base := cssDecls(t, readRepoFile(t, "static/app.css"), baseHeader)
+		anyVar := regexp.MustCompile(`var\([^)]*\)`)
+		fsVar := regexp.MustCompile(`var\((--fs-[\w-]+)\)`)
+		absLen := regexp.MustCompile(`\d*\.?\d+(?:px|rem)\b`)
+		outsideTokens(t, func(r cssRule, d cssDecl) {
+			if d.prop != "font-size" && d.prop != "font" {
+				return
+			}
+			v := stripImportant(d.val)
+			for _, m := range fsVar.FindAllStringSubmatch(v, -1) {
+				if _, ok := base[m[1]]; !ok {
+					report(t, r, d, m[1]+" is not defined on :root; the size would silently be inherited")
+				}
+			}
+			if absLen.MatchString(anyVar.ReplaceAllString(v, "")) {
+				report(t, r, d, "a px or rem font size; use a --fs-* token (the table in design-system.md > Type)")
+			}
+		})
+	})
+
+	// Why: the font files carry 400, 500 and 600 (the sans) and 400 and 500 (the mono); a 700, 800 or
+	// 550 is a weight the page then synthesises or rounds, and it differs from the design system's
+	// three weights by an amount nobody can see on purpose. The @font-face descriptors are skipped:
+	// their "400 700" is the range the file offers, not a use.
+	t.Run("weights are 400, 500 and 600", func(t *testing.T) {
+		allowed := map[string]bool{"400": true, "500": true, "600": true}
+		numeric := regexp.MustCompile(`^\d+$`)
+		outsideTokens(t, func(r cssRule, d cssDecl) {
+			if strings.HasPrefix(r.header, "@font-face") {
+				return
+			}
+			v := stripImportant(d.val)
+			switch d.prop {
+			case "font-weight":
+				if !allowed[v] && v != "inherit" {
+					report(t, r, d, "a weight that is not 400, 500 or 600")
+				}
+			case "font":
+				// the weight is a number or a keyword before the size ("italic 600 var(--fs-x) ...")
+				for _, f := range strings.Fields(v) {
+					if strings.HasPrefix(f, "var(") || lengthRe.MatchString(f) {
+						break
+					}
+					if (numeric.MatchString(f) && !allowed[f]) || f == "bold" || f == "bolder" || f == "lighter" {
+						report(t, r, d, "a weight that is not 400, 500 or 600")
+					}
+				}
+			}
+		})
+	})
 }
 
 // Why: the design system page is what the next person reads. The tokens #1099 adds (scrim, on-colours,
@@ -600,6 +657,31 @@ func TestMoreTokensRowsEqualStylesheet(t *testing.T) {
 		}
 		if !seen[name] {
 			t.Errorf("design-system.md does not write %s with its value in More tokens", name)
+		}
+	}
+	// the Type sizes row names every --fs-* token with its pixel value: it is what a reader takes as the
+	// scale, so a token the row leaves out (--fs-word was one) is a size nobody knows they may use
+	var sizes string
+	for _, line := range strings.Split(doc, "\n") {
+		if strings.HasPrefix(line, "| Type sizes |") {
+			sizes = line
+		}
+	}
+	if sizes == "" {
+		t.Error("design-system.md has no Type sizes row")
+	}
+	for name, val := range base {
+		if !strings.HasPrefix(name, "--fs-") {
+			continue
+		}
+		m := regexp.MustCompile("`" + regexp.QuoteMeta(name) + "` (\\d+(?:\\.\\d+)?px)").FindStringSubmatch(sizes)
+		if m == nil || m[1] != val {
+			t.Errorf("the Type sizes row of design-system.md does not say `%s` %s", name, val)
+		}
+	}
+	for _, m := range regexp.MustCompile("`(--fs-[\\w-]+)`").FindAllStringSubmatch(sizes, -1) {
+		if _, ok := base[m[1]]; !ok {
+			t.Errorf("the Type sizes row of design-system.md names %s, app.css has no such token", m[1])
 		}
 	}
 	// the radii row names every --r-* token with its pixel value

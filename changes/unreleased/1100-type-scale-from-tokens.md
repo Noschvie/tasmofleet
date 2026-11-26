@@ -1,0 +1,4 @@
+---
+section: Changed
+---
+Every font size and weight in the stylesheet comes from the type scale, and a test now fails when a size is written as px or rem, or a weight other than 400, 500 or 600 is used. Four sizes the design system had planned exist as tokens (dialog title 16, empty state heading 17, sign-in title 20, error page title 26). Headings collapse to the scale: card and section headings are 14 px (the firmware card "Tasmota 14.3.0" was 16, the replace-device cards and the update run title 15), 15 px is left to the release notes, and headings in the device overview cards stay 13 px. Sizes between the steps move to the nearest one: the 10 and 11 px badges and carets are 11.5, 14.5 and 15 px text is 14, the dense audit and job rules written in rem (12.8 to 14.4 px) follow the scale, and the 24 px count in the backup tiles is 22. Bold, extra bold and the 550 label weight are 600 or 500 (#1100)

@@ -94,7 +94,7 @@ Theme-independent tokens (all on `:root`):
 | Group | Tokens |
 | --- | --- |
 | Fonts | `--font-sans: "Geist", ui-sans-serif, system-ui, sans-serif`; `--font-mono: "Geist Mono", ui-monospace, Menlo, monospace`. Body is `400 14px/1.45` (`--fs-base`, `--lh-body`) |
-| Type sizes | `--fs-h1` 22px (weight 600), `--fs-h2-lg` 15px, `--fs-h2` 14px, `--fs-h2-sm` 13px, `--fs-body` 13.5px, `--fs-ui` 13px, `--fs-meta` 12.5px, `--fs-small` 12px, `--fs-badge` 11.5px, `--fs-stat` 28px (the stat tile value, `600 28px/1`, tabular figures; measured in F4) |
+| Type sizes | `--fs-h1` 22px (weight 600), `--fs-h2-lg` 15px (release notes only), `--fs-h2` 14px, `--fs-h2-sm` 13px, `--fs-title-sm` 16px, `--fs-empty` 17px, `--fs-auth` 20px, `--fs-error` 26px, `--fs-base` 14px, `--fs-body` 13.5px, `--fs-ui` 13px, `--fs-meta` 12.5px, `--fs-small` 12px, `--fs-badge` 11.5px, `--fs-stat` 28px (the stat tile value, `600 28px/1`, tabular figures; measured in F4), `--fs-word` 18px (`600 18px/1.25`, a word as a tile value). `TestStylesheetWritesTokens` fails on a px or rem font size, and on a weight other than 400, 500 and 600, written outside the token blocks; `TestMoreTokensRowsEqualStylesheet` fails when this row leaves out a `--fs-*` token or states another value |
 | Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-mark` 2px, `--r-pill` 999px; dots and avatars use `50%`. `--r-mark` is for marks (a pin, a column handle's focus, a locked checkbox); a bar, a track or a count pill whose ends are round uses `--r-pill`. A radius is never a px value and never a `--sp-*` token |
 | Spacing | `--sp-N` is N pixels, for the values the prototype uses: 1-12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40. The prototype is not on a 4px grid, nothing is rounded |
 | Card gap | `--card-gap`: the space between sibling cards, down and across, on every page: card stacks, the device overview, its tile row. The value is 16 px (`--sp-16`); the token still reads `--sp-12` and the card stacks write 16 px directly until #1101 makes them one. `device-layout.spec.ts` fails when two cards come closer |
@@ -124,29 +124,28 @@ width including the scrollbar, which is what the prototype's root measures, and 
 ## Type
 
 Body is `400 14px/1.45 var(--font-sans)`. Font sizes are the `--fs-*` tokens; a component writes
-`font: <weight> var(--fs-x)[/<line-height>] var(--font-sans|--font-mono)`. Weights are 400, 500 and 600
-only. A size that is not in the table below is not used; a new one needs a token and a row here. Most
-declarations in `app.css` still write literal sizes and off-scale weights; #1100 moves them to the tokens,
-adds the planned ones (`--fs-title-sm` 16px: dialog title and a card that is the page's subject;
-`--fs-empty` 17px: empty state heading; `--fs-auth` 20px: sign-in card title; `--fs-error` 26px: error page
-title) and adds the guard; `--fs-word` (18px: a word as a tile value) exists since #1097. The recurring sizes:
+`font: <weight> var(--fs-x)[/<line-height>] var(--font-sans|--font-mono)` or `font-size: var(--fs-x)`. Weights
+are 400, 500 and 600 only. A size that is not in the table below is not used; a new one needs a token and a row
+here. `app.css` writes no px or rem font size and no other weight outside the token block (an `em` size on
+`code`, `.shortid` and `.dv-readat` is relative to the text around it and stays). The base `h1` to `h4` rules
+set the heading sizes, so a heading needs no size of its own unless the table gives it one. The recurring sizes:
 
 | Use | Font |
 | --- | --- |
-| Page title (h1) | `600 22px/1.2`, letter-spacing -0.015em |
-| Error page title | `600 26px/1.2`, -0.02em |
-| Sign-in card title | `600 20px/1.2` |
-| Dialog title | `600 16px/1.3` |
-| Empty state heading | `600 17px` |
-| Card and section heading (h2) | `600 14px` (`--fs-h2`); `600 13px` (`--fs-h2-sm`) in device overview cards; `600 15px` (`--fs-h2-lg`) in release notes only |
+| Page title (h1) | `600 22px/1.2` (`--fs-h1`), letter-spacing -0.015em |
+| Error page title | `600 26px/1.2` (`--fs-error`), -0.02em |
+| Sign-in card title | `600 20px/1.2` (`--fs-auth`) |
+| Dialog title | `600 16px/1.3` (`--fs-title-sm`); the same token sizes the phone header title and the text glyph icons (close sign, kebab menu) |
+| Empty state heading | `600 17px` (`--fs-empty`) |
+| Card and section heading (h2, h3) | `600 14px` (`--fs-h2`, the base `h2` and `h3` rules); `600 13px` (`--fs-h2-sm`) in device overview cards and for small sub headings (`h4`); `600 15px` (`--fs-h2-lg`) in release notes only |
 | Stat tile value | `600 28px/1` (`--fs-stat`), tabular figures, -0.02em |
-| Info tile value that is a word | `600 18px/1.25` (`--fs-word`), -0.01em |
-| List rows, inputs | `400 13.5px` |
-| Buttons, tabs | `500 13px` (primary `600 13px`); tabs and top-bar groups `500 13.5px` |
-| Field labels, secondary lines | `500 12.5px` / `400 12.5px` |
-| Help, error lines, hints | `400 12px` |
-| Badges, counters | `500 11.5px` |
-| Mono values (addresses, versions, ids) | `400 12.5px var(--font-mono)`; transaction ids `500 12px` |
+| Info tile value that is a word | `600 18px/1.25` (`--fs-word`), -0.01em; the token also sizes the other 18 px text: the about page name, a sensor value, the one-time code, the next-run time, the sign-in brand |
+| List rows, inputs | `400 13.5px` (`--fs-body`) |
+| Buttons, tabs | `500 13px` (`--fs-ui`; primary `600 13px`); tabs and top-bar groups `500 13.5px` (`--fs-body`) |
+| Field labels, secondary lines | `500 12.5px` / `400 12.5px` (`--fs-meta`) |
+| Help, error lines, hints | `400 12px` (`--fs-small`) |
+| Badges, counters | `500 11.5px` (`--fs-badge`), also the smallest text: carets, avatar initials, key caps |
+| Mono values (addresses, versions, ids) | `400 12.5px var(--font-mono)`; transaction ids `500 12px`; a version in a tile `600 14px` |
 
 ## Spacing, shape and layout
 

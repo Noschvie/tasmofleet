@@ -63,9 +63,13 @@
   --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
   --fs-base: 14px; /* body */
   --fs-h1: 22px; /* page title */
-  --fs-h2-lg: 15px; /* page section and card headings */
-  --fs-h2: 14px; /* sub headings */
-  --fs-h2-sm: 13px; /* headings inside small cards */
+  --fs-h2-lg: 15px; /* headings in the release notes, nowhere else */
+  --fs-h2: 14px; /* card and section headings (h2, h3) */
+  --fs-h2-sm: 13px; /* headings inside device overview cards, small sub headings */
+  --fs-title-sm: 16px; /* dialog title, the card that is the page's subject, text glyph icons (close, kebab) */
+  --fs-empty: 17px; /* empty state heading */
+  --fs-auth: 20px; /* sign-in card title */
+  --fs-error: 26px; /* error page title */
   --fs-body: 13.5px; /* list rows, form text, controls */
   --fs-ui: 13px; /* buttons, nav, tabs, table cells */
   --fs-meta: 12.5px; /* secondary lines, crumbs */
@@ -337,7 +341,7 @@ h1 {
   font-weight: 600;
 }
 h2 {
-  font-size: var(--fs-h2-lg);
+  font-size: var(--fs-h2);
   font-weight: 600;
 }
 h3 {
@@ -685,7 +689,7 @@ legend {
   padding: 0 var(--sp-8);
   margin-left: calc(var(--sp-8) * -1);
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 600;
   font-size: var(--fs-ui);
 }
 .stack {
@@ -764,7 +768,7 @@ small.error {
   align-items: center;
   height: 20px;
   padding: 0 6px;
-  font: 500 11.5px var(--font-sans);
+  font: 500 var(--fs-badge) var(--font-sans);
   color: var(--color-text-2);
   border: var(--hair-w) solid var(--color-border-strong);
   border-radius: var(--r-badge);
@@ -801,8 +805,8 @@ small.error {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
-  font-size: 12px;
+  font-weight: 600;
+  font-size: var(--fs-small);
   color: var(--color-surface);
 }
 .notice {
@@ -851,7 +855,7 @@ small.error {
 .warning a,
 .error a {
   color: inherit;
-  font-weight: 700;
+  font-weight: 600;
 }
 span.error {
   color: var(--color-danger-fg);
@@ -1027,8 +1031,8 @@ th .sortlink.is-hover {
 
 /* cell content helpers */
 .chan {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--fs-badge);
+  font-weight: 600;
   padding: 0 4px;
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-xs);
@@ -1131,7 +1135,7 @@ th .sortlink.is-hover {
 }
 .menu a[aria-current="page"],
 .rowmenu-body [aria-current="true"] {
-  font-weight: 700;
+  font-weight: 600;
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 .menu [aria-disabled="true"],
@@ -1216,7 +1220,7 @@ details.fold > summary {
   cursor: pointer;
   list-style: none;
   font-family: var(--font-sans);
-  font-weight: 700;
+  font-weight: 600;
   font-size: var(--fs-body);
 }
 details.fold > summary::-webkit-details-marker {
@@ -1632,13 +1636,13 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     border: var(--hair-w) solid var(--color-border-strong);
     border-radius: var(--r-card);
     box-shadow: var(--shadow-lg);
-    font: 400 13px / 1.3 var(--font-sans);
+    font: 400 var(--fs-ui) / 1.3 var(--font-sans);
     color: var(--color-text);
   }
   .colpanel .colhint {
     margin: 0;
     padding: 6px 8px 8px;
-    font-size: 12px;
+    font-size: var(--fs-small);
     line-height: 1.45;
     color: var(--color-text-2);
   }
@@ -1696,7 +1700,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     height: 20px;
     padding: 0 7px;
     border-radius: var(--r-badge);
-    font: 500 11.5px var(--font-sans);
+    font: 500 var(--fs-badge) var(--font-sans);
     white-space: nowrap;
     background: var(--color-accent-bg);
     color: var(--color-accent-fg);
@@ -1710,7 +1714,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     border: var(--hair-w) solid var(--color-border);
     background: transparent;
     color: var(--color-text-2);
-    font: 500 11px var(--font-sans);
+    font: 500 var(--fs-badge) var(--font-sans);
     white-space: nowrap;
     box-shadow: none;
   }
@@ -1726,7 +1730,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     margin-top: 6px;
     padding: 6px 4px 2px 8px;
     border-top: var(--hair-w) solid var(--color-border);
-    font-size: 11.5px;
+    font-size: var(--fs-badge);
     color: var(--color-text-3);
   }
   .colpanel .colreset {
@@ -1739,7 +1743,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     background: none;
     box-shadow: none;
     color: var(--color-accent-fg);
-    font: 500 13px var(--font-sans);
+    font: 500 var(--fs-ui) var(--font-sans);
     white-space: nowrap;
   }
 }
@@ -1961,7 +1965,7 @@ td.wrap {
 }
 .picker label {
   display: inline;
-  font-weight: 550;
+  font-weight: 500;
   font-size: inherit;
 }
 .picker tr:has(input:disabled) td {
@@ -2064,7 +2068,7 @@ td.wrap {
 } /* a failed job is a full danger bar, not an empty pill */
 .job-step {
   margin-top: 0.25rem;
-  font-size: 0.86rem;
+  font-size: var(--fs-base);
   color: var(--color-text-2);
   white-space: nowrap;
   overflow: hidden;
@@ -2091,7 +2095,7 @@ details.job-log {
 details.job-log > summary {
   cursor: pointer;
   color: var(--color-text-2);
-  font-size: 0.86rem;
+  font-size: var(--fs-base);
   list-style-position: inside;
 }
 .job-last {
@@ -2254,7 +2258,7 @@ details.job-log > summary {
   border: 0;
   padding: 0;
   background: none;
-  font-size: 0.8rem;
+  font-size: var(--fs-meta);
   max-height: 15lh;
   overflow: hidden;
 }
@@ -2280,7 +2284,7 @@ details.job-log > summary {
 }
 .audittable tr.detail-row pre {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--fs-ui);
   max-height: 24rem;
   overflow: auto;
 }
@@ -2410,7 +2414,7 @@ details.job-log > summary {
   border-radius: var(--r-pill);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   text-decoration: none;
   cursor: pointer;
   /* a chip never gets wider than its list: a long unbroken device name wraps inside it */
@@ -2465,7 +2469,7 @@ button.chip-x {
   border: 0;
   background: none;
   color: var(--color-text-2);
-  font: 500 14px var(--font-sans);
+  font: 500 var(--fs-base) var(--font-sans);
   cursor: pointer;
 }
 .chip:has(> button.chip-x) {
@@ -2481,7 +2485,7 @@ button.chip-x {
   padding: var(--sp-6) var(--sp-12);
 }
 .chip-sub {
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 400;
   color: var(--color-text-2);
 }
@@ -2533,7 +2537,7 @@ button.chip-x {
   }
   .actionbar > [data-summary] {
     flex: 1 1 100%;
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
     line-height: 1.3;
   }
   .actionbar > button {
@@ -2583,7 +2587,7 @@ button.chip-x {
   table.dense td.ctx > details {
     order: 4;
     flex: none;
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
     color: var(--color-text-2);
   }
   table.dense td.ctx > details[open] {
@@ -2601,7 +2605,7 @@ button.chip-x {
   .rule-editor .error {
     margin: 0.2rem 0;
     padding: 0.4rem 0.6rem;
-    font-size: 0.88rem;
+    font-size: var(--fs-base);
     line-height: 1.35;
   }
   .rule-editor .notice,
@@ -2626,7 +2630,7 @@ button.chip-x {
     gap: 0.75rem;
   }
   .picker label {
-    font-weight: 550;
+    font-weight: 500;
   }
   .picker td.p1 {
     white-space: normal;
@@ -2647,7 +2651,7 @@ button.chip-x {
   }
   .cols.opts legend {
     padding: 0;
-    font-size: 1.05rem;
+    font-size: var(--fs-h2);
   }
   .picker td.p1 label {
     display: inline;
@@ -2669,7 +2673,7 @@ button.chip-x {
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--color-text-2);
-    font-size: 0.88rem;
+    font-size: var(--fs-base);
   }
   /* the target needs no label here: it is the line under time and user */
   .audittable.dense
@@ -2692,7 +2696,7 @@ button.chip-x {
   .audittable.dense summary {
     min-height: 1.6rem;
     padding: 0.1rem 0.5rem;
-    font-size: 0.82rem;
+    font-size: var(--fs-ui);
   }
   .audittable.dense tr.detail-row,
   .audittable.dense tbody tr.detail-row:nth-child(even) {
@@ -2748,7 +2752,7 @@ button.chip-x {
     height: 26px;
     padding: 0;
     border-radius: var(--r-badge);
-    font-size: 13px;
+    font-size: var(--fs-ui);
     line-height: 1;
     box-shadow: none;
     border: 0;
@@ -2963,7 +2967,7 @@ button.chip-x {
   align-items: center;
   gap: 0.1rem;
   min-width: 0;
-  font-weight: 550;
+  font-weight: 500;
 }
 .kv-key label {
   overflow-wrap: anywhere;
@@ -3031,7 +3035,7 @@ form[data-track-changes] .savebar .actions {
 }
 .sysform .fld label.reset {
   font-weight: 400;
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
   color: var(--color-text-2);
 }
 @media (max-width: 44.99rem) {
@@ -3797,7 +3801,7 @@ header.top {
   display: flex;
   align-items: center;
   gap: var(--sp-9);
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-base) var(--font-sans);
   letter-spacing: -0.01em;
   color: var(--color-text);
   text-decoration: none;
@@ -3813,7 +3817,7 @@ header.top {
   align-self: center;
 }
 .ver {
-  font: 400 11.5px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
   color: var(--color-text-3);
   text-decoration: none;
   white-space: nowrap;
@@ -3845,7 +3849,7 @@ header.top {
   height: 32px;
   padding: 0 var(--sp-12);
   border-radius: var(--r-control);
-  font: 500 13.5px var(--font-sans);
+  font: 500 var(--fs-body) var(--font-sans);
   color: var(--color-text-2);
   text-decoration: none;
   white-space: nowrap;
@@ -3881,7 +3885,7 @@ header.top {
   background: var(--color-surface);
   border-top: 1px solid var(--color-border-strong);
   box-shadow: var(--shadow-bar);
-  font: 500 12px/1 var(--font-sans);
+  font: 500 var(--fs-small)/1 var(--font-sans);
   color: var(--color-text-2);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -3942,7 +3946,7 @@ a.sb-i:hover {
   color: var(--color-text);
 }
 .sb-i .mono {
-  font: 400 11.5px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
 }
 .sb-mut {
   color: var(--color-text-3);
@@ -3954,7 +3958,7 @@ a.sb-i:hover {
   padding: 0; /* the spacer gives way to nothing: its padding made the row wider than the window at 768px (#934) */
 }
 .sb-ver {
-  font: 400 11.5px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
 }
 .sb-live {
   display: inline-flex;
@@ -4109,7 +4113,7 @@ html[data-live="offline"] .sb-stale {
     height: var(--sb-line);
     padding: 0 var(--sp-16);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-ui);
   }
   .sb-narrow summary::-webkit-details-marker {
     display: none;
@@ -4125,7 +4129,7 @@ html[data-live="offline"] .sb-stale {
   .sb-sum small {
     color: var(--color-text-3);
     font-weight: 400;
-    font-size: 12px;
+    font-size: var(--fs-small);
   }
   html[data-live="reconnecting"] .sb-sum-data,
   html[data-live="offline"] .sb-sum-data {
@@ -4145,7 +4149,7 @@ html[data-live="offline"] .sb-stale {
   }
   .sb-car {
     color: var(--color-text-3);
-    font-size: 10px;
+    font-size: var(--fs-badge);
     transition: transform var(--dur-base);
   }
   .sb-narrow[open] .sb-car {
@@ -4169,7 +4173,7 @@ html[data-live="offline"] .sb-stale {
     align-items: flex-start;
     border-left: 0;
     padding: var(--sp-12) var(--sp-16);
-    font-size: 13px;
+    font-size: var(--fs-ui);
     white-space: normal;
     flex-wrap: wrap;
     row-gap: var(--sp-4);
@@ -4222,7 +4226,7 @@ summary.um-btn {
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   cursor: pointer;
 }
 summary.um-btn::-webkit-details-marker {
@@ -4237,12 +4241,12 @@ summary.um-btn::-webkit-details-marker {
   color: var(--color-accent-fg);
   display: grid;
   place-items: center;
-  font: 600 11px var(--font-sans);
+  font: 600 var(--fs-badge) var(--font-sans);
   flex: none;
 }
 .um-caret {
   color: var(--color-text-3);
-  font-size: 10px;
+  font-size: var(--fs-badge);
 }
 .um-menu {
   position: absolute;
@@ -4267,7 +4271,7 @@ summary.um-btn::-webkit-details-marker {
   font-weight: 600;
 }
 .um-role {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .um-theme {
@@ -4276,12 +4280,12 @@ summary.um-btn::-webkit-details-marker {
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-8);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .um-note {
   margin: 0;
   padding: 0 var(--sp-10) var(--sp-6);
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-3);
   text-align: right;
 }
@@ -4300,7 +4304,7 @@ summary.um-btn::-webkit-details-marker {
   border-radius: var(--r-sm);
   background: none;
   color: var(--color-text);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   text-decoration: none;
   text-box: normal;
 }
@@ -4322,7 +4326,7 @@ summary.um-btn::-webkit-details-marker {
   border-radius: 0;
   background: transparent;
   color: var(--color-text);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   text-box: normal;
 }
 .seg button + button {
@@ -4356,7 +4360,7 @@ summary.um-btn::-webkit-details-marker {
   align-items: center;
   gap: var(--sp-6);
   padding: 0 var(--sp-2);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   color: var(--color-text-2);
   text-decoration: none;
   white-space: nowrap;
@@ -4399,7 +4403,7 @@ summary.um-btn::-webkit-details-marker {
 .ph-title {
   flex: 1;
   min-width: 0;
-  font: 600 16px var(--font-sans);
+  font: 600 var(--fs-title-sm) var(--font-sans);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4460,7 +4464,7 @@ html:has(dialog.drawer:modal) body {
   align-items: center;
   gap: var(--sp-9);
   padding: 0 var(--sp-8);
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-base) var(--font-sans);
 }
 .dr-group {
   margin-top: var(--sp-12);
@@ -4468,7 +4472,7 @@ html:has(dialog.drawer:modal) body {
 .dr-label {
   margin: 0;
   padding: 0 var(--sp-10) var(--sp-4);
-  font: 600 11px var(--font-sans);
+  font: 600 var(--fs-badge) var(--font-sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-text-3);
@@ -4485,7 +4489,7 @@ html:has(dialog.drawer:modal) body {
   border-radius: var(--r-code);
   background: transparent;
   color: var(--color-text);
-  font: 500 14.5px var(--font-sans);
+  font: 500 var(--fs-base) var(--font-sans);
   text-decoration: none;
   text-box: normal;
 }
@@ -4514,7 +4518,7 @@ html:has(dialog.drawer:modal) body {
   justify-content: space-between;
   gap: var(--sp-8);
   padding: 0 var(--sp-10);
-  font: 500 14.5px var(--font-sans);
+  font: 500 var(--fs-base) var(--font-sans);
 }
 
 /* crumbs (ui.Crumbs) and the trails of pages not ported yet (.crumb.trail) */
@@ -4576,7 +4580,7 @@ nav.crumbs a {
   border: var(--hair-w) solid var(--banner-line);
   background: var(--banner-bg);
   color: var(--banner-fg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .banner.tone-ok {
   --banner-line: var(--color-ok);
@@ -4634,7 +4638,7 @@ nav.crumbs a {
   border: var(--hair-w) solid var(--banner-line);
   background: var(--color-surface);
   color: var(--banner-fg);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   text-box: normal;
 }
 /* the connection banners sit in the page flow of <main>, under the crumbs, like the other inline banners
@@ -4695,7 +4699,7 @@ html[data-live="offline"] .pghead-stale {
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-banner);
   box-shadow: var(--shadow-lg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .toast.has-x {
   padding: var(--sp-8) var(--sp-8) var(--sp-8) var(--sp-14);
@@ -4727,7 +4731,7 @@ html[data-live="offline"] .pghead-stale {
   border: 0;
   background: none;
   color: var(--color-text-3);
-  font: 400 16px var(--font-sans);
+  font: 400 var(--fs-title-sm) var(--font-sans);
   text-box: normal;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -4767,13 +4771,13 @@ html[data-live="offline"] .pghead-stale {
 .pghead .h1-sample {
   margin: 0;
   overflow-wrap: anywhere; /* a long device name in the title must not widen the page (#1002) */
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
 }
 .pghead-sub {
   margin: 4px 0 0;
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pghead-acts {
   display: flex;
@@ -4796,7 +4800,7 @@ html[data-live="offline"] .pghead-stale {
   border: var(--hair-w) solid var(--color-control-border);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   text-box: normal;
   text-decoration: none;
   white-space: nowrap;
@@ -4885,7 +4889,7 @@ html[data-live="offline"] .pghead-stale {
   min-width: 32px;
   padding: 0;
   color: var(--color-text-2);
-  font: 600 16px var(--font-sans);
+  font: 600 var(--fs-title-sm) var(--font-sans);
 }
 .btn.btn-icon.btn-sm {
   width: var(--ctl-sm);
@@ -4915,7 +4919,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   max-width: 100%;
 }
 .btn-why {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* the reason of a page header's blocked button, one line under the whole header (Retry failed on a running transaction),
@@ -4923,7 +4927,7 @@ button.btn[aria-disabled="true"]:focus-visible {
 .pghead-why {
   flex-basis: 100%;
   margin: calc(-1 * var(--sp-4)) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 @media (min-width: 45rem) {
@@ -4950,7 +4954,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   height: 20px;
   padding: 0 7px;
   border-radius: var(--r-badge);
-  font: 500 11.5px var(--font-sans);
+  font: 500 var(--fs-badge) var(--font-sans);
   white-space: nowrap;
   background: var(--t-bg);
   color: var(--t-fg);
@@ -4962,7 +4966,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-6);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .sdot-dot {
   width: 8px;
@@ -4980,7 +4984,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   flex: none;
   background: var(--t-bg);
   color: var(--t-fg);
-  font: 600 11px var(--font-sans);
+  font: 600 var(--fs-badge) var(--font-sans);
 }
 
 /* cards: a padded section, a list card (header row, rows), key/value rows */
@@ -4996,12 +5000,12 @@ button.btn[aria-disabled="true"]:focus-visible {
 }
 .ucard > h2 {
   margin: 0 0 2px;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .ucard-sub {
   margin: 0 0 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .ucard > .banner {
@@ -5026,7 +5030,7 @@ button.btn[aria-disabled="true"]:focus-visible {
 }
 .ulist-head h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .ukv {
@@ -5038,7 +5042,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   gap: var(--sp-10);
   padding: var(--sp-6) 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .ukv dt {
   color: var(--color-text-2);
@@ -5055,7 +5059,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   overflow-wrap: anywhere;
 }
 .ukv dd.mono {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -5090,7 +5094,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   border: 0;
   background: none;
   color: var(--color-accent-fg);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   text-box: normal;
 }
 .toast .toast-act:hover {
@@ -5114,7 +5118,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   border-radius: var(--r-pill);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
   min-width: 150px;
 }
@@ -5140,7 +5144,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
   min-width: 0;
 }
@@ -5156,11 +5160,11 @@ button.btn[aria-disabled="true"]:focus-visible {
   box-shadow: none;
 }
 .ufield-err {
-  font: 400 12px var(--font-sans);
+  font: 400 var(--fs-small) var(--font-sans);
   color: var(--color-danger-fg);
 }
 .ufield-help {
-  font: 400 12px var(--font-sans);
+  font: 400 var(--fs-small) var(--font-sans);
   color: var(--color-text-3);
 }
 .ucheck {
@@ -5168,7 +5172,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   align-items: center;
   gap: var(--sp-10);
   min-height: 36px;
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   color: var(--color-text);
 }
 .ucheck input {
@@ -5178,7 +5182,7 @@ button.btn[aria-disabled="true"]:focus-visible {
 }
 .ucheck-text {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 
@@ -5194,7 +5198,7 @@ button.btn[aria-disabled="true"]:focus-visible {
 .rcards legend {
   margin: 0 0 var(--sp-5);
   padding: 0;
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .rcard {
@@ -5206,7 +5210,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   border-radius: var(--r-banner);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   cursor: pointer;
 }
 .rcard:has(input:checked) {
@@ -5221,11 +5225,11 @@ button.btn[aria-disabled="true"]:focus-visible {
 .rcard-body b {
   display: block;
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .rcard-body span {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 
@@ -5254,7 +5258,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   padding: 0 var(--sp-12);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   cursor: pointer;
 }
 .useg label + label span {
@@ -5287,7 +5291,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   border-radius: var(--r-banner);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -5358,11 +5362,11 @@ button.btn[aria-disabled="true"]:focus-visible {
 .utoggle-text b {
   display: block;
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .utoggle-text span {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pwr {
@@ -5449,7 +5453,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   display: flex;
   align-items: center;
   gap: 7px;
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .stat-value {
@@ -5458,7 +5462,7 @@ button.btn[aria-disabled="true"]:focus-visible {
   letter-spacing: -0.02em;
 }
 .stat-hint {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .health-bar {
@@ -5523,7 +5527,7 @@ a.att-row:hover {
 }
 .att-why {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .att-acts {
@@ -5556,7 +5560,7 @@ a.att-row:hover {
   flex-wrap: wrap;
 }
 .txn-id {
-  font: 500 12px var(--font-mono);
+  font: 500 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 .txn-title {
@@ -5569,7 +5573,7 @@ a.att-row:hover {
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--sp-4) var(--sp-10);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .txn-sum .txn-when {
@@ -5587,7 +5591,7 @@ a.att-row:hover {
   min-width: 140px;
 }
 .txn-when {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .mini-bar {
@@ -5608,7 +5612,7 @@ a.att-row:hover {
   fill: var(--color-accent);
 }
 .mini-pct {
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-2);
 }
@@ -5645,7 +5649,7 @@ a.att-row:hover {
   gap: var(--sp-6);
   height: calc(var(--ctl) + 6px);
   padding: 0 2px;
-  font: 500 13.5px var(--font-sans);
+  font: 500 var(--fs-body) var(--font-sans);
   color: var(--color-text-2);
   text-decoration: none;
   white-space: nowrap;
@@ -5695,7 +5699,7 @@ details.umenu[open] > summary.btn {
   border-radius: var(--r-sm);
   background: none;
   color: var(--color-text);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   text-align: left;
   text-decoration: none;
   white-space: normal;
@@ -5713,7 +5717,7 @@ details.umenu[open] > summary.btn {
   pointer-events: none;
 }
 .menu-why {
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-3);
 }
 .umenu .menu-panel hr {
@@ -5775,7 +5779,7 @@ dialog.stepup {
 .udlg-in h2,
 .stepup h2 {
   margin: 0;
-  font: 600 16px/1.3 var(--font-sans);
+  font: 600 var(--fs-title-sm)/1.3 var(--font-sans);
   letter-spacing: normal;
 }
 .udlg-body {
@@ -5800,7 +5804,7 @@ dialog.stepup {
   justify-content: space-between;
   padding: var(--sp-8) var(--sp-12);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .udlg-changes span:first-child {
   /* a readable width: a long command wraps below the name instead of squeezing it */
@@ -5809,7 +5813,7 @@ dialog.stepup {
   overflow-wrap: anywhere;
 }
 .udlg-changes .mono {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   min-width: 0;
   max-width: 100%;
@@ -5831,17 +5835,17 @@ dialog.stepup {
   gap: var(--sp-10);
 }
 .stepup-sub {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .stepup .udlg-body {
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .or-rule {
   display: flex;
   align-items: center;
   gap: var(--sp-10);
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .or-rule::before,
@@ -5856,7 +5860,7 @@ dialog.stepup {
   gap: var(--sp-14);
 }
 .confirm-card > h2 {
-  font: 600 16px/1.3 var(--font-sans);
+  font: 600 var(--fs-title-sm)/1.3 var(--font-sans);
 }
 
 /* empty state, "no match" row, loading skeleton */
@@ -5887,7 +5891,7 @@ dialog.stepup {
 }
 .uempty h2 {
   margin: 0;
-  font: 600 17px var(--font-sans);
+  font: 600 var(--fs-empty) var(--font-sans);
   letter-spacing: normal;
 }
 .uempty p {
@@ -5906,7 +5910,7 @@ dialog.stepup {
   align-items: center;
   gap: var(--sp-10);
   padding: var(--sp-24);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   text-align: center;
   background: var(--color-surface);
@@ -5921,7 +5925,7 @@ dialog.stepup {
 }
 .skel-head {
   padding: var(--sp-10) var(--sp-14);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
   border-bottom: var(--hair-w) solid var(--color-border);
 }
@@ -5992,25 +5996,25 @@ dialog.stepup {
   align-items: flex-start;
 }
 .errpage-code {
-  font: 500 13px var(--font-mono);
+  font: 500 var(--fs-ui) var(--font-mono);
   color: var(--color-text-3);
 }
 .errpage h2,
 .errpage h1,
 .errpage .h1-sample {
   margin: 0;
-  font: 600 26px/1.2 var(--font-sans);
+  font: 600 var(--fs-error)/1.2 var(--font-sans);
   letter-spacing: -0.02em;
   text-wrap: balance;
 }
 .errpage p {
   margin: 0;
   color: var(--color-text-2);
-  font-size: 14.5px;
+  font-size: var(--fs-base);
   text-wrap: pretty;
 }
 .errpage-path {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
   background: var(--color-surface-2);
   border: var(--hair-w) solid var(--color-border);
@@ -6042,14 +6046,14 @@ dialog.stepup {
 .auth-card h1,
 .auth-card .h1-sample {
   margin: 0;
-  font: 600 20px/1.2 var(--font-sans);
+  font: 600 var(--fs-auth)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
 }
 .auth-card > .banner {
   margin: 0;
 }
 .auth-foot {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-3);
   text-align: center;
   text-wrap: balance;
@@ -6074,7 +6078,7 @@ dialog.stepup {
   gap: var(--sp-10);
   padding: var(--sp-8) var(--sp-12);
   border-bottom: var(--hair-w) solid var(--color-console-rule);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-term-dim);
 }
 .console-dot {
@@ -6099,7 +6103,7 @@ dialog.stepup {
   border: var(--hair-w) solid var(--color-console-line);
   background: none;
   color: var(--color-term-fg);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   text-box: normal;
 }
 .console .console-chip {
@@ -6116,7 +6120,7 @@ dialog.stepup {
   max-height: min(440px, 52vh);
   overflow: auto;
   padding: var(--sp-12) var(--sp-14);
-  font: 400 12.5px/1.65 var(--font-mono);
+  font: 400 var(--fs-meta)/1.65 var(--font-mono);
 }
 .console-line {
   display: flex;
@@ -6148,14 +6152,14 @@ dialog.stepup {
   align-self: center;
   padding-left: 4px;
   color: var(--color-term-cmd);
-  font: 500 14px var(--font-mono);
+  font: 500 var(--fs-base) var(--font-mono);
 }
 .console-form input:not([type="checkbox"]):not([type="radio"]) {
   flex: 1;
   border-color: var(--color-console-line);
   background: var(--color-console-rule);
   color: var(--color-term-fg);
-  font: 400 13px var(--font-mono);
+  font: 400 var(--fs-ui) var(--font-mono);
 }
 .console-quick {
   display: flex;
@@ -6182,12 +6186,12 @@ dialog.stepup {
 }
 .diff-headrow {
   background: var(--color-surface-2);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 .diff-row {
   min-height: 36px;
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
   color: var(--color-text-2);
 }
@@ -6215,11 +6219,11 @@ dialog.stepup {
 }
 .diff-uni {
   padding: var(--sp-6) 0;
-  font: 400 12.5px/1.6 var(--font-mono);
+  font: 400 var(--fs-meta)/1.6 var(--font-mono);
 }
 .diff-uni-head {
   padding: 2px var(--sp-14) var(--sp-8);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 .diff-line {
@@ -6252,7 +6256,7 @@ dialog.stepup {
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.6;
 }
 .unotes p,
@@ -6264,14 +6268,14 @@ dialog.stepup {
 }
 .unotes h2 {
   margin: 0;
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-h2-lg) var(--font-sans);
   letter-spacing: normal;
 }
 .unotes pre {
   margin: 0;
   padding: var(--sp-10) var(--sp-12);
   border-radius: var(--r-code);
-  font: 400 12px/1.6 var(--font-mono);
+  font: 400 var(--fs-small)/1.6 var(--font-mono);
 }
 .unotes pre code {
   padding: 0;
@@ -6289,7 +6293,7 @@ dialog.stepup {
   align-items: center;
   gap: var(--sp-8);
   margin: 0 0 var(--sp-6);
-  font-size: 14px;
+  font-size: var(--fs-h2);
   color: var(--color-warn-fg);
 }
 
@@ -6321,7 +6325,7 @@ dialog.stepup {
 .sg-live-row > span:last-child {
   flex: 1;
   min-width: 200px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 /* the gallery starts where the prototype's screen ends (the prototype's 120 px bottom padding of
@@ -6337,12 +6341,12 @@ dialog.stepup {
 }
 .sg-gallery-head h2 {
   margin: 0;
-  font: 600 17px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: -0.01em;
 }
 .sg-gallery-head p {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .sg-row {
@@ -6371,7 +6375,7 @@ dialog.stepup {
 }
 .sg-label {
   margin: 0 0 var(--sp-6);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 /* open menus and dialogs in the flow (data-static: the scripts leave them alone) */
@@ -6433,7 +6437,7 @@ body.page-auth main {
 }
 .page-auth .brand {
   gap: var(--sp-10);
-  font-size: 18px;
+  font-size: var(--fs-word);
 }
 .page-auth .brand-mark {
   width: 28px;
@@ -6461,7 +6465,7 @@ body.page-auth main {
 .auth-text {
   margin: 0;
   color: var(--color-text-2);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   text-wrap: pretty;
 }
 .pw-who {
@@ -6471,13 +6475,13 @@ body.page-auth main {
   padding: var(--sp-8) var(--sp-10);
   border-radius: var(--r-control);
   background: var(--color-surface-2);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pw-who .uavatar {
   width: 26px;
   height: 26px;
-  font-size: 10.5px;
+  font-size: var(--fs-badge);
 }
 .pw-who b {
   color: var(--color-text);
@@ -6490,7 +6494,7 @@ body.page-auth main {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pw-checks li::before {
@@ -6645,7 +6649,7 @@ body.page-auth main {
 }
 .urow-sub {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
@@ -6659,7 +6663,7 @@ body.page-auth main {
 }
 .urow-meta {
   flex: 1 1 170px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .urow > .rowmenu {
@@ -6765,7 +6769,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 }
 .about-head h1 {
   margin: 0;
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
 }
 .about-card {
@@ -6791,15 +6795,15 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   grid-area: meta;
 }
 .about-name {
-  font: 600 18px var(--font-sans);
+  font: 600 var(--fs-word) var(--font-sans);
 }
 .about-build {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
   margin-top: var(--sp-4);
 }
 .about-meta {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   margin-top: var(--sp-12);
 }
@@ -6821,7 +6825,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   margin: 0;
   padding: var(--sp-12) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .comp-list {
@@ -6858,11 +6862,11 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 .comp-name {
   display: block;
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .comp-detail {
   display: block;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 .comp-state {
@@ -6871,7 +6875,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   height: 20px;
   padding: 0 var(--sp-7);
   border-radius: var(--r-badge);
-  font: 500 11.5px var(--font-sans);
+  font: 500 var(--fs-badge) var(--font-sans);
   background: var(--t-bg);
   color: var(--t-fg);
 }
@@ -6918,7 +6922,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 }
 .about-proj h2 {
   margin: 0 0 var(--sp-8);
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .cstack .about-version {
@@ -6974,7 +6978,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   height: 18px;
   padding: 0 var(--sp-6);
   border-radius: var(--r-pill);
-  font: 500 11px var(--font-sans);
+  font: 500 var(--fs-badge) var(--font-sans);
   white-space: nowrap;
   background: var(--color-accent);
   color: var(--color-on-accent);
@@ -6994,14 +6998,14 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 .dash-none {
   margin: 0;
   padding: var(--sp-14);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 /* the plans line on top of the "Transactions" card (#707) */
 .dash-plans {
   margin: 0;
   padding: var(--sp-14);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   border-bottom: 1px solid var(--color-border);
 }
@@ -7042,7 +7046,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     height: 38px;
     padding: 0 14px 0 10px;
     background: var(--color-surface-2);
-    font: 500 12px var(--font-sans);
+    font: 500 var(--fs-small) var(--font-sans);
     letter-spacing: 0;
     text-transform: none;
     color: var(--color-text-2);
@@ -7440,7 +7444,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     gap: 8px;
     height: var(--ctl-sm);
     padding: 0 4px;
-    font-size: 13px;
+    font-size: var(--fs-ui);
     color: var(--color-text-2);
   }
   .dcards-all[hidden] {
@@ -7530,7 +7534,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     text-decoration: underline;
   }
   .dcard-meta {
-    font: 400 12px var(--font-mono);
+    font: 400 var(--fs-small) var(--font-mono);
     color: var(--color-text-2);
     overflow-wrap: anywhere;
     text-wrap: balance; /* "addr · chip ·" / "16.0.0" becomes two even lines */
@@ -7553,7 +7557,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     display: none;
   }
   .dcard-last {
-    font-size: 12px;
+    font-size: var(--fs-small);
     color: var(--color-text-3);
   }
   /* the prototype's side column: the 48 x 44 switch over the 44 x 44 "⋯", centred, no gap */
@@ -7596,7 +7600,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 .bulkbar:has(> .bulk-acts) .bulk-count {
   flex: none;
   margin-right: 8px;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-ui) var(--font-sans);
   white-space: nowrap;
 }
 .bulkbar:has(> .bulk-acts) .bulk-acts {
@@ -7612,7 +7616,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   background: var(--color-surface);
   box-shadow: none;
   color: var(--color-text);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   white-space: nowrap;
 }
 .bulkbar:has(> .bulk-acts) button.btn-primary {
@@ -7683,7 +7687,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     grid-row: 1;
     grid-column: 1;
     margin: 0;
-    font-size: 13.5px;
+    font-size: var(--fs-body);
   }
   .bulkbar:has(> .bulk-acts) .bulk-clear {
     grid-row: 1;
@@ -7691,7 +7695,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     height: var(--ctl-sm);
     background: none;
     color: var(--color-accent-fg);
-    font-size: 13.5px;
+    font-size: var(--fs-body);
   }
   .bulkbar:has(> .bulk-acts) .bulk-acts {
     display: grid;
@@ -7706,7 +7710,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     border: var(--hair-w) solid var(--color-control-border);
     background: var(--color-surface);
     color: var(--color-text);
-    font-size: 12.5px;
+    font-size: var(--fs-meta);
   }
   .bulkbar:has(> .bulk-acts) .bulk-acts button.btn-primary {
     border: 0;
@@ -7749,7 +7753,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   border-radius: var(--r-control);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 400 13.5px var(--font-sans);
+  font: 400 var(--fs-body) var(--font-sans);
 }
 .dv-chips {
   display: flex;
@@ -7795,7 +7799,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   border-radius: var(--r-pill);
   background: var(--color-surface);
   color: var(--color-text-2);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   white-space: nowrap;
 }
 .dv-pick.on {
@@ -7815,7 +7819,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   background-image: none;
   box-shadow: none;
   color: var(--color-text);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   cursor: pointer;
 }
 .dv-grow {
@@ -7827,7 +7831,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   gap: 6px;
   margin: 0;
   color: var(--color-text-2);
-  font: 400 12.5px var(--font-sans);
+  font: 400 var(--fs-meta) var(--font-sans);
 }
 .dv-sort select {
   appearance: auto;
@@ -7841,7 +7845,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   background-color: var(--color-surface);
   background-image: none;
   color: var(--color-text);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
 }
 /* the Columns chooser of the reloaded table part sits at the end of the toolbar's first row */
 .dv-cols {
@@ -7866,7 +7870,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     height: var(--ctl);
     padding: 0 12px;
     border-radius: var(--r-control);
-    font: 500 13px var(--font-sans);
+    font: 500 var(--fs-ui) var(--font-sans);
   }
   .dv-cols .colbtn::after {
     content: "▾";
@@ -7874,7 +7878,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     height: auto;
     border: 0;
     transform: none;
-    font-size: 10px;
+    font-size: var(--fs-badge);
   }
 }
 @media (max-width: 44.99rem) {
@@ -7903,7 +7907,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 }
 .dv-nomatch span {
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 /* the device table: the prototype's fixed column widths; it scrolls sideways below their sum */
@@ -7959,7 +7963,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     width: 48px;
   }
   table.devtable {
-    font-size: 13px;
+    font-size: var(--fs-ui);
   }
   .tablescroll > table.devtable > thead > tr > th.sel,
   .tablescroll > table.devtable > tbody > tr > td.sel {
@@ -7988,7 +7992,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     color: var(--color-text);
-    font: 500 13px/1.3 var(--font-sans);
+    font: 500 var(--fs-ui)/1.3 var(--font-sans);
     text-decoration: none;
     overflow-wrap: anywhere;
   }
@@ -8056,7 +8060,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 .dv-why {
   display: block;
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-2);
 }
 /* OTA URL and group topic: one line cut off by the cell (the title holds the whole value), the
@@ -8084,7 +8088,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 }
 .dv-mono,
 .dv-mono a {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
 }
 td[data-label="Firmware"] .dv-mono {
@@ -8096,10 +8100,10 @@ table.devtable > tbody > tr > td[data-label="Firmware"] {
 }
 .dv-upd {
   height: 18px;
-  font-size: 11px;
+  font-size: var(--fs-badge);
 }
 .dv-reach {
-  font: 500 12px var(--font-mono);
+  font: 500 var(--fs-small) var(--font-mono);
 }
 .dv-reach .chan {
   display: inline;
@@ -8140,7 +8144,7 @@ table.devtable > tbody > tr > td[data-label="Firmware"] {
   fill: var(--color-warn);
 }
 .dv-dbm {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 /* the power switch of a row is the one ui.PowerSwitch (34 x 20 inside 48 x 44), the height of the row; the target
@@ -8162,12 +8166,12 @@ td.pcell .pwr {
   border-radius: var(--r-sm);
   background: none;
   color: var(--color-text-2);
-  font: 600 16px var(--font-sans);
+  font: 600 var(--fs-title-sm) var(--font-sans);
 }
 .dcard-side .umenu > summary {
   width: 44px;
   height: 44px;
-  font-size: 18px;
+  font-size: var(--fs-word);
 }
 .rowacts .umenu > summary:hover {
   background: var(--color-surface-3);
@@ -8269,7 +8273,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .devhd-name h1 {
   margin: 0;
   min-width: 0;
-  font: 600 22px/1.25 var(--font-sans);
+  font: 600 var(--fs-h1)/1.25 var(--font-sans);
   letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
@@ -8279,7 +8283,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   align-items: center;
   gap: var(--sp-6) var(--sp-12);
   margin-top: var(--sp-6);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
 }
 /* a long hostname has no break opportunity: it breaks anywhere instead of running past the edge (#1079) */
@@ -8300,7 +8304,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   border-radius: var(--r-badge);
   background: var(--color-accent-bg);
   color: var(--color-accent-fg);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   text-box: normal;
   cursor: pointer;
 }
@@ -8356,7 +8360,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 }
 .devcard h2 {
   margin: 0 0 var(--sp-10);
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-h2-sm) var(--font-sans);
   letter-spacing: normal;
 }
 .devcard-head {
@@ -8387,12 +8391,12 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 }
 .devcard-note {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .devcard-h3 {
   margin: var(--sp-12) 0 4px;
-  font: 600 12px var(--font-sans);
+  font: 600 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 /* ==== device overview (#145): live tiles, relay box, Identity | Connection, Activity ==== */
@@ -8437,7 +8441,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4) var(--sp-8);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 /* "Last reported": the word that replaced the offline dim (#1071). Beside the heading of a card, after the title */
@@ -8459,7 +8463,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   letter-spacing: -0.01em;
 }
 .itile-s {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
   overflow-wrap: anywhere;
 }
@@ -8489,7 +8493,7 @@ tr.is-saved > td {
   background: var(--color-accent-bg);
 }
 .dev-box-meta {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 /* always the same four-column box, one column at 375 px, two in between */
@@ -8524,17 +8528,17 @@ tr.is-saved > td {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .dev-relay-n {
   overflow-wrap: anywhere;
 }
 .dev-relay-n .mono {
-  font: 400 11px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
   color: var(--color-text-3);
 }
 .dev-relay-s {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .dev-sensor {
@@ -8548,11 +8552,11 @@ tr.is-saved > td {
   background: var(--color-surface-2);
 }
 .dev-sensor-l {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .dev-sensor-v {
-  font: 600 18px var(--font-sans);
+  font: 600 var(--fs-word) var(--font-sans);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -8589,7 +8593,7 @@ tr.is-saved > td {
   gap: var(--sp-4) var(--sp-12);
   padding: var(--sp-6) 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 @media (max-width: 74.99rem) {
   .dev-act li {
@@ -8624,7 +8628,7 @@ tr.is-saved > td {
 .dev-act-at {
   flex: none;
   min-width: 9.5em;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-3);
 }
 .dev-act-what {
@@ -8644,7 +8648,7 @@ tr.is-saved > td {
 }
 .devnote {
   margin: var(--sp-10) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .devconfirm {
@@ -8652,7 +8656,7 @@ tr.is-saved > td {
 }
 .devconfirm p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 /* console tab: the panel's fixed height, the prompt's look and the quick commands below it */
@@ -8689,7 +8693,7 @@ tr.is-saved > td {
   border-radius: var(--r-control);
   background: var(--color-term-cmd);
   color: var(--color-term-bg);
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-ui) var(--font-sans);
   text-box: normal;
   cursor: pointer;
 }
@@ -8703,12 +8707,12 @@ tr.is-saved > td {
 }
 .console-quick-l {
   margin-right: 4px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .btn.console-chip {
   padding: 0 var(--sp-10);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
 }
 
 /* command history: the "Clear history" link under the console prompt (history.js shows it) */
@@ -8719,7 +8723,7 @@ tr.is-saved > td {
 }
 .bk-histlink {
   align-self: flex-start;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .bk-histlink[hidden] {
   display: none;
@@ -8729,7 +8733,7 @@ tr.is-saved > td {
   border: 0;
   background: none;
   color: var(--color-term-dim);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   cursor: pointer;
 }
 .console .console-histlink:hover {
@@ -8763,12 +8767,12 @@ tr.is-saved > td {
 .devform-msg h2,
 .devform-h {
   margin: 0;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-h2-sm) var(--font-sans);
   letter-spacing: normal;
 }
 .devform-msg p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .devform-h {
@@ -8788,12 +8792,12 @@ tr.is-saved > td {
 }
 .devform-count {
   flex: 1 1 16rem; /* own line on a phone; a zero basis squeezed the text between the buttons */
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .devform-sp {
   flex: 1;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .devform-err {
@@ -8807,12 +8811,12 @@ tr.is-saved > td {
   gap: 4px 8px;
 }
 .rb-have {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
 .ufield-warn {
-  font: 400 12px var(--font-sans);
+  font: 400 var(--fs-small) var(--font-sans);
   color: var(--color-warn-fg);
 }
 .devform select[aria-invalid="true"] {
@@ -8841,7 +8845,7 @@ tr.is-saved > td {
 }
 .devdrift-lead {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   text-wrap: pretty;
 }
@@ -8853,7 +8857,7 @@ tr.is-saved > td {
 }
 .devdrift-bar b {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-base);
 }
 .devdrift-sp {
   flex: 1;
@@ -8881,7 +8885,7 @@ tr.is-saved > td {
   min-height: 36px;
   padding: var(--sp-8) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .devdrift-row:last-child {
@@ -8890,7 +8894,7 @@ tr.is-saved > td {
 .devdrift-head {
   min-height: 0;
   background: var(--color-surface-2);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 .devdrift-row.is-changed {
@@ -8948,7 +8952,7 @@ nav.crumbs a {
 /* the settings form's labels are <label for> elements beside the control: the field label's
    look, not the legacy form label's */
 .devform label.ufield-label {
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 
@@ -9103,14 +9107,14 @@ nav.crumbs a {
 }
 .dd-head h1 {
   margin: 0;
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
 .dd-sub {
   margin: 4px 0 0;
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-family: var(--font-mono);
 }
 .dd-page .banner {
@@ -9136,7 +9140,7 @@ nav.crumbs a {
   gap: 10px;
   padding: 8px 14px;
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .dd-when {
   font-weight: 500;
@@ -9171,7 +9175,7 @@ nav.crumbs a {
 }
 .dd-note {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .dd-ack {
@@ -9210,14 +9214,14 @@ nav.crumbs a {
   background: var(--color-surface);
 }
 .upd-run .txn-title {
-  font-size: 15px;
+  font-size: var(--fs-h2);
 }
 .upd-run .seg-bar {
   height: 8px;
   border-radius: var(--r-pill);
 }
 .upd-run .txn-sum {
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .upd .ulist {
   overflow: hidden;
@@ -9250,7 +9254,7 @@ nav.crumbs a {
   padding: 0 16px;
   border-bottom: var(--hair-w) solid var(--color-border);
   background: var(--color-surface-2);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 @media (min-width: 45rem) {
@@ -9264,17 +9268,17 @@ nav.crumbs a {
   }
 }
 .upd-hid {
-  font: 500 12.5px var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-mono);
 }
 .upd-htitle {
   font-weight: 500;
 }
 .upd-hn {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-hwho {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-3);
 }
 /* History (#1094): a table. The columns are fixed, so the result badge has a column of its own and sits at the
@@ -9363,7 +9367,7 @@ nav.crumbs a {
 .bdg.bdg-lg {
   height: 22px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .upd-head .mono {
   font-family: var(--font-mono);
@@ -9385,7 +9389,7 @@ nav.crumbs a {
   flex-wrap: wrap;
   gap: 6px 20px;
   margin-top: 10px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .upd-counts b {
@@ -9439,12 +9443,12 @@ nav.crumbs a {
 .upd-row-name {
   flex: 1 1 200px;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .upd-row-ver {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 .upd-row-state {
@@ -9465,7 +9469,7 @@ nav.crumbs a {
   border-radius: var(--r-pill);
 }
 .upd-row-state .mini-pct {
-  font: 400 11.5px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
   color: var(--color-text-3);
 }
 .upd-log {
@@ -9485,7 +9489,7 @@ nav.crumbs a {
   gap: 10px;
   padding: 9px 12px;
   border-bottom: var(--hair-w) solid var(--color-console-rule);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-term-dim);
   overflow-wrap: anywhere;
 }
@@ -9513,7 +9517,7 @@ nav.crumbs a {
   max-height: 420px;
   overflow: auto;
   padding: 10px 12px;
-  font: 400 12px/1.65 var(--font-mono);
+  font: 400 var(--fs-small)/1.65 var(--font-mono);
 }
 .upd-log-line {
   display: flex;
@@ -9549,7 +9553,7 @@ nav.crumbs a {
   align-items: flex-start;
   gap: 8px;
   margin-bottom: 6px;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -9578,28 +9582,28 @@ nav.crumbs a {
 }
 .upd-change-t {
   flex: 1 1 180px;
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .upd-why {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-danger-fg);
 }
 /* the read-back of a change (#947): the device's own value under the line, and the card's drift note */
 .upd-change-have {
   flex-basis: 100%;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
 .upd-change-have code,
 .rb-have code {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
 }
 .upd-note {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 
@@ -9625,7 +9629,7 @@ nav.crumbs a {
   gap: 10px;
 }
 .upd-n {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-quick {
@@ -9679,7 +9683,7 @@ nav.crumbs a {
 .upd-pick-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   overflow-wrap: anywhere;
 }
 /* below 75rem (phone, and the half-width card of two balanced stacks): the name gets a line of its
@@ -9697,11 +9701,11 @@ nav.crumbs a {
   }
 }
 .upd-pick-why {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .upd-pick-fw {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   white-space: nowrap;
 }
@@ -9745,7 +9749,7 @@ nav.crumbs a {
   font-weight: 600;
 }
 .upd-relopt-d {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .upd-older > .upd-relopt {
@@ -9764,7 +9768,7 @@ nav.crumbs a {
   align-items: center;
   gap: 10px;
   min-height: var(--ctl-lg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   cursor: pointer;
 }
 .upd-opt input[type="checkbox"] {
@@ -9781,7 +9785,7 @@ nav.crumbs a {
   border-radius: var(--r-control);
   background: var(--color-surface);
   color: var(--color-text);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
 }
 .ucard.upd-aside {
   gap: 10px;
@@ -9799,7 +9803,7 @@ nav.crumbs a {
   grid-template-columns: auto 1fr;
   gap: 6px 14px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .upd-facts dt {
   color: var(--color-text-2);
@@ -9820,7 +9824,7 @@ nav.crumbs a {
   font-weight: 600;
 }
 .upd-facts-wide dd.mono {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
 }
 /* the preview's head keeps its title at the top beside "Change" (the prototype's stretch) */
 .upd-prev > .ulist-head {
@@ -9828,7 +9832,7 @@ nav.crumbs a {
 }
 /* the address the devices fetch from, as the prototype writes it */
 .upd-url {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .upd-steps {
@@ -9837,12 +9841,12 @@ nav.crumbs a {
   gap: 3px;
   margin: 4px 0 0;
   padding-left: 18px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-warn-fg);
 }
 .upd-aside .btn-tall {
@@ -9872,12 +9876,12 @@ nav.crumbs a {
 .upd-prow-name {
   flex: 1 1 220px;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .upd-prow-ver {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   white-space: nowrap;
 }
 .upd-prow-ver b {
@@ -9889,7 +9893,7 @@ nav.crumbs a {
 .upd-prow-file {
   width: 190px;
   overflow: hidden;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -9897,7 +9901,7 @@ nav.crumbs a {
 .upd-prow-why,
 .upd-prow-note {
   flex: 1 1 100%;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-prow-mem {
@@ -9979,7 +9983,7 @@ nav.crumbs a {
 .upd-picks legend {
   margin: 0 0 var(--sp-6);
   padding: 0;
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .upd-custom {
@@ -9992,7 +9996,7 @@ nav.crumbs a {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-custom input {
@@ -10003,12 +10007,12 @@ nav.crumbs a {
 }
 .upd-tz {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-err {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: var(--color-danger-fg);
 }
@@ -10022,7 +10026,7 @@ nav.crumbs a {
   border-radius: var(--r-banner);
   background: var(--color-surface-2);
   border: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   line-height: 1.5;
   color: var(--color-text);
 }
@@ -10155,7 +10159,7 @@ html:has(dialog#dlg-txn:modal) body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
   white-space: nowrap;
   align-self: center;
@@ -10217,16 +10221,16 @@ html:has(dialog#dlg-txn:modal) body {
   gap: 8px;
 }
 .fw-rel-v {
-  font: 600 14px var(--font-mono);
+  font: 600 var(--fs-base) var(--font-mono);
 }
 .fw-rel-d {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .fw-rel-n {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
   white-space: nowrap;
 }
@@ -10236,7 +10240,7 @@ html:has(dialog#dlg-txn:modal) body {
   height: var(--ctl);
   padding: 0 4px;
   color: var(--color-accent-fg);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   text-decoration: none;
 }
 .fw-older {
@@ -10249,7 +10253,7 @@ html:has(dialog#dlg-txn:modal) body {
   border-radius: var(--r-sm);
   background: var(--color-surface-2);
   color: var(--color-text-2);
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   text-decoration: none;
 }
 .fw-chip:hover {
@@ -10264,7 +10268,7 @@ html:has(dialog#dlg-txn:modal) body {
   border-radius: var(--r-card);
   border: var(--hair-w) dashed var(--color-border-strong);
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .fw-norel p {
   margin: 0;
@@ -10281,18 +10285,18 @@ html:has(dialog#dlg-txn:modal) body {
 }
 .fw-sel h2 {
   margin: 0;
-  font: 600 16px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .fw-sel-sub {
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .fw-excerpt {
   margin: 12px 0 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text);
   display: flex;
   flex-direction: column;
@@ -10310,7 +10314,7 @@ html:has(dialog#dlg-txn:modal) body {
 }
 .fw-files-h h3 {
   margin: 0;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-h2-sm) var(--font-sans);
   letter-spacing: normal;
 }
 .fw-files-h form {
@@ -10318,7 +10322,7 @@ html:has(dialog#dlg-txn:modal) body {
 }
 .fw-files-h .btn-link {
   min-height: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 /* A file row is a grid, not a flex line (#1094): every cell has its own column, so the chip, the devices and the size
    start at one x in every row whatever the state's width is. The cells are placed in DOM order; the state column is
@@ -10336,16 +10340,16 @@ html:has(dialog#dlg-txn:modal) body {
   grid-template-columns: minmax(0, 1fr) 64px 176px;
 }
 .fw-file-n {
-  font: 500 12.5px var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .fw-file-c,
 .fw-file-d {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .fw-file-s {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-3);
   white-space: nowrap;
 }
@@ -10368,7 +10372,7 @@ html:has(dialog#dlg-txn:modal) body {
   padding: 0 7px;
 }
 .fw-file-nc {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-3);
 }
 /* Why a download failed (#1073): its own line under the file, the width of the row. */
@@ -10376,7 +10380,7 @@ html:has(dialog#dlg-txn:modal) body {
   display: block;
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-danger-fg);
   overflow-wrap: anywhere;
 }
@@ -10401,28 +10405,28 @@ html:has(dialog#dlg-txn:modal) body {
 .fw-fetch .btn-sm {
   height: 30px;
   padding: 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .fw-file-fail .fw-fetch .btn-sm {
   padding: 0 12px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .fw-fetching {
   text-decoration: none;
 }
 .fw-note {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .fw-fullnotes,
 .fw-dlg-body {
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .fw-fullnotes h3,
 .fw-dlg-body h3 {
   margin: 14px 0 6px;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-h2-sm) var(--font-sans);
 }
 .fw-fleet {
   margin: 0;
@@ -10473,7 +10477,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .fw-unused {
@@ -10496,11 +10500,11 @@ dialog.fw-notes-dlg .fw-dlg-body {
   align-items: baseline;
   padding: var(--sp-10) 16px;
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .fw-c-f {
   grid-column: 1;
-  font: 500 12.5px var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .fw-c-v time {
@@ -10516,7 +10520,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   grid-row: 2;
   justify-self: end;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .fw-c-a {
@@ -10534,13 +10538,13 @@ dialog.fw-notes-dlg .fw-dlg-body {
   height: 32px;
   padding: 0 10px;
   color: var(--color-text-2);
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   text-decoration: none;
 }
 .fw-cache-empty {
   margin: 0;
   padding: 12px 16px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   border-bottom: var(--hair-w) solid var(--color-border);
 }
@@ -10554,7 +10558,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   border-radius: var(--r-banner);
   text-align: center;
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .fw-drop .mono {
   font-family: var(--font-mono);
@@ -10579,7 +10583,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .fw-sum .btn.btn-sm {
   height: 20px;
   padding: 0 7px;
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
 }
 /* a value with its copy button on the same line (the TasmoFleet ID row of the Identity card, #1004) */
 .ukv dd.ukv-copy {
@@ -10592,7 +10596,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   .ukv dd.ukv-copy .btn.btn-sm {
     height: 20px;
     padding: 0 7px;
-    font-size: 11.5px;
+    font-size: var(--fs-badge);
   }
 }
 .fw-upload {
@@ -10636,7 +10640,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-head h1 {
   margin: 0;
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
 }
 .add-gap {
@@ -10658,7 +10662,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   border: var(--hair-w) solid var(--note-line);
   background: var(--note-bg);
   color: var(--note-fg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .add-note.tone-ok {
   --note-line: var(--color-ok);
@@ -10735,7 +10739,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-more > summary {
   width: fit-content;
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   color: var(--color-text-2);
   cursor: pointer;
 }
@@ -10752,7 +10756,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   margin-top: var(--sp-12);
 }
 .add-off {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* "Add device" comes first in the markup, so Enter in a field adds; the row shows it last */
@@ -10781,12 +10785,12 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .add-bar h2,
 .add-plan-head h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .add-moves-sub {
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-move {
@@ -10814,12 +10818,12 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-move-seen {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .add-move-addr {
   flex: 1 1 220px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .add-move-addr b {
@@ -10827,7 +10831,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-move-why {
   flex: 2 1 240px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-move-acts {
@@ -10837,7 +10841,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 /* Discovered: "Show ignored" help and the lookup "Not listed?" (#713) */
 .add-ignhelp {
   margin: 0 0 var(--sp-8);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-why {
@@ -10849,14 +10853,14 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .add-why label {
   flex-basis: 100%;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* the id beats the global input rule (width 100 %, font inherit), like #scan input.add-subnet */
 #card-discovered .add-why input.add-why-q {
   width: 320px;
   max-width: 100%;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 
 /* Discovered: the New devices bar and "Show ignored" (a GET form with a real checkbox). The POST form of
@@ -10900,7 +10904,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .add-disc-table table {
   /* #905: the columns size to their content (an address is never cut), the name column takes the slack and
@@ -10953,10 +10957,10 @@ dialog.fw-notes-dlg .fw-dlg-body {
   color: var(--color-text-2);
 }
 .add-table td.mono {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .add-table td.add-t2 {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .add-table td.mono.add-t2 {
   color: var(--color-text-2);
@@ -10999,7 +11003,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 /* a second line under a cell's value: the MQTT topic, the old address, a row's own reason */
 .add-sub {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 400;
   color: var(--color-text-2);
   overflow-wrap: anywhere;
@@ -11018,7 +11022,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   padding: 0 10px 10px 54px;
   white-space: normal;
   overflow: visible;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .add-disc-table td.mono b {
@@ -11089,11 +11093,11 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: 170px;
 }
 .add-empty h2 {
-  font-size: 16px;
+  font-size: var(--fs-empty);
 }
 .add-empty p {
   max-width: 440px;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .add-empty {
   padding: 36px var(--sp-20);
@@ -11157,16 +11161,16 @@ dialog.fw-notes-dlg .fw-dlg-body {
   color: var(--color-text-2);
 }
 .add-card-meta {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
 .add-card-src {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
 }
 .add-card-why {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 a.add-card-name {
@@ -11212,7 +11216,7 @@ a.add-card-name {
   font-family: var(--font-mono);
 }
 .add-scanstatus {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-scanerr {
@@ -11234,7 +11238,7 @@ a.add-card-name {
   gap: var(--sp-10);
   flex-wrap: wrap;
   margin-bottom: var(--sp-8);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .add-progress-t {
   display: inline-flex;
@@ -11268,7 +11272,7 @@ a.add-card-name {
 }
 .add-progress-found {
   margin-top: var(--sp-8);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-chips {
@@ -11306,14 +11310,14 @@ a.add-card-name {
 .add-drop-text {
   flex: 1;
   min-width: 220px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .add-drop-text b {
   font-weight: 600;
 }
 .add-drop-sub {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-drop-btn {
@@ -11376,18 +11380,18 @@ a.add-card-name {
 }
 .add-improw-name {
   display: block;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .add-improw-ip {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .add-improw-why {
   flex: 2 1 260px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .add-plan-foot {
@@ -11397,7 +11401,7 @@ a.add-card-name {
   flex-wrap: wrap;
   align-items: center;
   padding: var(--sp-12) var(--sp-16);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .add-result-acts {
   justify-content: flex-end;
@@ -11406,7 +11410,7 @@ a.add-card-name {
 .add-manual input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .add-manual textarea,
 #scan input.add-subnet {
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 /* the dots of a prefilled default password read like a filled field */
 .add-manual input[type="password"]::placeholder {
@@ -11416,7 +11420,7 @@ a.add-card-name {
   height: 18px;
   padding: 0 var(--sp-6);
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: var(--fs-badge);
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
@@ -11446,7 +11450,7 @@ a.add-card-name {
 }
 .bk-devs-head h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .bk-change {
@@ -11455,7 +11459,7 @@ a.add-card-name {
   height: var(--ctl);
   padding: 0 10px;
   color: var(--color-accent-fg);
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   text-decoration: none;
 }
 .bk-change:hover {
@@ -11477,7 +11481,7 @@ a.add-card-name {
 .bk-name {
   display: block;
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   overflow-wrap: anywhere;
 }
 /* the name and the muted device ID of a backup run's result row (#993) sit on one line */
@@ -11489,11 +11493,11 @@ a.add-card-name {
 }
 .bk-devid {
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .bk-meta {
   display: block;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 .bk-row .bk-meta > span {
@@ -11508,7 +11512,7 @@ a.add-card-name {
   border-radius: var(--r-sm);
   background: none;
   color: var(--color-text-2);
-  font: 400 18px var(--font-sans);
+  font: 400 var(--fs-word) var(--font-sans);
   cursor: pointer;
 }
 .bk-x:hover {
@@ -11518,7 +11522,7 @@ a.add-card-name {
 .bk-skipnote {
   margin: 0;
   padding: 10px 16px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .bk-aside {
@@ -11540,12 +11544,12 @@ a.add-card-name {
   flex-direction: column;
   gap: 5px;
   margin: 0;
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .bk-field input:not([type="checkbox"]),
 .bk-field select {
-  font: 400 13.5px var(--font-sans);
+  font: 400 var(--fs-body) var(--font-sans);
 }
 .bk-field select {
   padding-left: 8px;
@@ -11553,12 +11557,12 @@ a.add-card-name {
 .bk-field textarea {
   min-height: 0;
   padding: 8px 10px;
-  font: 400 13px/1.5 var(--font-mono);
+  font: 400 var(--fs-ui)/1.5 var(--font-mono);
   resize: vertical;
 }
 .bk-help {
   display: block;
-  font: 400 12px var(--font-sans);
+  font: 400 var(--fs-small) var(--font-sans);
   color: var(--color-text-3);
 }
 .bk-opt {
@@ -11567,7 +11571,7 @@ a.add-card-name {
   gap: 10px;
   min-height: var(--ctl-lg);
   margin: 0;
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -11587,7 +11591,7 @@ a.add-card-name {
   border: var(--hair-w) solid var(--color-warn);
   background: var(--color-warn-bg);
   color: var(--color-warn-fg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .bk-warn-dot {
   width: 8px;
@@ -11600,7 +11604,7 @@ a.add-card-name {
 .bk-sum {
   padding-top: 12px;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .bk-titlerow {
@@ -11618,7 +11622,7 @@ a.add-card-name {
   border-radius: var(--r-code);
   border: var(--hair-w) solid var(--color-border);
   background: var(--color-surface-2);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 /* the tiles filter the list below them, so they stay in view while the list scrolls: the bar
@@ -11649,12 +11653,12 @@ a.add-card-name {
   display: flex;
   align-items: center;
   gap: 7px;
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .bk-tile-v {
   margin-top: 6px;
-  font: 600 24px/1.1 var(--font-sans);
+  font: 600 var(--fs-h1)/1.1 var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 /* a tile with a link filters the result list to its devices; the active one is outlined */
@@ -11703,13 +11707,13 @@ a.bk-namelink:hover {
 .bk-rempty {
   margin: 0;
   padding: 14px 16px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .bk-detail {
   flex: 2 1 260px;
   min-width: 0;
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
@@ -11738,7 +11742,7 @@ a.bk-namelink:hover {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-8);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .db-contents {
   margin: var(--sp-12) 0 0;
@@ -11747,7 +11751,7 @@ a.bk-namelink:hover {
 .db-list {
   margin: var(--sp-6) 0 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .db-list li {
   margin: var(--sp-4) 0;
@@ -11755,13 +11759,13 @@ a.bk-namelink:hover {
 .db-where {
   font-weight: 400;
   color: var(--color-text-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
   margin-left: var(--sp-8);
 }
 .db-restore {
   margin: var(--sp-6) 0;
   padding-left: 20px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .db-restore li {
   margin: var(--sp-4) 0;
@@ -11795,12 +11799,12 @@ a.bk-namelink:hover {
 }
 .sch h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .cnote {
   margin: var(--sp-2) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .cbd {
@@ -11856,7 +11860,7 @@ a.bk-namelink:hover {
   margin-bottom: var(--sp-5);
 }
 .lbl {
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   color: var(--color-text-2);
 }
 .meta {
@@ -11903,7 +11907,7 @@ a.bk-namelink:hover {
   align-items: center;
   min-height: 24px; /* a 24 px target; the margin keeps the label row's height */
   margin-block: -2px;
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-accent-fg);
   cursor: pointer;
   white-space: nowrap;
@@ -11949,7 +11953,7 @@ a.bk-namelink:hover {
   border-radius: var(--r-control);
   background: var(--color-surface-2);
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   overflow-wrap: anywhere;
 }
 .sf.w-xs .in.ro {
@@ -11958,7 +11962,7 @@ a.bk-namelink:hover {
 .sopt {
   min-height: 0;
   margin-top: var(--sp-8);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .sopt[hidden] {
   display: none;
@@ -12035,7 +12039,7 @@ a.bk-namelink:hover {
 }
 .sf-switch .lbl {
   color: var(--color-text);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 .sf-switch .ufield-help {
@@ -12057,7 +12061,7 @@ a.bk-namelink:hover {
   border: var(--hair-w) solid var(--color-border-strong);
   background: var(--color-surface);
   color: var(--color-text-2);
-  font: 600 10.5px/1 var(--font-sans);
+  font: 600 var(--fs-badge)/1 var(--font-sans);
   padding: 0;
   cursor: pointer;
   display: inline-grid;
@@ -12087,7 +12091,7 @@ a.bk-namelink:hover {
   border: var(--hair-w) solid var(--color-border-strong);
   border-radius: var(--r-sm);
   box-shadow: var(--shadow-lg);
-  font: 12.5px/1.5 var(--font-sans);
+  font: var(--fs-meta)/1.5 var(--font-sans);
 }
 .uinfo-pop:not(:popover-open):not(.open) {
   display: none;
@@ -12117,7 +12121,7 @@ a.bk-namelink:hover {
   scroll-margin-bottom: calc(var(--sb-h) + 5rem);
 }
 .sbar-state {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-3);
 }
 .sbar.is-dirty .sbar-state {
@@ -12147,7 +12151,7 @@ a.bk-namelink:hover {
   flex-wrap: wrap;
 }
 .sbar-chip {
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   padding: var(--sp-2) var(--sp-8);
   border-radius: var(--r-pill);
   background: var(--color-warn-bg);
@@ -12211,7 +12215,7 @@ a.bk-namelink:hover {
 }
 .sys-subhead {
   margin: var(--sp-16) 0 0;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-h2-sm) var(--font-sans);
 }
 /* Advanced (#350): the after-form cards use the full content width; the container settings sit in
    two tables side by side, one table on a phone */
@@ -12250,7 +12254,7 @@ a.bk-namelink:hover {
     align-items: center;
     gap: var(--sp-8);
     margin: var(--sp-14) 0 var(--sp-6);
-    font-size: 12.5px;
+    font-size: var(--fs-meta);
     color: var(--color-text-3);
   }
   .sys-picker:not([hidden]) ~ .utabs[aria-label="Settings sections"] {
@@ -12357,11 +12361,11 @@ a.bk-namelink:hover {
   grid-column: 1 / -1;
 }
 .sys-test-res {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--t-fg);
 }
 .sys-test-help {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-3);
   flex: 1 1 260px;
 }
@@ -12396,11 +12400,11 @@ a.bk-namelink:hover {
 .sys-status-text b {
   display: block;
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .sys-status-text span {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .sys-container table {
@@ -12434,17 +12438,17 @@ a.sys-sum:hover {
   border-color: var(--color-border-strong);
 }
 .sys-sum-label {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .sys-sum-note {
   margin-top: var(--sp-4);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .sys-sum-value {
   margin-top: var(--sp-4);
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 .sys-orphans {
@@ -12479,7 +12483,7 @@ a.sys-sum:hover {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
 }
 .sys-unref .sys-store-name {
@@ -12487,7 +12491,7 @@ a.sys-sum:hover {
   overflow-wrap: anywhere;
 }
 .sys-orphan-detail {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* Topic check (#1047): the devices of a collision, each with how it uses the topic; a topic or stem wraps anywhere */
@@ -12499,7 +12503,7 @@ a.sys-sum:hover {
   margin: var(--sp-4) 0 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .topic-members li {
   display: flex;
@@ -12510,12 +12514,12 @@ a.sys-sum:hover {
   padding: 2px 0;
 }
 .topic-members .meta {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
 .topic-muted {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-3);
 }
 /* Advanced: "Reset all settings" in a framed strip; the trigger is a default button, red is the confirming button's (#1093) */
@@ -12523,21 +12527,21 @@ a.sys-sum:hover {
   font-weight: 600;
 }
 .sys-danger-text {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* ==== page: Devices → Backups (#409) ==== */
 .bk-table td .bk-rsn {
   margin-left: var(--sp-6);
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   white-space: normal;
 }
 .bk-tools {
   margin-bottom: var(--sp-10);
 }
 .sys-sum-sm {
-  font-size: 15px;
+  font-size: var(--fs-base);
   font-weight: 600;
 }
 /* the device table keeps to its card (no sideways scroll) */
@@ -12651,11 +12655,11 @@ a.sys-sum:hover {
 .audit-filters input[type="search"] {
   flex: 1 1 220px;
   max-width: 340px;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .audit-filters select {
   width: auto;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   padding-left: var(--sp-8);
 }
 .audit-filters [hidden] {
@@ -12723,7 +12727,7 @@ main.bare {
   display: grid;
   place-items: center;
   flex: none;
-  font: 600 11px var(--font-sans);
+  font: 600 var(--fs-badge) var(--font-sans);
   background: var(--color-surface-3);
   color: var(--color-text-2);
 }
@@ -12736,7 +12740,7 @@ main.bare {
   color: var(--color-on-accent);
 }
 .setup-label {
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
   white-space: nowrap;
   overflow: hidden;
@@ -12784,7 +12788,7 @@ main.bare {
 .setup-lead {
   margin: 0;
   color: var(--color-text-2);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   text-wrap: pretty;
 }
 .setup-form {
@@ -12822,7 +12826,7 @@ main.bare {
 }
 .bk-retention {
   flex: 1 1 300px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   text-wrap: pretty;
 }
@@ -12832,7 +12836,7 @@ main.bare {
   text-underline-offset: 2px;
 }
 .bk-total {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-3);
 }
 
@@ -12856,7 +12860,7 @@ main.bare {
 }
 .bk-selcount {
   flex: 1;
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-ui) var(--font-sans);
 }
 .bk-selbar .btn.btn-primary {
   padding: 0 var(--sp-12);
@@ -12906,17 +12910,17 @@ main.bare {
   font-weight: 500;
 }
 .bk-detail {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .bk-file {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
 .bk-reason {
   margin-top: 2px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-danger-fg);
 }
 .bk-acts {
@@ -12939,7 +12943,7 @@ main.bare {
 }
 .bk-list .bk-row > details.bk-files > summary {
   min-height: 36px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 600;
 }
 @media (max-width: 44.99rem) {
@@ -12959,7 +12963,7 @@ main.bare {
   gap: 2px var(--sp-12);
   padding: 6px 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .bk-fl-path {
   font-family: var(--font-mono);
@@ -12979,7 +12983,7 @@ main.bare {
 }
 .bk-fl-why {
   grid-column: 1 / -1;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .bk-fl-row.is-skipped .bk-fl-path {
@@ -12987,7 +12991,7 @@ main.bare {
 }
 .bk-fl-note {
   margin: var(--sp-8) 0 0;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .bk-fl-acts {
@@ -13018,7 +13022,7 @@ main.bare {
 .btn.bk-keep {
   padding: 0 var(--sp-10);
   gap: 7px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .btn.bk-keep.is-kept,
 .btn.bk-keep.is-kept:hover {
@@ -13034,7 +13038,7 @@ main.bare {
 }
 .bk-foot {
   margin: var(--sp-10) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .bk-page > .ulist {
@@ -13045,7 +13049,7 @@ main.bare {
   grid-template-columns: auto auto auto minmax(0, 1fr);
   gap: var(--sp-12);
   align-items: center;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .bk-job-detail {
   color: var(--color-text-2);
@@ -13078,14 +13082,14 @@ main.bare {
   max-width: 330px;
 }
 .cmp-pick select {
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .cmp-all {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
   height: var(--ctl);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   cursor: pointer;
 }
 .cmp-all input {
@@ -13096,14 +13100,14 @@ main.bare {
 }
 .cmp-note {
   margin: 0 0 var(--sp-10);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .cmp-none {
   padding: 24px;
   text-align: center;
   color: var(--color-text-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .cmp-foot {
   display: flex;
@@ -13114,7 +13118,7 @@ main.bare {
   margin-top: var(--sp-14);
 }
 .cmp-foot > span {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 
@@ -13141,7 +13145,7 @@ main.bare {
   margin: 0;
   padding: var(--sp-12) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .rs-grid {
@@ -13152,12 +13156,12 @@ main.bare {
 }
 .rs-headrow {
   background: var(--color-surface-2);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-2);
 }
 .rs-row {
   border-top: var(--hair-w) solid var(--color-border);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .rs-key {
@@ -13169,13 +13173,13 @@ main.bare {
 .rs-none {
   margin: 0;
   padding: var(--sp-12) var(--sp-16);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .rs-steps-text {
   margin: 0;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   display: flex;
   flex-direction: column;
@@ -13185,7 +13189,7 @@ main.bare {
 .rs-cred,
 .rs-fnote {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rs-form {
@@ -13212,7 +13216,7 @@ main.bare {
   flex-wrap: wrap;
 }
 .rs-leave {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rs-status {
@@ -13242,7 +13246,7 @@ main.bare {
   flex: none;
   background: var(--color-surface-3);
   color: var(--color-text-2);
-  font: 600 12px var(--font-sans);
+  font: 600 var(--fs-small) var(--font-sans);
 }
 .rs-step.is-done .rs-mark {
   background: var(--color-ok-bg);
@@ -13263,7 +13267,7 @@ main.bare {
 .rs-step-label {
   display: block;
   font-weight: 500;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .rs-step.is-todo .rs-step-label {
   color: var(--color-text-2);
@@ -13271,7 +13275,7 @@ main.bare {
 .rs-step-detail {
   display: block;
   margin-top: 1px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 
@@ -13294,7 +13298,7 @@ main.bare {
   padding: 0 var(--sp-14) var(--sp-6);
 }
 .ulist-meta {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rs-what .rs-steps-text {
@@ -13313,12 +13317,12 @@ main.bare {
 }
 .rp-card h2 {
   margin: 0 0 4px;
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .rp-lead {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   text-wrap: pretty;
 }
@@ -13345,7 +13349,7 @@ main.bare {
 }
 .rp-old-k {
   margin-bottom: 4px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .rp-old-name {
@@ -13353,7 +13357,7 @@ main.bare {
   overflow-wrap: anywhere;
 }
 .rp-old-line {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
 }
 .rp-grid select {
@@ -13382,7 +13386,7 @@ main.bare {
 }
 .rp-backup {
   margin-right: auto;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .rp-backup summary {
   cursor: pointer;
@@ -13399,7 +13403,7 @@ main.bare {
 }
 .rp-side h2 {
   margin: 0;
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
   letter-spacing: normal;
 }
 .rp-side .banner {
@@ -13418,7 +13422,7 @@ main.bare {
 }
 .rp-old-note {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rp-box {
@@ -13430,7 +13434,7 @@ main.bare {
 .rp-box-h {
   padding: var(--sp-10) var(--sp-14);
   background: var(--color-surface-2);
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-ui) var(--font-sans);
 }
 .rp-kv {
   display: grid;
@@ -13438,26 +13442,26 @@ main.bare {
   gap: var(--sp-10);
   padding: 7px var(--sp-14);
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .rp-kv > span:first-child {
   color: var(--color-text-2);
 }
 .rp-kv .mono {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   overflow-wrap: anywhere;
 }
 .rp-skip {
   padding: 7px var(--sp-14);
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .rp-skip > span {
   display: block;
 }
 .rp-skip > span + span {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .rp-new {
@@ -13466,7 +13470,7 @@ main.bare {
   gap: var(--sp-8);
 }
 .rp-other {
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .rp-other summary {
   cursor: pointer;
@@ -13495,7 +13499,7 @@ main.bare {
 .pol-sum-line {
   flex: 1 1 18rem;
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-base) var(--font-sans);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-2);
 }
@@ -13514,7 +13518,7 @@ main.bare {
 .pol-sum-state {
   flex: 1 1 7rem;
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-3);
   overflow-wrap: anywhere;
 }
@@ -13611,12 +13615,12 @@ tbody[data-rule-list] td[data-label="Compliance"] > div > span {
 }
 .pol-empty h2 {
   margin: 0 0 4px;
-  font: 600 16px var(--font-sans);
+  font: 600 var(--fs-empty) var(--font-sans);
 }
 .pol-empty p {
   margin: 0;
   color: var(--color-text-2);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .pol-tpls {
   display: grid;
@@ -13660,16 +13664,16 @@ a.pol-tpl {
   font-weight: 600;
 }
 .pol-tpl-kv {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
 }
 .pol-tpl-text {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pol-tpl-use {
   margin-top: auto; /* cards of one row stretch to the tallest: the link sits at the bottom of each */
   padding-top: 2px;
-  font: 500 13px var(--font-sans);
+  font: 500 var(--fs-ui) var(--font-sans);
   color: var(--color-accent-fg);
 }
 .pol-cards,
@@ -13687,7 +13691,7 @@ a.pol-tpl {
   color: var(--color-text-3);
   cursor: grab;
   letter-spacing: -2px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .pol-sev {
   font-weight: 500;
@@ -13712,10 +13716,10 @@ a.pol-tpl {
 }
 .pol-ed-head h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
 }
 .pol-form label.ufield-label {
-  font: 500 12.5px var(--font-sans);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
 }
 .pol-two {
@@ -13729,10 +13733,10 @@ a.pol-tpl {
 #want-control select,
 #want-control input {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pol-none {
-  font: 400 12.5px var(--font-sans);
+  font: 400 var(--fs-meta) var(--font-sans);
   color: var(--color-text-3);
 }
 /* "Applies to" (#235): an always-open, full-width section of the rule form. Nothing in it changes
@@ -13753,7 +13757,7 @@ a.pol-tpl {
 }
 .pol-sec-head h3 {
   margin: 0;
-  font: 600 13.5px var(--font-sans);
+  font: 600 var(--fs-body) var(--font-sans);
 }
 .pol-sec-sum {
   min-width: 0;
@@ -13814,7 +13818,7 @@ a.pol-tpl {
   gap: 10px;
   padding: 7px 11px;
   border-bottom: var(--hair-w) solid var(--color-border);
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   cursor: pointer;
 }
 .pol-row[hidden] {
@@ -13826,21 +13830,21 @@ a.pol-tpl {
 .pol-row-meta {
   margin-left: auto;
   color: var(--color-text-3);
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   text-align: right;
 }
 .pol-row-none {
   margin: 0;
   padding: var(--sp-12);
   color: var(--color-text-3);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .pol-pickc {
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 28px;
-  font: 400 13px var(--font-sans);
+  font: 400 var(--fs-ui) var(--font-sans);
   color: var(--color-text);
 }
 .pol-ed-foot {
@@ -13875,10 +13879,10 @@ a.pol-tpl {
 }
 .pol-hist-head h2 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
 }
 .pol-hist-head span {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pol-hist-body {
@@ -13907,7 +13911,7 @@ a.pol-tpl {
 .pol-hv-v {
   width: 26px;
   flex: none;
-  font: 600 12.5px var(--font-mono);
+  font: 600 var(--fs-meta) var(--font-mono);
 }
 .pol-hv-main {
   min-width: 0;
@@ -13917,11 +13921,11 @@ a.pol-tpl {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pol-hv-meta {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .pol-hist-diff {
@@ -13934,11 +13938,11 @@ a.pol-tpl {
   padding: var(--sp-12) var(--sp-16);
 }
 .pol-hist-diff .pol-none {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .pol-diff-h {
-  font: 600 13px var(--font-sans);
+  font: 600 var(--fs-ui) var(--font-sans);
 }
 .pol-diff {
   align-self: stretch;
@@ -13954,7 +13958,7 @@ a.pol-tpl {
   gap: 4px var(--sp-12);
   padding: var(--sp-8) var(--sp-12);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .pol-diff-row:last-child {
   border-bottom: 0;
@@ -13987,7 +13991,7 @@ a.pol-tpl {
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-card);
   background: var(--color-surface);
-  font: 400 12.5px / 1.55 var(--font-mono);
+  font: 400 var(--fs-meta) / 1.55 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -14004,12 +14008,12 @@ a.pol-tpl {
 }
 .pio-legend {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pio-form textarea {
   min-height: 290px;
-  font: 400 12.5px / 1.55 var(--font-mono);
+  font: 400 var(--fs-meta) / 1.55 var(--font-mono);
 }
 .pio-preview {
   overflow: hidden;
@@ -14028,7 +14032,7 @@ a.pol-tpl {
 }
 .pio-pv-head h3 {
   margin: 0;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
 }
 .pio-counts {
   display: flex;
@@ -14038,7 +14042,7 @@ a.pol-tpl {
 .pio-none {
   margin: 0;
   padding: var(--sp-16);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .pio-row {
@@ -14047,7 +14051,7 @@ a.pol-tpl {
   align-items: flex-start;
   padding: var(--sp-10) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pio-row .bdg {
   flex: none;
@@ -14059,7 +14063,7 @@ a.pol-tpl {
 }
 .pio-row-d {
   display: block;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   word-break: break-word;
 }
@@ -14087,14 +14091,14 @@ a.pol-tpl {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   overflow-wrap: anywhere; /* a long value (an OtaUrl) wraps inside the card and does not widen the page */
 }
 .pol-fix-note,
 .pol-fix-hint,
 .pol-fix-skip {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .pol-fix-foot {
@@ -14106,7 +14110,7 @@ a.pol-tpl {
 .pol-fix-left {
   margin: 0;
   padding-left: var(--sp-18);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 @media (max-width: 44.99rem) {
   .pol-two {
@@ -14129,7 +14133,7 @@ a.pol-tpl {
 .ud-head .uavatar {
   width: 44px;
   height: 44px;
-  font-size: 14px;
+  font-size: var(--fs-base);
   background: var(--color-surface-3);
   color: var(--color-text-2);
 }
@@ -14142,7 +14146,7 @@ a.pol-tpl {
   flex-wrap: wrap;
   gap: var(--sp-8);
   margin: 0;
-  font: 600 22px/1.2 var(--font-sans);
+  font: 600 var(--fs-h1)/1.2 var(--font-sans);
   letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
@@ -14151,7 +14155,7 @@ a.pol-tpl {
 }
 .ud-sub {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
@@ -14165,7 +14169,7 @@ a.pol-tpl {
 }
 .ud-why {
   margin: 0 0 var(--sp-14);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 /* the reasons of the disabled buttons: one line each, the block keeps the single line's distance below */
@@ -14218,7 +14222,7 @@ a.pol-tpl {
 }
 .ud-details details.fold > summary {
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .ud-edit .acct-form {
   margin: var(--sp-6) 0 var(--sp-10);
@@ -14229,7 +14233,7 @@ a.pol-tpl {
 .ud-none {
   margin: 0;
   padding: var(--sp-14);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .ud-row {
@@ -14249,11 +14253,11 @@ a.pol-tpl {
   flex-direction: column;
 }
 .ud-row-main {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 500;
 }
 .ud-row-sub {
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
   color: var(--color-text-2);
   overflow-wrap: anywhere;
 }
@@ -14270,7 +14274,7 @@ a.pol-tpl {
   gap: var(--sp-6) var(--sp-12);
   padding: var(--sp-10) var(--sp-16);
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .ulist-head + .ud-act {
   border-top: 0;
@@ -14279,7 +14283,7 @@ a.pol-tpl {
   justify-self: end;
 }
 .ud-act-when {
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
   white-space: normal; /* wraps inside the fixed track (long dates: "19 Aug 2025," / "08:02 PM"; "Today 10:17 PM" fits) instead of running over the text */
 }
@@ -14288,7 +14292,7 @@ a.pol-tpl {
   overflow-wrap: anywhere;
 }
 .ud-act-what {
-  font: 500 12.5px var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-mono);
 }
 .ud-act-sum {
   color: var(--color-text-2);
@@ -14319,7 +14323,7 @@ a.pol-tpl {
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-control);
   background: var(--color-surface-2);
-  font: 500 18px var(--font-mono);
+  font: 500 var(--fs-word) var(--font-mono);
   letter-spacing: 0.02em;
   overflow-wrap: anywhere;
 }
@@ -14347,7 +14351,7 @@ a.pol-tpl {
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-control);
   background: var(--color-surface-2);
-  font: 400 12px/1.6 var(--font-mono);
+  font: 400 var(--fs-small)/1.6 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -14386,21 +14390,21 @@ a.pol-tpl {
 }
 .wn-v {
   margin: 0;
-  font: 700 16px var(--font-mono);
+  font: 600 var(--fs-title-sm) var(--font-mono);
   letter-spacing: normal;
 }
 .wn-name {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 600;
   color: var(--color-text-2);
 }
 .wn-d {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .wn-intro p {
   margin: 0 0 var(--sp-8);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .wn-sec {
   display: flex;
@@ -14408,7 +14412,7 @@ a.pol-tpl {
   gap: var(--sp-10);
   padding: var(--sp-8) 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13.5px;
+  font-size: var(--fs-body);
   line-height: 22px;
 }
 /* the label column is at least 72 px and grows with its title up to 120 px; a longer title wraps inside
@@ -14457,7 +14461,7 @@ a.pol-tpl {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-6) var(--sp-12);
-  font: 500 13px var(--font-mono);
+  font: 500 var(--fs-ui) var(--font-mono);
 }
 .wn-older {
   margin-top: var(--sp-6);
@@ -14515,7 +14519,7 @@ a.pol-tpl {
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.6;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -14532,13 +14536,13 @@ a.pol-tpl {
 }
 .rel-notes h4 {
   margin: var(--sp-4) 0 -6px;
-  font: 600 15px var(--font-sans);
+  font: 600 var(--fs-h2-lg) var(--font-sans);
 }
 .rel-notes pre {
   margin: 0;
   padding: var(--sp-12) var(--sp-14);
   border-radius: var(--r-code);
-  font: 400 12.5px/1.6 var(--font-mono);
+  font: 400 var(--fs-meta)/1.6 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -14560,7 +14564,7 @@ a.pol-tpl {
 .cstack > .rel-files .ulist-head .btn-link,
 .cstack > .rel-older .ulist-head .btn-link {
   min-height: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .rel-file {
   display: grid;
@@ -14586,11 +14590,11 @@ a.pol-tpl {
   min-width: 0;
 }
 .rel-file-n {
-  font: 500 12.5px var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .rel-file-m {
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-2);
 }
 .rel-orow {
@@ -14599,12 +14603,12 @@ a.pol-tpl {
   gap: var(--sp-10);
   padding: var(--sp-6) 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rel-orow .mono {
   color: var(--color-text);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .rel-start {
   margin-top: var(--sp-8);
@@ -14615,12 +14619,12 @@ a.pol-tpl {
 }
 .rel-empty {
   margin: var(--sp-8) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rel-since-lead {
   margin: 0 0 var(--sp-12);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .rel-since-lead b {
@@ -14644,10 +14648,10 @@ a.pol-tpl {
   margin-bottom: 6px;
 }
 .rel-sv {
-  font: 700 14px var(--font-mono);
+  font: 600 var(--fs-base) var(--font-mono);
 }
 .rel-sd {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .rel-srow {
@@ -14655,7 +14659,7 @@ a.pol-tpl {
   align-items: flex-start;
   gap: var(--sp-10);
   padding: 2px 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   line-height: 21px;
 }
 .rel-slbl {
@@ -14669,7 +14673,7 @@ a.pol-tpl {
   height: 17px;
   line-height: 17px;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--fs-badge);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -14797,7 +14801,7 @@ tr.pol-grp td {
   padding: var(--sp-8) 0 0;
   border: 0;
   border-top: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .pol-fix-adv legend {
   padding: 0;
@@ -14829,7 +14833,7 @@ tr.pol-grp td {
 .pol-hday {
   padding: var(--sp-8) var(--sp-16);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .pol-hfold > summary {
@@ -14872,7 +14876,7 @@ details.devcard > summary {
   align-items: center;
   min-height: var(--ctl-lg);
   cursor: pointer;
-  font: 600 14px var(--font-sans);
+  font: 600 var(--fs-h2) var(--font-sans);
 }
 
 /* Identity card (#289): the StatusFWR block and TasmoFleet's own reading under it. */
@@ -14942,7 +14946,7 @@ details.devcard > summary {
   gap: 8px;
 }
 .cmd-kind {
-  font: 500 11px var(--font-mono);
+  font: 500 var(--fs-badge) var(--font-mono);
   color: var(--color-text-3);
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
@@ -14964,7 +14968,7 @@ details.devcard > summary {
   vertical-align: baseline;
 }
 .cmd-sug-g {
-  font: 600 11px var(--font-sans);
+  font: 600 var(--fs-badge) var(--font-sans);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-3);
@@ -14981,7 +14985,7 @@ details.devcard > summary {
   background: var(--color-accent-bg);
 }
 .cmd-opt-n {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -14991,7 +14995,7 @@ details.devcard > summary {
   font-weight: 400;
 }
 .cmd-opt-r {
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-2);
   text-align: right;
   align-self: center;
@@ -15003,18 +15007,18 @@ details.devcard > summary {
 }
 .cmd-opt-d {
   grid-column: 1/-1;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .cmd-sug-f {
   border-top: var(--hair-w) solid var(--color-border);
   padding: 6px 12px;
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-3);
   background: var(--color-surface-2);
 }
 .cmd-sug-f kbd {
-  font: 500 10.5px var(--font-mono);
+  font: 500 var(--fs-badge) var(--font-mono);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--r-xs);
   padding: 0 4px;
@@ -15030,7 +15034,7 @@ details.devcard > summary {
   padding: 0 8px 0 10px;
   background: var(--color-surface-2);
   border-right: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: var(--color-text-2);
 }
 .cmd-idx input {
@@ -15047,7 +15051,7 @@ details.devcard > summary {
 .cmd-idx-range {
   display: flex;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-badge);
   color: var(--color-text-3);
   white-space: nowrap;
 }
@@ -15056,7 +15060,7 @@ details.devcard > summary {
   border: 0;
   background: none;
   color: var(--color-accent-fg);
-  font: 500 12px var(--font-sans);
+  font: 500 var(--fs-small) var(--font-sans);
   padding: 0 10px;
   cursor: pointer;
   text-decoration: underline;
@@ -15077,7 +15081,7 @@ details.devcard > summary {
   grid-template-columns: 64px 112px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .cmd-vr {
   display: flex;
@@ -15098,7 +15102,7 @@ details.devcard > summary {
 }
 .cmd-foot {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-small);
   opacity: 0.9;
 }
 @media (max-width: 719px) {
@@ -15121,7 +15125,7 @@ details.devcard > summary {
   border-radius: var(--r-control);
   background: var(--color-surface-2);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-small);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -15158,7 +15162,7 @@ details.devcard > summary {
   border-radius: var(--r-badge);
   background: var(--t-bg);
   color: var(--t-fg);
-  font-size: 13px;
+  font-size: var(--fs-ui);
   line-height: 1.45;
 }
 .stab-card .ukv {
@@ -15167,7 +15171,7 @@ details.devcard > summary {
 .stab-card .ukv-row .sub {
   display: block;
   color: var(--color-text-2);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .stab-card .num-bad {
   color: var(--color-danger-fg);
@@ -15198,7 +15202,7 @@ details.devcard > summary {
   list-style: none;
   margin: var(--sp-4) 0 0;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .stab-boots li {
   display: grid;
@@ -15210,16 +15214,16 @@ details.devcard > summary {
 }
 .stab-boots .when {
   color: var(--color-text-2);
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
 }
 .stab-boots .ran {
   color: var(--color-text-2);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .stab-boots .raw {
   color: var(--color-text-3);
-  font: 400 11.5px var(--font-mono);
+  font: 400 var(--fs-badge) var(--font-mono);
 }
 @media (max-width: 640px) {
   .stab-boots li {
@@ -15235,7 +15239,7 @@ details.devcard > summary {
 .gt-bar .gt-sum {
   flex: 1 1 auto;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 600;
 }
 /* the line that says how old the values shown from memory are (#599): settings tab, GPIO templates */
@@ -15246,7 +15250,7 @@ details.devcard > summary {
   gap: var(--sp-6) var(--sp-8);
   max-width: 760px;
   margin: 0 0 var(--sp-12);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .agebar-warn {
@@ -15271,12 +15275,12 @@ details.devcard > summary {
   }
 }
 .gt-read {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .gt-intro {
   margin: 0 0 var(--sp-16);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 
@@ -15289,7 +15293,7 @@ details.devcard > summary {
 }
 .gt-n {
   font-weight: 400;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .gt-choose {
@@ -15338,26 +15342,26 @@ details.devcard > summary {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-4) var(--sp-8);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .gt-name {
   font-weight: 600;
   color: var(--color-text);
 }
 .gt-meta {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .gt-act {
   margin-left: auto;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .gt-diff {
   list-style: none;
   margin: var(--sp-6) 0 0;
   padding: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .gt-diff li + li {
   margin-top: var(--sp-2);
@@ -15365,7 +15369,7 @@ details.devcard > summary {
 .gt-pin {
   display: inline-block;
   min-width: 4.5em;
-  font: 600 12px var(--font-mono);
+  font: 600 var(--fs-small) var(--font-mono);
 }
 .gt-want {
   color: var(--color-ok-fg);
@@ -15373,12 +15377,12 @@ details.devcard > summary {
 }
 .gt-why {
   margin: var(--sp-4) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .gt-fine {
   margin: var(--sp-6) 0 0;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .gt-foot {
@@ -15391,14 +15395,14 @@ details.devcard > summary {
 }
 .gt-pins > summary {
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .gt-ptab {
   width: 100%;
   margin-top: var(--sp-6);
   border-collapse: collapse;
-  font: 400 12px var(--font-mono);
+  font: 400 var(--fs-small) var(--font-mono);
 }
 .gt-ptab th,
 .gt-ptab td {
@@ -15421,7 +15425,7 @@ details.devcard > summary {
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .gt-list li {
   display: flex;
@@ -15449,7 +15453,7 @@ details.devcard > summary {
   justify-content: space-between;
   cursor: pointer;
   list-style: none;
-  font-size: 14px;
+  font-size: var(--fs-base);
 }
 .gt-fold > summary::-webkit-details-marker {
   display: none;
@@ -15476,7 +15480,7 @@ details.devcard > summary {
   padding: var(--sp-8) var(--sp-10);
   border-radius: var(--r-code);
   background: var(--color-surface-2);
-  font: 400 12px/1.5 var(--font-mono);
+  font: 400 var(--fs-small)/1.5 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -15489,12 +15493,12 @@ details.devcard > summary {
   border-radius: var(--r-code);
   background: var(--color-warn-bg);
   color: var(--color-warn-fg);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .gt-steps {
   margin: 0;
   padding-left: 20px;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .gt-steps li + li {
   margin-top: var(--sp-6);
@@ -15511,7 +15515,7 @@ details.devcard > summary {
   align-items: center;
   gap: var(--sp-8);
   margin-right: auto;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pol-page > .banner {
   margin-bottom: var(--sp-16);
@@ -15529,7 +15533,7 @@ details.devcard > summary {
 }
 .gt-cmd-d > summary {
   cursor: pointer;
-  font: 400 12.5px var(--font-mono);
+  font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
 }
 .gt-stopped {
@@ -15667,13 +15671,13 @@ a[aria-busy="true"]::after {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .upd-sstart b {
   font-weight: 600;
 }
 .upd-sstart small {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .upd-sact {
@@ -15723,11 +15727,11 @@ a[aria-busy="true"]::after {
   align-items: baseline;
   gap: var(--sp-2) var(--sp-8);
   margin: 0;
-  font-size: 18px;
+  font-size: var(--fs-word);
   font-weight: 600;
 }
 .upd-when-big small {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   font-weight: 400;
   color: var(--color-text-2);
 }
@@ -15741,19 +15745,19 @@ a[aria-busy="true"]::after {
   background: var(--color-surface);
 }
 .upd-notif b {
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .upd-notif p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .upd-notif small {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .upd-prog-note {
   margin: var(--sp-10) 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .upd-cols-one .upd-rows {
@@ -15770,7 +15774,7 @@ a[aria-busy="true"]::after {
 .sys-subhead .bk-mac {
   margin-left: var(--sp-6);
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
 .bk-orph-tools {
@@ -15804,7 +15808,7 @@ dialog.udlg.udlg-wide {
   gap: var(--sp-8);
 }
 .pw-pick-count {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--color-text-2);
 }
 .pw-pick-list {
@@ -15819,7 +15823,7 @@ dialog.udlg.udlg-wide {
   gap: var(--sp-10);
   padding: var(--sp-6) var(--sp-12);
   border-bottom: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--fs-ui);
 }
 .pw-pick:last-child {
   border-bottom: 0;
@@ -15829,6 +15833,6 @@ dialog.udlg.udlg-wide {
   min-width: 0;
 }
 .pw-pick-meta {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--color-text-2);
 }
