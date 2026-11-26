@@ -7,7 +7,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 - **SemVer** from v0.1.0: new features or visible behaviour -> minor (`0.x.0`); bug fixes
   and small changes only -> patch (`0.x.y`). Breaking changes are allowed before 1.0 but
   must be listed in `CHANGELOG.md`.
-- `CHANGELOG.md` has one section per version with the subsections Upgrade notes, Added, Changed, Fixed,
+- `CHANGELOG.md` has one section per version with the subsections Upgrade notes: action may be required, Upgrade notes, Added, Changed, Fixed,
   Removed, Breaking and Security (in that order, empty ones omitted). **A change never edits `CHANGELOG.md`**
   (#527): it adds a fragment `changes/unreleased/<issue>-<slug>.md`, so parallel PRs do not conflict there.
   Format (see `changes/README.md`): front matter `section: Fixed` (one of the sections above), then the line
@@ -21,9 +21,11 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
   so the sentence is the headline and the text stays the detail. Write a `user:` line, or start the line with a
   sentence a user understands, whenever the first clause would be a migration, a column or a function name: a
   migration belongs in "Upgrade notes" (Details only), and a test fails when the page shows
-  `Migration 00` outside the Details folds. A change the admin must act on goes in "Breaking": What's new shows it as a warn
-  banner at the top of its release ("Upgrade notes: action may be required" does the same for a release that has it;
-  the assembler's sections do not include it).
+  `Migration 00` outside the Details folds. A change the admin must act on goes in "Breaking" or in "Upgrade notes: action may be
+  required" (a fragment can say `section: Upgrade notes: action may be required`, #1301): What's new shows both as a
+  warn banner at the top of its release. Plain "Upgrade notes" stay in Details, so a note that asks the admin to
+  change a filter, a rule or a setting does not belong there. A test keeps the assembler's section list and the page's
+  titles in step.
 - **The changelog fragment gate** (`pr.yml`, part of `required`): every PR validates its fragments; a PR that
   changes more than docs must add a fragment, or be the release commit, or carry `changelog: skip - <reason>`
   on a line of its PR body (nothing user-visible; the placeholder `<reason>` does not count). Renovate PRs

@@ -7,7 +7,7 @@
 //
 // The line text is the source of truth (credits, several issue refs); the file name only orders the lines
 // (leading number, then name). An optional "user: <one sentence>" line is the sentence What's new shows for the
-// change (#1108): it is written in front of the text as a bold lead, "- **<user line>** <text>". Sections: Upgrade notes, Added, Changed, Fixed, Removed, Breaking, Security.
+// change (#1108): it is written in front of the text as a bold lead, "- **<user line>** <text>". Sections: Upgrade notes: action may be required (What's new shows it as a warning), Upgrade notes, Added, Changed, Fixed, Removed, Breaking, Security.
 //
 //   changelog-assemble.mjs assemble --version X.Y.Z [--name "Name"] [--date YYYY-MM-DD]
 //       writes the "## X.Y.Z "Name" (date)" section into CHANGELOG.md and deletes the fragments
@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const SECTIONS = ["Upgrade notes", "Added", "Changed", "Fixed", "Removed", "Breaking", "Security"];
+export const SECTIONS = ["Upgrade notes: action may be required", "Upgrade notes", "Added", "Changed", "Fixed", "Removed", "Breaking", "Security"];
 export const DIR = "changes/unreleased";
 const NAME_RE = /^[a-z0-9][a-z0-9-]*\.md$/;
 

@@ -284,6 +284,38 @@ func TestWhatsNewBreakingIsAWarnBannerFirst(t *testing.T) {
 	}
 }
 
+// Why (#1301): the 0.49.0 note that update message titles changed asks the admin to change filters, but it sat
+// under plain "Upgrade notes" and so behind Details. A fragment can now write the section "Upgrade notes: action
+// may be required" (scripts/changelog-assemble.mjs, kept in step by its own test); this pins the page side: that
+// section is the warn banner, its headline stands once outside Details, and the full text stays in Details. The
+// markdown is what the assembler writes for such a fragment. It passes on main too: it pins the branch no test
+// reached, the guard against the page and the assembler drifting apart is the node test.
+func TestWhatsNewActionNotesAreAWarnBanner(t *testing.T) {
+	md := "## 3.0.0 (2026-04-01)\n\n### Upgrade notes: action may be required\n\n" +
+		"- **The update messages have new titles** a filter that matches the old text needs the new one (#1)\n\n" +
+		"### Upgrade notes\n\n- Nothing to set up; the schema stays at 0054\n\n" +
+		"### Fixed\n\n- **Lists render faster**\n"
+	var b strings.Builder
+	if err := whatsNewPage(whatsNewFrom(changelog.Parse(md), "3.0.0", nil)).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	page := b.String()
+	banner := strings.Index(page, `class="banner t-warn`)
+	if banner < 0 || !strings.Contains(page[banner:], "The update messages have new titles") {
+		t.Fatalf("the action-required note is no warn banner: %s", page)
+	}
+	outside := outsideFolds(t, `<main id="main" tabindex="-1">`+page+"</main>")
+	if n := strings.Count(outside, "The update messages have new titles"); n != 1 {
+		t.Errorf("the headline stands %d times outside Details, want once (in the banner)", n)
+	}
+	if strings.Contains(outside, "Nothing to set up") {
+		t.Error("plain Upgrade notes stand outside Details")
+	}
+	if !strings.Contains(page, "a filter that matches the old text needs the new one") {
+		t.Error("Details lost the full text of the action-required note")
+	}
+}
+
 // Why (#1108): the page shows five releases, so a person who skipped more than five has to be told that
 // the older ones exist and where they are, instead of finding the news dot gone and the middle missing.
 func TestWhatsNewMoreThanFiveNewSaysSo(t *testing.T) {

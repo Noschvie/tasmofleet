@@ -70,6 +70,44 @@ test("assembles the section in the CHANGELOG's order, above the newest release, 
   assert.deepEqual(readdirSync(join(d, "changes/unreleased")), []);
 });
 
+// Why (#1301): What's new warns only for the sections "Breaking" and "Upgrade notes: action may be required"; plain
+// "Upgrade notes" stay behind Details. A fragment that could not ask for action left the 0.49.0 note about changed
+// notification titles hidden, although admins have to change their filters. The note must come first in its release.
+test("a fragment that asks for action becomes its own first section", () => {
+  const title = "Upgrade notes: action may be required";
+  const d = repo({
+    fragments: {
+      "1-act.md": frag(title, "A filter that matches the old title needs the new one (#1)"),
+      "2-plain.md": frag("Upgrade notes", "Migration 0047 adds a table"),
+      "3-fix.md": frag("Fixed", "fix three (#3)"),
+    },
+  });
+  const r = assemble(d);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    readFileSync(join(d, "CHANGELOG.md"), "utf8"),
+    HEAD +
+      '## 0.21.0 "Bell Rock" (2026-11-07)\n\n' +
+      `### ${title}\n\n- A filter that matches the old title needs the new one (#1)\n\n` +
+      "### Upgrade notes\n\n- Migration 0047 adds a table\n\n" +
+      "### Fixed\n\n- fix three (#3)\n\n" +
+      OLD,
+  );
+});
+
+// Why (#1301): the page (internal/web/whatsnew.go) and the assembler keep separate lists of section titles, and
+// nothing tied them together: the page looked for a title the assembler could not write. A rename on either side
+// now fails here instead of hiding a note behind Details again.
+test("every section title What's new treats specially is one a fragment can write", async () => {
+  const { SECTIONS } = await import("./changelog-assemble.mjs");
+  const go = readFileSync(join(here, "..", "internal", "web", "whatsnew.go"), "utf8");
+  for (const name of ["actionNotes", "breakingTitle", "plainNotes"]) {
+    const m = new RegExp(`^\\s*${name}\\s*=\\s*"([^"]+)"`, "m").exec(go);
+    assert.ok(m, `internal/web/whatsnew.go no longer declares ${name} as a string constant: update this test`);
+    assert.ok(SECTIONS.includes(m[1]), `What's new looks for the section "${m[1]}" (${name}), but changelog-assemble.mjs cannot write it`);
+  }
+});
+
 test("a patch takes the name of its minor's section when NAME is omitted", () => {
   const d = repo({ fragments: { "1-a.md": frag("Fixed", "x (#1)") } });
   const r = run(d, "assemble", "--version", "0.20.2", "--date", "2026-11-07");
