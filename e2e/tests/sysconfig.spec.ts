@@ -180,12 +180,12 @@ test("metrics switch: off answers 404, on serves the metrics again", async ({ pa
   const toggle = page.locator("[data-key='METRICS_ENABLED']");
   await page.goto(app.url + "/settings/system?tab=general");
   await expect(toggle.locator("input[type=checkbox]")).toBeChecked();
-  await toggle.locator(".sw").click();
+  await toggle.locator(".uswitch").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   expect((await request.get(app.url + "/metrics")).status(), "switched off").toBe(404);
   await page.goto(app.url + "/settings/system?tab=general");
-  await toggle.locator(".sw").click();
+  await toggle.locator(".uswitch").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   expect((await request.get(app.url + "/metrics")).status(), "switched on again").toBe(200);

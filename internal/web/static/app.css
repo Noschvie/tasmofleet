@@ -5275,7 +5275,8 @@ button.btn[aria-disabled="true"]:focus-visible {
   width: 1px;
   height: 1px;
 }
-/* the switch alone: the label is its hit box (a phone widens it, see the settings page's touch targets) */
+/* the switch alone: the label is its hit box (a phone widens it, see the settings page's touch targets) and the
+   invisible input covers all of it, so a click, a tap and a script's check() all land on the input itself */
 .uswitch {
   position: relative;
   display: inline-flex;
@@ -5283,6 +5284,16 @@ button.btn[aria-disabled="true"]:focus-visible {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+.uswitch input {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.uswitch .sw {
+  pointer-events: none;
 }
 .utoggle .sw,
 .uswitch .sw,

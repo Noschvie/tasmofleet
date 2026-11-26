@@ -27,7 +27,7 @@ test("edits survive a tab change, the bar lists the tabs with changes, one Save 
   const bar = page.locator("[data-sys-bar]");
   await expect(bar).toBeHidden(); // nothing edited yet (#990)
 
-  await page.locator("[data-key='METRICS_DEVICE_LABELS'] .sw").click();
+  await page.locator("[data-key='METRICS_DEVICE_LABELS'] .uswitch").click();
   await expect(bar).toContainText("Unsaved changes:");
   await tabs(page).getByRole("link", { name: "Firmware & updates" }).click();
   await expect(page).toHaveURL(/tab=firmware/);
@@ -140,7 +140,7 @@ test("dependent settings follow their switch", async ({ page }) => {
   await page.goto(app.url + "/settings/system?tab=discovery");
   const dep = page.locator("[data-depends='v.DISCOVERY_SCAN']");
   await expect(dep).toHaveClass(/is-off/);
-  await page.locator("[data-key='DISCOVERY_SCAN'] .sw").click();
+  await page.locator("[data-key='DISCOVERY_SCAN'] .uswitch").click();
   await expect(dep).not.toHaveClass(/is-off/);
   await dep.locator("input[name='v.DISCOVERY_SCAN_INTERVAL']").fill("2h");
 
@@ -560,7 +560,7 @@ for (const width of [1280, 375]) {
     const clean = await covered();
     expect(clean.onTop, `the Device MQTT passwords card is covered by ${clean.tag} (card bottom ${clean.bottom}, status bar top ${clean.top})`).toBe(true);
     // an edit shows the bar with the MQTT chip, and Save is in reach
-    const flip = page.locator("[data-key='MQTT_PASSWORD_FROM_BACKUPS'] .sw");
+    const flip = page.locator("[data-key='MQTT_PASSWORD_FROM_BACKUPS'] .uswitch");
     await flip.click();
     await expect(bar).toBeVisible();
     await expect(bar.locator(".sbar-state")).toHaveText("Unsaved changes:");
