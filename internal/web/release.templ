@@ -3,7 +3,6 @@ package web
 import (
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -17,22 +16,22 @@ func relURL(base, version string, since bool) string {
 	return u
 }
 
-// releaseSub is "Released 6 Oct 2026 · from GitHub releases".
-func releaseSub(p releasePage) string {
-	s := ""
-	if p.Rel != nil && !p.Rel.Published.IsZero() {
-		s = "Released " + dayText(p.Rel.Published)
-	}
+// sub is the page's subtitle, "Released 6 Oct 2026 · from GitHub releases": the date is a time element.
+func (p releasePage) sub() ui.Stamped {
+	from := ""
 	if p.Source != "" {
-		if s != "" {
-			s += " · "
-		}
-		s += "from " + p.Source
+		from = "from " + p.Source
 	}
-	return s
+	if p.Rel == nil || p.Rel.Published.IsZero() {
+		return ui.Stamped{Lead: from}
+	}
+	if from != "" {
+		from = " · " + from
+	}
+	return ui.Stamped{Lead: "Released ", At: p.Rel.Published, Stamp: ui.StampDate, Tail: from}
 }
 
-// fileMeta is a file row's second line: "ESP8266 · 11 devices · 658 KB".
+// fileMeta is a file row's second line: "ESP8266 · 11 devices · 658.0 KiB".
 func fileMeta(f fileView) string {
 	s := plural(len(f.UsedBy), "device")
 	if f.Chip != "" {
@@ -61,8 +60,8 @@ templ releaseContent(v view, p releasePage) {
 						@ui.Badge(ui.ToneOK, "Latest")
 					}
 				</h1>
-				if sub := releaseSub(p); sub != "" {
-					<p class="pghead-sub">{ sub }</p>
+				if sub := p.sub(); sub.Lead != "" || !sub.IsZero() {
+					<p class="pghead-sub">@ui.StampedText(sub)</p>
 				}
 			</div>
 			if p.Rel != nil {
@@ -219,7 +218,7 @@ templ relSince(v view, p releasePage) {
 					<div class="rel-shead">
 						<a class="rel-sv" id={ "rel-s-" + b.Version } href={ templ.SafeURL(relURL(v.Base, b.Version, false)) }>{ b.Version }</a>
 						if !b.Published.IsZero() {
-							<time class="rel-sd" datetime={ b.Published.Format(time.RFC3339) }>{ dayText(b.Published) }</time>
+							<time class="rel-sd" { ui.StampAttrs(b.Published, ui.StampDate)... }>{ ui.StampText(b.Published, ui.StampDate) }</time>
 						}
 						if b.Breaking > 0 {
 							@ui.Badge(ui.ToneWarn, breakingText(b.Breaking))

@@ -101,7 +101,7 @@ func filesAre(n int, verb string) string {
 
 // backupSub is the line under the restore title: device, backup date, trigger, firmware, size.
 func backupSub(name string, b model.Backup, files int) string {
-	parts := []string{name, "backup from " + shortDate(b.TakenAt)}
+	parts := []string{name, ui.Stamped{Lead: "backup from ", At: b.TakenAt}.Plain()} // the header's subtitle is plain text
 	if t := triggerShort(b.Trigger); t != "" {
 		parts = append(parts, t)
 	}
@@ -234,7 +234,10 @@ func (h *handler) renderConfirm(w http.ResponseWriter, r *http.Request, status i
 type restoreStepView struct {
 	N             int
 	Label, Detail string
-	State         string // done, active, failed or todo
+	// Stamp, when its instant is set, is the detail as a sentence with a time element in it (Detail is then its
+	// plain text).
+	Stamp ui.Stamped
+	State string // done, active, failed or todo
 }
 
 // Mark is what the step's circle shows.
@@ -256,7 +259,7 @@ type restoreJobView struct {
 	StatusURL    string // polled while the job runs
 	Running      bool
 	Done, Failed bool
-	Banner       string // after "Restore finished." / "Restore failed."
+	Banner       ui.Stamped // after "Restore finished." / "Restore failed."; its lead starts with a space
 	Lead         string
 	Steps        []restoreStepView
 	RollbackHref string // restore the backup taken before the restore
@@ -309,13 +312,14 @@ func restoreJobOf(base string, p jobPage, target, pre model.Backup, preFiles boo
 			switch n {
 			case restore.StepBackup:
 				if pre.ID != 0 {
-					s.Detail = "Saved " + shortDate(pre.TakenAt) + " · " + humanBytes(pre.Size)
+					s.Stamp = ui.Stamped{Lead: "Saved ", At: pre.TakenAt, Tail: " · " + humanBytes(pre.Size)}
 					if preFiles {
-						s.Detail += " and its files"
+						s.Stamp.Tail += " and its files"
 					}
 					if t := backupTriggerText(pre.Trigger, pre.TriggerRef); t != "" {
-						s.Detail += " · labelled “" + t + "”"
+						s.Stamp.Tail += " · labelled “" + t + "”"
 					}
+					s.Detail = s.Stamp.Plain()
 				}
 			case restore.StepFiles:
 				s.Detail = filesStepDetail(j, prog)
@@ -339,9 +343,9 @@ func restoreJobOf(base string, p jobPage, target, pre model.Backup, preFiles boo
 	switch {
 	case v.Done && replace:
 		v.Lead = what + " finished."
-		v.Banner = p.Device.Name + " now stands for the new device (" + j.NewMAC + ")."
+		v.Banner = ui.Stamped{Lead: " " + p.Device.Name + " now stands for the new device (" + j.NewMAC + ")."}
 		if restore.FilesWritten(j.Detail) {
-			v.Banner += " Its files and settings are those from " + shortDate(target.TakenAt) + "."
+			v.Banner = ui.Stamped{Lead: v.Banner.Lead + " Its files and settings are those from ", At: target.TakenAt, Tail: "."}
 		}
 		v.DeviceHref = fmt.Sprintf("%s/devices/%d", base, j.DeviceID)
 	case v.Done:
@@ -351,26 +355,26 @@ func restoreJobOf(base string, p jobPage, target, pre model.Backup, preFiles boo
 		if withFiles {
 			what = "settings and files"
 		}
-		v.Banner = "The device is back online with the " + what + " from " + shortDate(target.TakenAt) + "."
+		v.Banner = ui.Stamped{Lead: " The device is back online with the " + what + " from ", At: target.TakenAt, Tail: "."}
 		if j.Verified {
-			v.Banner += " Verified: the device holds the restored configuration"
+			v.Banner.Tail += " Verified: the device holds the restored configuration"
 			if withFiles && prog != nil {
-				v.Banner += " and all " + filesPlural(prog.Count(restore.FileWritten)+prog.Count(restore.FileSame))
+				v.Banner.Tail += " and all " + filesPlural(prog.Count(restore.FileWritten)+prog.Count(restore.FileSame))
 			}
-			v.Banner += "."
+			v.Banner.Tail += "."
 		}
 	case v.Failed && pre.ID != 0 && (step > restore.StepUpload || restore.FilesChanged(j.Detail)):
 		// Only a failure after the upload (or after files were written) may have changed the device;
 		// before, the failure text says nothing was changed and there is nothing to roll back.
 		v.Lead = what + " failed."
-		v.Banner = "The state before was backed up at " + shortDate(pre.TakenAt) + " before anything changed, so you can roll back."
+		v.Banner = ui.Stamped{Lead: " The state before was backed up at ", At: pre.TakenAt, Tail: " before anything changed, so you can roll back."}
 		if !replace {
 			v.RollbackHref = fmt.Sprintf("%s/backups/%d/restore", base, pre.ID)
-			v.RollbackText = "Restore the " + shortDate(pre.TakenAt) + " backup"
+			v.RollbackText = ui.Stamped{Lead: "Restore the ", At: pre.TakenAt, Tail: " backup"}.Plain() // a button label holds text only
 		}
 	case v.Failed:
 		v.Lead = what + " failed."
-		v.Banner = "Nothing was changed on the device."
+		v.Banner = ui.Stamped{Lead: " Nothing was changed on the device."}
 	}
 	if prog != nil && len(prog.Files) > 0 {
 		v.FilesMeta = fmt.Sprintf("%d of %d written", prog.Count(restore.FileWritten)+prog.Count(restore.FileSame), len(prog.Files))

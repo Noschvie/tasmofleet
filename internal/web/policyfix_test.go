@@ -15,6 +15,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/ota"
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 type fakeFix struct {
@@ -643,5 +644,34 @@ func TestPolicyFixCancelReturnsToTheOpeningDevice(t *testing.T) {
 	r, out := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {"deadbeef"}, "device": {"1"}, "from": {"device"}})
 	if m := cancelRe.FindStringSubmatch(out); r.StatusCode != 409 || m == nil || m[1] != "/tf/devices/1" {
 		t.Errorf("the stale page keeps the way back: %d %v", r.StatusCode, m)
+	}
+}
+
+// Why (#1104): the note under a command reads "Power on state: has 3, checked 2 min ago (live)". The sentence is one
+// piece of text; written as separate template pieces, the template put a space before the comma ("has 3 , checked"),
+// a visible wording change the date work must not bring. A backup value has its day as a <time> element in the same
+// sentence, still with no space before the comma.
+func TestPolicyFixNoteReadsAsOneSentence(t *testing.T) {
+	e := fixEnv(t, &fakeFix{}, nil)
+	body := previewFor(t, e, url.Values{"all": {"1"}})
+	notes := regexp.MustCompile(`<span class="pol-fix-note">(.*?)</span>`).FindAllStringSubmatch(body, -1)
+	if len(notes) == 0 {
+		t.Fatal("the preview shows no note under a command")
+	}
+	for _, n := range notes {
+		if !strings.Contains(n[1], ": has ") || !strings.Contains(n[1], ", checked ") || strings.Contains(n[1], " ,") {
+			t.Errorf("the note is one sentence with the comma against the value: %q", n[1])
+		}
+	}
+	var b strings.Builder
+	c := fixCmd{Label: "Power on state", Have: "2", Note: ui.Stamped{Lead: "from backup of ", At: time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC), Stamp: ui.StampDate}}
+	if err := ui.StampedText(fixNote(c)).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.String(); !strings.HasPrefix(got, "Power on state: has 2, from backup of <time ") {
+		t.Errorf("a backup note keeps the day as a time element in the same sentence: %s", got)
+	}
+	if got := fixNote(fixCmd{Label: "Power on state", Have: "2"}); got.Lead != "Power on state: has 2" || !got.IsZero() {
+		t.Errorf("a command with no source note says only what it has: %+v", got)
 	}
 }

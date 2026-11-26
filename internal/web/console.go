@@ -118,7 +118,7 @@ func consoleSince(s string) time.Time {
 // appends the reply or the error of the command just sent.
 func consoleLines(data consoleData, since, now time.Time) []ui.ConsoleLine {
 	var out []ui.ConsoleLine
-	stamp := func(t time.Time) (string, string) { return t.Local().Format("15:04:05"), t.UTC().Format(time.RFC3339) }
+	stamp := func(t time.Time) (string, string) { return ui.StampText(t, ui.StampLog), t.UTC().Format(time.RFC3339) }
 	for i := len(data.History) - 1; i >= 0; i-- {
 		row := data.History[i]
 		if !since.IsZero() && row.At.Before(since) {

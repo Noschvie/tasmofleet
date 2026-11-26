@@ -131,7 +131,7 @@ templ userDetailPage(v userDetailView) {
 			}
 			for _, a := range v.Activity {
 				<div class="ud-act">
-					<time class="ud-act-when mono" datetime={ a.At } data-ts={ ui.StampRelative.Key }>{ a.When }</time>
+					<time class="ud-act-when" datetime={ a.At } data-ts={ ui.StampRelative.Key }>{ a.When }</time>
 					<span class="ud-act-text"><span class="ud-act-what mono">{ a.Action }</span> <span class="ud-act-sum">{ a.Summary }</span></span>
 					@ui.Badge(a.Tone, a.Status)
 				</div>
@@ -168,7 +168,7 @@ templ otpPage(o otpView) {
 			<output id="otp-value" class="mono" data-visual-mask>{ o.D.Password }</output>
 			@ui.CopyButton(ui.CopyData{From: "#otp-value"})
 		</div>
-		@ui.KV([]ui.KVRow{{Key: "Username", Value: o.D.User, Mono: true}, {Key: "Expires", Value: o.Expires, Mask: true}})
+		@ui.KV([]ui.KVRow{{Key: "Username", Value: o.D.User, Mono: true}, {Key: "Expires", At: o.Expires, Mask: true}})
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "Once you leave this page the password can’t be shown again. Reset it to get a new one."})
 	}
 	<div class="otp-foot">

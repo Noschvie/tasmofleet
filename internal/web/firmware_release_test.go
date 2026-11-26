@@ -93,7 +93,7 @@ func TestReleasePageShowsNotesFilesAndOlderVersions(t *testing.T) {
 	e := relEnv(t, fw)
 	_, body := e.do(t, "GET", "/firmware/releases/16.2.0", "admin", nil)
 	main := strings.ReplaceAll(body[strings.Index(body, `<main id="main">`):], "<wbr>", "") // file names carry soft break points
-	for _, want := range []string{"Tasmota 16.2.0", "Latest", "Released 6 Oct 2026 · from GitHub releases", "View on GitHub",
+	for _, want := range []string{"Tasmota 16.2.0", "Latest", `Released <time data-ts="date" datetime="2026-10-06T00:00:00Z">6 Oct 2026</time> · from GitHub releases`, "View on GitHub",
 		`class="unotes-breaking rel-breaking"`, "<code>SetOption65</code>", "Berry thing",
 		"Files this fleet needs", "tasmota.bin.gz", "ESP8266 · 2 devices · 658.0 KiB", "Cached", "Prefetch tasmota32.bin", `name="from" value="release"`,
 		"Still on older versions", "16.1.0", "15.0.0", "Changes since 15.0.0"} {

@@ -108,10 +108,10 @@ templ restoreStatusBody(v restoreJobView) {
 		}
 	>
 		if v.Done {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Title: v.Lead, Text: " " + v.Banner})
+			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Title: v.Lead, Text: v.Banner.Plain(), TextStamp: v.Banner})
 		}
 		if v.Failed {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: v.Lead, Text: " " + v.Banner, Alert: true})
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: v.Lead, Text: v.Banner.Plain(), TextStamp: v.Banner, Alert: true})
 		}
 		@ui.CardStacks(2) {
 			@ui.CardStack(1) {
@@ -122,7 +122,13 @@ templ restoreStatusBody(v restoreJobView) {
 							<span class="rs-step-text">
 								<span class="rs-step-label">{ s.Label }<span class="sr-only">{ ": " + s.State }</span></span>
 								if s.Detail != "" {
-									<span class="rs-step-detail">{ s.Detail }</span>
+									<span class="rs-step-detail">
+										if !s.Stamp.IsZero() {
+											@ui.StampedText(s.Stamp)
+										} else {
+											{ s.Detail }
+										}
+									</span>
 								}
 							</span>
 						</div>

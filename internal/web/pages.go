@@ -514,7 +514,7 @@ func (p *Pages) OneTimePassword(w http.ResponseWriter, r *http.Request, status i
 	v := p.h.view(r, "One-time password", "users", nil)
 	v.Crumbs = []ui.Crumb{{Label: "One-time password"}}
 	o := otpView{D: d, Detail: d.BasePath + "/users/" + url.PathEscape(d.User),
-		Expires: d.ExpiresAt.In(p.h.d.Clock.Now().Location()).Format("2 Jan 2006, 15:04")}
+		Expires: d.ExpiresAt}
 	p.h.show(w, r, status, "users", v, otpPage(o))
 }
 
@@ -676,7 +676,7 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	v.Facts = []ui.KVRow{{Key: "Role", Value: orDash(v.Role)}, {Key: "Sign-in method", Value: v.Method}, {Key: "Username", Value: v.Username},
 		{Key: "Email", Value: orDash(d.Email)}}
 	if !d.CreatedAt.IsZero() {
-		v.Facts = append(v.Facts, ui.KVRow{Key: "Created", Value: d.CreatedAt.In(now.Location()).Format("2 Jan 2006") + createdBy(d.CreatedBy, nameOf), Mask: true})
+		v.Facts = append(v.Facts, ui.KVRow{Key: "Created", At: d.CreatedAt, Stamp: ui.StampDate, Tail: createdBy(d.CreatedBy, nameOf), Mask: true})
 	}
 	last := ui.KVRow{Key: "Last sign-in", Value: "Never"}
 	if !u.LastLogin.IsZero() {
@@ -685,11 +685,11 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	v.Facts = append(v.Facts, last)
 	if !d.OTPExpiresAt.IsZero() {
-		otp := "Valid until " + ui.StampRelativeText(now, d.OTPExpiresAt)
+		otp := ui.KVRow{Key: "One-time password", Lead: "Valid until ", At: d.OTPExpiresAt, Stamp: ui.StampRelative, Value: ui.StampRelativeText(now, d.OTPExpiresAt), Mask: true}
 		if d.OTPExpired {
-			otp = "Expired: reset the password again"
+			otp = ui.KVRow{Key: "One-time password", Value: "Expired: reset the password again"}
 		}
-		v.Facts = append(v.Facts, ui.KVRow{Key: "One-time password", Value: otp, Mask: !d.OTPExpired})
+		v.Facts = append(v.Facts, otp)
 	}
 	for _, s := range d.Sessions {
 		v.Sessions = append(v.Sessions, sessionView{ID: s.ID, Current: s.Current,
@@ -759,6 +759,6 @@ func createdBy(by string, nameOf func(string) string) string {
 // otpView is the one-time password page.
 type otpView struct {
 	D       auth.OTPPageData
-	Detail  string // the user's detail page (Done)
-	Expires string
+	Detail  string    // the user's detail page (Done)
+	Expires time.Time // when the one-time password stops working
 }

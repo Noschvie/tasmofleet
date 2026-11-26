@@ -423,7 +423,8 @@ func TestComparisonCellsKeepTheirPhoneLabels(t *testing.T) {
 		t.Errorf("drift lost its header row or its sideways scroll:\n%s", body)
 	}
 	_, cmp := e.do(t, "GET", "/devices/1/backups/diff?a=3&b=6", "admin", nil)
-	if !strings.Contains(cmp, `<div class="diff-grid diff-headrow"><span>Setting</span><span>Older · 18 Oct 2026, 10:00</span><span>Newer · 18 Oct 2026, 11:00</span></div>`) {
+	if !strings.Contains(cmp, `<div class="diff-grid diff-headrow"><span>Setting</span><span>Older · <time data-ts="date-time" datetime="`) ||
+		!strings.Contains(cmp, `">18 Oct 2026, 10:00</time></span><span>Newer · <time data-ts="date-time" datetime="`) || !strings.Contains(cmp, `">18 Oct 2026, 11:00</time></span></div>`) {
 		t.Errorf("the comparison lost its column heads:\n%s", cmp)
 	}
 	e2, _, _ := newAdminEnv(t)

@@ -62,13 +62,16 @@ async function openIn(browser: Browser, locale: string) {
   return { ctx, page: await ctx.newPage() };
 }
 
-/** the pages whose stamps the audit named: the device overview, Backups, Firmware, the audit log and a user's page */
+/** the pages whose stamps the audit named: the device overview, Backups, Firmware, the audit log and a user's page, then the pages with a date that was server text */
 const pages = (d2: string): [string, string][] => [
   ["device overview", `/devices/${d2}`],
   ["device backups", `/devices/${d2}/backups`],
   ["firmware", "/firmware"],
   ["audit", "/audit"],
   ["user detail", "/users/principal/maren"],
+  // the dates that Go used to write itself (#1104 part 2): the update's release cards and the history of the rules
+  ["new update", "/updates/new"],
+  ["policy history", "/policy/history"],
 ];
 
 for (const locale of locales) {

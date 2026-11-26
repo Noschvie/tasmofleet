@@ -521,13 +521,12 @@ func lastLiveRead(rep PolicyReport) time.Time {
 	return last
 }
 
-// sourceNote is the per-value label: "checked 5m ago (live)" or
-// "from backup of 2026-10-01".
-func sourceNote(s ValueSource, now time.Time) string {
+// sourceNote is the per-value label: "checked 5m ago (live)" or "from backup of 1 Oct 2026" (the day is a time element).
+func sourceNote(s ValueSource, now time.Time) ui.Stamped {
 	if s.Kind == "backup" {
-		return "from backup of " + s.At.Local().Format("2006-01-02")
+		return ui.Stamped{Lead: "from backup of ", At: s.At, Stamp: ui.StampDate}
 	}
-	return "checked " + agoWords(now, s.At) + " (live)"
+	return ui.Stamped{Lead: "checked " + agoWords(now, s.At) + " (live)"}
 }
 
 // scopeChipText is a scope choice as people read it.

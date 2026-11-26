@@ -390,7 +390,7 @@ func TestRestoreJobPagePollsUntilTerminal(t *testing.T) {
 	}
 	_, done := e.do(t, "GET", "/restores/2/status", "admin", nil)
 	// finished: no polling, the backup taken before (#4) is named so the user can roll back, and the verification is stated
-	if strings.Contains(done, "hx-trigger") || !strings.Contains(done, "Saved 18 Oct 2026, 11:00") || !strings.Contains(done, "Verified") {
+	if strings.Contains(done, "hx-trigger") || !strings.Contains(done, `>18 Oct 2026, 11:00</time>`) || !strings.Contains(done, "Verified") {
 		t.Errorf("finished job:\n%s", done)
 	}
 	if resp, _ := e.do(t, "GET", "/restores/2", "operator", nil); resp.StatusCode != 403 {

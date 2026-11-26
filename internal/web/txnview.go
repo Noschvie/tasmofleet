@@ -145,17 +145,6 @@ func chipName(f model.ChipFamily) string {
 	return s
 }
 
-// sizeText is a file size the way the update pages show it: "658 KB", "1.9 MB".
-func sizeText(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MB"
-	case n >= 1<<10:
-		return strconv.FormatInt(n>>10, 10) + " KB"
-	}
-	return strconv.FormatInt(n, 10) + " B"
-}
-
 // updatePerDevice is the time one device's update typically takes on a LAN (preflight, backup,
 // download and flash, reboot, verify). It is for the estimate on the update pages only; the
 // state machine's timeouts are the limits.
@@ -209,14 +198,18 @@ func upstreamFile(id model.Identity, release string) string {
 func releaseOptions(rels []firmware.Release, uploads []firmware.CustomImage, chosen string) (cards, older []ui.Option) {
 	for i, rel := range rels {
 		o := ui.Option{Value: rel.Version, Label: "Tasmota " + rel.Version, Checked: rel.Version == chosen}
-		var d []string
+		lead := ""
 		if i == 0 {
-			d = append(d, "Latest")
+			lead = "Latest"
 		}
-		if !rel.Published.IsZero() {
-			d = append(d, dateText(rel.Published))
+		if rel.Published.IsZero() {
+			o.Text = lead
+		} else {
+			if lead != "" {
+				lead += " · "
+			}
+			o.TextStamp = ui.Stamped{Lead: lead, At: rel.Published, Stamp: ui.StampDate}
 		}
-		o.Text = strings.Join(d, " · ")
 		if i < 2 || o.Checked {
 			cards = append(cards, o)
 		} else {
@@ -226,13 +219,10 @@ func releaseOptions(rels []firmware.Release, uploads []firmware.CustomImage, cho
 	for _, img := range uploads {
 		v := customReleasePrefix + img.Artifact.Custom
 		cards = append(cards, ui.Option{Value: v, Label: "Custom firmware " + img.Artifact.Release, Checked: v == chosen,
-			Text: img.Label + " · uploaded " + dateText(img.UploadedAt)})
+			TextStamp: ui.Stamped{Lead: img.Label + " · uploaded ", At: img.UploadedAt, Stamp: ui.StampDate}})
 	}
 	return cards, older
 }
-
-// dateText is a date as the release cards show it: "6 Oct 2026".
-func dateText(t time.Time) string { return t.Local().Format("2 Jan 2006") }
 
 // otaParallel is how many devices update at a time: the system setting OTA_PARALLEL, else the
 // engine's default of 2.

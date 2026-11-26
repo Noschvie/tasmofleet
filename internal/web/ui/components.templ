@@ -1,5 +1,7 @@
 package ui
 
+import "time"
+
 // Components of the design system (design v2, WP F4). Every one is on /styleguide; the CSS
 // lives in app.css under "Components (design v2, WP F4)", one block per component.
 
@@ -465,10 +467,21 @@ templ KV(rows []KVRow) {
 	</dl>
 }
 
+// StampedText is a sentence with one instant: the lead, the instant as a <time> element that time.js repaints in the
+// browser's locale and zone (its fallback text is for a page without JavaScript), then the tail. Every carrier of
+// such a sentence (a dialog body, a banner text, a row, a release card) renders it through this one component.
+templ StampedText(s Stamped) {
+	if s.At.IsZero() {
+		{ s.Lead + s.Tail }
+	} else {
+		{ s.Lead }<time { StampAttrs(s.At, s.stamp())... }>{ s.fallback() }</time>{ s.Tail }
+	}
+}
+
 // kvValue is the value of a row: a time, a soft-wrapped name or plain text.
 templ kvValue(r KVRow) {
 	if !r.At.IsZero() {
-		<time { StampAttrs(r.At, r.stampOf())... }>{ r.Value }</time>
+		@StampedText(Stamped{Lead: r.Lead, At: r.At, Stamp: r.stampOf(), Text: r.Value, Tail: r.Tail})
 	} else if r.Soft {
 		@Soft(r.Value)
 	} else {
@@ -565,7 +578,11 @@ templ Banner(b BannerData) {
 			} else if b.Title != "" {
 				<b>{ b.Title }</b>
 			}
-			{ b.Text }
+			if !b.TextStamp.IsZero() {
+				@StampedText(b.TextStamp)
+			} else {
+				{ b.Text }
+			}
 			{ children... }
 		</div>
 		if b.Action != nil {
@@ -687,7 +704,9 @@ templ RadioCards(legend, name string, opts []Option) {
 			<label class="rcard">
 				<input type="radio" name={ name } value={ o.Value } checked?={ o.Checked } disabled?={ o.Disabled }/>
 				<span class="rcard-body"><b>{ o.Label }</b>
-					if o.Text != "" {
+					if !o.TextStamp.IsZero() {
+						<span>@StampedText(o.TextStamp)</span>
+					} else if o.Text != "" {
 						<span>{ o.Text }</span>
 					}
 				</span>
@@ -916,7 +935,13 @@ templ Dialog(d DialogData) {
 				<input type="hidden" name={ f.Key } value={ f.Value }/>
 			}
 			<h2 id={ d.ID + "-h" }>{ d.Title }</h2>
-			<p class="udlg-body">{ d.Body }</p>
+			<p class="udlg-body">
+				if !d.BodyStamp.IsZero() {
+					@StampedText(d.BodyStamp)
+				} else {
+					{ d.Body }
+				}
+			</p>
 			if d.Command != "" {
 				<label class="ufield"><span class="ufield-label">Command</span><input name="command" class="mono" value={ d.Command }/></label>
 			}
@@ -993,7 +1018,13 @@ templ ConfirmPage(c ConfirmData) {
 		if c.showHeading() {
 			<h2 id="confirm-h">{ c.Heading }</h2>
 		}
-		<p class="udlg-body">{ c.Text }</p>
+		<p class="udlg-body">
+			if !c.TextStamp.IsZero() {
+				@StampedText(c.TextStamp)
+			} else {
+				{ c.Text }
+			}
+		</p>
 		if c.Warning != "" {
 			@Banner(BannerData{Tone: ToneDanger, Text: c.Warning, Alert: true})
 		}
@@ -1163,19 +1194,28 @@ templ Console(c ConsoleData) {
 	}
 }
 
+// diffLabel is the label of one side of a Diff: the instant as a time element, or the plain label.
+templ diffLabel(label string, at time.Time) {
+	if at.IsZero() {
+		{ label }
+	} else {
+		<time { StampAttrs(at, StampDateTime)... }>{ StampText(at, StampDateTime) }</time>
+	}
+}
+
 // Diff compares two backups side by side or unified; changed rows are tinted.
 templ Diff(d DiffData) {
 	<section class="ulist diff">
 		if !d.Unified {
 			<div class="diff-scroll">
-				<div class="diff-grid diff-headrow"><span>Setting</span><span>Older · { d.OldLabel }</span><span>Newer · { d.NewLabel }</span></div>
+				<div class="diff-grid diff-headrow"><span>Setting</span><span>Older · @diffLabel(d.OldLabel, d.OldAt)</span><span>Newer · @diffLabel(d.NewLabel, d.NewAt)</span></div>
 				for _, r := range d.Rows {
 					<div class={ "diff-grid", "diff-row", templ.KV("is-changed", r.Changed) }><span class="diff-key">{ r.Key }</span><span>{ r.Old }</span><span>{ r.New }</span></div>
 				}
 			</div>
 		} else {
 			<div class="diff-uni">
-				<div class="diff-uni-head">− { d.OldLabel }<br/>+ { d.NewLabel }</div>
+				<div class="diff-uni-head">− @diffLabel(d.OldLabel, d.OldAt)<br/>+ @diffLabel(d.NewLabel, d.NewAt)</div>
 				for _, r := range d.Rows {
 					if r.Changed {
 						<div class="diff-line is-del"><span>−</span><span><b>{ r.Key }</b> { r.Old }</span></div>

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -20,9 +21,9 @@ type deviceConfirmData struct {
 
 // devDeleteView is the delete page of a device (N2, screen "devdelete").
 type devDeleteView struct {
-	Name, Address, Meta string // Meta: " · ESP32 · Tasmota 14.3.0" after the address
-	Runs                int    // backup runs, as the Backups tab counts them
-	Summary             string // "2 kept, 16.1 KiB, newest 22 Oct 2026, 09:41"
+	Name, Address, Meta string     // Meta: " · ESP32 · Tasmota 14.3.0" after the address
+	Runs                int        // backup runs, as the Backups tab counts them
+	Summary             ui.Stamped // " (2 kept, 16.1 KiB, newest 22 Oct 2026, 09:41). Choose what happens to them."
 	Rows                []devDeleteRow
 	Choice              string // the posted choice on a refused post; "" = Keep (the reference's default)
 	ChoiceErr, AckErr   bool
@@ -94,7 +95,10 @@ func (h *handler) deviceHeld(ctx context.Context, id model.DeviceID) (*deviceHol
 }
 
 // devDeleteRow is one backup run on the delete page: when, and the Backups tab's detail line.
-type devDeleteRow struct{ When, Detail string }
+type devDeleteRow struct {
+	At     time.Time
+	Detail string
+}
 
 func (h *handler) registerDeviceConfirm(route routeFunc, adm func(http.Handler) http.Handler) {
 	route("GET /devices/{id}/delete", adm, h.deviceDeleteConfirm)
@@ -150,7 +154,7 @@ func (h *handler) renderDeviceDelete(w http.ResponseWriter, r *http.Request, sta
 		if run.Kept {
 			kept++
 		}
-		p.Rows = append(p.Rows, devDeleteRow{When: shortDate(run.TakenAt), Detail: deleteRowDetail(run)})
+		p.Rows = append(p.Rows, devDeleteRow{At: run.TakenAt, Detail: deleteRowDetail(run)})
 	}
 	p.Runs = len(runs)
 	if p.Runs > 0 {
@@ -158,8 +162,8 @@ func (h *handler) renderDeviceDelete(w http.ResponseWriter, r *http.Request, sta
 		if kept > 0 {
 			parts = append(parts, strconv.Itoa(kept)+" kept")
 		}
-		parts = append(parts, humanBytes(total), "newest "+shortDate(runs[0].TakenAt))
-		p.Summary = strings.Join(parts, ", ")
+		parts = append(parts, humanBytes(total))
+		p.Summary = ui.Stamped{Lead: " (" + strings.Join(parts, ", ") + ", newest ", At: runs[0].TakenAt, Tail: "). Choose what happens to them."}
 	}
 	p.Action, p.CSRF, p.CancelHref = v.Base+devPath+"/delete", v.CSRF, v.Base+devPath
 	if p.Hold != nil && p.Hold.Href != "" {

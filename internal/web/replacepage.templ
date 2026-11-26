@@ -127,7 +127,7 @@ templ replaceStartCard(v replaceView) {
 			}
 			<label class={ "ucheck", templ.KV("is-invalid", v.Missing) }>
 				<input type="checkbox" name="confirm" value="1" if v.Missing { aria-invalid="true" aria-describedby="rp-ack-err" }/>
-				<span>{ v.Ack }</span>
+				<span>@ui.StampedText(v.Ack)</span>
 			</label>
 			if v.Missing {
 				<p class="ufield-err" id="rp-ack-err" role="alert">{ needConfirm }</p>

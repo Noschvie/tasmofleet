@@ -147,5 +147,5 @@ func isoDay(s string) string {
 	if err != nil {
 		return s
 	}
-	return dayText(t)
+	return ui.StampCalendarDay(t)
 }

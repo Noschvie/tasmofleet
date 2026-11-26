@@ -84,7 +84,7 @@ func TestComparePickAllAndRestoreOlder(t *testing.T) {
 	bk.files[3] = []byte(`{"tele_period":60,"ledstate":1,"topic":"kitchen"}`)
 	bk.files[6] = []byte(`{"tele_period":300,"ledstate":1,"topic":"kitchen"}`)
 	_, body := e.do(t, "GET", "/devices/1/backups/diff?id=4&id=1", "admin", nil) // newer first, as ticked
-	if !strings.Contains(body, "1 of 3 settings differ") || !strings.Contains(body, "Older · 18 Oct 2026, 10:00") || strings.Contains(body, ">ledstate<") {
+	if !strings.Contains(body, "1 of 3 settings differ") || !strings.Contains(body, `">18 Oct 2026, 10:00</time>`) || strings.Contains(body, ">ledstate<") {
 		t.Errorf("changed rows only, older on the left:\n%s", body)
 	}
 	if !strings.Contains(body, `href="/tf/backups/1/restore"`) {

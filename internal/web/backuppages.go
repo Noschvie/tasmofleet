@@ -106,8 +106,11 @@ func pruneText(ret backupRetentionView) string {
 	return why + " Kept backups and the newest backup are never pruned."
 }
 
-// shortDate is the prototype's date: "22 Oct 2026, 09:41".
-func shortDate(t time.Time) string { return t.Local().Format("2 Jan 2006, 15:04") }
+// plainAt is a sentence with one instant as plain text, for an attribute that cannot hold an element (an aria-label):
+// the instant is written by ui/stamp.go, in the server's zone.
+func plainAt(lead string, t time.Time, tail string) string {
+	return ui.Stamped{Lead: lead, At: t, Tail: tail}.Plain()
+}
 
 // backupRun is one backup run as the tab lists it: the dump (or the snapshot of a run without
 // a dump) and the missing parts of the run's snapshot, if it is incomplete.

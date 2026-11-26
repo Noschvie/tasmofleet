@@ -38,7 +38,7 @@ type replaceView struct {
 	Files      *replaceFiles // the files row among the copied items; nil without files to write
 	Checks     []string      // the always-on copy options
 	Hidden     []ui.KVRow    // the confirmed form's fields
-	Ack        string
+	Ack        ui.Stamped
 	StartHref  string
 	CancelHref string
 }
@@ -103,7 +103,7 @@ func (h *handler) renderReplace(w http.ResponseWriter, r *http.Request, status i
 		sel = p.Preview.Backup.ID
 	}
 	for i, b := range dumps {
-		label := shortDate(b.TakenAt)
+		label := ui.StampText(b.TakenAt, ui.StampDateTime) // an option holds text only
 		if b.Version != "" {
 			label += " · Tasmota " + b.Version
 		}
@@ -120,7 +120,7 @@ func (h *handler) renderReplace(w http.ResponseWriter, r *http.Request, status i
 		rv.StartHref = fmt.Sprintf("%s/devices/%d/replace", v.Base, d.ID)
 		c := pv.Carries
 		rv.Copied = append(rv.Copied, ui.KVRow{Key: "Name and history", Value: d.Name + " (the entry keeps its tags, notes and history)"},
-			ui.KVRow{Key: "Backup", Value: shortDate(pv.Backup.TakenAt) + " · Tasmota " + pv.Backup.Version, Mono: true})
+			ui.KVRow{Key: "Backup", At: pv.Backup.TakenAt, Tail: " · Tasmota " + pv.Backup.Version, Mono: true})
 		if c.Known {
 			rv.Copied = append(rv.Copied,
 				ui.KVRow{Key: "Hostname", Value: orNotSet(c.Hostname), Mono: true},
@@ -177,14 +177,16 @@ func (h *handler) renderReplace(w http.ResponseWriter, r *http.Request, status i
 		if pv.Files.Restores() {
 			receives = "the " + filesPlural(nFiles) + " and the configuration"
 		}
-		ack := "I understand that the new device (" + pv.New.MAC + ") is backed up first, then receives " + receives + " of the backup of " + shortDate(pv.Backup.TakenAt) + " and restarts, that " + d.Name + " then stands for it instead of " + old + ", and that the old credentials come back"
+		ack := ui.Stamped{Lead: "I understand that the new device (" + pv.New.MAC + ") is backed up first, then receives " + receives + " of the backup of ",
+			At: pv.Backup.TakenAt, Tail: " and restarts, that " + d.Name + " then stands for it instead of " + old + ", and that the old credentials come back"}
 		if pv.Major {
-			ack += "; that the backup is from another firmware major version"
+			ack.Tail += "; that the backup is from another firmware major version"
 		}
 		if pv.Family {
-			ack += "; and I confirm the chip family of the old device matches the new one"
+			ack.Tail += "; and I confirm the chip family of the old device matches the new one"
 		}
-		rv.Ack = ack + "."
+		ack.Tail += "."
+		rv.Ack = ack
 	}
 	h.headPage(w, r, status, "replace", v, d, replaceTab(rv))
 }

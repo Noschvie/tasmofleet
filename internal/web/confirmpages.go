@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -22,12 +23,17 @@ import (
 type confirmFact struct {
 	Name, Value string
 	Code        bool
+	// At, when set, makes the value an instant (a <time> element time.js repaints; Value is then empty) followed by
+	// Tail (" · 12.0 KiB").
+	At   time.Time
+	Tail string
 }
 
 type confirmField struct{ Name, Value string }
 
 type actionConfirm struct {
 	Title, Text, Warning    string
+	TextStamp               ui.Stamped // when its instant is set, the text instead of Text
 	Crumbs                  []ui.Crumb // steps between the page's sub-navigation entry (Trail) and the current page
 	Last                    string     // the current page in the trail
 	Facts                   []confirmFact
@@ -57,12 +63,12 @@ func (h *handler) renderActionConfirm(w http.ResponseWriter, r *http.Request, na
 	v.Crumbs = append(v.Crumbs, c.Crumbs...)
 	v.Crumbs = append(v.Crumbs, ui.Crumb{Label: c.Last})
 	d := ui.ConfirmData{
-		Title: c.Title, Text: c.Text, Warning: c.Warning,
+		Title: c.Title, Text: c.Text, TextStamp: c.TextStamp, Warning: c.Warning,
 		Action: v.Base + c.Action, CSRF: v.CSRF, Verb: c.Verb, Danger: true, Ack: c.Ack,
 		CancelHref: v.Base + c.CancelHref, CancelLabel: c.CancelLabel, NoBusy: c.NoBusy,
 	}
 	for _, f := range c.Facts {
-		d.Facts = append(d.Facts, ui.KVRow{Key: f.Name, Value: f.Value, Mono: f.Code})
+		d.Facts = append(d.Facts, ui.KVRow{Key: f.Name, Value: f.Value, Mono: f.Code, At: f.At, Tail: f.Tail})
 	}
 	for _, f := range c.Fields {
 		d.Fields = append(d.Fields, ui.KVRow{Key: f.Name, Value: f.Value})
@@ -107,10 +113,10 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	c := actionConfirm{
-		Title: "Delete this backup?",
-		Text:  backupData{}.DeleteText(b),
+		Title:     "Delete this backup?",
+		TextStamp: backupData{}.DeleteWords(b),
 		Facts: []confirmFact{
-			{Name: "Taken", Value: ui.StampText(b.TakenAt, ui.StampDateTime)},
+			{Name: "Taken", At: b.TakenAt},
 			{Name: "Firmware", Value: b.Version},
 		},
 		Crumbs: crumbs,

@@ -140,8 +140,8 @@ templ deviceHeadRest(t deviceTabs) {
 // can put the banner in when the device goes offline and take it out when it is back (#126).
 templ deviceOffSlot(t deviceTabs, attrs templ.Attributes) {
 	<div id="devhd-slot" { attrs... }>
-		if t.NotYet != "" {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, ID: notYetBannerID, Text: t.NotYet})
+		if t.notYet() {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, ID: notYetBannerID, Text: t.NotYet.Plain(), TextStamp: t.NotYet})
 		} else if t.offline() {
 			@deviceOffBanner(t)
 		}

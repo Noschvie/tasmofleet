@@ -1049,3 +1049,50 @@ func TestBadgeOfRendersChildrenAfterTheLabel(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1104): a sentence that holds an instant (a dialog body, a banner text, a row, a release card, a confirm page) must
+// show it as one <time> element with its datetime and its format key, because a date the server writes into the text is
+// in the server's zone and order, and time.js can only repaint an element. Every carrier renders the same
+// StampedText; the hostile text around the instant stays escaped, and a sentence without an instant has no element.
+func TestStampedSentencesRenderOneTimeElement(t *testing.T) {
+	at := time.Date(2026, 11, 20, 14, 17, 0, 0, time.UTC)
+	s := Stamped{Lead: "Lead " + hostile + " ", At: at, Stamp: StampDate, Tail: " tail " + hostile}
+	for name, c := range map[string]templ.Component{
+		"dialog":  Dialog(DialogData{ID: "d", Title: "T", BodyStamp: s, Verb: "Go"}),
+		"banner":  Banner(BannerData{Tone: ToneAccent, TextStamp: s}),
+		"confirm": ConfirmPage(ConfirmData{Title: "T", TextStamp: s, Verb: "Go"}),
+		"row":     KV([]KVRow{{Key: "k", At: at, Stamp: StampDate, Lead: s.Lead, Tail: s.Tail}}),
+		"option":  RadioCards("l", "n", []Option{{Value: "v", Label: "L", TextStamp: s}}),
+		"direct":  StampedText(s),
+	} {
+		got := comp(t, c)
+		if n := strings.Count(got, "<time"); n != 1 {
+			t.Errorf("%s: %d time elements, want 1: %s", name, n, got)
+		}
+		if !strings.Contains(got, `<time data-ts="date" datetime="2026-11-20T14:17:00Z">`) || !strings.Contains(got, ">20 Nov 2026</time>") {
+			t.Errorf("%s: the instant is not a date stamp: %s", name, got)
+		}
+		if strings.Contains(got, "<script>") || strings.Contains(got, `" onmouseover="x`) {
+			t.Errorf("%s: the hostile text around the instant is not escaped: %s", name, got)
+		}
+	}
+	if got := comp(t, Dialog(DialogData{ID: "d", Title: "T", Body: "Plain body.", Verb: "Go"})); strings.Contains(got, "<time") || !strings.Contains(got, "Plain body.") {
+		t.Errorf("a dialog without an instant keeps its Body: %s", got)
+	}
+	if got := comp(t, StampedText(Stamped{Lead: "a", Tail: "b"})); got != "ab" {
+		t.Errorf("a sentence without an instant is its lead and tail, got %q", got)
+	}
+}
+
+// Why (#1104): Plain is the one way for Go code to put an instant into an attribute or a button label; it must be the
+// text the element would carry, so a page without JavaScript and an aria-label say the same.
+func TestStampedPlainIsTheElementsFallbackText(t *testing.T) {
+	at := time.Date(2026, 11, 20, 14, 17, 0, 0, time.UTC)
+	s := Stamped{Lead: "Select the backup of ", At: at}
+	if got, want := s.Plain(), "Select the backup of "+StampText(at, StampDateTime); got != want {
+		t.Errorf("Plain = %q, want %q", got, want)
+	}
+	if got := (Stamped{Lead: "a ", At: at, Text: "Today 14:17", Tail: " b"}).Plain(); got != "a Today 14:17 b" {
+		t.Errorf("a relative fallback text is kept: %q", got)
+	}
+}

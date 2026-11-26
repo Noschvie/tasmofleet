@@ -28,7 +28,7 @@ type ruleOpts struct {
 	Draft    *ruleDraft          // the form as posted (a refused save): shown again with its problem
 	Spec     *sysconfig.RuleSpec // a draft the server built (template, command, copy)
 	Origin   string              // template:<id>, copy:<device id>, duplicate:<rule id> or command: kept in the form
-	Source   string              // the draft's source in words ("Copied from kitchen · read live now")
+	Source   ui.Stamped          // the draft's source in words ("Copied from kitchen · read live now")
 	ErrField string
 	ErrMsg   string
 	Banner   string
@@ -57,7 +57,7 @@ type ruleDevRow struct {
 	ID     model.DeviceID
 	Name   string
 	Have   string
-	Source string
+	Source ui.Stamped
 	Kind   policy.OutcomeKind
 }
 
@@ -140,26 +140,26 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 		case policy.OutcomeUnknown:
 			switch note := notJudgedNote(rules[pos].Command, byID[o.DeviceID]); {
 			case policy.FirmwareNote(byID[o.DeviceID]) != "":
-				row.Source = policy.FirmwareNote(byID[o.DeviceID]) + "; checked again about once an hour" // nothing is sent to it (#558)
+				row.Source = ui.Stamped{Lead: policy.FirmwareNote(byID[o.DeviceID]) + "; checked again about once an hour"} // nothing is sent to it (#558)
 			case note != "":
-				row.Source = note // the device's firmware does not know the command: nothing to wait for
+				row.Source = ui.Stamped{Lead: note} // the device's firmware does not know the command: nothing to wait for
 			case haveSrc:
-				row.Source = "chip family unknown" // the value is there, the family-limited rule cannot be judged
+				row.Source = ui.Stamped{Lead: "chip family unknown"} // the value is there, the family-limited rule cannot be judged
 			case rep.NotLive[key]:
-				row.Source = "not readable live"
+				row.Source = ui.Stamped{Lead: "not readable live"}
 			default:
 				// Why not judged, as exactly as the report knows it (#1240): a backup that exists but cannot
 				// answer this setting is not "no backup yet", and an offline device cannot be read live.
-				row.Source = "no backup yet"
+				row.Source = ui.Stamped{Lead: "no backup yet"}
 				if rep.HasBackup[o.DeviceID] {
-					row.Source = "not in backup"
+					row.Source = ui.Stamped{Lead: "not in backup"}
 				}
 				if h.d.Health.Get(o.DeviceID).State == model.HealthOffline {
-					row.Source = "offline · " + row.Source
+					row.Source.Lead = "offline · " + row.Source.Lead
 				}
 			}
 		case policy.OutcomeShadowed:
-			row.Source = "covered by " + ruleName(sysconfig.RuleSpec{Name: rules[o.ByIndex].Name, Command: rules[o.ByIndex].Command})
+			row.Source = ui.Stamped{Lead: "covered by " + ruleName(sysconfig.RuleSpec{Name: rules[o.ByIndex].Name, Command: rules[o.ByIndex].Command})}
 		case policy.OutcomeExcepted:
 			continue // exempt: counted in the tile, not listed
 		}
@@ -179,14 +179,14 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 }
 
 // valueSource is the Source cell of a judged device: "live · 6 min" or "backup · 28 Oct".
-func valueSource(s ValueSource, ok bool, now time.Time) string {
+func valueSource(s ValueSource, ok bool, now time.Time) ui.Stamped {
 	switch {
 	case !ok:
-		return ""
+		return ui.Stamped{}
 	case s.Kind == "backup":
-		return "backup · " + s.At.Local().Format("2 Jan")
+		return ui.Stamped{Lead: "backup · ", At: s.At, Stamp: ui.StampDayOf(now, s.At)}
 	}
-	return "live · " + shortDuration(now.Sub(s.At))
+	return ui.Stamped{Lead: "live · " + shortDuration(now.Sub(s.At))}
 }
 
 // ruleTile is one of the four tiles.
@@ -287,7 +287,7 @@ type rulePageView struct {
 	Origin     string
 	Banner     string
 	BannerTone ui.Tone
-	Source     string
+	Source     ui.Stamped
 	Tiles      []ruleTile
 	Editor     *ruleEditor
 	KV         []ui.KVRow
@@ -343,7 +343,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		return
 	}
 	draft := o.ID == "new"
-	if draft && o.Draft != nil && o.Source == "" {
+	if draft && o.Draft != nil && o.Source.Lead == "" {
 		o.Source = h.draftSource(r, *o.Draft, src.Specs) // the form carries only the origin
 	}
 	pos := len(src.Specs)
@@ -433,30 +433,30 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 // draftSource is the line that says where a draft came from, rebuilt from the origin the form
 // carries when the draft is drawn again (Show all without JavaScript, a refused save). The wording
 // is that of the page that started the draft; a copy from a device names the device only.
-func (h *handler) draftSource(r *http.Request, d ruleDraft, saved []sysconfig.RuleSpec) string {
+func (h *handler) draftSource(r *http.Request, d ruleDraft, saved []sysconfig.RuleSpec) ui.Stamped {
 	const tail = ". Nothing is saved until you press Save rule."
 	kind, ref, _ := strings.Cut(d.Origin, ":")
 	switch kind {
 	case "template":
 		for _, t := range policyTemplates(h.brokerHost()) {
 			if t.ID == ref {
-				return "Started from the template “" + t.Title + "”" + tail
+				return ui.Stamped{Lead: "Started from the template “" + t.Title + "”" + tail}
 			}
 		}
 	case "command":
-		return "A new rule for " + d.Spec.Command + tail
+		return ui.Stamped{Lead: "A new rule for " + d.Spec.Command + tail}
 	case "duplicate":
 		if n := indexOfRule(saved, ref); n >= 0 {
-			return "A copy of " + ruleName(saved[n]) + tail
+			return ui.Stamped{Lead: "A copy of " + ruleName(saved[n]) + tail}
 		}
 	case "copy":
 		if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
 			if dev, ok := h.deviceByID(r, model.DeviceID(id)); ok {
-				return "Copied from " + dev.Name + tail
+				return ui.Stamped{Lead: "Copied from " + dev.Name + tail}
 			}
 		}
 	}
-	return ""
+	return ui.Stamped{Lead: ""}
 }
 
 // ruleKV is the rule as read-only rows (operators).
@@ -566,7 +566,8 @@ func newScopeSummary(spec sysconfig.RuleSpec, st ruleStat) scopeSummary {
 type ruleHead struct {
 	Name                      string
 	Required, Draft, Disabled bool
-	Base, Source              string
+	Base                      string
+	Source                    ui.Stamped
 	WantWarn                  *checkView
 	Crumbs                    []ui.Crumb
 }
@@ -607,7 +608,7 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 		WantWarn: wantWarning(spec.Command, spec.Want),
 		Crumbs:   trailOf(h.view(r, name, "policy", nil), "policy", ui.Crumb{Label: name})} // the swap replaces the whole trail
 	if d.Origin == "command" {
-		head.Source = "A new rule for " + spec.Command + ". Nothing is saved until you press Save rule."
+		head.Source = ui.Stamped{Lead: "A new rule for " + spec.Command + ". Nothing is saved until you press Save rule."}
 	}
 	h.component(w, r, http.StatusOK, rulePreviewAnswer(
 		ruleDevicesCard(newRuleDevices(httpBase(r), d.ID, true, spec, stat, show, all)),
@@ -684,7 +685,7 @@ func (h *handler) ruleNew(w http.ResponseWriter, r *http.Request) {
 		}
 		spec := tpls[i].Spec
 		h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: "new", Spec: &spec, Origin: "template:" + tpls[i].ID,
-			Source: "Started from the template “" + tpls[i].Title + "”. Nothing is saved until you press Save rule."})
+			Source: ui.Stamped{Lead: "Started from the template “" + tpls[i].Title + "”. Nothing is saved until you press Save rule."}})
 	case q.Get("command") != "":
 		cmd := strings.TrimSpace(q.Get("command"))
 		if why := commandRefusal(cmd); why != "" {
@@ -693,7 +694,7 @@ func (h *handler) ruleNew(w http.ResponseWriter, r *http.Request) {
 		}
 		spec := sysconfig.RuleSpec{Name: settingName(cmd), Command: cmd, Severity: policy.SeverityInfo}
 		h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: "new", Spec: &spec, Origin: "command",
-			Source: "A new rule for " + cmd + ". Nothing is saved until you press Save rule."})
+			Source: ui.Stamped{Lead: "A new rule for " + cmd + ". Nothing is saved until you press Save rule."}})
 	default:
 		h.ruleNewRender(w, r, http.StatusOK, newRuleOpts{Q: strings.TrimSpace(q.Get("q"))})
 	}
@@ -753,7 +754,7 @@ func (h *handler) ruleDuplicate(w http.ResponseWriter, r *http.Request) {
 		spec.Name = copyName(spec.Name)
 	}
 	h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: "new", Spec: &spec, Origin: "duplicate:" + id,
-		Source: "A copy of " + ruleName(st.Specs[n]) + ". Nothing is saved until you press Save rule."})
+		Source: ui.Stamped{Lead: "A copy of " + ruleName(st.Specs[n]) + ". Nothing is saved until you press Save rule."}})
 }
 
 // copyName is the name of a duplicated rule: "<name> (copy)", shortened so it stays within the
@@ -812,12 +813,13 @@ func (h *handler) ruleCopy(w http.ResponseWriter, r *http.Request) {
 	if strings.EqualFold(cmd, "OtaUrl") && dev.Identity.Family != model.ChipUnknown && slices.Contains(policy.FamilyNames(), string(dev.Identity.Family)) {
 		spec.Families = []string{string(dev.Identity.Family)} // a firmware URL fits one chip family
 	}
-	from := "read live now"
+	const saveTail = ". Nothing is saved until you press Save rule."
+	from := ui.Stamped{Lead: "Copied from " + dev.Name + " · read live now" + saveTail}
 	if src.Kind == "backup" {
-		from = "backup " + src.At.Local().Format("2 Jan")
+		from = ui.Stamped{Lead: "Copied from " + dev.Name + " · backup ", At: src.At, Stamp: ui.StampDayOf(h.d.Clock.Now(), src.At), Tail: saveTail}
 	}
 	h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: "new", Spec: &spec, Origin: "copy:" + strconv.FormatInt(id, 10),
-		Source: "Copied from " + dev.Name + " · " + from + ". Nothing is saved until you press Save rule."})
+		Source: from})
 }
 
 func (h *handler) deviceByID(r *http.Request, id model.DeviceID) (model.Device, bool) {

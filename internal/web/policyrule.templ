@@ -223,10 +223,10 @@ templ rulePageTitle(name string, required, draft, disabled, oob bool) {
 
 // ruleSource is the notice of where the draft came from; for a draft started from a command the
 // preview swaps it, so it names the command being edited.
-templ ruleSource(text string, oob bool) {
+templ ruleSource(text ui.Stamped, oob bool) {
 	<div id="rule-source" if oob { hx-swap-oob="true" }>
-		if text != "" {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: text})
+		if text.Lead != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: text.Plain(), TextStamp: text})
 		}
 	</div>
 }
@@ -239,7 +239,7 @@ templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum
 	@rulePageTitle(t.Name, t.Required, t.Draft, t.Disabled, true)
 	@ui.CrumbsOOB(t.Crumbs, t.Base)
 	@ui.PhoneTitleOOB("policy")
-	if t.Source != "" {
+	if t.Source.Lead != "" {
 		@ruleSource(t.Source, true)
 	}
 	@ruleTilesRow(tiles, true)
@@ -470,7 +470,7 @@ templ ruleDevicesCard(v ruleDevicesView) {
 											<span aria-label="no value">–</span>
 										}
 									</td>
-									<td data-label="Source">{ r.Source }</td>
+									<td data-label="Source">@ui.StampedText(r.Source)</td>
 								</tr>
 							}
 						</tbody>

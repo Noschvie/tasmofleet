@@ -299,7 +299,7 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 	switch {
 	case t.Health == model.HealthOffline:
 		t.UpdateWhy = reasonOffline
-	case t.NotYet != "":
+	case t.notYet():
 		t.UpdateWhy = t.Reason // the page maps a never-answered Offline to Unknown; the card still says "Not available"
 	}
 	if !ok {
@@ -338,7 +338,7 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 // delivery (and so the path) is chosen on the update page, so the card's pull-only Update path
 // must not decide here.
 func (t deviceTabs) updateBtnWhy() string {
-	if t.Updating || t.Health == model.HealthOffline || t.NotYet != "" {
+	if t.Updating || t.Health == model.HealthOffline || t.notYet() {
 		return t.Reason
 	}
 	return ""
@@ -366,7 +366,7 @@ func (t deviceTabs) restartWhy() string {
 	switch {
 	case t.Health == model.HealthOffline && t.Updating:
 		return t.Reason // the operation that holds the device, named by the same sentence as Back up
-	case t.NotYet != "":
+	case t.notYet():
 		return reasonNotAnswered
 	case t.Health == model.HealthOffline:
 		return reasonOffline
@@ -379,7 +379,7 @@ func (t deviceTabs) restartWhy() string {
 // once; without a banner their reason is the line #devhd-why.
 func (t deviceTabs) slotBannerID() string {
 	switch {
-	case t.NotYet != "":
+	case t.notYet():
 		return notYetBannerID
 	case t.offline():
 		return offBannerID

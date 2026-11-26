@@ -141,7 +141,7 @@ templ backupRowItem(p backupsView, b backupRow) {
 	<div class={ "bk-row", templ.KV("is-failed", b.Failed) }>
 		<label class="bk-check">
 			if !b.Failed {
-				<input type="checkbox" name="id" value={ bkStr(b.ID) } aria-label={ "Select the backup of " + shortDate(b.Taken) }/>
+				<input type="checkbox" name="id" value={ bkStr(b.ID) } aria-label={ plainAt("Select the backup of ", b.Taken, "") }/>
 			}
 		</label>
 		<div class="bk-main">

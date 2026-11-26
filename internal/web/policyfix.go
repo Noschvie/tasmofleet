@@ -37,8 +37,20 @@ func (h *handler) registerPolicyFix(route func(string, func(http.Handler) http.H
 	route("POST /policy/fix/apply", adm, h.policyFixApply)
 }
 
+// fixNote is the line under a command: "Power on state: has 3, checked 2 min ago (live)". It is one Stamped sentence,
+// so the day of a backup value is a <time> element inside it and no template piece sits between the words and the comma.
+func fixNote(c fixCmd) ui.Stamped {
+	n := c.Note
+	if n.Lead == "" && n.IsZero() {
+		return ui.Stamped{Lead: c.Label + ": has " + c.Have}
+	}
+	n.Lead = c.Label + ": has " + c.Have + ", " + n.Lead
+	return n
+}
+
 type fixCmd struct {
-	Label, Text, Have, Want, Note string
+	Label, Text, Have, Want string
+	Note                    ui.Stamped // where the value came from: "checked 5m ago (live)", "from backup of 1 Oct 2026"
 	// Advisory: the command comes from an Advisory rule that was picked by hand.
 	Advisory bool
 }
@@ -477,15 +489,6 @@ func (h *handler) refusalText(r *http.Request, skipped []ota.Refusal) string {
 		b.WriteString(d.Name + ": " + humanReason(x.Reason) + ". ")
 	}
 	return b.String()
-}
-
-// fixNote says what a command changes: the setting, its value now and where that came from.
-func fixNote(c fixCmd) string {
-	s := c.Label + ": has " + c.Have
-	if c.Note != "" {
-		s += ", " + c.Note
-	}
-	return s
 }
 
 // back is where Cancel goes (a path below the base): the opening device when the device page

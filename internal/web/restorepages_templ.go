@@ -615,13 +615,13 @@ func restoreStatusBody(v restoreJobView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if v.Done {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneOK, Title: v.Lead, Text: " " + v.Banner}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneOK, Title: v.Lead, Text: v.Banner.Plain(), TextStamp: v.Banner}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
 		if v.Failed {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: v.Lead, Text: " " + v.Banner, Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: v.Lead, Text: v.Banner.Plain(), TextStamp: v.Banner, Alert: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -739,14 +739,21 @@ func restoreStatusBody(v restoreJobView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var34 string
-						templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(s.Detail)
-						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 125, Col: 48}
-						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
-						if templ_7745c5c3_Err != nil {
-							return templ_7745c5c3_Err
+						if !s.Stamp.IsZero() {
+							templ_7745c5c3_Err = ui.StampedText(s.Stamp).Render(ctx, templ_7745c5c3_Buffer)
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+						} else {
+							var templ_7745c5c3_Var34 string
+							templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(s.Detail)
+							if templ_7745c5c3_Err != nil {
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 129, Col: 21}
+							}
+							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
 						}
 						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "</span>")
 						if templ_7745c5c3_Err != nil {
@@ -788,7 +795,7 @@ func restoreStatusBody(v restoreJobView) templ.Component {
 					var templ_7745c5c3_Var36 string
 					templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(v.FilesMeta)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 135, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 141, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 					if templ_7745c5c3_Err != nil {
@@ -928,7 +935,7 @@ func restoreFileList(rows []fileRowView) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 167, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 173, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -957,7 +964,7 @@ func restoreFileList(rows []fileRowView) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(r.Size)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 176, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 182, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -975,7 +982,7 @@ func restoreFileList(rows []fileRowView) templ.Component {
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(r.Why)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 178, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/restorepages.templ`, Line: 184, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 				if templ_7745c5c3_Err != nil {

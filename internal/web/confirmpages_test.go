@@ -21,6 +21,11 @@ func TestBackupDeleteConfirmPage(t *testing.T) {
 		!strings.Contains(body, "This cannot be undone") || !strings.Contains(body, "This is the newest backup") {
 		t.Fatalf("newest backup page: %d %.600s", r.StatusCode, body)
 	}
+	// Why (#1104): the instant of the backup is a <time> element in the question and in the Taken row, so time.js shows
+	// it in the viewer's zone like every other date; as server text it would be the server's zone and order.
+	if n := strings.Count(body, `<time data-ts="date-time" datetime="`); n != 2 {
+		t.Errorf("the confirm page shows the backup's instant as %d time elements, want 2 (the question and the Taken row):\n%.1500s", n, body)
+	}
 	if _, older := e.do(t, "GET", "/backups/1/delete", "admin", nil); strings.Contains(older, "newest backup") {
 		t.Errorf("the newest-backup warning shows on an older backup")
 	}

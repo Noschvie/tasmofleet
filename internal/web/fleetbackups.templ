@@ -428,7 +428,7 @@ templ fleetPruneDialog(p sysPage) {
 			<p class="udlg-body"><b>{ plural(len(v.PruneNow), "backup") + " of " + plural(v.PruneNowDevices, "device") + ", " + v.PruneNowSize + " in all" }</b>, are deleted now instead of at their next backup. { pruneNowRules } { pruneLeftOutText(v.PruneLeftOut) } This cannot be undone; the audit log lists every backup.</p>
 			<div class="udlg-changes">
 				for _, run := range v.PruneNow {
-					<div><span>{ run.Name }</span><span class="mono"><time { ui.StampAttrs(run.Taken, ui.StampDateTime)... }>{ ui.StampText(run.Taken, ui.StampDateTime) }</time>{ " · " + humanBytes(run.Bytes) }</span></div>
+					<div><span>{ run.Name }</span><span><time { ui.StampAttrs(run.Taken, ui.StampDateTime)... }>{ ui.StampText(run.Taken, ui.StampDateTime) }</time>{ " · " + humanBytes(run.Bytes) }</span></div>
 				}
 			</div>
 			<div class="udlg-foot">

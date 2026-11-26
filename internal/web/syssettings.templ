@@ -664,9 +664,9 @@ templ sysOrphanRow(p sysPage, st sysStorage, o sysOrphan) {
 		if st.CanBulk {
 			<label class="bk-check" if o.Kept { title="Kept: release it to delete it" }>
 				if o.Kept {
-					<input type="checkbox" disabled aria-label={ "Kept backup of " + orphanName(o) + ", " + shortDate(o.Taken) + ": release it to delete it" }/>
+					<input type="checkbox" disabled aria-label={ plainAt("Kept backup of "+orphanName(o)+", ", o.Taken, ": release it to delete it") }/>
 				} else {
-					<input type="checkbox" form="bk-orph-sel" name="id" value={ bkStr(o.ID) } aria-label={ "Select the backup of " + orphanName(o) + ", " + shortDate(o.Taken) }/>
+					<input type="checkbox" form="bk-orph-sel" name="id" value={ bkStr(o.ID) } aria-label={ plainAt("Select the backup of "+orphanName(o)+", ", o.Taken, "") }/>
 				}
 			</label>
 		}

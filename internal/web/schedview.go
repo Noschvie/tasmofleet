@@ -228,7 +228,7 @@ func planAgain(jobs []jobView) *checkAgain {
 // startedText words the start_due event of a job in its log.
 func startedText(e model.JobEvent, j model.Job) string {
 	late := e.At.Sub(j.StartAt)
-	at := j.StartAt.Local().Format("15:04")
+	at := ui.StampText(j.StartAt, ui.StampTime)
 	if late < time.Minute {
 		return "Started as planned (planned for " + at + ")"
 	}

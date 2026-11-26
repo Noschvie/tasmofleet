@@ -53,7 +53,7 @@ func (h *handler) why(v any) string  { return hintWhy(v, h.d.StaleAfter) }
 func (h *handler) ago(t time.Time) string { return ago(h.d.Clock.Now(), t) }
 
 // stamp is a full timestamp for tooltips.
-func stamp(t time.Time) string { return t.Local().Format("2006-01-02 15:04:05 MST") }
+func stamp(t time.Time) string { return ui.StampText(t, ui.StampTitle) }
 
 // seenText is the Uptime column of a device that is down: "seen now", "seen 3h ago".
 func seenText(ago string) string {

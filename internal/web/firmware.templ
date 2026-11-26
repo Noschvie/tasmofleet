@@ -40,17 +40,6 @@ func one(b bool) string {
 // sizeNoWrap is a size that never wraps between number and unit.
 func sizeNoWrap(n int64) string { return strings.ReplaceAll(humanBytes(n), " ", " ") }
 
-// dayText is a release date: "6 Oct 2026".
-func dayText(t time.Time) string { return t.Format("2 Jan 2006") }
-
-// shortDay is the date of a cached file: "6 Oct" this year, "6 Oct 2025" before.
-func shortDay(now, t time.Time) string {
-	if t.Year() == now.Year() {
-		return t.Format("2 Jan")
-	}
-	return t.Format("2 Jan 2006")
-}
-
 // checkedAgo is the age of a check in the status line: "5m ago", "just now".
 func checkedAgo(now, t time.Time) string {
 	if s := agoWords(now, t); s != "now" {
@@ -218,7 +207,7 @@ templ fwReleaseList(v view, p firmwarePage) {
 					}
 				</span>
 				if !r.Published.IsZero() {
-					<span class="fw-rel-d"><time datetime={ r.Published.Format(time.RFC3339) }>{ dayText(r.Published) }</time></span>
+					<span class="fw-rel-d"><time { ui.StampAttrs(r.Published, ui.StampDate)... }>{ ui.StampText(r.Published, ui.StampDate) }</time></span>
 				}
 			</span>
 			<span class="fw-rel-n">{ strconv.Itoa(len(r.At)) } running</span>
@@ -269,7 +258,7 @@ templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
 				<h2 id="fw-sel-h">Tasmota { r.Version }</h2>
 				if !r.Published.IsZero() {
 					<div class="fw-sel-sub">
-						Released <time datetime={ r.Published.Format(time.RFC3339) }>{ dayText(r.Published) }</time>
+						Released <time { ui.StampAttrs(r.Published, ui.StampDate)... }>{ ui.StampText(r.Published, ui.StampDate) }</time>
 						@fwRelLinks(v, p, r)
 					</div>
 				} else {
@@ -650,7 +639,7 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView, up bool) {
 				{ a.Release }
 			}
 			· { sizeNoWrap(a.Size) }
-			· <time title={ stamp(a.FetchedAt) } { ui.StampAttrs(a.FetchedAt, ui.StampTitle)... }>{ shortDay(p.Now, a.FetchedAt) }</time>
+			· <time title={ stamp(a.FetchedAt) } { ui.StampAttrs(a.FetchedAt, ui.StampDayOf(p.Now, a.FetchedAt))... }>{ ui.StampText(a.FetchedAt, ui.StampDayOf(p.Now, a.FetchedAt)) }</time>
 		</span>
 		<span class="fw-c-h" title={ a.SHA256 } data-visual-mask>sha256 { shortHash(a.SHA256) }</span>
 	</div>

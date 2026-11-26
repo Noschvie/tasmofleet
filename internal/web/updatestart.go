@@ -10,6 +10,7 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/hellwand/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The "5 · When" card of the update preview (#604): start now (the default) or at a chosen time, with
@@ -150,7 +151,7 @@ func planAgainStart(form url.Values, now time.Time) whenState {
 	}
 	t = t.In(now.Location())
 	w.Mode, w.Start, w.Picked = startsSet, t, pickCustom
-	w.Date, w.Time = t.Format("2006-01-02"), t.Format("15:04")
+	w.Date, w.Time = t.Format("2006-01-02"), t.Format("15:04") // the values of <input type=date> and <input type=time>
 	return w
 }
 
@@ -164,7 +165,7 @@ func (w whenState) ButtonText() string {
 
 // StartsText is the plan's start: "Sat, Nov 7 at 03:00".
 func (w whenState) StartsText() string {
-	return w.Start.In(w.Now.Location()).Format("Mon, Jan 2 at 15:04")
+	return ui.StampTextIn(w.Start.In(w.Now.Location()), ui.StampStart)
 }
 
 // StartsIn is how far away the start is: "in 17 h", "in 5 d 16 h", "in 12 min".
@@ -194,9 +195,9 @@ func (w whenState) ruleStart() time.Time {
 
 // RuleClock and RuleDeadline are the two clock times the rule names: the start and the end of the window in
 // which TasmoFleet still starts a missed job.
-func (w whenState) RuleClock() string { return w.ruleStart().Format("15:04") }
+func (w whenState) RuleClock() string { return ui.StampTextIn(w.ruleStart(), ui.StampTime) }
 func (w whenState) RuleDeadline() string {
-	return w.ruleStart().Add(schedule.LateStart).Format("15:04")
+	return ui.StampTextIn(w.ruleStart().Add(schedule.LateStart), ui.StampTime)
 }
 
 // LateMinutes is the window in minutes; it is schedule.LateStart, fixed, not a setting.

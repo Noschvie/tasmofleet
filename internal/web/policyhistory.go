@@ -45,10 +45,18 @@ type histEntry struct {
 	Versions []histVer
 }
 
+// histDay is one day of the history list: its title is the day as a time element (Today · 26 Nov), the lead "Today"
+// only for the current day. The versions are grouped by the day in the server's zone; the element carries noon of
+// that day, so a browser within twelve hours of the server's zone writes the same day.
 type histDay struct {
-	Title   string
+	Today   bool
+	Day     time.Time // local midnight of the day
+	Stamp   ui.StampFmt
 	Entries []histEntry
 }
+
+// At is the instant the day title paints: noon of the day.
+func (d histDay) At() time.Time { return d.Day.Add(12 * time.Hour) }
 
 // histDetail is the right card: what the picked version changed, and the revert to the state before it.
 type histDetail struct {
@@ -240,17 +248,6 @@ func versionWhat(v store.PolicyRuleVersion) string {
 	return "Rules saved"
 }
 
-func dayTitle(day, now time.Time) string {
-	layout := "2 Jan"
-	if day.Year() != now.Year() {
-		layout = "2 Jan 2006"
-	}
-	if day.Equal(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())) {
-		return "Today · " + day.Format(layout)
-	}
-	return day.Format(layout)
-}
-
 func (h *handler) histDays(pg sysconfig.HistoryPage, pick, current int64, cursor, base string) []histDay {
 	now := h.d.Clock.Now().In(time.Local)
 	link := func(id int64) string {
@@ -265,7 +262,7 @@ func (h *handler) histDays(pg sysconfig.HistoryPage, pick, current int64, cursor
 			he.Label = "v" + vstr(last.ID) + "–" + vstr(first.ID)
 			he.Summary = strconv.Itoa(len(e.Versions)) + " quick saves · " + e.Summary
 			he.To = last.At
-			he.SameTime = first.At.Format("15:04") == last.At.Format("15:04")
+			he.SameTime = first.At.Truncate(time.Minute).Equal(last.At.Truncate(time.Minute))
 		} else {
 			he.Note, he.NoteFull = shorten(first.Note)
 		}
@@ -280,8 +277,9 @@ func (h *handler) histDays(pg sysconfig.HistoryPage, pick, current int64, cursor
 				he.Versions = append(he.Versions, histVer{ID: ver.ID, What: what, WhatFull: full, By: h.pr.Text(ver.Actor), At: ver.At, Href: link(ver.ID), Selected: sel})
 			}
 		}
-		if len(days) == 0 || days[len(days)-1].Title != dayTitle(e.Day, now) {
-			days = append(days, histDay{Title: dayTitle(e.Day, now)})
+		if len(days) == 0 || !days[len(days)-1].Day.Equal(e.Day) {
+			today := e.Day.Equal(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()))
+			days = append(days, histDay{Today: today, Day: e.Day, Stamp: ui.StampDayOf(now, e.Day)})
 		}
 		d := &days[len(days)-1]
 		d.Entries = append(d.Entries, he)

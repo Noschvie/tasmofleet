@@ -423,6 +423,8 @@ func (c CopyData) label() string {
 type BannerData struct {
 	Tone        Tone
 	Title, Text string
+	// TextStamp, when its instant is set, is the text instead of Text: a sentence with a <time> in it (Stamped).
+	TextStamp Stamped
 	// TitleAt, when set, puts a time into the lead: Title, then the instant (TitleAtText is its fallback text, time.js
 	// shows it in the browser's zone like a day stamp), then TitleAfter.
 	TitleAt     time.Time
@@ -499,6 +501,9 @@ type KVRow struct {
 	Soft   bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
 	At     time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
 	Stamp  StampFmt  // how time.js shows At; the zero value is StampDateTime
+	// Lead and Tail are the words around the instant ("Valid until " At ", by ann"); empty Value then takes the
+	// instant's own fallback text.
+	Lead, Tail string
 }
 
 // Tab is one tab of a tab row. Tabs are links (each tab its own route). A disabled tab says why.
@@ -522,11 +527,13 @@ type MenuItem struct {
 // command input, Cancel and the confirming verb. The form posts to Action with the CSRF token.
 type DialogData struct {
 	ID, Title, Body string
-	Changes         []KVRow // name and the command or value that changes
-	Command         string  // non-empty: a Command input prefilled with this value
-	Action, CSRF    string
-	Fields          []KVRow // hidden fields the form posts (Key = name)
-	Verb            string
+	// BodyStamp, when its instant is set, is the body instead of Body: a sentence with a <time> in it (Stamped).
+	BodyStamp    Stamped
+	Changes      []KVRow // name and the command or value that changes
+	Command      string  // non-empty: a Command input prefilled with this value
+	Action, CSRF string
+	Fields       []KVRow // hidden fields the form posts (Key = name)
+	Verb         string
 	// Alt, when set, is a second button that posts the same fields to AltAction instead
 	// (Make compliant: "Choose Advisory rows…" opens the preview with the boxes).
 	Alt, AltAction string
@@ -562,15 +569,17 @@ func (s StepUpData) passwordName() string {
 // look as the dialog, its own route.
 type ConfirmData struct {
 	Title, Heading, Text, Warning string
-	Facts                         []KVRow
-	Action, CSRF                  string
-	Fields                        []KVRow // hidden fields (Key = name)
-	Ack                           string  // a required checkbox "ack" with this label; empty: none
-	Verb                          string
-	Danger                        bool
-	CancelHref, CancelLabel       string
-	NoBusy                        bool // the answer is a file, not a page: form.js must not leave the button busy (#538)
-	ACL                           bool // the broker ACL notice (BrokerACLNotice) stands above the facts (#840)
+	// TextStamp, when its instant is set, is the text instead of Text: a sentence with a <time> in it (Stamped).
+	TextStamp               Stamped
+	Facts                   []KVRow
+	Action, CSRF            string
+	Fields                  []KVRow // hidden fields (Key = name)
+	Ack                     string  // a required checkbox "ack" with this label; empty: none
+	Verb                    string
+	Danger                  bool
+	CancelHref, CancelLabel string
+	NoBusy                  bool // the answer is a file, not a page: form.js must not leave the button busy (#538)
+	ACL                     bool // the broker ACL notice (BrokerACLNotice) stands above the facts (#840)
 }
 
 // showHeading says whether the card draws its own heading: only a heading that adds something to the page's title. A
@@ -591,7 +600,10 @@ type FieldData struct {
 // Option is one choice of a radio card group or segmented control.
 type Option struct {
 	Value, Label, Text string
-	Checked, Disabled  bool
+	// TextStamp, when its instant is set, is the description instead of Text: a sentence with a <time> in it
+	// (a release card's date). A control that cannot hold an element (a select's option) uses Text.
+	TextStamp         Stamped
+	Checked, Disabled bool
 }
 
 // AttProposal is a "Needs attention" proposal with two inline actions (POST forms). Version is
@@ -701,8 +713,11 @@ type DiffRow struct {
 // DiffData is a comparison of two backups, side by side or unified.
 type DiffData struct {
 	OldLabel, NewLabel string
-	Unified            bool
-	Rows               []DiffRow
+	// OldAt and NewAt, when set, are the instants the two sides were taken: each is then a <time> element (the label
+	// is not used) that time.js shows in the browser's locale and zone.
+	OldAt, NewAt time.Time
+	Unified      bool
+	Rows         []DiffRow
 }
 
 // NoteBlock is one block of release notes: "h" heading, "p" paragraph, "ul" list, "code" code

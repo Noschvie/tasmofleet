@@ -230,12 +230,12 @@ func (h *handler) backupDiff(w http.ResponseWriter, r *http.Request) {
 		shown = all
 	}
 	p.Identical = len(shown) == 0
-	p.Diff = ui.DiffData{OldLabel: shortDate(a.TakenAt), NewLabel: shortDate(b.TakenAt), Unified: p.Unified, Rows: diffRows(shown)}
+	p.Diff = ui.DiffData{OldAt: a.TakenAt, NewAt: b.TakenAt, Unified: p.Unified, Rows: diffRows(shown)}
 	for _, x := range list {
 		if x.Kind != model.BackupDecoded {
 			continue
 		}
-		label := shortDate(x.TakenAt)
+		label := ui.StampText(x.TakenAt, ui.StampDateTime) // an option holds text only
 		if t := triggerShort(x.Trigger); t != "" {
 			label += " · " + t
 		}

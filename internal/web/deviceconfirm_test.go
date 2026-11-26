@@ -68,7 +68,7 @@ func TestDeletePageListsBackupsAndOffersBothChoices(t *testing.T) {
 	}
 	for _, want := range []string{
 		"<h1>Delete kitchen?</h1>", " · ESP8266 · Tasmota 16.0.0",
-		"This device still has 2 backups", "1 kept, 10.1 KiB, newest 22 Oct 2026, 09:41", // every file counts: Delete removes them all
+		"This device still has 2 backups", "1 kept, 10.1 KiB, newest <time data-ts=\"date-time\" datetime=\"2026-10-22T09:41:00Z\">22 Oct 2026, 09:41</time>). Choose what happens", // every file counts: Delete removes them all
 		"22 Oct 2026, 09:41", "Manual · 14.2.0 · 4.1 KiB", "Kept · Scheduled · 14.2.0 · 4.0 KiB",
 		`method="post" action="/tf/devices/1/delete"`, `name="csrf"`,
 		`<input type="radio" name="backups" value="keep" checked>`, `<input type="radio" name="backups" value="delete">`,

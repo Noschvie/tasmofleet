@@ -18,7 +18,12 @@ templ policyHistoryPage(p policyHistoryView) {
 					<div class="pol-hist-body">
 						<div class="pol-hist-list">
 							for _, d := range p.Days {
-								<div class="pol-hday">{ d.Title }</div>
+								<div class="pol-hday">
+									if d.Today {
+										{ "Today · " }
+									}
+									<time { ui.StampAttrs(d.At(), d.Stamp)... }>{ ui.StampText(d.At(), d.Stamp) }</time>
+								</div>
 								for _, e := range d.Entries {
 									@histEntryRow(e)
 								}
@@ -42,8 +47,8 @@ templ policyHistoryPage(p policyHistoryView) {
 		if p.Admin && p.Detail != nil && p.Detail.Revert != 0 {
 			@ui.Dialog(ui.DialogData{
 				ID: "dlg-revert", Title: "Revert the rules to version " + vstr(p.Detail.Revert) + "?",
-				Body:    "The rules get the state of " + p.Detail.RevertAt.Local().Format("2 Jan 2006, 15:04") + ". This is saved as a new version; nothing is written to devices.",
-				Changes: revertRows(p.Detail.RevertDiff), Action: p.Base + rulesPath + "/revert/" + vstr(p.Detail.Revert), CSRF: p.CSRF,
+				BodyStamp: ui.Stamped{Lead: "The rules get the state of ", At: p.Detail.RevertAt, Tail: ". This is saved as a new version; nothing is written to devices."},
+				Changes:   revertRows(p.Detail.RevertDiff), Action: p.Base + rulesPath + "/revert/" + vstr(p.Detail.Revert), CSRF: p.CSRF,
 				Verb: "Revert to v" + vstr(p.Detail.Revert),
 			})
 		}

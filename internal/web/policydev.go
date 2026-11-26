@@ -9,6 +9,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The Deviating devices tab (/policy/deviations): every deviation of every device, grouped by
@@ -33,10 +34,10 @@ type devRow struct {
 	Required    bool
 	Expected    string
 	Actual      string
-	Source      string // "live · 6 min", "backup · 28 Oct"
-	Pickable    bool   // a box: the value was read live
-	Checked     bool   // Required rows only
-	NotLiveNote string // why a backup-only row has no box
+	Source      ui.Stamped // "live · 6 min", "backup · 28 Oct"
+	Pickable    bool       // a box: the value was read live
+	Checked     bool       // Required rows only
+	NotLiveNote string     // why a backup-only row has no box
 }
 
 // devGroup is a device with its deviating rules.

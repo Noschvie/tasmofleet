@@ -107,7 +107,7 @@ templ policyDevTable(p devView) {
 									<td data-label="Expected" title={ r.Expected }><span class="mono pol-dev-v">{ r.Expected }</span></td>
 									<td data-label="Actual" title={ r.Actual }><span class="mono pol-dev-v pol-dev-bad"><span class="pol-dev-mark" aria-hidden="true">≠</span><span class="sr-only">Differs: </span>{ r.Actual }</span></td>
 									<td data-label="Source">
-										{ r.Source }
+										@ui.StampedText(r.Source)
 										if r.NotLiveNote != "" {
 											<span class="pol-none">{ r.NotLiveNote }</span>
 										}

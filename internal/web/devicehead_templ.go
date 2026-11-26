@@ -662,8 +662,8 @@ func deviceOffSlot(t deviceTabs, attrs templ.Attributes) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if t.NotYet != "" {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, ID: notYetBannerID, Text: t.NotYet}).Render(ctx, templ_7745c5c3_Buffer)
+		if t.notYet() {
+			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, ID: notYetBannerID, Text: t.NotYet.Plain(), TextStamp: t.NotYet}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

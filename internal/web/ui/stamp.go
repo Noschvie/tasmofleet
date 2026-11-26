@@ -43,6 +43,62 @@ var (
 // in the server's zone (t.Local()), never in the zone the store happens to hand the time out in.
 func StampText(t time.Time, f StampFmt) string { return t.Local().Format(f.Layout) }
 
+// StampTextIn is StampText for a time already placed in the zone the page speaks in (a clock the page was given, a
+// day in the zone of the job): it formats t as it is, without moving it to the server's local zone.
+func StampTextIn(t time.Time, f StampFmt) string { return t.Format(f.Layout) }
+
+// StampDayOf is the format of a day that names the year only when it is not now's: month-day this year, date
+// otherwise (a cached file's day, a policy history day title).
+func StampDayOf(now, t time.Time) StampFmt {
+	if t.In(now.Location()).Year() == now.Year() {
+		return StampMonthDay
+	}
+	return StampDate
+}
+
+// StampCalendarDay is a calendar day without an instant or a zone (a changelog date, "2026-10-08"), written as the
+// date key's fallback is. It is text, not a <time>: a day with no time of day would shift to the day before for a
+// viewer west of UTC if time.js read it as midnight.
+func StampCalendarDay(t time.Time) string { return t.Format(StampDate.Layout) }
+
+// Stamped is a sentence with one instant in it: Lead, the instant as a <time> element that time.js repaints in the
+// browser's locale and zone (Text is its fallback text for a page without JavaScript), then Tail. A page that has
+// the instant in a sentence hands it over as a Stamped and never writes the date itself (#1104).
+type Stamped struct {
+	Lead  string
+	At    time.Time
+	Stamp StampFmt // the zero value is StampDateTime
+	// Text is the fallback text of At when it needs a clock (StampRelativeText); empty: StampText(At, Stamp).
+	Text string
+	Tail string
+}
+
+// IsZero reports that no instant is set: the carrying field falls back to its plain text.
+func (s Stamped) IsZero() bool { return s.At.IsZero() }
+
+func (s Stamped) stamp() StampFmt {
+	if s.Stamp.Key == "" {
+		return StampDateTime
+	}
+	return s.Stamp
+}
+
+func (s Stamped) fallback() string {
+	if s.Text != "" {
+		return s.Text
+	}
+	return StampText(s.At, s.stamp())
+}
+
+// Plain is the sentence as one string, for an attribute (a title, an aria-label, the text of a dialog an opener
+// fills) where an element cannot go. It is the only way Go code puts an instant into a string.
+func (s Stamped) Plain() string {
+	if s.IsZero() {
+		return s.Lead + s.Tail
+	}
+	return s.Lead + s.fallback() + s.Tail
+}
+
 // StampAttrs are the attributes of a <time> element that time.js rewrites in the browser's locale
 // and zone: datetime (RFC 3339, the instant) and data-ts (the format key). Spread them:
 // <time { ui.StampAttrs(t, ui.StampTime)... }>{ ui.StampText(t, ui.StampTime) }</time>.

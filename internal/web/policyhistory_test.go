@@ -3,6 +3,7 @@ package web
 import (
 	"html"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,23 @@ func TestPolicyHistoryRevertIsAdminOnlyAndListsWhatItChanges(t *testing.T) {
 	}
 	if !strings.Contains(html.UnescapeString(body[:i]), `expected "0" -> "1"`) {
 		t.Error("the card must show what v4 changed (v3 -> v4)")
+	}
+}
+
+// Why (#1104): the revert dialog names the instant of the state the rules go back to, and a date the server writes into
+// a plain body is in the server's zone and order next to the browser's own dates. The instant is a <time> element
+// time.js repaints, and so is each day title of the list (the group is the server's day, painted at noon of it).
+func TestPolicyHistoryDatesAreTimeElements(t *testing.T) {
+	e, _ := historyEnv(t)
+	_, body := e.do(t, "GET", "/policy/history?v=4", "admin", nil)
+	dlg := body[strings.Index(body, `id="dlg-revert"`):]
+	dlg = dlg[:strings.Index(dlg, "</dialog>")]
+	if !regexp.MustCompile(`The rules get the state of\s*<time data-ts="date-time" datetime="[^"]+">[^<]+</time>\s*\. This is saved`).MatchString(dlg) {
+		t.Errorf("the revert dialog's instant is not a time element:\n%s", dlg)
+	}
+	day := regexp.MustCompile(`<div class="pol-hday">[^<]*<time data-ts="(month-day|date)" datetime="[^"]+">[^<]+</time>\s*</div>`)
+	if !day.MatchString(body) {
+		t.Errorf("a day title is not a time element:\n%s", body[strings.Index(body, "pol-hday")-20:][:300])
 	}
 }
 

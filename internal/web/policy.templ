@@ -430,7 +430,7 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 										@ui.Badge(ui.ToneAccent, "Advisory")
 									}
 								</span>
-								<span class="pol-fix-note">{ fixNote(c) }</span>
+								<span class="pol-fix-note">@ui.StampedText(fixNote(c))</span>
 							</div>
 						}
 						if row.CRWarn != "" && row.runs() {

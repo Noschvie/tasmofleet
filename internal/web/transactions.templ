@@ -565,7 +565,13 @@ templ relOption(o ui.Option) {
 	<label class="upd-relopt">
 		<input type="radio" name="release" value={ o.Value } checked?={ o.Checked }/>
 		<span class="upd-relopt-t">{ o.Label }</span>
-		<small class="upd-relopt-d">{ o.Text }</small>
+		<small class="upd-relopt-d">
+			if !o.TextStamp.IsZero() {
+				@ui.StampedText(o.TextStamp)
+			} else {
+				{ o.Text }
+			}
+		</small>
 	</label>
 }
 
@@ -702,7 +708,7 @@ templ updatePreviewPage(p previewPage, csrf string) {
 					<dt>From cache</dt><dd class="mono">{ joinComma(p.Files) }</dd>
 				}
 				if p.Bytes > 0 {
-					<dt>Sent to devices</dt><dd>{ sizeText(p.Bytes) } over the LAN</dd>
+					<dt>Sent to devices</dt><dd>{ humanBytes(p.Bytes) } over the LAN</dd>
 				}
 				<dt>Delivery</dt>
 				<dd data-visual-mask>

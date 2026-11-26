@@ -294,11 +294,16 @@ type backupData struct {
 	Blocked     string // why "Back up now" cannot be used now (updating, never answered); empty = usable
 }
 
-// DeleteText is the text of the confirmation dialog of the delete button. The
+// DeleteWords is the question of the delete confirmation, with the backup's instant in it as a time element. The
 // newest backup of the device gets an extra warning on the confirm page (confirmpages.go).
-func (b backupData) DeleteText(x model.Backup) string {
-	return "Delete the backup of " + ui.StampText(x.TakenAt, ui.StampDateTime) + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
+func (b backupData) DeleteWords(x model.Backup) ui.Stamped {
+	return ui.Stamped{Lead: "Delete the backup of ", At: x.TakenAt, Stamp: ui.StampDateTime,
+		Tail: "? Its dump, snapshot and decoded copy are removed. This cannot be undone."}
 }
+
+// DeleteText is DeleteWords as one string, the text an opener hands to the shared delete dialog (data-dlg-text;
+// dialog.js swaps the instant for the browser's own text through data-dlg-at).
+func (b backupData) DeleteText(x model.Backup) string { return b.DeleteWords(x).Plain() }
 
 // deviceTabs is the device header and its tabs (devicehead.templ): the pages of one device.
 type deviceTabs struct {
@@ -332,7 +337,7 @@ type deviceTabs struct {
 	CanRestart bool   // admin and the command service
 	// NotYet is the text of the "has not answered yet" banner: set for a device that never answered while no operation
 	// holds it (neverAnswered). It takes the slot of the offline banner, so no tab says "Offline" about such a device.
-	NotYet       string
+	NotYet       ui.Stamped
 	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
 	// OfflineSinceText is its fallback text (StampRelative) for a page without JavaScript
 	OfflineSinceText string
@@ -361,7 +366,7 @@ func tabsFor(v view, d model.Device, hl model.Health, running *model.Job, active
 	}
 	t.Reason = blockReason(d, hl, running)
 	if running == nil && neverAnswered(d, hl) {
-		t.NotYet = notYetText(d)
+		t.NotYet = notYetWords(d)
 	}
 	t.applyPaths(transport.Paths{}, false)
 	return t
@@ -386,14 +391,18 @@ func pageHealth(d model.Device, hl model.Health, running *model.Job) model.Healt
 	return hl
 }
 
-// notYetText is what the "has not answered yet" banner says: when the device was added and what to check.
-func notYetText(d model.Device) string {
-	s := "This device has not answered yet"
-	if !d.CreatedAt.IsZero() {
-		s += " (added " + sinceText(d.CreatedAt) + ")"
+// notYetWords is what the "has not answered yet" banner says: when the device was added (a time element) and what
+// to check.
+func notYetWords(d model.Device) ui.Stamped {
+	check := ". Check that it is powered and that its address (" + d.Address + ") is right."
+	if d.CreatedAt.IsZero() {
+		return ui.Stamped{Lead: "This device has not answered yet" + check}
 	}
-	return s + ". Check that it is powered and that its address (" + d.Address + ") is right."
+	return ui.Stamped{Lead: "This device has not answered yet (added ", At: d.CreatedAt, Tail: ")" + check}
 }
+
+// notYet reports that the banner "has not answered yet" stands in the offline banner's slot.
+func (t deviceTabs) notYet() bool { return t.NotYet.Lead != "" }
 
 // blockReason says why nothing that needs the device (Settings, Console, Back up
 // now) can be used right now, or "" when the device can be used. While an

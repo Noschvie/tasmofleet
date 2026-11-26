@@ -348,7 +348,7 @@ func TestRuleCopyOpensADraftWithTheValueAndItsSource(t *testing.T) {
 	}
 	rp.readSrc = ValueSource{Kind: "backup", At: time.Date(2026, 10, 28, 9, 0, 0, 0, time.Local)}
 	_, body = e.do(t, "POST", "/policy/rules/new/copy", "admin", url.Values{"csrf": {"tok"}, "device": {"1"}, "command": {"Timezone"}})
-	if !strings.Contains(body, "Copied from kitchen · backup 28 Oct") {
+	if !strings.Contains(body, "Copied from kitchen · backup <time data-ts=\"month-day\" datetime=") {
 		t.Errorf("a backup value says it is one:\n%s", body)
 	}
 	rp.readErr = &ValueRefusedError{Reason: "the value contains credentials; enter it by hand"}

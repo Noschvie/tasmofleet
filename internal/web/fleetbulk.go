@@ -300,7 +300,7 @@ func (h *handler) pruneNowConfirm(w http.ResponseWriter, r *http.Request) {
 		Action: pruneNowPath, CancelHref: fleetPath, CancelLabel: "Cancel"}
 	for _, run := range runs {
 		size += run.Bytes
-		c.Facts = append(c.Facts, confirmFact{Name: run.Name, Value: shortDate(run.Taken) + " · " + humanBytes(run.Bytes)})
+		c.Facts = append(c.Facts, confirmFact{Name: run.Name, At: run.Taken, Tail: " · " + humanBytes(run.Bytes)})
 		c.Fields = append(c.Fields, confirmField{Name: "id", Value: strconv.FormatInt(int64(run.ID), 10)})
 	}
 	c.Fields = append(c.Fields, confirmField{Name: "confirm", Value: "1"})

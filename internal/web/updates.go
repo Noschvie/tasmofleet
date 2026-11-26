@@ -593,10 +593,10 @@ func (r previewRow) DeliveryText() string {
 	return "Downloads instead."
 }
 
-// FileText is the file a device gets and its size: "tasmota32.bin · 1.9 MB".
+// FileText is the file a device gets and its size: "tasmota32.bin · 1.9 MiB".
 func (r previewRow) FileText() string {
 	if r.Size > 0 {
-		return r.Item.Filename + " · " + sizeText(r.Size)
+		return r.Item.Filename + " · " + humanBytes(r.Size)
 	}
 	return r.Item.Filename
 }

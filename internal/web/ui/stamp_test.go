@@ -191,3 +191,27 @@ func TestStampFallbackLayouts(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1104): a day names its year only when it is not this year, and the choice is the server's "now" at render time
+// (the key is written into the element, so time.js shows the same fields later).
+func TestStampDayOfNamesTheYearOnlyWhenItIsNotThisOne(t *testing.T) {
+	now := time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
+	if got := StampDayOf(now, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)); got.Key != "month-day" {
+		t.Errorf("this year: %q, want month-day", got.Key)
+	}
+	if got := StampDayOf(now, time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC)); got.Key != "date" {
+		t.Errorf("another year: %q, want date", got.Key)
+	}
+}
+
+// Why (#1104): a changelog day has no time of day. Written through the server's local zone a server west of UTC would
+// print the day before; the calendar day is written as it is, in the date key's layout.
+func TestStampCalendarDayIgnoresTheServersZone(t *testing.T) {
+	day := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	old := time.Local
+	time.Local = time.FixedZone("west", -8*3600)
+	t.Cleanup(func() { time.Local = old })
+	if got := StampCalendarDay(day); got != "8 Oct 2026" {
+		t.Errorf("StampCalendarDay = %q, want 8 Oct 2026", got)
+	}
+}
