@@ -7713,7 +7713,8 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   background: var(--color-border);
 }
 /* The separator between the chips and the pickers only belongs to a single line: when the Devices list's
-   row wraps it would be left hanging at the end of a line, so it shows only where the row fits (#678). */
+   row wraps it would be left hanging at the end of a line, so it shows only from 75rem up, where the chips
+   and pickers stay together in their own strip even when that strip falls below search (#678). */
 .dv-list .dv-vsep {
   display: none;
 }

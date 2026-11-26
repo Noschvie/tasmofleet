@@ -129,8 +129,8 @@ func TestDeviceListToolbarOffersCountedFilters(t *testing.T) {
 		`>All</span><span class="chip-n">`, `>Offline / unknown</span><span class="chip-n">`, `>Update available</span><span class="chip-n">`, `>Differs from policy</span><span class="chip-n">`,
 		`<option value="esp32">ESP32 · 1</option>`, `<option value="esp8266">ESP8266 · 1</option>`,
 		`<option value="kitchen" selected>kitchen · 1</option>`,
-		// the search field is short (the toolbar must fit one row at 1280px, #428), so the placeholder is
-		// brief and the full hint stays in the title and the description
+		// the search field is short (#428), so the placeholder is brief and the full hint stays in the title
+		// and the description
 		`placeholder="Filter devices"`, `title="Filter by name, IP, chip or firmware"`, `aria-describedby="dv-q-help"`,
 		`<span id="dv-q-help" class="sr-only">Filter by name, IP, chip or firmware</span>`,
 	} {

@@ -572,7 +572,10 @@ Selected is the accent tint of the Selected rule below, never inverted; the chec
 full word for a screen reader after an abbreviation (`Long`, "Mon" and "Monday"), and a cross that shows while
 it is ticked instead of its count (`Remove`, the tags and exceptions of a policy rule). The strip that holds
 the chips (`.dv-chips`, `.add-chips`, `.pol-pills`, `.cks`) keeps its own name: it scrolls or wraps, and a
-strip that scrolls fades its edge (see Page header, crumbs and tabs).
+strip that scrolls fades its edge (see Page header, crumbs and tabs). The Devices toolbar is one row where
+it fits; where the chip names make it longer, search and Columns stay on the first line and the chips and
+the Chip and Tag pickers wrap below them, and Columns never covers a filter. The `Columns button shares the
+toolbar's vertical centre and height` spec holds this at 1280 px.
 
 A tag is a read-only outlined label (`--color-border-strong`, radius 5, `500 11.5px`) for a kind or a source
 (Proxy, System, CLI, MQTT discovery, Network scan, a device name). A tag never carries a state; a state is a

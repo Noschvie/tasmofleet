@@ -134,20 +134,33 @@ test("Columns button shares the toolbar's vertical centre and height", async ({
   page,
 }) => {
   await open(page, 1280);
-  // the toolbar's first row: search, filter chips, Chip and Tag, and Columns at its end (design v2)
-  const items = page.locator(
-    ".dv-q, .dv-chips .chip, .dv-pick, .dv-cols details.colmenu > summary",
-  );
+  // The toolbar at 1280: search, filter chips, Chip and Tag, and Columns at the end of the first line (design v2).
+  // It is one row only where the labels fit: the chip names are the stat tiles' names (#1109), so a longer name
+  // pushes the chips and pickers onto a second line, under search and Columns, on purpose (the Devices list
+  // wraps instead of scrolling, #678). What must hold at every width is that Columns sits with search, is as
+  // tall, stays at the table's right edge, covers no filter, and that nothing is off-centre on its own line.
+  // A "one row" assertion here failed the nightly of 2026-11-26 when two chips were renamed, though nothing was broken.
+  const sel = ".dv-q, .dv-chips .chip, .dv-pick, .dv-cols details.colmenu > summary";
+  const items = page.locator(sel);
   await expect(items.last()).toBeVisible();
   // One in-page measurement: #devtable reloads 0.5 s after the first health reports, and separate calls
   // could read the toolbar from the old table and the frame from a node the swap had already removed.
-  const { boxes, tableRight } = await page.evaluate(() => {
-    const sel = ".dv-q, .dv-chips .chip, .dv-pick, .dv-cols details.colmenu > summary";
+  const { boxes, tableRight } = await page.evaluate((sel) => {
     const boxes = [...document.querySelectorAll(sel)]
       .filter((e) => e.getBoundingClientRect().width > 0)
       .map((e) => {
         const r = e.getBoundingClientRect();
-        return { c: r.top + r.height / 2, h: r.height, right: r.right, chip: e.classList.contains("chip") };
+        return {
+          c: r.top + r.height / 2,
+          top: r.top,
+          bottom: r.bottom,
+          left: r.left,
+          right: r.right,
+          h: r.height,
+          chip: e.classList.contains("chip"),
+          q: e.classList.contains("dv-q"),
+          cols: e.matches(".dv-cols details.colmenu > summary"),
+        };
       });
     const frame = document.querySelector(
       ".tablewrap[data-key=devices] > .tablescroll",
@@ -156,21 +169,40 @@ test("Columns button shares the toolbar's vertical centre and height", async ({
       boxes,
       tableRight: frame ? frame.getBoundingClientRect().right : NaN,
     };
-  });
+  }, sel);
   expect(boxes.length).toBeGreaterThan(1);
+  const cols = boxes.find((b) => b.cols)!;
+  const search = boxes.find((b) => b.q)!;
+  // Columns is a control of the search line: same centre, same height
+  expect(Math.abs(cols.c - search.c)).toBeLessThanOrEqual(1);
+  expect(Math.abs(cols.h - search.h)).toBeLessThanOrEqual(1);
   // the filter chips are 28 px (ui.Chip, #1095), the controls beside them 34: the height is the controls', the
-  // centre is everyone's
+  // centre is each line's
   const controls = boxes.filter((b) => !b.chip);
-  for (const b of boxes) {
-    expect(Math.abs(b.c - boxes[0].c)).toBeLessThanOrEqual(1);
-  }
   for (const b of controls) {
     expect(Math.abs(b.h - controls[0].h)).toBeLessThanOrEqual(1);
   }
+  // lines: an item joins the line whose first item's vertical range holds its centre; everyone on a line shares its centre
+  const lines: (typeof boxes)[] = [];
+  for (const b of [...boxes].sort((x, y) => x.c - y.c)) {
+    const line = lines.find((l) => b.c >= l[0].top && b.c <= l[0].bottom);
+    if (line) line.push(b);
+    else lines.push([b]);
+  }
+  for (const line of lines) {
+    for (const b of line) {
+      expect(Math.abs(b.c - line[0].c)).toBeLessThanOrEqual(1);
+    }
+  }
+  // Columns is absolutely placed, so only the toolbar's reserve keeps a filter from running under it
+  for (const b of boxes) {
+    if (b === cols) continue;
+    const overlaps =
+      b.left < cols.right && b.right > cols.left && b.top < cols.bottom && b.bottom > cols.top;
+    expect(overlaps, `a toolbar item at ${b.left}-${b.right} lies under Columns`).toBe(false);
+  }
   // right-aligned at the edge of the table's frame (the table scrolls inside it)
-  expect(
-    Math.abs(boxes[boxes.length - 1].right - tableRight),
-  ).toBeLessThanOrEqual(4);
+  expect(Math.abs(cols.right - tableRight)).toBeLessThanOrEqual(4);
   await shot(page, "devices-1280-columns");
   // another table (no toolbar): the button has a bar of its own, right-aligned
   await page.goto(app.url + "/audit");
