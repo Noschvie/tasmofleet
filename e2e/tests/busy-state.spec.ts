@@ -344,6 +344,8 @@ test("a control sent on change is busy while its request runs", async ({ page })
   });
   await page.goto(app.url + "/devices/new");
   const zone = page.locator("form.add-drop");
+  // the fleet has devices, so the import waits in a closed fold (#1110): open it as a person does
+  await page.locator("#card-import summary", { hasText: "Upload the files" }).click();
   await page.setInputFiles('input[name="files"]', importCsv);
   await expect(zone).toHaveAttribute("aria-busy", "true");
   // the ring is drawn by a background, not a new box, so the layout stays put

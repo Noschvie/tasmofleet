@@ -9,11 +9,11 @@ import (
 // The Add page (#410): the header and four boxes, no tabs. The CSS is the "Add devices" block of
 // app.css (.add-*, .scard-add).
 
-// addPageView is the page: Discovered and Network scan in the wide stack, Add manually and Import
-// from TasmoAdmin in the narrow one. The rank classes give the phone order: Discovered, Add manually,
-// Network scan, Import.
+// addPageView is the page: one line that says where to start (#1110), then Discovered and Network scan in the
+// wide stack, Add by address and Import from TasmoAdmin in the narrow one. The rank classes give the phone
+// order: Discovered, Add by address, Network scan, Import.
 templ addPageView(p addPage) {
-	<div class="add-head"><h1>Add devices</h1></div>
+	@ui.PageHeader(addTitle, "Devices announce themselves here. Not showing up? Scan your network or add one by address.")
 	if p.Manual.Error != "" && p.Manual.ErrField == "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Manual.Error, Alert: true})
 	}
@@ -32,12 +32,20 @@ templ addPageView(p addPage) {
 			}
 		}
 		@ui.CardStack(1) {
-			@addBox("manual", "r2", "Add manually", "", "By address, when you know it.") {
+			@addBox("manual", "r2", "Add by address", "", "When you know its IP address or hostname.") {
 				@addManualForm(p.Manual)
 			}
 			if p.Import != nil {
 				@addBox("import", "r4", "Import from TasmoAdmin", "", "Takes over the device list of a TasmoAdmin installation.") {
-					@importBodyPart(*p.Import)
+					if p.ImportFolded {
+						// a one-time migration: once the fleet has devices it waits folded (A3-007)
+						<details class="fold">
+							<summary>Upload the files</summary>
+							@importBodyPart(*p.Import)
+						</details>
+					} else {
+						@importBodyPart(*p.Import)
+					}
 				}
 			}
 		}
@@ -66,7 +74,7 @@ templ addBox(id, rank, title, count, note string) {
 	</section>
 }
 
-// ---- Add manually ----
+// ---- Add by address ----
 
 templ addManualForm(f addManualView) {
 	<form class="add-manual" method="post" action={ templ.SafeURL(f.Base + "/devices/new") }>
@@ -85,7 +93,7 @@ templ addManualForm(f addManualView) {
 					}
 					· <span class="mono" data-visual-mask>{ f.Prefill.Address }</span>
 				</span>
-				<a class="btn btn-sm" href={ templ.SafeURL(f.Base + "/devices/new") }>Clear</a>
+				@ui.Button(ui.Btn{Label: "Clear", Small: true, Href: f.Base + "/devices/new"})
 			</div>
 		}
 		if f.Tested != nil {
@@ -104,7 +112,7 @@ templ addManualForm(f addManualView) {
 			<span class="ufield-help" id="add-user-help">Tasmota’s web user is always admin.</span>
 		</label>
 		@ui.Field(ui.FieldData{Label: "Web password", Name: "http_password", Type: "password", Autocomplete: "new-password",
-			Placeholder: f.PasswordPlaceholder(), Help: f.PasswordHelp(), Error: f.FieldError("http_password")})
+			Placeholder: f.PasswordPlaceholder(), Help: f.PasswordHelp(), Error: f.FieldError("http_password"), Autofocus: f.NeedPassword})
 		if f.HasDefault && f.Prefill == nil {
 			<input type="hidden" name="use_default_password" value="1"/>
 		}
@@ -144,12 +152,8 @@ templ addManualForm(f addManualView) {
 			<p class="add-off" id="add-off">Adding is off until a device network is configured (see the notice above): every address would be refused.</p>
 		}
 		<div class="add-acts">
-			<button type="submit" class="btn btn-primary" disabled?={ f.NoNetworks }
-				if f.NoNetworks {
-					aria-describedby="add-off"
-				}
-			>Add device</button>
-			<button type="submit" name="test" value="1" class="btn" disabled?={ f.NoNetworks }>Test connection</button>
+			@ui.Button(ui.Btn{Label: "Add device", Kind: "primary", Type: "submit", Disabled: f.NoNetworks, Attrs: offDescribed(f.NoNetworks, "add-off")})
+			@ui.Button(ui.Btn{Label: "Test connection", Type: "submit", Name: "test", Value: "1", Disabled: f.NoNetworks})
 		</div>
 	</form>
 }
@@ -159,6 +163,17 @@ templ addManualForm(f addManualView) {
 templ discBanners(p discView) {
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+	}
+	if len(p.NeedPassword) > 0 {
+		// "Add N selected" left these: each is added through its filled-in form (#1110). Beside a danger banner the
+		// count of the added devices is said there already.
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: needPasswordLead(p), Action: addedListAction(p)}) {
+			for i, n := range p.NeedPassword {
+				<a href={ templ.SafeURL(n.Href) }>{ n.Name }</a>{ listEnd(i, len(p.NeedPassword)) }
+			}
+		}
+	} else if p.Added > 0 {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: plural(p.Added, "device") + " added.", Action: &ui.Btn{Label: "Open the device list", Href: p.Base + "/devices"}})
 	}
 	if p.Unverified != nil {
 		<form method="post" action={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(p.Unverified.ProposalID, 10) + "/accept") }>
@@ -174,7 +189,7 @@ templ discBanners(p discView) {
 
 // discoveredBody is the Discovered box: the note about a switched-off discovery, then one table of the
 // known devices that reported a new address (or a conflict) and the new devices (and, with Show ignored,
-// the ignored ones) with selection, Ignore and Add…, then the topics MQTT saw but could not identify.
+// the ignored ones) with selection, Ignore and Add, then the topics MQTT saw but could not identify.
 // Show ignored is a GET form of its own (a POST form would put its CSRF token in the URL); the POST form
 // follows it and, with display: contents, takes part in the same row of the bar, so the bulk buttons that
 // select.js counts per form stay beside it.
@@ -184,7 +199,7 @@ templ discoveredBody(p discView) {
 			<span class="add-note-dot" aria-hidden="true"></span>
 			<span class="add-note-text"><b>MQTT discovery is switched off.</b> Only network scans find new devices.</span>
 			if p.Settings != "" {
-				<a class="btn btn-sm" href={ templ.SafeURL(p.Settings) }>Open settings</a>
+				@ui.Button(ui.Btn{Label: "Open settings", Small: true, Href: p.Settings})
 			}
 		</div>
 	}
@@ -195,10 +210,12 @@ templ discoveredBody(p discView) {
 				<input type="hidden" name={ f[0] } value={ f[1] }/>
 			}
 			@ui.Check("ignored", "Show ignored ("+strconv.Itoa(p.Ignored)+")", "", p.ShowIgn, false)
-			<button type="submit" class="btn btn-sm" data-autosubmit-hide>Apply</button>
+			@ui.Button(ui.Btn{Label: "Apply", Small: true, Type: "submit", Attrs: templ.Attributes{"data-autosubmit-hide": true}})
 		</form>
 		<form class="add-newdev" method="post" action={ templ.SafeURL(p.Base + "/discovery/proposals/accept") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			// Add of this page opens the added device; the dashboard's Add, which posts no "from", stays there
+			<input type="hidden" name="from" value="add"/>
 			if p.HasDefault {
 				<input type="hidden" name="use_default_password" value="1"/>
 			}
@@ -211,14 +228,17 @@ templ discoveredBody(p discView) {
 			<span class="add-gap"></span>
 			if p.NewCount > 0 {
 				<div class="btn-row" data-bulkbar>
-					<button type="submit" class="btn" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/dismiss") }>Ignore selected</button>
-					<button type="submit" class="btn btn-primary">Add <span data-bar-count></span> selected</button>
+					@ui.Button(ui.Btn{Label: "Ignore selected", Type: "submit", FormAction: p.Base + "/discovery/proposals/dismiss"})
+					@ui.Button(ui.Btn{Label: "Add ", Kind: "primary", Type: "submit"}) {
+						<span data-bar-count></span>{ " selected" }
+					}
 				</div>
 			}
 			<div class="add-bar-body">
-				// The rule is store.UpsertProposal's "same" (an ignored row stays hidden while its content is unchanged); keep the words generic.
-				if p.Ignored > 0 {
-					<p class="add-ignhelp">An ignored device stays hidden while the data it announces stays the same. It comes back when that changes, or when it announces itself after { strconv.Itoa(p.ProposalDays) } days without a sighting.</p>
+				// The rule is store.UpsertProposal's "same" (an ignored row stays hidden while its content is unchanged); keep the
+				// words generic. Only while the ignored devices are listed: that is when the question comes up (A3-004).
+				if p.Ignored > 0 && p.ShowIgn {
+					<p class="add-ignhelp">Ignored devices stay hidden until they change or reappear after { strconv.Itoa(p.ProposalDays) } days.</p>
 				}
 				for _, h := range p.Help() {
 					<p class="add-ignhelp">{ h }</p>
@@ -293,11 +313,12 @@ templ discoveredBody(p discView) {
 								<td class="add-t2"><time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></td>
 								<td class="act">
 									if r.Ignored {
-										<button type="submit" class="btn btn-sm" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/undismiss") } name="version" value={ r.Version }>Show again</button>
+										@ui.Button(propBtn(p, r, "Show again", "undismiss", ui.Btn{Small: true}))
 									} else {
-										<button type="submit" class="btn btn-ghost add-ign" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/dismiss") } name="version" value={ r.Version }>Ignore</button>
-										<a class="btn btn-sm" href={ templ.SafeURL(r.AddHref) } title="Add with a web password">Add…</a>
-										<button type="submit" class="btn btn-primary" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
+										@ui.Button(propBtn(p, r, "Ignore", "dismiss", ui.Btn{Kind: "ghost", Class: "add-ign"}))
+										// the cell is inline: the space keeps the two buttons apart
+										{ " " }
+										@ui.Button(propBtn(p, r, "Add", "accept", ui.Btn{Kind: "primary"}))
 									}
 								</td>
 							</tr>
@@ -335,12 +356,11 @@ templ discoveredBody(p discView) {
 							<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(cardHost(r)) }</span>
 							<span class="add-card-src">{ r.Source } · last seen <time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></span>
 							if r.Ignored {
-								<button type="submit" class="btn add-card-btn" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/undismiss") } name="version" value={ r.Version }>Show again</button>
+								@ui.Button(propBtn(p, r, "Show again", "undismiss", ui.Btn{Class: "add-card-btn"}))
 							} else {
 								<div class="add-card-acts">
-									<button type="submit" class="btn" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/dismiss") } name="version" value={ r.Version }>Ignore</button>
-									<a class="btn" href={ templ.SafeURL(r.AddHref) }>Add…</a>
-									<button type="submit" class="btn btn-primary" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
+									@ui.Button(propBtn(p, r, "Ignore", "dismiss", ui.Btn{}))
+									@ui.Button(propBtn(p, r, "Add", "accept", ui.Btn{Kind: "primary"}))
 								</div>
 							}
 						</div>
@@ -359,7 +379,8 @@ templ discoveredBody(p discView) {
 				<div class="uempty-icon" aria-hidden="true"><span></span></div>
 				<h2>No new devices found</h2>
 				if p.Off {
-					<p>MQTT discovery is off, so only network scans add devices here.</p>
+					// the banner above says that discovery is off and links its setting: this says what to do (A3-014)
+					<p>Nothing new yet. Scan your network below.</p>
 				} else {
 					<p>
 						Discovery is listening on MQTT. New Tasmota devices show up here a few seconds after they join the network.
@@ -384,12 +405,13 @@ templ discoveredBody(p discView) {
 // answer can be bookmarked and changes nothing.
 templ whyBox(p discView) {
 	<form class="add-why" method="get" action={ templ.SafeURL(p.Base + "/devices/new#why") }>
-		<label for="why-q">Not listed? Look it up</label>
-		<input id="why-q" class="mono add-why-q" type="search" name="why" value={ p.WhyQuery } maxlength="128" placeholder="192.168.1.20, aa:bb:cc:dd:ee:ff or topic" autocomplete="off" data-visual-mask/>
+		<label for="why-q">Find a device by address</label>
+		// the lookup takes an IP address, a MAC or a topic (discovery.Explain), not a hostname: the example says what works
+		<input id="why-q" class="mono add-why-q" type="search" name="why" value={ p.WhyQuery } maxlength="128" placeholder="192.168.1.50 or aa:bb:cc:dd:ee:ff" autocomplete="off" data-visual-mask/>
 		if p.ShowIgn {
 			<input type="hidden" name="ignored" value="1"/>
 		}
-		<button type="submit" class="btn">Look up</button>
+		@ui.Button(ui.Btn{Label: "Look up", Type: "submit"})
 	</form>
 	if p.Why != nil {
 		@whyAnswer(p, *p.Why)
@@ -480,7 +502,7 @@ templ moveTableRow(p discView, m moveRow) {
 		</td>
 		<td class="add-t2"><time datetime={ m.Seen.UTC().Format("2006-01-02T15:04:05Z") }>{ m.LastText }</time></td>
 		<td class="act">
-			@moveActs(p, m, "btn btn-ghost add-ign", "btn btn-sm", "btn btn-primary")
+			@moveActs(p, m, ui.Btn{Kind: "ghost", Class: "add-ign"}, ui.Btn{Small: true}, ui.Btn{Kind: "primary"})
 		</td>
 	</tr>
 	if m.Why != "" {
@@ -514,10 +536,10 @@ templ moveCard(p discView, m moveRow) {
 			}
 			<span class="add-card-src">{ m.Source } · last seen <time datetime={ m.Seen.UTC().Format("2006-01-02T15:04:05Z") }>{ m.LastText }</time></span>
 			if m.Ignored {
-				@moveActs(p, m, "btn add-card-btn", "btn add-card-btn", "btn btn-primary")
+				@moveActs(p, m, ui.Btn{Class: "add-card-btn"}, ui.Btn{Class: "add-card-btn"}, ui.Btn{Kind: "primary"})
 			} else {
 				<div class="add-card-acts">
-					@moveActs(p, m, "btn", "btn", "btn btn-primary")
+					@moveActs(p, m, ui.Btn{}, ui.Btn{}, ui.Btn{Kind: "primary"})
 				</div>
 			}
 		</div>
@@ -536,14 +558,17 @@ templ moveBadges(m moveRow) {
 }
 
 // moveActs are the buttons of a known device's row, in the POST form of the table: each carries the
-// version of its own row, which the form has no field for (#745).
-templ moveActs(p discView, m moveRow, ignoreClass, showClass, applyClass string) {
+// version of its own row, which the form has no field for (#745). The three Btn give each button its look
+// (kind, size, the page's class) in the table and on the phone card.
+templ moveActs(p discView, m moveRow, ignore, show, apply ui.Btn) {
 	if m.Ignored {
-		<button type="submit" class={ showClass } formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(m.ID, 10) + "/undismiss") } name="version" value={ m.Version }>Show again</button>
+		@ui.Button(rowBtn(p.Base, m.ID, m.Version, "Show again", "undismiss", show))
 	} else {
-		<button type="submit" class={ ignoreClass } formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(m.ID, 10) + "/dismiss") } name="version" value={ m.Version }>Ignore</button>
+		@ui.Button(rowBtn(p.Base, m.ID, m.Version, "Ignore", "dismiss", ignore))
 		if m.CanApply {
-			<button type="submit" class={ applyClass } formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(m.ID, 10) + "/accept") } name="version" value={ m.Version }>Apply</button>
+			// the table cell is inline: the space keeps the two buttons apart
+			{ " " }
+			@ui.Button(rowBtn(p.Base, m.ID, m.Version, "Apply", "accept", apply))
 		}
 	}
 }
@@ -565,11 +590,7 @@ templ scanBox(b scanBodyView) {
 		<form class="add-scanbar" method="post" action={ templ.SafeURL(b.Base + "/discovery/scan") }>
 			<input type="hidden" name="csrf" value={ b.CSRF }/>
 			<input class="mono add-subnet" name="cidrs" value={ b.CIDRs } placeholder="192.168.1.0/24" aria-label="Subnet"/>
-			<button type="submit" class="btn btn-primary" disabled?={ b.NoNetworks || b.Running }
-				if b.NoNetworks {
-					aria-describedby="scan-off"
-				}
-			>Scan now</button>
+			@ui.Button(ui.Btn{Label: "Scan now", Kind: "primary", Type: "submit", Disabled: b.NoNetworks || b.Running, Attrs: offDescribed(b.NoNetworks, "scan-off")})
 			<span class="add-scanstatus">
 				<span data-visual-mask>
 					{ b.StatusLead }
@@ -643,13 +664,9 @@ templ scanBody(b scanBodyView) {
 				}
 			/>
 			if b.Running {
-				<button type="submit" class="btn" formaction={ templ.SafeURL(b.Base + "/discovery/scan/" + b.ID + "/cancel") }>Stop scan</button>
+				@ui.Button(ui.Btn{Label: "Stop scan", Type: "submit", FormAction: b.Base + "/discovery/scan/" + b.ID + "/cancel"})
 			} else {
-				<button type="submit" class="btn btn-primary" disabled?={ b.NoNetworks }
-					if b.NoNetworks {
-						aria-describedby="scan-off"
-					}
-				>Scan now</button>
+				@ui.Button(ui.Btn{Label: "Scan now", Kind: "primary", Type: "submit", Disabled: b.NoNetworks, Attrs: offDescribed(b.NoNetworks, "scan-off")})
 			}
 			<span class="add-scanstatus">
 				<span data-visual-mask>
@@ -734,7 +751,9 @@ templ scanLive(b scanBodyView) {
 				<span class="add-gap"></span>
 				if b.Selectable {
 					<div class="btn-row" data-bulkbar>
-						<button type="submit" class="btn btn-primary">Add <span data-bar-count></span> selected</button>
+						@ui.Button(ui.Btn{Label: "Add ", Kind: "primary", Type: "submit"}) {
+							<span data-bar-count></span>{ " selected" }
+						}
 					</div>
 				}
 			</div>
@@ -831,16 +850,18 @@ templ scanLive(b scanBodyView) {
 templ scanRowActs(b scanBodyView, r scanRow) {
 	switch {
 		case r.Kind == "new":
-			<button type="submit" class="btn btn-ghost add-ign" formaction={ templ.SafeURL(b.Base + "/discovery/proposals/" + strconv.FormatInt(r.ProposalID, 10) + "/dismiss") } name="version" value={ r.Version }>Ignore</button>
-			<a class="btn btn-sm" href={ templ.SafeURL(r.AddHref) }>Add</a>
+			@ui.Button(rowBtn(b.Base, r.ProposalID, r.Version, "Ignore", "dismiss", ui.Btn{Kind: "ghost", Class: "add-ign"}))
+			// the cell is inline: the space keeps the buttons apart, as it did before they were components
+			{ " " }
+			@ui.Button(ui.Btn{Label: "Add", Small: true, Href: r.AddHref})
 		case r.Kind == "ignored":
-			<button type="submit" class="btn btn-link" formaction={ templ.SafeURL(b.Base + "/discovery/proposals/" + strconv.FormatInt(r.ProposalID, 10) + "/undismiss") } name="version" value={ r.Version }>Show again</button>
+			@ui.Button(rowBtn(b.Base, r.ProposalID, r.Version, "Show again", "undismiss", ui.Btn{Kind: "link"}))
 		case r.OpenHref != "":
-			<a class="btn btn-link" href={ templ.SafeURL(r.OpenHref) }>Open</a>
+			@ui.Button(ui.Btn{Label: "Open", Kind: "link", Href: r.OpenHref})
 		case r.ReviewRef != "":
-			<a class="btn btn-link" href={ templ.SafeURL(r.ReviewRef) }>Review</a>
+			@ui.Button(ui.Btn{Label: "Review", Kind: "link", Href: r.ReviewRef})
 		case r.AddHref != "":
-			<a class="btn btn-sm" href={ templ.SafeURL(r.AddHref) }>Add</a>
+			@ui.Button(ui.Btn{Label: "Add", Small: true, Href: r.AddHref})
 	}
 }
 
@@ -914,7 +935,7 @@ templ importBodyPart(b importBody) {
 								Devices are probed when you apply.
 							}
 						</span>
-						<button type="submit" class="btn btn-primary">Apply plan · { plural(b.Plan.Create+b.Plan.Merge, "device") }</button>
+						@ui.Button(ui.Btn{Label: "Apply plan · " + plural(b.Plan.Create+b.Plan.Merge, "device"), Kind: "primary", Type: "submit"})
 					</form>
 				} else {
 					<div class="add-plan-foot">
@@ -937,9 +958,9 @@ templ importBodyPart(b importBody) {
 				}
 			</section>
 			<div class="btn-row add-result-acts">
-				<a class="btn" href={ templ.SafeURL(b.Base + "/import/tasmoadmin/report.csv") } download>Download report</a>
-				<a class="btn" href={ templ.SafeURL(b.Base + "/devices/new#card-import") }>Import more files</a>
-				<a class="btn btn-primary" href={ templ.SafeURL(b.Base + "/devices") }>Open devices</a>
+				@ui.Button(ui.Btn{Label: "Download report", Href: b.Base + "/import/tasmoadmin/report.csv", Attrs: templ.Attributes{"download": true}})
+				@ui.Button(ui.Btn{Label: "Import more files", Href: b.Base + "/devices/new#card-import"})
+				@ui.Button(ui.Btn{Label: "Open devices", Kind: "primary", Href: b.Base + "/devices"})
 			</div>
 		}
 	</div>
@@ -975,10 +996,10 @@ templ whyLine(l whyLineView) {
 	<span class="add-move-why"><b>{ l.Lead }</b> { l.Detail }</span>
 	<span class="btn-row add-move-acts">
 		if l.RestoreID != 0 {
-			<button type="submit" class="btn">Show again</button>
+			@ui.Button(ui.Btn{Label: "Show again", Type: "submit"})
 		}
 		if l.Anchor != "" {
-			<a class="btn" href={ templ.SafeURL(l.Anchor) }>Show in list</a>
+			@ui.Button(ui.Btn{Label: "Show in list", Href: l.Anchor})
 		}
 	</span>
 }

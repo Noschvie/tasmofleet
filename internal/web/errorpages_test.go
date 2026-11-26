@@ -60,7 +60,7 @@ func TestAddTabsHideImportWhenUnavailable(t *testing.T) {
 	if strings.Contains(body, "/import/tasmoadmin") {
 		t.Fatalf("import tab without the import feature: %s", body)
 	}
-	if !strings.Contains(body, "Add manually") {
+	if !strings.Contains(body, "Add by address") {
 		t.Fatalf("add tabs missing: %.300s", body)
 	}
 }

@@ -855,3 +855,246 @@ func TestTrailsOfListAddAndScanResults(t *testing.T) {
 		t.Error("the list page lost its heading")
 	}
 }
+
+// ---- one first route, Ignore and Add only (#1110) ----
+
+// rowActions are the labels of the buttons and button links in one piece of markup, in order.
+var reRowAction = regexp.MustCompile(`<(?:a|button)\b[^>]*class="btn[^"]*"[^>]*>([^<]*)</(?:a|button)>`)
+
+func rowActions(markup string) []string {
+	var out []string
+	for _, m := range reRowAction.FindAllStringSubmatch(markup, -1) {
+		out = append(out, strings.TrimSpace(m[1]))
+	}
+	return out
+}
+
+// Why (A3-002): a discovered row offered Ignore, "Add…" and "Add", and the only difference between the two Adds was
+// a tooltip ("Add with a web password") that a phone never shows. A device that needs its password is now found by
+// the plain Add itself (it opens the form), so a row, in the table and on the phone card, has two actions that differ.
+func TestDiscoveredRowHasTwoActionsIgnoreAndAdd(t *testing.T) {
+	e, _ := setupDiscovery(t)
+	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
+	row := rowWith(discTable(body), `value="1:v1"`)
+	if row == "" {
+		t.Fatal("no table row for the new device")
+	}
+	cards := between(body, `<div class="add-cards">`, `<div class="add-why"`)
+	card := cards[strings.Index(cards, `value="1:v1"`):]
+	card = card[:strings.Index(card, `</div></div>`)]
+	for name, markup := range map[string]string{"table row": row, "phone card": card} {
+		if got := rowActions(markup); !slices.Equal(got, []string{"Ignore", "Add"}) {
+			t.Errorf("%s actions = %q, want exactly Ignore and Add", name, got)
+		}
+		if strings.Contains(markup, "Add…") || strings.Contains(markup, "Add with a web password") {
+			t.Errorf("%s still offers the second Add: %s", name, markup)
+		}
+	}
+}
+
+// Why (A3-016): after Add the person stayed on the list with a toast and had to find the device; the manual add
+// already opened the device. Both routes end on the device page now. The dashboard's Add posts no "from" and keeps
+// the person on the dashboard, where the row then leaves Needs attention.
+func TestAddOpensTheAddedDeviceAndTheDashboardStaysPut(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	_, page := e.do(t, "GET", "/devices/new", "admin", nil)
+	if form := reNewdevForm.FindString(page); !strings.Contains(form, `<input type="hidden" name="from" value="add">`) {
+		t.Fatalf("the Discovered form does not say it is the Add page: %s", form)
+	}
+	r, _ := e.do(t, "POST", "/discovery/proposals/1/accept", "admin", url.Values{"version": {"v1"}, "from": {"add"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != "/tf/devices/5?ok=added" {
+		t.Fatalf("Add from the Add page: %d %q, want 303 to the new device", r.StatusCode, loc)
+	}
+	r, _ = e.do(t, "POST", "/discovery/proposals/1/accept", "admin", url.Values{"version": {"v1"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != "/tf/" {
+		t.Fatalf("Add from the dashboard: %d %q, want 303 back to the dashboard", r.StatusCode, loc)
+	}
+	// Apply of an address change is not an add: it returns to the list with its notice, from either page.
+	for _, form := range []url.Values{{"version": {"v2"}, "from": {"add"}}, {"version": {"v2"}}} {
+		r, _ = e.do(t, "POST", "/discovery/proposals/2/accept", "admin", form)
+		if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != "/tf/devices/new?ok=moved" {
+			t.Errorf("Apply (%v): %d %q, want the list with ok=moved", form, r.StatusCode, loc)
+		}
+	}
+	if len(fd.accepted) != 4 {
+		t.Errorf("accepted %v", fd.accepted)
+	}
+}
+
+// Why (#1110, decision 9): a device that answers the MAC check with 401 is behind a web password. Add (from the Add
+// page and from the dashboard) opens the address form filled from it, with the sentence at the password field, instead
+// of adding a device TasmoFleet cannot log in to. The form stays a prefilled one: the fleet default password is not
+// offered and not sent to the discovered address (safety rule 4, security review 2026-10-22).
+func TestAddOfADeviceThatNeedsItsPasswordOpensTheFilledForm(t *testing.T) {
+	_, fd := setupDiscovery(t)
+	fd.acceptErr = map[int64]error{1: fmt.Errorf("%w: 10.0.0.50", discovery.ErrNeedsPassword)}
+	e := setupWith(t, func(d *Deps) {
+		d.Discovery = fd
+		d.DefaultDevicePassword = func() string { return "fleet-fake-pw" }
+	})
+	const form = "/tf/devices/new?proposal=1&need=password"
+	for _, post := range []url.Values{{"version": {"v1"}, "from": {"add"}, "use_default_password": {"1"}}, {"version": {"v1"}}} {
+		r, _ := e.do(t, "POST", "/discovery/proposals/1/accept", "admin", post)
+		if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != form {
+			t.Fatalf("Add (%v) of a device that needs its password: %d %q, want 303 to %s", post, r.StatusCode, loc, form)
+		}
+	}
+	if len(fd.accepted) != 0 {
+		t.Fatalf("a device was added: %v", fd.accepted)
+	}
+	_, body := e.do(t, "GET", strings.TrimPrefix(form, "/tf"), "admin", nil)
+	wantFieldError(t, body, "http_password", "This device needs its web password.")
+	if tag := inputTag(t, body, "address"); !strings.Contains(tag, `value="10.0.0.50"`) {
+		t.Errorf("the address is not filled in: %s", tag)
+	}
+	manual := between(body, `<form class="add-manual"`, "</form>")
+	if !strings.Contains(manual, `name="prefilled"`) || strings.Contains(manual, `name="use_default_password"`) || strings.Contains(body, "fleet-fake-pw") {
+		t.Errorf("the form must be a prefilled one without the default password: %s", manual)
+	}
+	post := url.Values{"address": {"10.0.0.50"}, "prefilled": {"MQTT discovery"}, "use_default_password": {"1"}, "skip_probe": {"1"}}
+	if r, _ := e.do(t, "POST", "/devices/new", "admin", post); r.StatusCode != 303 || e.inv.last.HTTPPassword != "" {
+		t.Fatalf("the default went to the discovered address: %d %q", r.StatusCode, e.inv.last.HTTPPassword)
+	}
+	// The sentence belongs to a listed new device only: a gone proposal or an address change opens the plain form.
+	for _, q := range []string{"proposal=99&need=password", "proposal=2&need=password", "need=password"} {
+		if _, plain := e.do(t, "GET", "/devices/new?"+q, "admin", nil); strings.Contains(plain, "needs its web password") {
+			t.Errorf("?%s shows the sentence without a listed new device", q)
+		}
+	}
+}
+
+// Why (#1110): "Add N selected" must not stop at a device that needs its password, and must not hide it in a
+// danger sentence either. It adds the others; the banner says how many were added, names each device that needs
+// its web password with a link to its filled-in form, and leads to the device list.
+func TestAddSelectedNamesTheDevicesThatNeedTheirPassword(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props = append(fd.props, discoveryProposal(7, "porch"), discoveryProposal(8, "shed"))
+	fd.acceptErr = map[int64]error{7: fmt.Errorf("%w: 10.0.0.57", discovery.ErrNeedsPassword)}
+	r, body := e.do(t, "POST", "/discovery/proposals/accept", "admin", postedTwice(t, "1:v1", "7:v7", "8:v8"))
+	if r.StatusCode != 200 || !slices.Equal(fd.accepted, []int64{1, 8}) {
+		t.Fatalf("add selected with one device behind a password: %d accepted %v, want 200 and [1 8]", r.StatusCode, fd.accepted)
+	}
+	banner := between(body, `<div class="banner t-warn`, `</div></div>`)
+	for _, want := range []string{"2 devices added.", "1 needs its web password:",
+		`<a href="/tf/devices/new?proposal=7&amp;need=password">porch</a>.`, `href="/tf/devices"`, "Open the device list"} {
+		if !strings.Contains(banner, want) {
+			t.Errorf("the banner lacks %q: %s", want, banner)
+		}
+	}
+	if strings.Contains(body, `class="banner t-danger`) {
+		t.Error("a device that needs its password is reported as a failure")
+	}
+	// Mixed with a real failure, each keeps its own words: the failure in the danger banner, the password in its own.
+	fd.accepted = nil
+	r, body = e.do(t, "POST", "/discovery/proposals/accept", "admin", url.Values{"id": {"7:v7", "8:v8", "9:v9"}})
+	if r.StatusCode != 409 || !strings.Contains(body, "1 device added, 1 not: #9 is no longer listed.") {
+		t.Fatalf("a stale row among them: %d %s", r.StatusCode, between(body, `<main`, `</main>`))
+	}
+	if !strings.Contains(between(body, `<div class="banner t-warn`, `</div></div>`), `proposal=7&amp;need=password`) {
+		t.Error("the device that needs its password is not named beside the failure")
+	}
+}
+
+// Why (#1110): when every ticked row needs its web password, nothing was added. A banner that says "0 devices added"
+// and offers the device list leads nowhere; the person's next step is the password of each device. One such row is
+// the single Add of that row: its filled-in form opens. Several are named, each linked to its form, without a count of
+// the added and without the list.
+func TestAddSelectedOfOnlyDevicesThatNeedTheirPasswordLeadsToTheirForms(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props = append(fd.props, discoveryProposal(7, "porch"), discoveryProposal(8, "shed"))
+	fd.acceptErr = map[int64]error{
+		7: fmt.Errorf("%w: 10.0.0.57", discovery.ErrNeedsPassword),
+		8: fmt.Errorf("%w: 10.0.0.58", discovery.ErrNeedsPassword),
+	}
+	r, _ := e.do(t, "POST", "/discovery/proposals/accept", "admin", url.Values{"id": {"7:v7"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != "/tf/devices/new?proposal=7&need=password" {
+		t.Errorf("one row that needs its password: %d %q, want its filled-in form as a single Add", r.StatusCode, loc)
+	}
+	r, body := e.do(t, "POST", "/discovery/proposals/accept", "admin", url.Values{"id": {"7:v7", "8:v8"}})
+	if r.StatusCode != 200 || len(fd.accepted) != 0 {
+		t.Fatalf("two rows that need their password: %d accepted %v, want 200 and none", r.StatusCode, fd.accepted)
+	}
+	banner := between(body, `<div class="banner t-warn`, `</div></div>`)
+	if want := `2 devices need their web password: <a href="/tf/devices/new?proposal=7&amp;need=password">porch</a>, <a href="/tf/devices/new?proposal=8&amp;need=password">shed</a>.`; !strings.Contains(banner, want) {
+		t.Errorf("the banner does not name both devices with their forms: %s", banner)
+	}
+	for _, not := range []string{"0 devices added", "Open the device list"} {
+		if strings.Contains(banner, not) {
+			t.Errorf("nothing was added, yet the banner says %q: %s", not, banner)
+		}
+	}
+}
+
+// Why (A3-016): after "Add N selected" the person stays on the list (they may add more) with a banner that says how
+// many were added and leads to the list where they now are. One device added is the single Add: it opens the device.
+func TestAddSelectedSaysHowManyAndOneOpensTheDevice(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props = append(fd.props, discoveryProposal(7, "porch"))
+	r, _ := e.do(t, "POST", "/discovery/proposals/accept", "admin", url.Values{"id": {"1:v1", "7:v7"}})
+	loc := r.Header.Get("Location")
+	if r.StatusCode != 303 || !strings.Contains(loc, "ok=accepted") || !strings.Contains(loc, "n=2") {
+		t.Fatalf("two added: %d %q", r.StatusCode, loc)
+	}
+	_, page := e.do(t, "GET", strings.TrimPrefix(loc, "/tf"), "admin", nil)
+	banner := between(page, `<div class="banner t-ok`, `</div></div>`)
+	if !strings.Contains(banner, "2 devices added.") || !strings.Contains(banner, `href="/tf/devices"`) {
+		t.Errorf("no banner with the count and the list: %s", banner)
+	}
+	r, _ = e.do(t, "POST", "/discovery/proposals/accept", "admin", url.Values{"id": {"7:v7"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || loc != "/tf/devices/5?ok=added" {
+		t.Errorf("one added: %d %q, want its page", r.StatusCode, loc)
+	}
+}
+
+// Why (A3-007): four boxes of equal weight and no sentence that says where to start. The page leads with one line,
+// the manual box is named for what it takes (an address), the lookup says what it finds, and the TasmoAdmin import,
+// a one-time migration, is folded away once the fleet has devices (open while it is empty, when it may be the start).
+func TestAddPageLeadsWithOneLineAndFoldsTheImport(t *testing.T) {
+	_, fd := setupDiscovery(t)
+	e := setupWith(t, func(d *Deps) {
+		d.Discovery = fd
+		d.Import = importer.New(importer.Options{Inventory: &checkingInv{}})
+	})
+	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
+	for _, want := range []string{`<h1>Add devices</h1>`, `<p class="pghead-sub">Devices announce themselves here. Not showing up? Scan your network or add one by address.</p>`,
+		`<h2>Add by address`, `<label for="why-q">Find a device by address</label>`, `placeholder="192.168.1.50 or aa:bb:cc:dd:ee:ff"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	imp := body[strings.Index(body, `id="card-import"`):]
+	if !strings.Contains(imp[:strings.Index(imp, `id="import"`)], `<details class="fold">`) {
+		t.Errorf("with devices in the fleet the import is not a closed fold: %.600s", imp)
+	}
+	e.inv.devs = map[model.DeviceID]model.Device{}
+	_, empty := e.do(t, "GET", "/devices/new", "admin", nil)
+	if strings.Contains(between(empty, `id="card-import"`, `id="import"`), "<details") {
+		t.Error("with an empty fleet the import is folded away")
+	}
+}
+
+// Why (A3-004, A3-014): two sentences about how ignoring works stood above the table for everyone once one device was
+// ignored, and with discovery off the banner and the empty state said the same thing twice. One line, only while the
+// ignored devices are shown; the empty state points to the scan and leaves the "off" to the banner.
+func TestOneSentenceForIgnoredAndForDiscoveryOff(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.ignored = []discovery.Proposal{{ID: 9, Version: "v9", Kind: discovery.KindNew, SeenAt: time.Now(), Device: model.Device{Name: "hidden-lamp", Address: "10.0.0.60", MAC: "aa:bb:cc:dd:ee:09"}}}
+	const ignHelp = "Ignored devices stay hidden until they change or reappear after 30 days."
+	if _, body := e.do(t, "GET", "/devices/new", "admin", nil); strings.Contains(body, ignHelp) || strings.Contains(body, "stays hidden while the data") {
+		t.Error("the ignored help shows while the ignored devices are hidden")
+	}
+	if _, body := e.do(t, "GET", "/devices/new?ignored=1", "admin", nil); strings.Count(body, ignHelp) != 1 {
+		t.Errorf("with Show ignored the one line is not there once")
+	}
+	off := setupWith(t, func(d *Deps) {
+		d.Discovery = &fakeDiscovery{}
+		d.MQTT = func() string { return "disabled" }
+	})
+	_, body := off.do(t, "GET", "/devices/new", "admin", nil)
+	if n := strings.Count(body, "MQTT discovery is"); n != 1 {
+		t.Errorf("discovery off is said %d times, want once (the banner)", n)
+	}
+	if !strings.Contains(body, "Nothing new yet. Scan your network below.") {
+		t.Error("the empty state does not point to the scan")
+	}
+}

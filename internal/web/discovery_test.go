@@ -30,7 +30,8 @@ type fakeDiscovery struct {
 	confirmed []string
 	passwords []string // discovery.DevicePassword of each AcceptVersion
 	unident   []discovery.Unidentified
-	consume   bool // Accept takes the proposal off the list, like the service (the second try finds nothing)
+	consume   bool            // Accept takes the proposal off the list, like the service (the second try finds nothing)
+	acceptErr map[int64]error // AcceptVersion fails for these proposals with the error (ErrNeedsPassword, ...), adding nothing
 
 	dismissVersions, undismissVersions []string // the version each Dismiss and Undismiss carried
 
@@ -84,6 +85,9 @@ func (f *fakeDiscovery) AcceptVersion(ctx context.Context, actor string, id int6
 	}
 	f.versions = append(f.versions, v)
 	f.passwords = append(f.passwords, discovery.DevicePassword(ctx))
+	if err := f.acceptErr[id]; err != nil {
+		return 0, err
+	}
 	return f.Accept(ctx, actor, id)
 }
 
@@ -449,7 +453,7 @@ func TestDiscoveryProposalFactsStayVisibleOnPhones(t *testing.T) {
 		t.Fatal("no phone cards")
 	}
 	card := body[i:]
-	for _, want := range []string{"&lt;script&gt;", "10.0.0.50", "MQTT discovery · last seen", `<time datetime=`, `value="1:v1"`, `href="/tf/devices/new?proposal=1#card-manual"`} {
+	for _, want := range []string{"&lt;script&gt;", "10.0.0.50", "MQTT discovery · last seen", `<time datetime=`, `value="1:v1"`, `formaction="/tf/discovery/proposals/1/accept" name="version" value="v1">Add</button>`} {
 		if !strings.Contains(card, want) {
 			t.Errorf("phone card lacks %q", want)
 		}

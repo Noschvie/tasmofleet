@@ -801,9 +801,10 @@ func DevicePassword(ctx context.Context) string {
 // password (N20) it fails closed: the address came from a sighting, not from
 // the admin, and the fleet-wide password would go via basic auth to whatever
 // answers there, so the host must prove the proposal's MAC first (security
-// review 2026-10-22). A device that already asks for a password cannot
-// answer the unauthenticated probe; the admin accepts it without the default
-// and types the password in the device edit form.
+// review 2026-10-22). A device that answers the unauthenticated probe with
+// 401 asks for its web password: nothing is created and ErrNeedsPassword
+// tells the admin to add it by address with that password (#1110); the
+// default is not sent to it either, its MAC is not proven.
 func (m *Manager) acceptNew(ctx context.Context, actor string, row store.ProposalRow, det map[string]any) (model.DeviceID, error) {
 	d := row.Device
 	d.ID = 0
@@ -828,6 +829,9 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 			if got, nerr := inventory.NormaliseMAC(mac); nerr != nil || got != d.MAC {
 				return 0, fmt.Errorf("%w: %s now answers with a different MAC", ErrStale, d.Address)
 			}
+		} else if errors.Is(err, tasmota.ErrAuth) {
+			// Only the address goes into the error (audit, log, page): the check carried no credential.
+			return 0, fmt.Errorf("%w: %s", ErrNeedsPassword, d.Address)
 		}
 	}
 	if err != nil && pw == "" {
@@ -835,7 +839,7 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 	}
 	if pw != "" {
 		if err != nil {
-			return 0, fmt.Errorf("%w: %s did not prove its MAC, so the default password is not sent there; use \"Add…\" and type the device's password (or none), or set it later in the device edit form: %w",
+			return 0, fmt.Errorf("%w: %s did not prove its MAC, so the default password is not sent there; add it by address and type the device's password (or none), or set it later in the device edit form: %w",
 				ErrNotAcceptable, d.Address, err)
 		}
 		d.HTTPPassword = pw // the fleet default (N20); the user stays empty: Tasmota's admin

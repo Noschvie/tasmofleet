@@ -5,13 +5,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/a-h/templ"
 	"github.com/hellwand/tasmofleet/internal/discovery"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The Add page (#410): one page with four boxes, one per way to add devices: Discovered and
-// Network scan in the wide column, Add manually and Import from TasmoAdmin in the narrow one. The
+// Network scan in the wide column, Add by address and Import from TasmoAdmin in the narrow one. The
 // page is /devices/new; the boxes post to the routes of their own service (/discovery/..., the
 // import fragments). A box whose service is not configured is left out. The network scan's full
 // result lives on its own page (/discovery/scan/{id}).
@@ -23,6 +25,8 @@ type addPage struct {
 	Disc       *discView     // nil without discovery
 	Scan       *scanBodyView // nil without discovery
 	Import     *importBody   // nil without the web import
+	// ImportFolded: the fleet has devices, so the one-time TasmoAdmin import is a closed fold (#1110).
+	ImportFolded bool
 }
 
 // addTitle names the page in the window title and the phone header.
@@ -43,6 +47,14 @@ func (h *handler) renderAdd(w http.ResponseWriter, r *http.Request, status int, 
 		if d == nil {
 			x := h.discoveryData(r)
 			d = &x
+			if r.URL.Query().Get("ok") == "accepted" {
+				// "Add N selected" carries how many it added: a banner with the count and the way to the list
+				// stays on the page (a toast would fade with its link), so more can be added from here.
+				d.Added = 1
+				if n, err := strconv.Atoi(r.URL.Query().Get("n")); err == nil && n > 1 {
+					d.Added = n
+				}
+			}
 		}
 		d.Base, d.CSRF = v.Base, v.CSRF
 		page.Disc = d
@@ -52,14 +64,10 @@ func (h *handler) renderAdd(w http.ResponseWriter, r *http.Request, status int, 
 	if h.d.Import != nil {
 		b := h.importBodyOf(r)
 		page.Import = &b
+		devs, err := h.d.Inventory.List(r.Context())
+		page.ImportFolded = err == nil && len(devs) > 0 // a failed read keeps the box open: nothing is hidden
 	}
 	switch r.URL.Query().Get("ok") {
-	case "accepted":
-		v.Flash = "Device added."
-		// "Add selected" carries how many it added; one device keeps the singular notice.
-		if n, err := strconv.Atoi(r.URL.Query().Get("n")); err == nil && n > 1 {
-			v.Flash = plural(n, "device") + " added."
-		}
 	case "moved":
 		v.Flash = "Address updated."
 	case "dismissed":
@@ -70,7 +78,7 @@ func (h *handler) renderAdd(w http.ResponseWriter, r *http.Request, status int, 
 	h.show(w, r, status, "add", v, addPageView(page))
 }
 
-// addManualView is the Add manually box: the prototype's address and web password, the fixed
+// addManualView is the Add by address box: the prototype's address and web password, the fixed
 // web user, and the remaining device fields folded under "More options".
 type addManualView struct {
 	Base, CSRF string
@@ -87,6 +95,9 @@ type addManualView struct {
 	HasDefault bool
 	// NoNetworks: no device network is configured, every address would be refused.
 	NoNetworks bool
+	// NeedPassword: Add of the discovered device found it behind a web password (#1110); the form says so at the
+	// password and puts the focus there.
+	NeedPassword bool
 }
 
 // addPrefill is the banner of a form opened from a discovered device.
@@ -132,8 +143,13 @@ func (v addManualView) PasswordPlaceholder() string {
 	return ""
 }
 
-// deviceNewForm is the Add page. ?proposal=<id> fills the manual form from a discovered device
-// (the "Add…" of the Discovered box); ?address= and ?port= from a scan result.
+// needPasswordText is the sentence at the web password of the form that Add of a discovered device opens when the
+// device asks for its password (#1110).
+const needPasswordText = "This device needs its web password."
+
+// deviceNewForm is the Add page. ?proposal=<id> fills the address form from a discovered device
+// (a scan result's Add; with &need=password the Add of a device that asks for its web password,
+// which then says so at the password); ?address= and ?port= from a scan result.
 func (h *handler) deviceNewForm(w http.ResponseWriter, r *http.Request) {
 	var f addManualView
 	q := r.URL.Query()
@@ -144,6 +160,9 @@ func (h *handler) deviceNewForm(w http.ResponseWriter, r *http.Request) {
 				f.Device.Port = 0
 			}
 			f.Prefill = &addPrefill{Source: viaText(p.Via), Name: p.Device.Name, Host: p.Device.Topic, Address: netaddr.Display(p.Device.Address, p.Device.Port, "http")}
+			if q.Get("need") == "password" { // only beside the device it is about: a gone proposal opens the plain form
+				f.NeedPassword, f.ErrField, f.Error = true, "http_password", needPasswordText
+			}
 		}
 	} else if a := strings.TrimSpace(q.Get("address")); a != "" && h.d.Discovery != nil {
 		port, _ := strconv.Atoi(q.Get("port")) // a bad port is just no port
@@ -258,6 +277,65 @@ func nameTip(r propRow) string {
 		return dash(r.Name)
 	}
 	return dash(r.Name) + " · topic " + r.Topic
+}
+
+// rowBtn is a button of a Discovered or scan row: it posts the shown version to the proposal's action (accept,
+// dismiss, undismiss) through the row's form (#745). look gives the kind, size and the page's class.
+func rowBtn(base string, id int64, version, label, verb string, look ui.Btn) ui.Btn {
+	look.Label, look.Type, look.Name, look.Value = label, "submit", "version", version
+	look.FormAction = base + "/discovery/proposals/" + strconv.FormatInt(id, 10) + "/" + verb
+	return look
+}
+
+// propBtn is rowBtn for a new device of the Discovered table.
+func propBtn(p discView, r propRow, label, verb string, look ui.Btn) ui.Btn {
+	return rowBtn(p.Base, r.ID, r.Version, label, verb, look)
+}
+
+// offDescribed points a disabled button at the line that says why (aria-describedby), nil while it is enabled.
+func offDescribed(off bool, id string) templ.Attributes {
+	if !off {
+		return nil
+	}
+	return templ.Attributes{"aria-describedby": id}
+}
+
+// needPasswordLead starts the banner of the devices "Add N selected" left because they need their web password:
+// how many were added (unless the danger banner beside it says so already), then how many need it. With nothing
+// added the devices are the subject: a count of nothing added would only stand in front of them.
+func needPasswordLead(p discView) string {
+	n := len(p.NeedPassword)
+	if p.Added == 0 {
+		if n == 1 {
+			return "1 device needs its web password: "
+		}
+		return strconv.Itoa(n) + " devices need their web password: "
+	}
+	lead := ""
+	if p.Error == "" {
+		lead = plural(p.Added, "device") + " added. "
+	}
+	if n == 1 {
+		return lead + "1 needs its web password: "
+	}
+	return lead + strconv.Itoa(n) + " need their web password: "
+}
+
+// addedListAction is the "Open the device list" of an "Add N selected" banner, nil when nothing was added: the list
+// then holds nothing new.
+func addedListAction(p discView) *ui.Btn {
+	if p.Added == 0 {
+		return nil
+	}
+	return &ui.Btn{Label: "Open the device list", Href: p.Base + "/devices"}
+}
+
+// listEnd is what follows item i of n in a list that ends a sentence: a comma and a space, after the last a full stop.
+func listEnd(i, n int) string {
+	if i == n-1 {
+		return "."
+	}
+	return ", "
 }
 
 // cardHost is the hostname line of a phone card; it is left out when it only repeats the name.

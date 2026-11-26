@@ -34,6 +34,9 @@ var (
 	ErrNotRunning    = errors.New("discovery: service is not running")
 	ErrScanRunning   = errors.New("discovery: a scan is already running")
 	ErrScanRange     = errors.New("discovery: scan range refused")
+	// ErrNeedsPassword: the address answered the unauthenticated MAC check with 401, so the device is behind a web
+	// password. Nothing was created; the admin adds it by address with its password (#1110).
+	ErrNeedsPassword = errors.New("discovery: the device needs its web password")
 )
 
 // Proposal kinds and sources (Proposal.Kind, Proposal.Via).

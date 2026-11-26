@@ -273,14 +273,14 @@ func TestHeadingCountsWhatTheTableHoldsAndSelectAllNeedsANewDevice(t *testing.T)
 	}
 }
 
-// Why (A3-048): the name and the MQTT topic were in a tooltip, which touch and keyboard users never see, and the
-// purpose of Add… ("with a password") was a tooltip too. They are text on the page; the select-all box was hidden
+// Why (A3-048): the name and the MQTT topic were in a tooltip, which touch and keyboard users never see (the second
+// Add with its "with a password" tooltip is gone, #1110). They are text on the page; the select-all box was hidden
 // until a script revealed it, so a table without the script (or before it ran) had no way to tick every row.
 func TestDiscoveredTableSaysItsThingsInVisibleText(t *testing.T) {
 	e, _ := moveFixture(t)
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
 	visible := reTitleAttr.ReplaceAllString(body, "")
-	for _, want := range []string{"porch_plug", "Porch plug", "10.0.0.62", "Add… lets you type one first"} {
+	for _, want := range []string{"porch_plug", "Porch plug", "10.0.0.62"} {
 		if !strings.Contains(visible, want) {
 			t.Errorf("%q is only in a tooltip, or missing", want)
 		}

@@ -57,8 +57,10 @@ var markupExemptions = []markupBlock{
 		"audit.templ":       {"btn": 3},
 		"syssettings.templ": {"btn": 27},
 	}},
+	// #1110 converted the Add page; what is left is the TasmoAdmin file chooser, a <label class="btn"> around the
+	// file input (the input covers it, so a click opens the chooser): ui.Button renders a link or a button, no label.
 	{Name: "#1092 buttons: add devices", Files: map[string]map[string]int{
-		"adddevices.templ": {"btn": 42},
+		"adddevices.templ": {"btn": 1},
 	}},
 	{Name: "#1092 buttons: style guide", Files: map[string]map[string]int{
 		"styleguide.templ": {"btn": 3},

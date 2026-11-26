@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -49,14 +50,19 @@ func (a *auditLog) has(action string) bool {
 	return false
 }
 
-// macVerifier answers like a network of unauthenticated devices: ip -> MAC.
+// macVerifier answers like a network of unauthenticated devices: ip -> MAC. An address in errs answers
+// with that error instead (a device behind a web password answers the check with tasmota.ErrAuth).
 type macVerifier struct {
 	macs  map[string]string
+	errs  map[string]error
 	calls atomic.Int32
 }
 
 func (v *macVerifier) VerifyMAC(_ context.Context, address string, _ int) (string, error) {
 	v.calls.Add(1)
+	if err, ok := v.errs[address]; ok {
+		return "", err
+	}
 	if m, ok := v.macs[address]; ok {
 		return m, nil
 	}
@@ -803,6 +809,66 @@ func TestAcceptWithDefaultPasswordNeedsAProvenMAC(t *testing.T) {
 				t.Error("the device got a password")
 			}
 		})
+	}
+}
+
+// Why (#1110): a device that answers the unauthenticated MAC check with 401 is behind a web password. Adding it
+// without that password created a device TasmoFleet could not log in to (login refused from its first poll), and with
+// the fleet default it was refused with a pointer to a second button. The accept now says what is missing
+// (ErrNeedsPassword) so the page can open the address form for the password; it creates nothing, keeps the proposal,
+// starts no probe and never sends the default password to the unproven host (safety rule 4). The order of the branches
+// matters: with the default set the 401 must not turn into the generic "did not prove its MAC" refusal.
+func TestAcceptOfADeviceThatAsksForItsPasswordCreatesNothing(t *testing.T) {
+	for name, ctx := range map[string]context.Context{
+		"no default password": bg,
+		"fleet default set":   WithDevicePassword(bg, "fleet-fake-pw"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			probes := 0
+			e := newEnv(t, "172.31.0.0/16", func(o *Options) { o.OnAccepted = func(model.DeviceID) { probes++ } })
+			e.ver.errs = map[string]error{"172.31.13.31": fmt.Errorf("%w: HTTP 401", tasmota.ErrAuth)}
+			e.mgr.handleMessage(bg, discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+			p := mustProposals(t, e)
+			_, err := e.mgr.AcceptVersion(ctx, "admin", p[0].ID, p[0].Version)
+			if !errors.Is(err, ErrNeedsPassword) || errors.Is(err, ErrNotAcceptable) {
+				t.Fatalf("accept of a device that answered 401: %v, want ErrNeedsPassword", err)
+			}
+			if devs, _ := e.inv.List(bg); len(devs) != 0 {
+				t.Fatalf("a device was created without its password: %+v", devs)
+			}
+			if probes != 0 {
+				t.Errorf("the identity probe was started %d times for a device that was not added", probes)
+			}
+			if left := mustProposals(t, e); len(left) != 1 || left[0].ID != p[0].ID {
+				t.Errorf("the proposal must stay listed for the form: %+v", left)
+			}
+			e.audit.mu.Lock()
+			defer e.audit.mu.Unlock()
+			for _, ev := range e.audit.ev {
+				if strings.Contains(ev.Detail+ev.Result, "fleet-fake-pw") {
+					t.Errorf("the default password reached the audit: %+v", ev)
+				}
+			}
+		})
+	}
+}
+
+// Why: only a 401 means "it needs its password". A check that nobody answered (a timeout, a firewall) says nothing
+// about a password, and the spec accepts such a device unverified when no password goes with it ("Adding without a
+// probe"): the change for #1110 must not spread to it, or every device that drops one request could not be added.
+func TestAcceptWithoutPasswordOfAnUnansweredCheckStaysUnverified(t *testing.T) {
+	e := newEnv(t, "172.31.0.0/16", nil)
+	e.mgr.handleMessage(bg, discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	p := mustProposals(t, e)
+	id, err := e.mgr.AcceptVersion(bg, "admin", p[0].ID, p[0].Version)
+	if err != nil {
+		t.Fatalf("accept after an unanswered check: %v", err)
+	}
+	if d, _ := e.inv.Get(bg, id); d.MAC != "02:00:5e:d2:2c:14" || d.HTTPPassword != "" {
+		t.Fatalf("device = %+v", d)
+	}
+	if n := auditDetail(e, "discovery.accept", `"mac_unverified":true`); n != 1 {
+		t.Fatalf("the accept must be audited as MAC unverified, found %d", n)
 	}
 }
 

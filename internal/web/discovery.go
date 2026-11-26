@@ -64,7 +64,7 @@ func (v discView) OpenCount() int {
 }
 
 // discView is the Discovered box: one table of the address changes and conflicts a known device reported
-// and the new devices (and, with ?ignored, the ignored ones), with selection, Ignore and Add….
+// and the new devices (and, with ?ignored, the ignored ones), with selection, Ignore and Add.
 type discView struct {
 	Base, CSRF string
 	// Off: MQTT discovery is switched off (or there is no broker), only scans find devices.
@@ -97,7 +97,29 @@ type discView struct {
 	WhyQuery string
 	// ProposalDays is the number of days after which an ignored device that was not seen is forgotten.
 	ProposalDays int
+	// Added is how many devices "Add N selected" added (its banner, with a link to the list); NeedPassword are the
+	// rows it left because they need their web password, each with the link to its filled-in form (#1110).
+	Added        int
+	NeedPassword []needPasswordRow
 }
+
+// needPasswordRow is a device "Add N selected" did not add because it asks for its web password.
+type needPasswordRow struct {
+	ID         int64
+	Name, Href string
+}
+
+// needPasswordPath is the address form filled from proposal id with the sentence that it needs its web password:
+// where Add goes for such a device (#1110), and the link of its row in the "Add N selected" banner. It has no
+// #card-manual: the password field takes the focus (autofocus), which a browser skips on a page opened at a fragment.
+func needPasswordPath(id int64) string {
+	return "/devices/new?proposal=" + strconv.FormatInt(id, 10) + "&need=password"
+}
+
+// fromAddPage says whether an accept was posted by the Add page (its form carries from=add) and not by the
+// dashboard's Needs attention, which posts only the token and the version: an added device opens from the Add page,
+// the dashboard stays where it is.
+func fromAddPage(r *http.Request) bool { return r.PostFormValue("from") == "add" }
 
 // propRow is one discovered device of the New devices table.
 type propRow struct {
@@ -111,7 +133,6 @@ type propRow struct {
 	Last           time.Time
 	LastText       string
 	Ignored        bool
-	AddHref        string
 	Offline        bool // its MQTT LWT says Offline: it is added as seen, without a probe
 	OfflineSince   time.Time
 	OfflineText    string // "Offline since 2 h ago" style words, "" when not offline or the moment is unknown
@@ -144,19 +165,13 @@ const (
 	conflictHelp = "A Conflict means another device claims the address or MQTT topic of a known device. Nothing is changed until you resolve it in the inventory (edit or delete the stored device), then ignore it."
 )
 
-// Help says once what the rows of the table need explained: what Add and Add… do, what a new address
-// is, what a conflict is. Only kinds that have an open row are explained.
+// Help says once what the rows of the table need explained: that Add uses the default password (when one is
+// set), what a new address is, what a conflict is. Only kinds that have an open row are explained. A device that
+// needs its own web password needs no sentence here: its Add opens the form for it (#1110).
 func (v discView) Help() []string {
 	var out []string
-	for _, r := range v.Rows {
-		if !r.Ignored {
-			if v.HasDefault {
-				out = append(out, "Add uses the default device password from Settings. Add… opens the form so you can type the device’s own web password first.")
-			} else {
-				out = append(out, "Add uses no web password; Add… lets you type one first.")
-			}
-			break
-		}
+	if v.HasDefault && slices.ContainsFunc(v.Rows, func(r propRow) bool { return !r.Ignored }) {
+		out = append(out, "Add uses the default device password from Settings.")
 	}
 	if openMoves(v.Moves) > 0 {
 		out = append(out, moveHelp)
@@ -211,7 +226,7 @@ func (h *handler) discoveryData(r *http.Request) discView {
 		switch p.Kind {
 		case discovery.KindNew:
 			v.NewCount++
-			v.Rows = append(v.Rows, h.propRow(base, now, p, false))
+			v.Rows = append(v.Rows, h.propRow(now, p, false))
 		default:
 			v.addMove(h.moveRowOf(r.Context(), base, now, p, false))
 		}
@@ -229,7 +244,7 @@ func (h *handler) discoveryData(r *http.Request) discView {
 		switch {
 		case !v.ShowIgn:
 		case p.Kind == discovery.KindNew:
-			v.Rows = append(v.Rows, h.propRow(base, now, p, true))
+			v.Rows = append(v.Rows, h.propRow(now, p, true))
 		default:
 			v.addMove(h.moveRowOf(r.Context(), base, now, p, true))
 		}
@@ -319,12 +334,11 @@ func (h *handler) moveRowOf(ctx context.Context, base string, now time.Time, p d
 	return m
 }
 
-func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, ignored bool) propRow {
+func (h *handler) propRow(now time.Time, p discovery.Proposal, ignored bool) propRow {
 	row := propRow{ID: p.ID, Version: p.Version, Name: p.Device.Name, Hostname: p.Device.Net.Hostname, Topic: p.Device.Topic,
 		Address: netaddr.Display(p.Device.Address, p.Device.Port, "http"),
 		Source:  viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, Last: p.SeenAt,
-		LastText: agoWords(now, p.SeenAt), Ignored: ignored,
-		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10) + "#card-manual", Offline: p.LWT == "Offline"}
+		LastText: agoWords(now, p.SeenAt), Ignored: ignored, Offline: p.LWT == "Offline"}
 	if row.Offline && !p.OfflineSince.IsZero() {
 		row.OfflineSince, row.OfflineText = p.OfflineSince, agoWords(now, p.OfflineSince)
 	}
@@ -757,15 +771,17 @@ func (h *handler) discoveryAccept(w http.ResponseWriter, r *http.Request) {
 	if pw := h.defaultPasswordFor(r); pw != "" {
 		ctx = discovery.WithDevicePassword(ctx, pw)
 	}
-	_, err := h.d.Discovery.AcceptVersion(ctx, actor(r), id, version)
+	devID, err := h.d.Discovery.AcceptVersion(ctx, actor(r), id, version)
 	var um *inventory.UnverifiedMoveError
 	switch {
+	case err == nil && shown.P.Kind == discovery.KindAddressChange:
+		redirect(w, r, discBack(r, "moved"))
+	case err == nil && fromAddPage(r):
+		redirect(w, r, "/devices/"+strconv.FormatInt(int64(devID), 10)+"?ok=added") // where a manual add ends too
 	case err == nil:
-		if shown.P.Kind == discovery.KindAddressChange {
-			redirect(w, r, discBack(r, "moved"))
-		} else {
-			redirect(w, r, discBack(r, "accepted"))
-		}
+		redirect(w, r, "/") // the dashboard's Needs attention: the row leaves it, the device joins the fleet
+	case errors.Is(err, discovery.ErrNeedsPassword):
+		redirect(w, r, needPasswordPath(id))
 	case errors.As(err, &um):
 		token := h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), prefix+um.Target, nil)
 		p := h.discoveryData(r)
@@ -822,29 +838,49 @@ func (h *handler) discoveryAcceptSelected(w http.ResponseWriter, r *http.Request
 	if pw := h.defaultPasswordFor(r); pw != "" {
 		ctx = discovery.WithDevicePassword(ctx, pw)
 	}
-	added, failed := 0, []string{}
+	var added []model.DeviceID
+	var failed []string
+	var needPW []needPasswordRow
+	base := httpBase(r)
 	for i, id := range ids {
 		shown, ok := h.shownProposal(r, id)
 		if !ok || shown.P.Kind != discovery.KindNew {
 			failed = append(failed, fmt.Sprintf("#%d is no longer listed", id))
 			continue
 		}
-		if _, err := h.d.Discovery.AcceptVersion(ctx, actor(r), id, versions[i]); err != nil {
+		devID, err := h.d.Discovery.AcceptVersion(ctx, actor(r), id, versions[i])
+		switch {
+		case errors.Is(err, discovery.ErrNeedsPassword):
+			// not a failure: it is added through its filled-in form, which the banner links
+			needPW = append(needPW, needPasswordRow{ID: id, Name: nameOr(shown.P), Href: base + needPasswordPath(id)})
+		case err != nil:
 			h.log.InfoContext(ctx, "discovery: add selected", "id", id, "err", err)
 			failed = append(failed, nameOr(shown.P)+": "+strings.TrimPrefix(errText(err), "discovery: "))
-			continue
+		default:
+			added = append(added, devID)
 		}
-		added++
 	}
-	if len(failed) == 0 {
+	switch {
+	case len(failed) == 0 && len(needPW) == 0 && len(added) == 1:
+		redirect(w, r, "/devices/"+strconv.FormatInt(int64(added[0]), 10)+"?ok=added") // one device: as a single Add
+		return
+	case len(failed) == 0 && len(needPW) == 0:
 		// discBack always ends in "ok=accepted", so "&n=" starts a new parameter; the count lets
-		// the notice say how many devices were added.
-		redirect(w, r, discBack(r, "accepted")+"&n="+strconv.Itoa(added))
+		// the banner say how many devices were added.
+		redirect(w, r, discBack(r, "accepted")+"&n="+strconv.Itoa(len(added)))
+		return
+	case len(failed) == 0 && len(added) == 0 && len(needPW) == 1:
+		redirect(w, r, needPasswordPath(needPW[0].ID)) // one device that needs its password: as a single Add
 		return
 	}
 	p := h.discoveryData(r)
-	p.Error = fmt.Sprintf("%s added, %d not: %s.", plural(added, "device"), len(failed), strings.Join(failed, "; "))
-	h.discoveryRender(w, r, http.StatusConflict, p)
+	p.Added, p.NeedPassword = len(added), needPW
+	status := http.StatusOK
+	if len(failed) > 0 {
+		status = http.StatusConflict
+		p.Error = fmt.Sprintf("%s added, %d not: %s.", plural(len(added), "device"), len(failed), strings.Join(failed, "; "))
+	}
+	h.discoveryRender(w, r, status, p)
 }
 
 // formOutOfDate is what a page that no longer matches the proposals behind its numbers is told.

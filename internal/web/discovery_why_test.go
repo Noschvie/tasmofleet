@@ -261,7 +261,7 @@ func TestAddPageWithoutALookupShowsNoAnswerAndAsksNothing(t *testing.T) {
 		if len(fd.explained) != 0 || strings.Contains(body, `id="why"`) {
 			t.Fatalf("%s: lookups = %v, answer shown = %v", path, fd.explained, strings.Contains(body, `id="why"`))
 		}
-		if !strings.Contains(body, "Not listed? Look it up") {
+		if !strings.Contains(body, "Find a device by address") {
 			t.Errorf("%s: the lookup form is missing", path)
 		}
 	}
@@ -278,20 +278,20 @@ func TestLookupErrorGivesASentenceNotAnErrorPage(t *testing.T) {
 	}
 }
 
-// Why (#713): an admin who sees "Show ignored (1)" must learn there when an ignored device comes back,
+// Why (#713, #1110): an admin who ticks "Show ignored (1)" must learn there when an ignored device comes back,
 // and the number of days is the prune's (discovery.ProposalTTL), not a copy of it.
 func TestShowIgnoredSaysWhenAnIgnoredDeviceComesBack(t *testing.T) {
 	now := time.Now()
 	fd := &fakeDiscovery{ignored: []discovery.Proposal{{ID: 5, Version: "v5", Kind: discovery.KindNew, Via: "mqtt", SeenAt: now, Device: model.Device{Name: "old", Address: "10.0.0.51", MAC: "aa:bb:cc:dd:ee:05"}}}}
 	e := setupWith(t, func(d *Deps) { d.Discovery = fd })
-	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
-	hasAll(t, body, "stays hidden while", "30 days without a sighting")
+	_, body := e.do(t, "GET", "/devices/new?ignored=1", "admin", nil)
+	hasAll(t, body, "stay hidden until they change or reappear after 30 days.")
 	if want := int(discovery.ProposalTTL / (24 * time.Hour)); want != 30 {
 		t.Fatalf("the prune keeps proposals %d days: update the acceptance text of #713", want)
 	}
 	fd.ignored = nil
-	_, body = e.do(t, "GET", "/devices/new", "admin", nil)
-	if strings.Contains(body, "stays hidden while") {
+	_, body = e.do(t, "GET", "/devices/new?ignored=1", "admin", nil)
+	if strings.Contains(body, "stay hidden until") {
 		t.Error("the help line shows with nothing ignored")
 	}
 }

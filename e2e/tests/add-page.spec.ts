@@ -4,7 +4,7 @@ import { test, expect } from "../support/fixtures";
 import { expectNoOverflow } from "../support/layout";
 import { App, Devenv, startApp, startDevenv } from "../support/stack";
 
-// #410: Devices -> Add is one page with four boxes (Discovered + Network scan wide, Add manually +
+// #410: Devices -> Add is one page with four boxes (Discovered + Network scan wide, Add by address +
 // Import narrow), no tabs. Every way of adding a device still works from its box.
 const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 let app: App;
@@ -69,7 +69,7 @@ test.beforeEach(async ({ page }) => {
 const box = (page: import("@playwright/test").Page, id: string) => page.locator(`#card-${id}`);
 
 // Why: the four ways to add devices are one page, so there are fewer clicks and fewer menus: Discovered and
-// Network scan in the wide column on the left, Add manually and Import in the narrow one on the right, no
+// Network scan in the wide column on the left, Add by address and Import in the narrow one on the right, no
 // tabs. Add devices is the List's button and no menu entry (#1106), so the sub-navigation says List · Policy ·
 // Device backups with List lit, and the trail names the page under List.
 test("four boxes in two columns, no tabs, the menu says List, Policy, Device backups", { tag: "@core" }, async ({ page }) => {
@@ -85,7 +85,7 @@ test("four boxes in two columns, no tabs, the menu says List, Policy, Device bac
   const [disc, scan, manual, imp] = [await b("discovered"), await b("scan"), await b("manual"), await b("import")];
   expect(disc.x).toBeLessThan(manual.x);
   expect(Math.abs(scan.x - disc.x), "Network scan under Discovered").toBeLessThan(2);
-  expect(Math.abs(imp.x - manual.x), "Import under Add manually").toBeLessThan(2);
+  expect(Math.abs(imp.x - manual.x), "Import under Add by address").toBeLessThan(2);
   expect(scan.y).toBeGreaterThan(disc.y + disc.height - 1);
   expect(imp.y).toBeGreaterThan(manual.y + manual.height - 1);
   expect(disc.width, "the Discovered box is the wide one").toBeGreaterThan(manual.width * 1.7);
@@ -94,8 +94,8 @@ test("four boxes in two columns, no tabs, the menu says List, Policy, Device bac
   await expectNoOverflow(page, "Add devices");
 });
 
-// Why: on a phone the order is the one a person reads: Discovered, Add manually, Network scan, Import.
-test("phone: Discovered, Add manually, Network scan, Import, one column", async ({ page }) => {
+// Why: on a phone the order is the one a person reads: Discovered, Add by address, Network scan, Import.
+test("phone: Discovered, Add by address, Network scan, Import, one column", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(app.url + "/devices/new");
   const ys: number[] = [];
@@ -108,9 +108,9 @@ test("phone: Discovered, Add manually, Network scan, Import, one column", async 
   await expectNoOverflow(page, "Add devices phone");
 });
 
-// Why: Ignore, Show ignored and Show again of a discovered device must keep working from the box, and "Add…" must
-// take the person to the manual form with that device filled in (the form is in the same page).
-test("Discovered: ignore, show ignored, show again, and Add… prefills the manual box", async ({ page }) => {
+// Why: Ignore, Show ignored and Show again of a discovered device must keep working from the box, and the row keeps
+// the two actions that differ: Ignore and Add (the second "Add…" is gone, #1110; add-devices-accept.spec.ts adds).
+test("Discovered: ignore, show ignored, show again, and the row offers Ignore and Add", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/devices/new");
   const row = (name: string) => box(page, "discovered").getByRole("row").filter({ hasText: name });
@@ -121,9 +121,8 @@ test("Discovered: ignore, show ignored, show again, and Add… prefills the manu
   await expect(box(page, "discovered").getByRole("checkbox", { name: /Show ignored/ })).toBeChecked();
   await row("Porch plug").getByRole("button", { name: "Show again" }).click();
   await expect(page.getByText("Shown again.", { exact: true })).toBeVisible();
-  await row("Porch plug").getByRole("link", { name: "Add…" }).click();
-  await expect(box(page, "manual").locator("input[name=address]")).toHaveValue("127.0.0.22");
-  await expect(box(page, "manual")).toContainText("Prefilled from MQTT discovery");
+  await expect(row("Porch plug").getByRole("button")).toHaveText(["Ignore", "Add"]);
+  await expect(row("Porch plug").getByRole("link")).toHaveCount(0);
 });
 
 // Why (A3-003, #1081): Show ignored was a link with role=checkbox: a screen reader announced a checkbox that Space
@@ -176,12 +175,12 @@ test("Discovered: the lookup says where a device is and what it has not seen", a
   await page.goto(app.url + "/devices/new");
   const disc = box(page, "discovered");
   await expect(disc.locator("#why")).toHaveCount(0);
-  await disc.getByLabel("Not listed? Look it up").fill("127.0.0.21");
+  await disc.getByLabel("Find a device by address").fill("127.0.0.21");
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(page).toHaveURL(/why=127\.0\.0\.21/);
   await expect(disc.locator("#why")).toContainText("Shed light");
   await expect(disc.locator("#why")).toContainText("is listed in the table");
-  await disc.getByLabel("Not listed? Look it up").fill("127.0.0.99");
+  await disc.getByLabel("Find a device by address").fill("127.0.0.99");
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(disc.locator("#why")).toContainText("has not seen this on MQTT");
   await expectNoOverflow(page, "Add devices with a lookup");
@@ -376,7 +375,7 @@ test("Network scan: Scan now opens the live results, the box keeps a one-line su
 });
 
 // Why: the manual box tests a connection without storing anything and adds the device when asked.
-test("Add manually: Test connection stores nothing, Add device does", async ({ page }) => {
+test("Add by address: Test connection stores nothing, Add device does", async ({ page }) => {
   const [name, d] = Object.entries(env.devices)[0];
   const [host, port] = d.addr.split(":");
   await page.goto(app.url + "/devices/new");

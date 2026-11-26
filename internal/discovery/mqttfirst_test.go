@@ -625,13 +625,14 @@ func TestOnlineAcceptIsNotProbedTwice(t *testing.T) {
 }
 
 // Why (L5): the Discovered tab always sends the default password; when it is
-// refused, the message must point to the way that works ("Add…").
+// refused, the message must point to the way that works: the address form
+// ("Add by address"), since the row has no second Add any more (#1110).
 func TestDefaultPasswordRefusalPointsToAddForm(t *testing.T) {
 	e := newMQTTEnv(t, nil)
 	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
 	_, err := e.mgr.Accept(WithDevicePassword(bg, "fake-default"), "admin", onlyNew(t, e.env).ID)
-	if err == nil || !strings.Contains(err.Error(), "Add…") {
-		t.Fatalf("err = %v, want a pointer to Add…", err)
+	if err == nil || !strings.Contains(err.Error(), "add it by address") || strings.Contains(err.Error(), "Add…") {
+		t.Fatalf("err = %v, want a pointer to the address form", err)
 	}
 }
 
