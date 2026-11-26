@@ -80,7 +80,7 @@ test("What's new shows five releases, each with its headlines and a closed Detai
   await page.goto(app.url + "/whats-new");
   await expect(page.locator(".wn-rel")).toHaveCount(5);
   await expect(page.locator(".wn-jump a")).toHaveCount(5);
-  await expect(page.getByText("Older releases")).toHaveCount(0);
+  await expect(page.locator(".wn-jump details")).toHaveCount(0); // no "Older releases" fold in the jump card
   await expect(page.locator(".wn-rel details.fold")).toHaveCount(5);
   await expect(page.locator(".wn-rel details.fold[open]")).toHaveCount(0);
   const first = page.locator(".wn-rel").first();
