@@ -42,7 +42,7 @@ func (s onceFacts) DeviceFacts(context.Context, model.Device) (transport.Facts, 
 }
 
 const (
-	pathsCardText = "How TasmoFleet reaches this device"
+	pathsCardText = `id="devpaths-facts-sum"` // the folds of the Connection card: its address rows stay without paths
 	topicHintMark = `id="topic-hint"`
 )
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"html"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -66,7 +67,7 @@ func TestCardAndDisabledButtonsCarryTheChooserSentence(t *testing.T) {
 	e := setupWith(t, withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: f}}))
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 
-	if !strings.Contains(body, "How TasmoFleet reaches this device") {
+	if !strings.Contains(body, `<h2 id="dc-paths">Connection</h2>`) || !strings.Contains(body, "devpaths-actions") {
 		t.Fatal("no connection card on the overview")
 	}
 	// #1082: the card keeps the full sentence; the note the disabled button points at says what to do, in the short
@@ -125,7 +126,7 @@ func TestForgetIsAdminOnlyAndOnlyWithARecordedNo(t *testing.T) {
 	if strings.Contains(op, "fwreach/forget") || strings.Contains(op, ">Forget<") {
 		t.Fatal("an operator must not get Forget")
 	}
-	if !strings.Contains(op, "How TasmoFleet reaches this device") {
+	if !strings.Contains(op, `<h2 id="dc-paths">Connection</h2>`) {
 		t.Fatal("an operator still sees the card, read-only")
 	}
 	_, none := e.do(t, "GET", "/devices/2", "admin", nil)
@@ -174,13 +175,13 @@ func TestListMarkerOnlyWhenCommandsGoOverMQTT(t *testing.T) {
 func TestPageRendersWithoutFacts(t *testing.T) {
 	e := setupWith(t, withFacts(fakeFacts{err: errors.New("db down")}))
 	r, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	if r.StatusCode != 200 || strings.Contains(body, "How TasmoFleet reaches this device") {
-		t.Fatalf("status %d, card shown without facts", r.StatusCode)
+	if r.StatusCode != 200 || strings.Contains(body, `id="devpaths-facts-sum"`) || !strings.Contains(visibleText(body), "Address 10.0.0.1") {
+		t.Fatalf("status %d, paths shown without facts, or the address missing", r.StatusCode)
 	}
 	e = setup(t)
 	_, body = e.do(t, "GET", "/devices/1", "admin", nil)
-	if strings.Contains(body, "How TasmoFleet reaches this device") {
-		t.Fatal("no transport service, no card")
+	if strings.Contains(body, `id="devpaths-facts-sum"`) {
+		t.Fatal("no transport service, no paths")
 	}
 }
 
@@ -239,7 +240,13 @@ func TestUpdateButtonIgnoresThePullPath(t *testing.T) {
 func TestLiveRefreshSwapsPartsNotFolds(t *testing.T) {
 	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
 	e := setupWith(t, withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: f}}))
-	_, body := e.do(t, "GET", "/devices/1/live", "admin", nil)
+	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
+	sig := regexp.MustCompile(`id="identsig" name="ident" value="([0-9a-f]+)"`).FindStringSubmatch(page)
+	if sig == nil {
+		t.Fatal("the page names no Identity signature")
+	}
+	// the Identity card (and so its Firmware details fold) travels only when it changed: this asks with its signature
+	_, body := e.do(t, "GET", "/devices/1/live?ident="+sig[1], "admin", nil)
 	for _, id := range []string{"devpaths-facts-sum", "devpaths-facts", "devpaths-actions-sum", "devpaths-actions"} {
 		if !strings.Contains(body, `id="`+id+`"`) {
 			t.Fatalf("live answer lacks %s", id)
@@ -265,7 +272,7 @@ func TestDisabledBackupIsDescribedByAVisibleLine(t *testing.T) {
 // reordering the rows cannot change what it says.
 func TestFactsSummaryByKey(t *testing.T) {
 	c := pathCard{Facts: []pathRow{{Key: keyFW, Value: "No"}, {Key: keyMQTT, Value: "On our broker"}, {Key: keyHTTP, Value: "Not reachable"}}}
-	if got, want := c.FactsSummary(), "Connection: HTTP not reachable, MQTT on our broker, firmware server no"; got != want {
+	if got, want := c.FactsSummary(), "HTTP not reachable, MQTT on our broker, firmware server no"; got != want {
 		t.Fatalf("%q, want %q", got, want)
 	}
 }
@@ -374,9 +381,6 @@ func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
 			}
 			if got := strings.Contains(body, "MQTT on another broker"); got != tc.want {
 				t.Fatalf("tile names the other broker = %v, want %v", got, tc.want)
-			}
-			if got := strings.Contains(body, "This device does not report to TasmoFleet"); got != tc.want {
-				t.Fatalf("sensor note names the other broker = %v, want %v", got, tc.want)
 			}
 			if strings.Contains(body, "<dt>MQTT broker</dt>") {
 				t.Fatal("the Connection card lists the MQTT broker again")

@@ -5029,6 +5029,14 @@ button.btn[aria-disabled="true"]:focus-visible {
 .ukv dd.ukv-name {
   font-weight: 500;
 }
+/* a long value (KVRow Wide: Hostname, MQTT topic, OTA URL, Notes, the firmware version) takes the whole row on a phone, the
+   label above it: beside a 118px key a 40 character topic is squeezed into a narrow column and breaks mid-word (#1112) */
+@media (max-width: 44.99rem) {
+  .ukv-row.ukv-wide {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-2);
+  }
+}
 
 /* inline banners: an action that is a link */
 .banner a.banner-btn {
@@ -15239,6 +15247,22 @@ details.devcard > summary {
   padding: var(--sp-6) 0;
   border-top: var(--hair-w) solid var(--color-border);
   align-items: baseline;
+}
+/* from tablet width the date column is as wide as its widest date and every row shares it (subgrid): a fixed 96px broke
+   "Yesterday, 10:21 AM" of an en-US browser onto two lines (#1112). Phones keep the two columns below. */
+@media (min-width: 45rem) {
+  .stab-boots {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) auto;
+    column-gap: var(--sp-10);
+  }
+  .stab-boots li {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+  .stab-boots .when {
+    white-space: nowrap;
+  }
 }
 .stab-boots .when {
   color: var(--color-text-2);

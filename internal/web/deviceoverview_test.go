@@ -223,7 +223,7 @@ func TestRelayBoxMeteringLabelsAndPerChannelWatts(t *testing.T) {
 		t.Fatalf("channel count differs from relay count: %+v", odd)
 	}
 	none := relayBoxOf(model.Health{Power: four}, health.Telemetry{}, nil, true)
-	if none.Right != "3 of 4 on · no energy meter" || none.Rows[0].Line != "On" {
+	if none.Right != "3 of 4 on" || none.Rows[0].Line != "On" {
 		t.Fatalf("no meter: %+v", none)
 	}
 	one := relayBoxOf(model.Health{Power: map[string]string{"POWER": "ON"}}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(133, 0, 0, 0)}}, nil, true)
@@ -235,16 +235,16 @@ func TestRelayBoxMeteringLabelsAndPerChannelWatts(t *testing.T) {
 	}
 }
 
-// Why (#441): Connection shows how the device is connected: SSID/BSSID/channel on Wi-Fi, the
-// Ethernet MAC on a cable. The device's MQTT broker is not a network fact and does not belong in
-// this card; "How TasmoFleet reaches it" says so when the broker is a different one.
+// Why (#441, #1112): the card of the medium shows how the device is connected: SSID/BSSID/channel on Wi-Fi, the
+// Ethernet MAC on a cable. The address TasmoFleet uses is the Connection card's (addressRows). The device's MQTT broker
+// is not a network fact and does not belong in this card; the Connection card says so when the broker is a different one.
 func TestConnectionCardFollowsTheLink(t *testing.T) {
 	wifi := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.26", MQTTHost: "mqtt.home.internal"}, Facts: snapFacts{Gateway: "172.27.13.1", SSID: "IoT", BSSID: "8C:30", Channel: 11}})
-	if wifi.Title != "Connection · Wi-Fi" || kvKeys(wifi.Rows) != "Address,Gateway,SSID,BSSID,Channel" || wifi.Rows[4].Value != "11 (2.4 GHz)" {
+	if wifi.Title != "Wi-Fi" || kvKeys(wifi.Rows) != "Gateway,SSID,BSSID,Channel" || wifi.Rows[3].Value != "11 (2.4 GHz)" {
 		t.Fatalf("wifi: %+v", wifi)
 	}
 	eth := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.44", MAC: "aa", MACs: []string{"aa", "bb"}}, Facts: snapFacts{Wired: true, Gateway: "172.27.13.1", Subnet: "255.255.255.0", DNS: "172.27.13.1, 9.9.9.9"}})
-	if eth.Title != "Connection · Ethernet" || kvKeys(eth.Rows) != "Address,Gateway,Subnet mask,DNS,Ethernet MAC" || eth.Rows[2].Value != "255.255.255.0" || eth.Rows[3].Value != "172.27.13.1, 9.9.9.9" || eth.Rows[4].Value != "bb" {
+	if eth.Title != "Ethernet" || kvKeys(eth.Rows) != "Gateway,Subnet mask,DNS,Ethernet MAC" || eth.Rows[1].Value != "255.255.255.0" || eth.Rows[2].Value != "172.27.13.1, 9.9.9.9" || eth.Rows[3].Value != "bb" {
 		t.Fatalf("ethernet: %+v", eth)
 	}
 }
@@ -257,9 +257,8 @@ func kvKeys(rows []ui.KVRow) string {
 	return strings.Join(k, ",")
 }
 
-// Why: Identity is the static facts in a fixed order; "Chip" is gone (the family is in the header's
-// meta line). The device's own fields (StatusFWR, #289) follow the card's own rows, TasmoFleet's
-// reading comes last and carries the flash size.
+// Why: Identity is the static facts in a fixed order. The device's own fields (StatusFWR, #289) follow the card's own
+// rows in the closed Firmware details fold (#1112), TasmoFleet's reading comes last and carries the flash size.
 func TestIdentityRowsFollowTheMockup(t *testing.T) {
 	e := setup(t)
 	d := e.inv.devs[1]
@@ -268,10 +267,10 @@ func TestIdentityRowsFollowTheMockup(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 	i := strings.Index(body, `id="dc-ident"`)
 	ident := body[i : i+strings.Index(body[i:], `</section>`)] // the card, wherever the stacks put it
-	if strings.Contains(ident, "<dt>Chip</dt>") || !strings.Contains(ident, "2 MB") {
+	if !strings.Contains(ident, "2 MB") {
 		t.Errorf("identity:\n%s", ident)
 	}
-	last, order := -1, []string{"<dt>TasmoFleet ID", "<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>MAC", "<dt>Hardware", "TasmoFleet&#39;s reading", "<dt>Variant", "<dt>Flash size"}
+	last, order := -1, []string{"<dt>TasmoFleet ID", "<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>MAC", "Firmware details", "<dt>Chip", "<dt>Variant", "<dt>Flash size"}
 	for _, k := range order {
 		at := strings.Index(ident, k)
 		if at < last {
@@ -493,9 +492,8 @@ func TestIdentityShowsTheOTAURLOnlyWhenKnown(t *testing.T) {
 }
 
 // Why (#145, D5): a device without a relay gets a Sensors box instead of the relay box, filled from
-// MQTT telemetry only (no Status 10 polling). A device we do not hear over MQTT says so in one
-// line instead of showing an empty box that looks like a fault; one that does but has sent nothing
-// yet says that.
+// MQTT telemetry only (no Status 10 polling). A device with nothing to show gets no box at all, not a card that
+// explains its own emptiness (#1112, A2-014).
 func TestSensorsBoxReplacesTheRelayBox(t *testing.T) {
 	tele := health.Telemetry{Sensors: []health.SensorReading{
 		{Sensor: "BME280", Name: "Temperature", Value: 12.4, Unit: "°C"},
@@ -503,7 +501,7 @@ func TestSensorsBoxReplacesTheRelayBox(t *testing.T) {
 		{Sensor: "BH1750", Name: "Illuminance", Value: 3400.256, Unit: "lx"},
 	}}
 	box := sensorBoxOf(overviewIn{Dev: model.Device{MQTT: model.MQTTOurs}, Health: onlineHealth(nil), Tele: tele})
-	if box == nil || len(box.Cells) != 3 || box.Right != "no relay" || box.Note != "" {
+	if box == nil || len(box.Cells) != 3 || box.Right != "no relay" {
 		t.Fatalf("%+v", box)
 	}
 	want := []sensorCell{{"Temperature · BME280", "12.4 °C"}, {"Pressure · BME280", "1012 hPa"}, {"Illuminance · BH1750", "3400.26 lx"}}
@@ -512,13 +510,11 @@ func TestSensorsBoxReplacesTheRelayBox(t *testing.T) {
 			t.Errorf("cell %d: %+v, want %+v", i, box.Cells[i], c)
 		}
 	}
-	httpOnly := sensorBoxOf(overviewIn{Dev: model.Device{}, Health: model.Health{State: model.HealthOnline, SeenHTTP: now0}})
-	if len(httpOnly.Cells) != 0 || !strings.Contains(httpOnly.Note, "MQTT") {
-		t.Errorf("HTTP-only device: %+v", httpOnly)
+	if b := sensorBoxOf(overviewIn{Dev: model.Device{}, Health: model.Health{State: model.HealthOnline, SeenHTTP: now0}}); b != nil {
+		t.Errorf("HTTP-only device without readings: %+v", b)
 	}
-	quiet := sensorBoxOf(overviewIn{Dev: model.Device{MQTT: model.MQTTOurs}, Health: onlineHealth(nil)})
-	if quiet.Note != "No sensor readings yet." {
-		t.Errorf("no readings yet: %q", quiet.Note)
+	if b := sensorBoxOf(overviewIn{Dev: model.Device{MQTT: model.MQTTOurs}, Health: onlineHealth(nil)}); b != nil {
+		t.Errorf("no readings yet: %+v", b)
 	}
 }
 
@@ -752,7 +748,7 @@ func TestActivityRowKeepsTheBadgeInItsOwnElementAfterTheText(t *testing.T) {
 var httpFresh = transport.HTTPState{State: transport.HTTPOK}
 
 // Why (#416): the tile said "Reachable" for days after ONE successful health poll since start,
-// while the card "How TasmoFleet reaches this device" (same facts) correctly said "Not checked
+// while the Connection card (same facts) correctly said "Not checked
 // lately". Tile and card must read the same HTTP state, and an old contact shows its age.
 func TestReachTileAndConnectionCardAgreeOnHTTP(t *testing.T) {
 	ours := model.Device{MQTT: model.MQTTOurs}

@@ -62,7 +62,7 @@ func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 	e.bk.data = []byte(snapshotDoc)
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 	for _, want := range []string{
-		`<h2 id="dc-ident">Identity</h2>`, `<h2 id="dc-conn">Connection · Wi-Fi</h2>`, `<h2 id="dc-act">Activity</h2>`, `<h2 id="dc-relays">Relays</h2>`,
+		`<h2 id="dc-ident">Identity</h2>`, `<h2 id="dc-conn">Wi-Fi</h2>`, `<h2 id="dc-paths">Connection</h2>`, `<h2 id="dc-act">Activity</h2>`, `<h2 id="dc-relays">Relays</h2>`,
 		`<dd class="mono" data-visual-mask>kitchen-lamp</dd>`, // hostname from the snapshot
 		`<dd class="mono" data-visual-mask>10.0.0.254</dd>`,   // gateway
 		`<dd class="mono" data-visual-mask>lab-iot</dd>`, `<dd class="mono" data-visual-mask>6 (2.4 GHz)</dd>`,
@@ -70,7 +70,7 @@ func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 		`data-visual-mask>-61 dBm</div>`, `78 % · lab-iot · ch 6`,
 		`>MQTT · HTTP</div>`, "Connected · Reachable",
 		`data-tile="policy"`, `>1 / 2</div>`, "TelePeriod 60 → 300", "Make compliant…", `name="only" value="1"`, `name="from" value="device"`, // the marker Cancel on the plan page keys on (#1002)
-		`Relay 1 <span class="mono">POWER</span>`, `aria-label="Relay 1 is On: switch it Off"`,
+		`<span class="dev-relay-n" title="POWER">Relay 1</span>`, `aria-label="Relay 1 is On: switch it Off"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
@@ -524,12 +524,12 @@ func TestWiredDeviceShowsAnEthernetCardAndItsEthernetMAC(t *testing.T) {
 	d.Net = model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Wired: true, ReadAt: time.Now()}
 	e.inv.devs[1] = d
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<h2 id="dc-conn">Connection · Ethernet</h2>`, `<dt>Ethernet MAC</dt><dd class="mono" data-visual-mask>08:d1:f9:2b:e9:71</dd>`, `>192.168.7.1</dd>`, `data-tile="link"`, ">Wi-Fi off</div>"} {
+	for _, want := range []string{`<h2 id="dc-conn">Ethernet</h2>`, `<dt>Ethernet MAC</dt><dd class="mono" data-visual-mask>08:d1:f9:2b:e9:71</dd>`, `>192.168.7.1</dd>`, `data-tile="link"`, ">Wi-Fi off</div>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
 		}
 	}
-	for _, bad := range []string{"<dt>SSID</dt>", "<dt>Signal</dt>", "dev-bar", "0.0.0.0", `data-tile="wifi"`, "Connection · Wi-Fi"} {
+	for _, bad := range []string{"<dt>SSID</dt>", "<dt>Signal</dt>", "dev-bar", "0.0.0.0", `data-tile="wifi"`, "Connection · Wi-Fi", `<h2 id="dc-conn">Wi-Fi</h2>`} {
 		if strings.Contains(body, bad) {
 			t.Errorf("wired device page still has %q", bad)
 		}

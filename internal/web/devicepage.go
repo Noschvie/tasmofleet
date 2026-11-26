@@ -35,6 +35,9 @@ type deviceOverview struct {
 	Stab     *stabCard // nil without the stability store
 	Ident    identCard
 	Conn     connCard
+	// Addr is the top of the Connection card: the address TasmoFleet uses and the IP the device reports. Shown even
+	// when the paths could not be read (Paths nil).
+	Addr     []ui.KVRow
 	Paths    *pathCard // nil without the transport service
 	Activity devActivity
 }
@@ -96,7 +99,6 @@ type relayBox struct {
 type sensorBox struct {
 	Right string
 	Cells []sensorCell
-	Note  string // why there are no cells
 }
 
 // sensorCell is one reading: "Temperature · BME280" and "12.4 °C".
@@ -155,8 +157,11 @@ type devActRow struct {
 // connCard is the Connection card: how TasmoFleet reaches the device and how the device is
 // connected.
 type connCard struct {
-	Title string // "Connection · Wi-Fi" or "Connection · Ethernet"
+	Title string // "Wi-Fi" or "Ethernet": the card is the medium's; the paths card is "Connection" (#1112)
 	Rows  []ui.KVRow
+	// History is the signal of the last 24 hours and the Wi-Fi drops, with a sparkline: rows of a Wi-Fi device only.
+	// Read at page load like the rest of the card (the live refresh swaps Stability, not this card).
+	History []stabRow
 }
 
 // overviewRows is how many entries the Activity box shows; the complete list is one link away.
@@ -348,14 +353,6 @@ func macShown(d model.Device, wired bool) string {
 	return d.MAC
 }
 
-// orUnknown is the value of a row, "Unknown" when there is none.
-func orUnknown(s string) string {
-	if s == "" {
-		return "Unknown"
-	}
-	return s
-}
-
 // identity builds the Identity card for the viewer. Credentials never leave the server: the
 // card says only whether a web login is stored.
 func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFacts) identCard {
@@ -365,8 +362,8 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	}
 	rows := []ui.KVRow{
 		{Key: "Device name", Value: d.Name, IsName: true},
-		{Key: "Hostname", Value: orUnknown(f.Hostname), Mono: true, Mask: true},
-		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
+		{Key: "Hostname", Value: orDash(f.Hostname), Mono: true, Mask: true, Wide: true},
+		{Key: "MQTT topic", Value: orDash(d.Topic), Mono: true, Wide: true},
 	}
 	if gs := d.GroupTopics(); len(gs) > 0 { // #1005: every group topic the device listens on, GroupTopic1 first
 		rows = append(rows, ui.KVRow{Key: "Group topics", Value: strings.Join(gs, ", "), Mono: true, Soft: true, Wide: true})
@@ -374,7 +371,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	if d.OTAURL != "" { // #127: where the device would update from; the prober stored it without credentials
 		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true, Wide: true})
 	}
-	rows = append(rows, ui.KVRow{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true})
+	rows = append(rows, ui.KVRow{Key: "MAC", Value: orDash(d.MAC), Mono: true, Mask: true})
 	if d.HTTPUser != "" || d.HTTPPassword != "" {
 		login := "password set"
 		if d.HTTPPassword == "" {
@@ -441,10 +438,11 @@ func (h *handler) crWarnPercent() int {
 	return h.d.CRWarnPercent()
 }
 
-// fwrRow is one StatusFWR field of Status 2 under Tasmota's own name, with the value as the
-// device sent it and a short explanation (#289).
+// fwrRow is one StatusFWR field of Status 2 under a plain label, with the value as the device sent it (CPU speed and
+// the settings memory in words) and a short explanation (#289). Name is Tasmota's own name for it: secondary text beside
+// the label, and the id of the explanation.
 type fwrRow struct {
-	Name, Value, Info string
+	Label, Name, Value, Info string
 	// Wide: a long value, which takes the whole row on a phone.
 	Wide bool
 }
@@ -456,7 +454,7 @@ func statusFWRRows(i model.Identity) []fwrRow {
 	var rows []fwrRow
 	add := func(name, value, info string) {
 		if value != "" {
-			rows = append(rows, fwrRow{Name: name, Value: value, Info: info, Wide: name == "Version" || name == "BuildDateTime"})
+			rows = append(rows, fwrRow{Label: fwrLabels[name], Name: name, Value: value, Info: info, Wide: name == "Version" || name == "BuildDateTime"})
 		}
 	}
 	add("Version", f.Version, "The firmware version and its build in brackets, as Tasmota prints it.")
@@ -464,10 +462,10 @@ func statusFWRRows(i model.Identity) []fwrRow {
 	add("Core", f.Core, "Version of the Arduino core the firmware is built on.")
 	add("SDK", f.SDK, "Version of the Espressif SDK below the core.")
 	if f.CPUFrequency > 0 {
-		add("CpuFrequency", strconv.Itoa(f.CPUFrequency), "Current CPU clock in MHz.")
+		add("CpuFrequency", cpuSpeed(f.CPUFrequency), "Current CPU clock.")
 	}
 	add("Hardware", i.Hardware, "The chip as Tasmota names it: model, revision and, on an ESP32, the package.")
-	add("CR", f.CR, "Characters used / available in the settings text area, which names, topics, rules, URLs and passwords share. When it is full, longer values are not saved.")
+	add("CR", settingsMemory(f), "Characters used and available in the settings text area, which names, topics, rules, URLs and passwords share. When it is full, longer values are not saved.")
 	return rows
 }
 

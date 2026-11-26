@@ -69,7 +69,7 @@ func TestDevicePageNamesTheAPIOffAsTheReasonForNoPath(t *testing.T) {
 	})
 	e.health[1] = apiOffHealth()
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{"HTTP API off (SetOption128 0)", "SetOption128 1", "Connection: HTTP API off"} {
+	for _, want := range []string{"HTTP API off (SetOption128 0)", "SetOption128 1", `id="devpaths-facts-sum">HTTP API off`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
 		}

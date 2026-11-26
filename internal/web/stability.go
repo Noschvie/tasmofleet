@@ -156,11 +156,7 @@ type noteSeg struct {
 
 type stabRow struct {
 	Key         string
-	Main, Class string // the first part of the value; Class colours it (num-bad, num-warn)
-	Rest        string // the plain rest of the value
-	Sub         string
-	SubAt       time.Time // when set the sub line begins with this instant (time.js shows it in the browser's zone)
-	SubAtText   string
+	Main, Class string // the value; Class colours it (num-bad)
 	Spark       *stabSpark
 }
 
@@ -208,17 +204,6 @@ func (c stabCard) badgeTone() ui.Tone {
 	return stabLevelTone(c.Level)
 }
 
-// signalWord: how good a reading is. The edges are the ones of the Wi-Fi tile's bar.
-func signalWord(dbm int) string {
-	switch {
-	case dbm > -60:
-		return "good"
-	case dbm >= stability.WeakDBm:
-		return "fair"
-	}
-	return "weak"
-}
-
 // dbmText formats a reading: Go's %d prints the minus sign the way the page wants it.
 func dbmText(dbm int) string { return strconv.Itoa(dbm) + " dBm" }
 
@@ -232,12 +217,6 @@ func minutesText(d time.Duration) string {
 		return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
 	}
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
-}
-
-// tasmotaDowntime writes a duration the way Tasmota prints Wifi.Downtime: 0T00:03:41.
-func tasmotaDowntime(d time.Duration) string {
-	s := int(d.Seconds())
-	return fmt.Sprintf("%dT%02d:%02d:%02d", s/86400, s%86400/3600, s%3600/60, s%60)
 }
 
 func exactDuration(d time.Duration) string {
@@ -281,7 +260,7 @@ func loopAdvice(r stability.Reason) string {
 }
 
 // stabCardOf words the verdict. boots are the stored restarts, newest first.
-func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl model.Health, ssid string, st stabState) stabCard {
+func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, st stabState) stabCard {
 	c := stabCard{Level: r.Level, Tone: stabTone(r.Level), Meta: "last 24 hours", NoData: st.NoData, Stale: st.Stale}
 	if r.Level == stability.Stable {
 		c.Meta = "last 7 days"
@@ -317,97 +296,18 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 	case stability.Stable:
 	}
 
-	// Last restart
-	row := stabRow{Key: "Last restart", Main: "Not seen yet", Sub: "TasmoFleet notes a restart when it sees one."}
-	if r.Last != nil {
-		row = stabRow{Key: "Last restart", Main: r.LastReason.Label, SubAt: r.Last.At, SubAtText: ui.StampRelativeText(now, r.Last.At),
-			Sub: " · " + agoWords(now, r.Last.At)}
-		if r.Last.Reason != "" {
-			row.Sub += " · Tasmota: “" + r.Last.Reason + "”"
-		}
-		if r.LastReason.Attention {
-			row.Class = "num-bad"
-		}
-	}
-	c.Rows = append(c.Rows, row)
-
 	// Restarts
-	var rs stabRow
-	rs.Key = "Restarts"
-	d24, d7 := fmt.Sprintf("%d in 24 h", r.Restarts24h), fmt.Sprintf("%d in %s", r.Restarts7d, "7 days")
+	rs := stabRow{Key: "Restarts", Main: restartCountWords(r)}
 	switch {
-	case r.Restarts1h > 0:
-		rs.Main, rs.Rest = fmt.Sprintf("%d in 1 h", r.Restarts1h), " · "+d24+" · "+d7
-		if r.Restarts1h >= stability.BootLoopPerHour {
-			rs.Class = "num-bad"
-		}
-	default:
-		rs.Main, rs.Rest = d24, " · "+d7
-		if r.Restarts24h >= stability.BootLoopPerDay {
-			rs.Class = "num-bad"
-		}
-	}
-	if r.Level == stability.BootLoop {
-		rs.Sub = "counted from BootCount: includes restarts TasmoFleet did not see"
+	case r.Restarts1h >= stability.BootLoopPerHour, r.Restarts1h == 0 && r.Restarts24h >= stability.BootLoopPerDay:
+		rs.Class = "num-bad"
 	}
 	if st.NoData {
-		rs.Main, rs.Rest, rs.Class = "—", "", "" // nothing was seen, so "0 in 24 h" would claim a quiet device
+		rs.Main, rs.Class = "—", "" // nothing was seen, so "none" would claim a quiet device
 	}
 	c.Rows = append(c.Rows, rs)
 	if r.Level == stability.BootLoop {
-		c.Rows = append(c.Rows, stabRow{Key: "Longest uptime", Main: minutesText(r.LongestUptime) + " in the last 24 h", Sub: "a healthy device stays up for days"})
-	}
-
-	// Wi-Fi signal
-	if hl.SignalDBm != 0 || r.HasAvg {
-		dbm := hl.SignalDBm
-		if dbm == 0 {
-			dbm = r.AvgDBm
-		}
-		sig := stabRow{Key: "Wi-Fi signal", Main: dbmText(dbm), Rest: " · " + signalWord(dbm)}
-		if dbm < stability.WeakDBm {
-			sig.Class = "num-warn"
-		}
-		var sub []string
-		if r.Level == stability.WeakWiFi {
-			if hl.RSSI > 0 {
-				sub = append(sub, strconv.Itoa(hl.RSSI)+" %")
-			}
-			if ssid != "" {
-				sub = append(sub, ssid)
-			}
-		}
-		if len(r.Spark) >= 2 {
-			switch r.Level {
-			case stability.WeakWiFi:
-				sub = append(sub, fmt.Sprintf("24 h average %d dBm, best %d, worst %d", r.AvgDBm, r.BestDBm, r.WorstDBm))
-			case stability.Stable:
-				sub = append(sub, fmt.Sprintf("24 h range %d to %d dBm", r.WorstDBm, r.BestDBm))
-			case stability.BootLoop:
-			}
-			sig.Spark = sparkOf(r)
-		}
-		if r.Level != stability.Stable || len(r.Spark) >= 2 {
-			sig.Sub = strings.Join(sub, " · ")
-		}
-		c.Rows = append(c.Rows, sig)
-	}
-
-	// Wi-Fi reconnects
-	if hl.LinkCount > 0 {
-		rc := stabRow{Key: "Wi-Fi reconnects", Main: strconv.Itoa(r.Reconnects) + " since boot"}
-		if r.WeakByReconnects {
-			rc.Class = "num-warn"
-		}
-		// A few seconds of downtime is the connect after boot: only a minute or more, or a weak link,
-		// is worth the sentence; a stable device then says there was none to speak of.
-		switch {
-		case hl.WifiDowntime >= time.Minute || hl.WifiDowntime > 0 && r.Level == stability.WeakWiFi:
-			rc.Sub = fmt.Sprintf("Wi-Fi down for %s in total (Tasmota: LinkCount %d, Downtime %s)", exactDuration(hl.WifiDowntime), hl.LinkCount, tasmotaDowntime(hl.WifiDowntime))
-		case r.Level == stability.Stable && hl.WifiDowntime < time.Minute:
-			rc.Sub = "no Wi-Fi downtime"
-		}
-		c.Rows = append(c.Rows, rc)
+		c.Rows = append(c.Rows, stabRow{Key: "Longest uptime", Main: longestUptimeWords(r.LongestUptime)})
 	}
 
 	if len(boots) > 0 {
@@ -426,6 +326,22 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 		}
 	}
 	return c
+}
+
+// wifiHistoryRows are the two rows the Wi-Fi card takes over from Stability (#1112): the signal of the last 24 hours
+// with its sparkline, and how often the link dropped. The current reading stays in the Wi-Fi tile. A fact with
+// nothing behind it (fewer than two samples, a device that never reconnected and has no link count) is no row.
+func wifiHistoryRows(r stability.Result, hl model.Health) []stabRow {
+	var rows []stabRow
+	if len(r.Spark) >= 2 {
+		sig := stabRow{Key: signalHistoryKey, Main: signalHistoryWords(r), Spark: sparkOf(r)}
+		rows = append(rows, sig)
+	}
+	if hl.LinkCount > 0 {
+		drops := stabRow{Key: wifiDropsKey, Main: wifiDropsWords(r.Reconnects, hl.WifiDowntime, r.Level)}
+		rows = append(rows, drops)
+	}
+	return rows
 }
 
 // sparkOf draws the last 24 hours of samples: 240 x 36, the -75 dBm line in the middle, 0.68 px per dB.

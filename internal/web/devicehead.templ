@@ -181,10 +181,11 @@ templ deviceOverviewPage(p deviceOverview) {
 					@staleLabel(!p.Live.Off)
 				</div>
 				@ui.KV(p.Conn.Rows)
+				if len(p.Conn.History) > 0 {
+					@stabRows(p.Conn.History)
+				}
 			</section>
-			if p.Paths != nil {
-				@pathsCard(*p.Paths)
-			}
+			@pathsCard(p.Addr, p.Paths)
 		}
 		@ui.CardStack(1) {
 			@identityCard(p.Ident)
@@ -299,7 +300,9 @@ templ relayBoxView(l liveView) {
 			if l.Off {
 				@staleLabel(false)
 			}
-			<span class="dev-box-meta">{ l.Box.Right }</span>
+			if l.Box.Right != "" {
+				<span class="dev-box-meta">{ l.Box.Right }</span>
+			}
 		</div>
 		<div class="dev-relays">
 			for _, rl := range l.Box.Rows {
@@ -315,7 +318,7 @@ templ relayBoxView(l liveView) {
 					<input type="hidden" name="action" value={ rl.Action }/>
 					<input type="hidden" name="back" value="device"/>
 					<div class="dev-relay-t">
-						<span class="dev-relay-n">{ rl.Name } <span class="mono">{ rl.Cmd }</span></span>
+						<span class="dev-relay-n" title={ rl.Cmd }>{ rl.Name }</span>
 						<span class="dev-relay-s" data-visual-mask>{ rl.Line }</span>
 					</div>
 					@ui.PowerSwitch(ui.PowerSwitchData{Label: rl.Aria, On: rl.On, Disabled: !l.Box.Enabled, Submit: true, Class: "devrelay-sw", Attrs: relaySwitchAttrs(l.Box.Why)})
@@ -323,7 +326,7 @@ templ relayBoxView(l liveView) {
 			}
 		</div>
 		if l.Box.Why != "" {
-			<p class="devcard-note" id="dev-relays-why">Switching is disabled: @keepTogether(l.Box.Why)</p>
+			<p class="devcard-note" id="dev-relays-why">{ relaysWhyLead }@keepTogether(l.Box.Why)</p>
 		}
 		if l.Box.Err != "" {
 			<p class="error" role="alert">@keepTogether(l.Box.Err)</p>
@@ -342,18 +345,14 @@ templ sensorBoxView(l liveView) {
 			}
 			<span class="dev-box-meta">{ l.Sensors.Right }</span>
 		</div>
-		if len(l.Sensors.Cells) > 0 {
-			<div class="dev-relays">
-				for _, c := range l.Sensors.Cells {
-					<div class="dev-sensor">
-						<span class="dev-sensor-l">{ c.Label }</span>
-						<span class="dev-sensor-v" data-visual-mask>{ c.Value }</span>
-					</div>
-				}
-			</div>
-		} else {
-			<p class="devcard-note">{ l.Sensors.Note }</p>
-		}
+		<div class="dev-relays">
+			for _, c := range l.Sensors.Cells {
+				<div class="dev-sensor">
+					<span class="dev-sensor-l">{ c.Label }</span>
+					<span class="dev-sensor-v" data-visual-mask>{ c.Value }</span>
+				</div>
+			}
+		</div>
 	</section>
 }
 
@@ -524,29 +523,31 @@ templ identityID(id model.DeviceID) {
 	</dl>
 }
 
-// identityFWR is the StatusFWR block of the Identity card (#289): the fields of Status 2 under
-// Tasmota's own names with the values as sent, each explained behind an info button (ui.Info, a
-// popover that opens on a tap as well as on a click; the id is per field, #680), then
-// TasmoFleet's own reading of them, kept apart.
+// identityFWR is the closed fold "Firmware details" of the Identity card (#289, #1112): what the device reports about its
+// firmware under plain labels, Tasmota's own name beside each as secondary text (ui.Info explains the field in a popover
+// that opens on a tap as well as on a click; its id is per field, #680), then TasmoFleet's own reading of them (variant,
+// language, flash size). It starts closed on every render: the card is swapped by Refresh identity and by the live
+// refresh when it changed (#1003), and the fold's state lives in the DOM only.
 templ identityFWR(c identCard) {
-	<h3 class="ukv-h">Reported by the device <span class="ukv-sub">Status 2 · StatusFWR</span></h3>
-	if len(c.FWR) > 0 {
-		<dl class="ukv">
-			for _, r := range c.FWR {
-				<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
-					<dt>{ r.Name } @ui.Info("fwr-info-"+r.Name, r.Name, r.Info)</dt>
-					<dd class="mono">{ r.Value }</dd>
-				</div>
-			}
-		</dl>
-	}
-	if !c.FWRRead {
-		<p class="devcard-note">Most of Status 2 is not read yet. Refresh identity reads it.</p>
-	}
-	if len(c.Reading) > 0 {
-		<h3 class="ukv-h">TasmoFleet&#39;s reading <span class="ukv-sub">worked out by TasmoFleet, not reported by the device</span></h3>
-		@ui.KV(c.Reading)
-	}
+	<details class="fold" id="fw-details">
+		<summary>{ firmwareDetailsTitle }</summary>
+		if len(c.FWR) > 0 {
+			<dl class="ukv">
+				for _, r := range c.FWR {
+					<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
+						<dt>{ r.Label } @ui.Info("fwr-info-"+r.Name, r.Label, r.Info) <span class="ukv-sub mono">{ r.Name }</span></dt>
+						<dd class="mono">{ r.Value }</dd>
+					</div>
+				}
+			</dl>
+		}
+		if !c.FWRRead {
+			<p class="devcard-note">{ firmwareNotRead }</p>
+		}
+		if len(c.Reading) > 0 {
+			@ui.KV(c.Reading)
+		}
+	</details>
 }
 
 // stabilityCard is the Stability card of the Overview (#325): the verdict as a badge, a notice only
@@ -574,35 +575,7 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 				}
 			</div>
 		}
-		<dl class="ukv">
-			for _, r := range c.Rows {
-				<div class="ukv-row">
-					<dt>{ r.Key }</dt>
-					<dd>
-						if r.Class != "" {
-							<span class={ r.Class }>{ r.Main }</span>
-						} else {
-							{ r.Main }
-						}
-						{ r.Rest }
-						if r.Sub != "" || !r.SubAt.IsZero() {
-							<span class="sub">
-								if !r.SubAt.IsZero() {
-									<time data-visual-mask { ui.StampAttrs(r.SubAt, ui.StampRelative)... }>{ r.SubAtText }</time>
-								}
-								{ r.Sub }
-							</span>
-						}
-						if r.Spark != nil {
-							<svg class={ "stab-spark", r.Spark.Tone } viewBox="0 0 240 36" preserveAspectRatio="none" role="img" aria-label="Wi-Fi signal, last 24 hours, one sample per hour" data-visual-mask>
-								<line class="ref" x1="0" x2="240" y1={ r.Spark.Ref } y2={ r.Spark.Ref }></line>
-								<polyline class="line" points={ r.Spark.Points }></polyline>
-							</svg>
-						}
-					</dd>
-				</div>
-			}
-		</dl>
+		@stabRows(c.Rows)
 		if len(c.Boots) > 0 {
 			<h3 class="devcard-h3">Recent restarts</h3>
 			<ul class="stab-boots">
@@ -624,4 +597,29 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 			</ul>
 		}
 	</section>
+}
+
+// stabRows are the rows of a card that shows numbers of the stability history: Stability's restart numbers and the
+// Wi-Fi card's signal history and drops. A sparkline sits under its value.
+templ stabRows(rows []stabRow) {
+	<dl class="ukv">
+		for _, r := range rows {
+			<div class="ukv-row">
+				<dt>{ r.Key }</dt>
+				<dd>
+					if r.Class != "" {
+						<span class={ r.Class }>{ r.Main }</span>
+					} else {
+						{ r.Main }
+					}
+					if r.Spark != nil {
+						<svg class={ "stab-spark", r.Spark.Tone } viewBox="0 0 240 36" preserveAspectRatio="none" role="img" aria-label="Wi-Fi signal, last 24 hours, one sample per hour" data-visual-mask>
+							<line class="ref" x1="0" x2="240" y1={ r.Spark.Ref } y2={ r.Spark.Ref }></line>
+							<polyline class="line" points={ r.Spark.Points }></polyline>
+						</svg>
+					}
+				</dd>
+			</div>
+		}
+	</dl>
 }

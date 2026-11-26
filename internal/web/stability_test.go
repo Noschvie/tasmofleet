@@ -105,7 +105,7 @@ func TestOverviewStabilityCardForABootLoop(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices/7", "admin", nil)
 	card := between(body, `<section id="stability"`, `</section>`)
 	for _, want := range []string{">Boot loop<", "last 24 hours", "Restarted 5 times in the last hour", "every time by a crash", "Check the supply first",
-		"Crash (exception)", "5 in 1 h", "Longest uptime", "9 min in the last 24 h", "Recent restarts", `<span class="raw">Exception</span>`, "after 9 min", "-56 dBm"} {
+		"Crash (exception)", "5 times in the last hour", "Longest uptime", "9 min in the last 24 hours", "Recent restarts", `<span class="raw">Exception</span>`, "after 9 min"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("card lacks %q:\n%s", want, card)
 		}
@@ -119,17 +119,22 @@ func TestOverviewStabilityCardForWeakWifiAndForAStableDevice(t *testing.T) {
 	e := stabFleet(t)
 	_, body := e.do(t, "GET", "/devices/8", "admin", nil)
 	card := between(body, `<section id="stability"`, `</section>`)
-	for _, want := range []string{">Weak Wi-Fi<", "weak is below -75 dBm", "14 times", "-82 dBm", "weak", "14 since boot", "Wi-Fi down for 3 min 41 s in total (Tasmota: LinkCount 15, Downtime 0T00:03:41)"} {
+	for _, want := range []string{">Weak Wi-Fi<", "weak is below -75 dBm", "14 times", "-82 dBm"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("weak card lacks %q:\n%s", want, card)
 		}
+	}
+	// the signal and the drops are the Wi-Fi card's since #1112; the verdict above keeps the numbers behind it
+	wifi := visibleText(between(body, `<section id="devconn"`, `</section>`))
+	if !strings.Contains(wifi, "Wi-Fi drops 14 times since the last restart, offline for 3 min 41 s in total") || strings.Contains(wifi, "LinkCount") {
+		t.Errorf("the Wi-Fi card does not say the drops in words:\n%s", wifi)
 	}
 	if strings.Contains(card, "Recent restarts") {
 		t.Error("a device with no stored restart has no list of them")
 	}
 	_, body = e.do(t, "GET", "/devices/1", "admin", nil)
 	card = between(body, `<section id="stability"`, `</section>`)
-	for _, want := range []string{">Stable<", "last 7 days", "Not seen yet", "0 in 24 h", "no Wi-Fi downtime"} {
+	for _, want := range []string{">Stable<", "last 7 days", "None in the last 7 days"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("stable card lacks %q:\n%s", want, card)
 		}
@@ -201,7 +206,7 @@ func TestRecentRestartsCarryTheDateWhenNotToday(t *testing.T) {
 		{DeviceID: 1, At: now.Add(-2 * time.Hour), Reason: "Software/System restart"},
 		{DeviceID: 1, At: time.Date(2026, 10, 19, 12, 31, 0, 0, time.UTC), Reason: "Power On"},
 	}
-	c := stabCardOf(now, stability.Result{Level: stability.Stable}, boots, model.Health{}, "", stabState{})
+	c := stabCardOf(now, stability.Result{Level: stability.Stable}, boots, stabState{})
 	if len(c.Boots) != 2 {
 		t.Fatalf("boots: %d", len(c.Boots))
 	}

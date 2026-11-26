@@ -2,22 +2,26 @@ package web
 
 import "github.com/hellwand/tasmofleet/internal/web/ui"
 
-// pathsCard is the card of #261: how TasmoFleet reaches the device and which way each action
-// takes. It sits under Identity and Connection, is never dimmed (it explains an offline device).
-// Both lists are folds, closed so the phone overview keeps its height budget. The live refresh
-// swaps the summaries and the lists by id (pathsLive), never the folds, so an open fold stays open.
+// pathsCard is the Connection card (#261, #1112): the address TasmoFleet uses and the IP the device reports at its top,
+// then how TasmoFleet reaches the device and which way each action takes. It sits under Stability and the medium's card
+// (Wi-Fi or Ethernet), and is never dimmed (it explains an offline device). Both lists are folds, closed so the phone
+// overview keeps its height budget. The live refresh swaps the summaries and the lists by id (pathsLive), never the
+// folds, so an open fold stays open. The address rows are rendered also when the paths could not be read (c is nil).
 // The Forget button is the admin's: a viewer without it sees the card read-only.
-templ pathsCard(c pathCard) {
+templ pathsCard(addr []ui.KVRow, c *pathCard) {
 	<section id="devpaths" class={ "devcard", ui.StackRank(4) } aria-labelledby="dc-paths">
-		<div class="devcard-head"><h2 id="dc-paths">How TasmoFleet reaches this device</h2></div>
-		<details class="fold">
-			@pathSummary("devpaths-facts-sum", c.FactsSummary(), nil)
-			@pathList("devpaths-facts", c.Facts, c, nil)
-		</details>
-		<details class="fold">
-			@pathSummary("devpaths-actions-sum", c.ActionsSummary(), nil)
-			@pathList("devpaths-actions", c.Actions, c, nil)
-		</details>
+		<div class="devcard-head"><h2 id="dc-paths">{ connectionTitle }</h2></div>
+		@ui.KV(addr)
+		if c != nil {
+			<details class="fold">
+				@pathSummary("devpaths-facts-sum", c.FactsSummary(), nil)
+				@pathList("devpaths-facts", c.Facts, *c, nil)
+			</details>
+			<details class="fold">
+				@pathSummary("devpaths-actions-sum", c.ActionsSummary(), nil)
+				@pathList("devpaths-actions", c.Actions, *c, nil)
+			</details>
+		}
 	</section>
 }
 
@@ -82,7 +86,7 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 							@ui.BrokerACLNotice()
 						}
 						if a.Test && a.TestWhy != "" {
-							<p class="devcard-note" id="pw-test-why">{ "Test not possible: " + sentence(a.TestWhy) }</p>
+							<p class="devcard-note" id="pw-test-why">{ connTestWhyLead + sentence(a.TestWhy) }</p>
 						}
 					}
 					if r.Forget && c.Forget != "" {

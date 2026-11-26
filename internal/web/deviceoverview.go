@@ -14,6 +14,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/health"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/stability"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/transport"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
@@ -30,7 +31,10 @@ type overviewIn struct {
 	Facts  snapFacts
 	HTTP   transport.HTTPState // the state the connection card shows (app.TransportFacts)
 	Policy *policyCard
-	Now    time.Time
+	// Stab is the stability verdict with its 24 h samples, nil without a stability store. The Wi-Fi card shows its
+	// signal history and drops (#1112).
+	Stab *stability.Result
+	Now  time.Time
 	// OtherBroker: the device reports to a broker that is not ours (otherBrokerRow, #580).
 	OtherBroker bool
 }
@@ -361,7 +365,7 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 	box := &relayBox{Enabled: enabled}
 	on := 0
 	for i, r := range rs {
-		row := relayRow{N: r.N, Name: relayName(names, r.N), Cmd: "POWER", On: r.State == "ON", Action: "ON"}
+		row := relayRow{N: r.N, Name: relayName(names, r.N), Cmd: "POWER", On: r.State == "ON", Action: "ON"} // Cmd is the tooltip only (A2-014)
 		if len(rs) > 1 {
 			row.Cmd += strconv.Itoa(r.N)
 		}
@@ -382,10 +386,9 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 		row.Aria = row.Name + " is " + state + ": switch it " + label(row.Action)
 		box.Rows = append(box.Rows, row)
 	}
-	var meter string
+	var meter string // a device without a meter says nothing about it (A2-014)
 	switch {
 	case len(all) == 0:
-		meter = "no energy meter"
 	case len(rs) == 1:
 		meter = "metered"
 	case perChannel:
@@ -395,16 +398,19 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 	default:
 		meter = plural(len(ch), "meter channel")
 	}
-	if len(rs) > 1 {
+	switch {
+	case len(rs) > 1 && meter != "":
 		box.Right = fmt.Sprintf("%d of %d on · %s", on, len(rs), meter)
-	} else {
+	case len(rs) > 1:
+		box.Right = fmt.Sprintf("%d of %d on", on, len(rs))
+	default:
 		box.Right = meter
 	}
 	return box
 }
 
 // sensorBoxOf is the Sensors box of a device without relays: the numeric readings of its MQTT
-// telemetry (D5: nothing is polled for them). Without readings it says why in one line.
+// telemetry (D5: nothing is polled for them). Nil without readings: a card that has nothing to say is not drawn (A2-014).
 func sensorBoxOf(in overviewIn) *sensorBox {
 	box := &sensorBox{Right: "no relay"}
 	for _, r := range in.Tele.Sensors {
@@ -414,51 +420,53 @@ func sensorBoxOf(in overviewIn) *sensorBox {
 		}
 		box.Cells = append(box.Cells, sensorCell{Label: r.Name + " · " + r.Sensor, Value: v})
 	}
-	switch {
-	case len(box.Cells) > 0:
-	case in.OtherBroker || !reachOf(in.Dev, in.Health, in.HTTP, in.Now).MQTTOn:
-		box.Note = "Sensor readings come from MQTT telemetry. This device does not report to TasmoFleet's MQTT broker."
-	default:
-		box.Note = "No sensor readings yet."
+	if len(box.Cells) == 0 {
+		return nil
 	}
 	return box
 }
 
-// connOf is the Connection card: how TasmoFleet reaches the device, then how the device is
-// connected (Wi-Fi or Ethernet). The device's MQTT broker is not here: see otherBrokerRow (#441).
-func connOf(in overviewIn) connCard {
-	d, f := in.Dev, in.Facts
+// addressRows are the top of the Connection card: where TasmoFleet reaches the device. The IP the device reports is a
+// second row only when it says something else (the address is a DNS name, or the device moved).
+func addressRows(d model.Device, f snapFacts) []ui.KVRow {
 	addr := d.Address
 	if d.Port != 0 && d.Port != 80 {
 		addr = net.JoinHostPort(d.Address, strconv.Itoa(d.Port))
 	}
-	// "Address" is where TasmoFleet reaches the device. The IP the device reports is a second row
-	// only when it says something else (the address is a DNS name, or the device moved).
 	rows := []ui.KVRow{{Key: "Address", Value: addr, Mono: true, Mask: true}}
 	if f.IP != "" && f.IP != d.Address {
 		rows = append(rows, ui.KVRow{Key: "IP address", Value: f.IP, Mono: true, Mask: true})
 	}
-	rows = append(rows, ui.KVRow{Key: "Gateway", Value: orUnknown(f.Gateway), Mono: true, Mask: true})
-	c := connCard{Title: "Connection · Wi-Fi"}
+	return rows
+}
+
+// connOf is the card of the medium the device is on, titled by it: Wi-Fi or Ethernet. How TasmoFleet reaches the
+// device (Address, IP address and the paths) is the Connection card (addressRows, pathsCard); the device's MQTT broker is
+// not here either: see otherBrokerRow (#441). A fact nobody read is a dash, and a Wi-Fi channel nobody reported is no row.
+func connOf(in overviewIn) connCard {
+	d, f := in.Dev, in.Facts
+	rows := []ui.KVRow{{Key: "Gateway", Value: orDash(f.Gateway), Mono: true, Mask: true}}
+	c := connCard{Title: "Wi-Fi"}
 	if f.Wired {
-		c.Title = "Connection · Ethernet"
+		c.Title = "Ethernet"
 		rows = append(rows,
-			ui.KVRow{Key: "Subnet mask", Value: orUnknown(f.Subnet), Mono: true, Mask: true},
-			ui.KVRow{Key: "DNS", Value: orUnknown(f.DNS), Mono: true, Mask: true},
-			ui.KVRow{Key: "Ethernet MAC", Value: orUnknown(macShown(d, true)), Mono: true, Mask: true})
+			ui.KVRow{Key: "Subnet mask", Value: orDash(f.Subnet), Mono: true, Mask: true},
+			ui.KVRow{Key: "DNS", Value: orDash(f.DNS), Mono: true, Mask: true},
+			ui.KVRow{Key: "Ethernet MAC", Value: orDash(macShown(d, true)), Mono: true, Mask: true})
 	} else {
-		channel := ""
+		rows = append(rows,
+			ui.KVRow{Key: "SSID", Value: orDash(f.SSID), Mono: true, Mask: true},
+			ui.KVRow{Key: "BSSID", Value: orDash(f.BSSID), Mono: true, Mask: true})
 		if f.Channel > 0 {
 			band := "2.4 GHz"
 			if f.Channel > 14 {
 				band = "5 GHz"
 			}
-			channel = fmt.Sprintf("%d (%s)", f.Channel, band)
+			rows = append(rows, ui.KVRow{Key: "Channel", Value: fmt.Sprintf("%d (%s)", f.Channel, band), Mono: true, Mask: true})
 		}
-		rows = append(rows,
-			ui.KVRow{Key: "SSID", Value: orUnknown(f.SSID), Mono: true, Mask: true},
-			ui.KVRow{Key: "BSSID", Value: orUnknown(f.BSSID), Mono: true, Mask: true},
-			ui.KVRow{Key: "Channel", Value: orUnknown(channel), Mono: true, Mask: true})
+		if in.Stab != nil {
+			c.History = wifiHistoryRows(*in.Stab, in.Health)
+		}
 	}
 	c.Rows = rows
 	return c
@@ -598,12 +606,14 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 		p.Live.Box.Why = p.Tabs.writesAPIOff()
 	}
 	if res, boots, ok := h.stabilityOf(ctx, d.ID, hl); ok {
-		c := stabCardOf(in.Now, res, boots, hl, facts.SSID, stabState{NoData: never, Stale: off})
+		in.Stab = &res
+		c := stabCardOf(in.Now, res, boots, stabState{NoData: never, Stale: off})
 		p.Stab = &c
 	}
 	p.Ident = h.identityWithHint(v, d, p.Updating != nil, off, facts, pf.Conflicts)
 	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
+	p.Addr = addressRows(d, facts)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs, h.pwViewOf(ctx, v, d, tf, tp))
 		if shown != tf.HTTP { // the card says what the tile says (shownHTTP)

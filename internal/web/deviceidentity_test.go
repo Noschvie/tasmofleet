@@ -22,9 +22,10 @@ func withFWR(e *env, fwr model.FWRFacts) {
 
 var sampleFWR = model.FWRFacts{Version: "16.0.0(tasmota32)", BuildDateTime: "2026-10-16T18:34:59", Core: "3.3.12", SDK: "5.5.5", CPUFrequency: 240, CR: "448/699"}
 
-// Why (#289): users compare the card with `Status 2` on the device, so the StatusFWR fields appear
-// under Tasmota's own names with the raw values, each explained, and what TasmoFleet derives
-// itself is kept apart and named as its reading instead of being mixed into those fields.
+// Why (#289, #1112): users compare the card with `Status 2` on the device, so each field keeps its Tasmota name as
+// secondary text beside a plain label, with the value as the device sent it, each explained, and what TasmoFleet
+// derives itself (variant, language, flash size) follows the device's fields instead of being mixed into them. All of it
+// sits in the closed Firmware details fold.
 func TestIdentityCardShowsStatusFWRRawAndTasmoFleetsReadingApart(t *testing.T) {
 	e := setup(t)
 	withFWR(e, sampleFWR)
@@ -32,14 +33,14 @@ func TestIdentityCardShowsStatusFWRRawAndTasmoFleetsReadingApart(t *testing.T) {
 	card := body[strings.Index(body, `id="identity"`):]
 	card = card[:strings.Index(card, "</section>")]
 	for _, want := range []string{
-		"<dt>Version", `<dd class="mono">16.0.0(tasmota32)</dd>`,
-		"<dt>BuildDateTime", `<dd class="mono">2026-10-16T18:34:59</dd>`,
-		"<dt>Core", `<dd class="mono">3.3.12</dd>`,
-		"<dt>SDK", `<dd class="mono">5.5.5</dd>`,
-		"<dt>CpuFrequency", `<dd class="mono">240</dd>`,
-		"<dt>Hardware", `<dd class="mono">ESP32-S3 v0.2</dd>`,
-		"<dt>CR", `<dd class="mono">448/699</dd>`,
-		"TasmoFleet&#39;s reading", "<dt>Variant", "<dt>Flash size",
+		"<dt>Version ", `<dd class="mono">16.0.0(tasmota32)</dd>`,
+		"<dt>Build date ", `<span class="ukv-sub mono">BuildDateTime</span>`, `<dd class="mono">2026-10-16T18:34:59</dd>`,
+		"<dt>Arduino core ", `<dd class="mono">3.3.12</dd>`,
+		"<dt>Espressif SDK ", `<dd class="mono">5.5.5</dd>`,
+		"<dt>CPU speed ", `<span class="ukv-sub mono">CpuFrequency</span>`, `<dd class="mono">240 MHz</dd>`,
+		"<dt>Chip ", `<dd class="mono">ESP32-S3 v0.2</dd>`,
+		"<dt>Settings memory used ", `<span class="ukv-sub mono">CR</span>`, `<dd class="mono">448 of 699</dd>`,
+		"<dt>Variant", "<dt>Flash size",
 	} {
 		if !strings.Contains(card, want) {
 			t.Errorf("Identity card lacks %q:\n%s", want, shortDump(card))
@@ -51,13 +52,13 @@ func TestIdentityCardShowsStatusFWRRawAndTasmoFleetsReadingApart(t *testing.T) {
 	// Why (#680): the explanations must be reachable by a tap. A title attribute is not (a phone
 	// has no hover and the tooltip script never opens for touch), so each icon opens a native
 	// popover (ui.Info) whose id is unique to its field: popovertarget finds its popover by id, so
-	// a shared id would open another field's text.
+	// a shared id would open another field's text. The id is the Tasmota name, so it has no spaces.
 	if strings.Contains(card, `class="info"`) {
 		t.Error("an Identity info icon still keeps its text in a title attribute, which a tap never shows")
 	}
 	for name, info := range map[string]string{
 		"Version": "The firmware version and its build in brackets",
-		"CR":      "Characters used / available in the settings text area",
+		"CR":      "Characters used and available in the settings text area",
 	} {
 		id := `id="fwr-info-` + name + `" popover`
 		if strings.Count(card, id) != 1 {
@@ -70,8 +71,8 @@ func TestIdentityCardShowsStatusFWRRawAndTasmoFleetsReadingApart(t *testing.T) {
 			t.Errorf("the %s explanation %q is not in the card", name, info)
 		}
 	}
-	if strings.Index(card, "TasmoFleet&#39;s reading") < strings.Index(card, "<dt>CR") {
-		t.Error("TasmoFleet's reading must come after, not inside, the StatusFWR fields")
+	if strings.Index(card, "<dt>Variant") < strings.Index(card, "<dt>Settings memory used") {
+		t.Error("TasmoFleet's reading must come after, not inside, the device's fields")
 	}
 }
 
@@ -84,8 +85,8 @@ func TestIdentityCardWithoutStoredStatusFWRSaysSo(t *testing.T) {
 	if !strings.Contains(body, "Refresh identity") || !strings.Contains(body, "not read yet") {
 		t.Errorf("no hint that Refresh identity reads Status 2:\n%s", shortDump(body))
 	}
-	if strings.Contains(body, "<dt>BuildDateTime") {
-		t.Error("BuildDateTime shown without a value")
+	if strings.Contains(body, "Build date") {
+		t.Error("the build date shown without a value")
 	}
 }
 

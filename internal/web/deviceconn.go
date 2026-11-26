@@ -83,7 +83,7 @@ type pathCard struct {
 // FactsSummary is the line of the closed Connection list: the two states that decide the path.
 // Both lists are closed so the overview stays within the phone height budget.
 func (c pathCard) FactsSummary() string {
-	s := "Connection: HTTP " + lowerWord(rowByKey(c.Facts, keyHTTP).Value) + ", MQTT " + lowerWord(rowByKey(c.Facts, keyMQTT).Value)
+	s := "HTTP " + lowerWord(rowByKey(c.Facts, keyHTTP).Value) + ", MQTT " + lowerWord(rowByKey(c.Facts, keyMQTT).Value)
 	if fw := rowByKey(c.Facts, keyFW); fw.Value == "No" {
 		s += ", firmware server no"
 	}
@@ -117,10 +117,7 @@ func (c pathCard) ActionsSummary() string {
 			n++
 		}
 	}
-	if n == 0 {
-		return "What each action uses (all available)"
-	}
-	return "What each action uses (" + strconv.Itoa(n) + " not available)"
+	return actionsSummaryWords(n)
 }
 
 // pathLabel is the short word of a path for the Action rows. An update path is worded by what has a transport of its

@@ -92,8 +92,10 @@ test("a device that keeps its link and its power is Stable, with no notice", asy
   const card = page.locator("#stability");
   await expect(card.locator(".bdg")).toHaveText("Stable");
   await expect(card.locator(".stab-note")).toHaveCount(0);
-  await expect(card).toContainText("Last restart");
-  await expect(card).toContainText("Wi-Fi reconnects");
+  await expect(card).toContainText("Restarts");
+  // #1112: the restart is the Uptime tile's and the Wi-Fi numbers the tile's and the Wi-Fi card's; the card repeats neither
+  await expect(card).not.toContainText("Last restart");
+  await expect(card).not.toContainText("Wi-Fi");
   await expectNoOverflow(page, "stability stable");
   await shot(page, "overview-healthy-1280");
 });
@@ -104,7 +106,9 @@ test("a device with a weak link shows Weak Wi-Fi on the overview, the list and t
   await expect(card.locator(".bdg")).toHaveText("Weak Wi-Fi");
   await expect(card.locator(".stab-note")).toContainText("-84 dBm");
   await expect(card.locator(".stab-note")).toContainText("14 times");
-  await expect(card).toContainText("14 since boot");
+  // the drops and the signal of the last 24 hours are the Wi-Fi card's (#1112)
+  await expect(page.locator("#devconn")).toContainText("14 times since the last restart");
+  await expect(page.locator("#devconn")).toContainText("Signal, last 24 hours");
   await expect(card.locator(".stab-boots li")).toHaveCount(1); // the restart TasmoFleet noted when it first saw the device
   await shot(page, "overview-weakwifi-1280");
 
@@ -121,7 +125,7 @@ test("three restarts in an hour make a boot loop, with the reason in plain words
   for (let i = 1; i <= 3; i++) {
     await control("/device/st-bootloop/restart?reason=Exception");
     // the next restart is sent only after this one was seen: a device that is still rebooting ignores it
-    await cardShows(page, new RegExp(`${i} in 1 h`));
+    await cardShows(page, new RegExp(`${i === 1 ? "Once" : `${i} times`} in the last hour`));
   }
   const card = page.locator("#stability");
   await expect(card.locator(".bdg")).toHaveText("Boot loop");
@@ -158,6 +162,24 @@ for (const width of [375, 1280]) {
   }
 }
 
+// #1112: Recent restarts kept its date in a fixed 96 px column, so the date of an en-US browser ("Yesterday, 10:21 AM",
+// "Nov 20, 2025, 9:59 AM") broke onto two lines while the same row in another locale fitted. The column takes the width of
+// its widest date instead. The text is set here to the longest shape the page prints, so the test does not depend on the
+// hour it runs; a line that wraps has two client rects, one that fits has one.
+test("a restart's date stays on one line at 1280, whatever its wording", async ({ page }) => {
+  await openOverview(page, "st-weakwifi", 1280);
+  const times = page.locator("#stability .stab-boots .when time");
+  await expect(times.first()).toBeVisible();
+  const lines = await times.evaluateAll((els) =>
+    els.map((el) => {
+      el.textContent = "Yesterday, 10:21 AM";
+      return el.getClientRects().length;
+    }),
+  );
+  expect(lines, "line boxes of each date").not.toHaveLength(0);
+  for (const n of lines) expect(n, "a date on two lines is a broken row").toBe(1);
+});
+
 // #679: the 24 h sparkline is a stretchable SVG (preserveAspectRatio none, strokes that do not scale), but a
 // max-width of 240 px held it at that width while its column grew: at 540 px it filled 68 %, at 1280 px 56 %,
 // and the rest of the row stayed empty. It must use the whole value column at every width, keeping its height.
@@ -170,7 +192,7 @@ for (const scheme of ["light", "dark"] as const) {
     const bad: string[] = [];
     for (const width of [375, 412, 540, 1280]) {
       await openOverview(page, "st-weakwifi", width);
-      const spark = page.locator("#stability svg.stab-spark");
+      const spark = page.locator("#devconn svg.stab-spark"); // the Wi-Fi card since #1112
       // without the seeded samples there is no sparkline and nothing below would measure anything
       await expect(spark, `${width}px: the seeded samples draw a sparkline`).toHaveCount(1);
       await page.evaluate(() => document.fonts.ready);

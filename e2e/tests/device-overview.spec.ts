@@ -196,7 +196,7 @@ const shapes: { device: string; check: (page: Page) => Promise<void> }[] = [
     check: async (page) => {
       await expect(page.locator("[data-tile=power]")).toHaveCount(0);
       await expect(page.locator("[data-tile=energy]")).toHaveCount(0);
-      await expect(page.locator("#devlive .dev-box-meta")).toHaveText("no energy meter");
+      await expect(page.locator("#devlive .dev-box-meta")).toHaveCount(0); // a missing meter is not announced (#1112)
     },
   },
   {
@@ -225,7 +225,7 @@ const shapes: { device: string; check: (page: Page) => Promise<void> }[] = [
       await page.reload();
       await expect(page.locator("[data-tile=link]")).toContainText("Ethernet");
       await expect(page.locator("[data-tile=wifi]")).toHaveCount(0);
-      await expect(page.getByRole("heading", { name: "Connection · Ethernet" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Ethernet", exact: true })).toBeVisible();
       await expect(page.locator("#devconn")).toContainText("Ethernet MAC");
     },
   },
@@ -261,6 +261,23 @@ for (const shape of shapes) {
     }
   }
 }
+
+// #1112 (A2-007): a healthy device's overview was 1373 px tall at 1280 because every card repeated what another one
+// said (Wi-Fi signal three times, Last restart three times, the whole of Status 2 open). The people who open the page
+// want to switch a relay or see that all is well. Measured with this device after the change: 1184 px; the budget is
+// 1200 and the issue's first figure of 1100 was an estimate. What is left is card padding and gaps (app.css), which
+// belong to the page frame and not to this issue. A card that gains a fact it already shows elsewhere breaks the budget.
+// ov-plain-plug is read-only in every other test.
+test("a healthy overview is at most 1200 px tall at 1280 (#1112)", async ({ page }) => {
+  await openDevice(page, "ov-plain-plug");
+  await refreshIdentity(page); // Status 2 read: the Identity card is as tall as on a device that was identified
+  await page.reload();
+  await expect(page.locator("#identity")).toBeVisible();
+  await expect(page.locator("#devact")).toBeVisible();
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  await shot(page, "overview-healthy-1280");
+  expect(height, "overview height at 1280 px (1373 before #1112, 1184 after)").toBeLessThanOrEqual(1200);
+});
 
 // Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them (#1044).
 // The simulator reports the same captured values on every read and the shape tests above already refreshed this device,

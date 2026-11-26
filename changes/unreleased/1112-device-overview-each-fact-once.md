@@ -1,0 +1,5 @@
+---
+section: Changed
+user: The device overview says each fact once and in plain words.
+---
+Device overview: each fact stands in one place. Stability keeps the restart numbers ("None in the last 24 hours, once in the last 7 days"), "Last restart" is the Uptime tile's, and the 24 hour signal and the Wi-Fi drops ("None since the last restart") moved to the Wi-Fi card, which is titled by its medium (Wi-Fi or Ethernet). The card with the paths is called Connection and starts with the address and IP address. What the device reports about its firmware sits in a closed "Firmware details" fold under plain labels (Build date, CPU speed, Settings memory used 445 of 699), the Tasmota names beside them. A fact that was not read is a dash, a Wi-Fi channel nobody reported is no row, relays show only their names, a device without sensors has no Sensors card and one without an energy meter no "no energy meter". On a phone a long Identity value (hostname, topic, OTA URL) sits below its label, and a date in Recent restarts stays on one line (#1112)

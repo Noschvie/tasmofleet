@@ -327,16 +327,16 @@ func TestStabilityCardOfAnOfflineDeviceSaysLastReported(t *testing.T) {
 // Why (#1082): the card's verdict for a device that never answered is "No data" in a neutral badge, and the restart
 // count is a dash: "0 in 24 h" says the device was quiet, and nobody was watching.
 func TestStabilityCardOfADeviceThatNeverAnsweredHasNoVerdict(t *testing.T) {
-	c := stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, model.Health{}, "", stabState{NoData: true})
+	c := stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, stabState{NoData: true})
 	if c.badgeLabel() != "No data" || c.badgeTone() != ui.ToneNeutral {
 		t.Errorf("badge %q %q", c.badgeLabel(), c.badgeTone())
 	}
 	for _, r := range c.Rows {
-		if r.Key == "Restarts" && (r.Main != "—" || r.Rest != "") {
-			t.Errorf("restarts: %q%q", r.Main, r.Rest)
+		if r.Key == "Restarts" && (r.Main != "—") {
+			t.Errorf("restarts: %q", r.Main)
 		}
 	}
-	c = stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, model.Health{}, "", stabState{})
+	c = stabCardOf(time.Now(), stability.Result{Level: stability.Stable}, nil, stabState{})
 	if c.badgeLabel() != "Stable" || c.badgeTone() != ui.ToneOK {
 		t.Errorf("a device with data keeps its verdict: %q %q", c.badgeLabel(), c.badgeTone())
 	}
