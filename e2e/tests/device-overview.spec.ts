@@ -264,11 +264,14 @@ for (const shape of shapes) {
 
 // #1112 (A2-007): a healthy device's overview was 1373 px tall at 1280 because every card repeated what another one
 // said (Wi-Fi signal three times, Last restart three times, the whole of Status 2 open). The people who open the page
-// want to switch a relay or see that all is well. Measured with this device after the change: 1184 px; the budget is
-// 1200 and the issue's first figure of 1100 was an estimate. What is left is card padding and gaps (app.css), which
-// belong to the page frame and not to this issue. A card that gains a fact it already shows elsewhere breaks the budget.
+// want to switch a relay or see that all is well. Measured with this device after the change: 1184 px; the issue's
+// first figure of 1100 was an estimate. #1204 then added the one-line caveat under the address of the Connection card
+// ("Opens only where this address is reachable ..."), which is deliberate: 1216 px measured with it on one line, so
+// the budget is 1230. The same caveat on two lines measured 1234, so a caveat that wraps again also breaks it. What is
+// left is card padding and gaps (app.css), which belong to the page frame and not to this issue. A card that gains a
+// fact it already shows elsewhere breaks the budget.
 // ov-plain-plug is read-only in every other test.
-test("a healthy overview is at most 1200 px tall at 1280 (#1112)", async ({ page }) => {
+test("a healthy overview is at most 1230 px tall at 1280 (#1112, #1204)", async ({ page }) => {
   await openDevice(page, "ov-plain-plug");
   await refreshIdentity(page); // Status 2 read: the Identity card is as tall as on a device that was identified
   await page.reload();
@@ -276,7 +279,7 @@ test("a healthy overview is at most 1200 px tall at 1280 (#1112)", async ({ page
   await expect(page.locator("#devact")).toBeVisible();
   const height = await page.evaluate(() => document.documentElement.scrollHeight);
   await shot(page, "overview-healthy-1280");
-  expect(height, "overview height at 1280 px (1373 before #1112, 1184 after)").toBeLessThanOrEqual(1200);
+  expect(height, "overview height at 1280 px (1373 before #1112, 1184 after, 1216 with the #1204 caveat)").toBeLessThanOrEqual(1230);
 });
 
 // Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them (#1044).

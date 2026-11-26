@@ -47,7 +47,7 @@ func addrBlockOf(s string) string {
 
 var hrefRe = regexp.MustCompile(`href="([^"]*)"`)
 
-const webUINoteText = "The device's own page opens only where its address can be reached, such as your home network or a VPN."
+const webUINoteText = "Opens only where this address is reachable, such as your home network or a VPN."
 
 // Why (#1204): the person who looks at a device wants its own page one click away, the same one rule as the list's
 // Address link (deviceWebLink): it opens in a new tab without handing the page an opener, and never carries the
@@ -116,18 +116,21 @@ func TestOverviewOpenWebUI(t *testing.T) {
 func TestOverviewAddressLastKnown(t *testing.T) {
 	cases := []struct {
 		name  string
+		addr  string
 		hl    model.Health
 		jobs  bool
 		known bool
 	}{
-		{"offline", answered(model.HealthOffline), false, true},
-		{"online", answered(model.HealthOnline), false, false},
-		{"never answered", model.Health{State: model.HealthOffline}, false, false},
-		{"an update holds the device", answered(model.HealthOffline), true, false},
+		{"offline", "192.0.2.10", answered(model.HealthOffline), false, true},
+		{"online", "192.0.2.10", answered(model.HealthOnline), false, false},
+		{"never answered", "192.0.2.10", model.Health{State: model.HealthOffline}, false, false},
+		{"an update holds the device", "192.0.2.10", answered(model.HealthOffline), true, false},
+		// A device added from the broker has no stored address: nothing is "last known" about nothing.
+		{"offline without an address", "", answered(model.HealthOffline), false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := webUIEnv(t, "192.0.2.10", 0, tc.hl, func(d *Deps) {
+			e := webUIEnv(t, tc.addr, 0, tc.hl, func(d *Deps) {
 				if tc.jobs {
 					d.Jobs = &fakeJobs{jobs: []model.Job{{ID: 1, BatchID: 7, DeviceID: 1, State: model.JobApplying, CreatedAt: time.Now()}}}
 				}
@@ -137,6 +140,12 @@ func TestOverviewAddressLastKnown(t *testing.T) {
 			text := html.UnescapeString(visibleText(card))
 			if got := strings.Contains(text, "Address 192.0.2.10 (last known)"); got != tc.known {
 				t.Fatalf("last known %v, want %v: %s", got, tc.known, text)
+			}
+			if tc.addr == "" {
+				if strings.Contains(text, "(last known)") {
+					t.Fatalf("no address, so no last known mark: %s", text)
+				}
+				return
 			}
 			if !strings.Contains(card, `href="http://192.0.2.10"`) {
 				t.Fatalf("the link stays in every state: %s", card)

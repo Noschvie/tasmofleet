@@ -436,7 +436,7 @@ func addressRows(d model.Device, f snapFacts, off bool) []ui.KVRow {
 	if d.Port != 0 && d.Port != 80 {
 		addr = net.JoinHostPort(d.Address, strconv.Itoa(d.Port))
 	}
-	if off {
+	if off && d.Address != "" {
 		addr += " (last known)"
 	}
 	row := ui.KVRow{Key: "Address", Value: addr, Mono: true, Mask: true}

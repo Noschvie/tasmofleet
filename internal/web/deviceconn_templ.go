@@ -208,7 +208,7 @@ func addrBlock(rows []ui.KVRow, attrs templ.Attributes) templ.Component {
 }
 
 // webUINote is the caveat under the address: the device's own page is the browser's request, not TasmoFleet's.
-const webUINote = "The device's own page opens only where its address can be reached, such as your home network or a VPN."
+const webUINote = "Opens only where this address is reachable, such as your home network or a VPN."
 
 // pathsLive is the live refresh of the card: the four parts out of band.
 func pathsLive(c pathCard) templ.Component {
