@@ -608,7 +608,7 @@ func TestSettingsTabNamesWhyTheLastBackgroundRefreshFailed(t *testing.T) {
 		f := &RefreshFailure{At: now.Add(-12 * time.Minute), Next: next, Reason: tc.reason}
 		fs := &fakeSettings{values: map[string]string{"TelePeriod": "300"}}
 		_, page := bgFailEnv(t, now, fs, f).do(t, "GET", "/devices/1/settings", "admin", nil)
-		for _, want := range []string{"Refreshing from the device", "Last background refresh failed", "12m ago", ": " + tc.want + ".", "Next try", ui.StampClockOrDayText(now, next)} {
+		for _, want := range []string{"Refreshing from the device", "Last background refresh failed", "12m ago", ": " + tc.want + ".", "Next try", ui.StampRelativeText(now, next)} {
 			if !strings.Contains(page, want) {
 				t.Errorf("%s, refreshing: page lacks %q\n%s", tc.name, want, shortDump(page))
 			}

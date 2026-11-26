@@ -36,12 +36,14 @@ const zones = [
 ];
 
 // The expected text is computed in the page, with the page's own Intl (the browser under test),
-// not in Node: ICU data differs between the two.
+// not in Node: ICU data differs between the two. The text is the key date-time (no seconds, #1104); the
+// tooltip keeps the full instant with seconds and the zone's name.
 const expectedInPage = (iso: string, withTitle: boolean) => {
-  const o: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  const full: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  const text: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
   return withTitle
-    ? new Intl.DateTimeFormat(undefined, { ...o, timeZoneName: "short" }).format(new Date(iso))
-    : new Intl.DateTimeFormat(undefined, o).format(new Date(iso));
+    ? new Intl.DateTimeFormat(undefined, { ...full, timeZoneName: "short" }).format(new Date(iso))
+    : new Intl.DateTimeFormat(undefined, text).format(new Date(iso));
 };
 
 for (const z of zones) {
@@ -78,7 +80,7 @@ test("a swapped-in timestamp is repainted in the browser's zone", async ({ brows
     host.id = "swap-host";
     document.body.appendChild(host);
     // @ts-expect-error htmx is a page global
-    window.htmx.swap(host, `<time datetime="${i}" data-ts="datetime-s">SERVER-TEXT</time>`, { swapStyle: "innerHTML" });
+    window.htmx.swap(host, `<time datetime="${i}" data-ts="date-time">SERVER-TEXT</time>`, { swapStyle: "innerHTML" });
     await new Promise((r) => setTimeout(r, 300));
     return host.textContent;
   }, iso);
@@ -90,7 +92,7 @@ test("a swapped-in timestamp is repainted in the browser's zone", async ({ brows
 
 // #137: "Today"/"Yesterday" is decided in the browser's zone, not the server's. The server runs in
 // UTC; the browser sits in Kiritimati (UTC+14, no DST), so the same instant is a different day or
-// a different clock time there. Everything an admin reads as relative is a <time data-ts="day">.
+// a different clock time there. Everything an admin reads as relative is a <time data-ts="relative">.
 const seededAt = Date.now() - 5 * 60_000; // the instant every seeded row below carries
 
 async function seedFiveMinutesAgo(): Promise<void> {
@@ -139,9 +141,9 @@ const nextLocalDay = () => {
 };
 const sameLocalDay = () => seededAt + 60_000;
 
-/** wanted is the text of a day stamp, computed with the page's own Intl: "<Today|Yesterday> HH:MM" in the browser's zone. */
+/** wanted is the text of a day stamp, computed with the page's own Intl: "<Today|Yesterday> H:MM" in the browser's zone. */
 const wanted = (page: import("@playwright/test").Page, iso: string, day: string) =>
-  page.evaluate(([i, d]) => d + " " + new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(i)), [iso, day] as [string, string]);
+  page.evaluate(([i, d]) => d + " " + new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(i)), [iso, day] as [string, string]);
 
 const dayStamps: [string, string][] = [
   ["the dashboard's transactions", "/|.txn-when time"],
@@ -165,9 +167,9 @@ for (const [name, where] of dayStamps) {
   }
 }
 
-// #422: the Stability card's recent restarts list spans days. Today's restart is the browser's clock
-// time; an older one carries its date, or it reads like a restart from today.
-test("Stability's recent restarts: the clock for today, the date for an older day", async ({ browser }) => {
+// #422: the Stability card's recent restarts list spans days. Every restart says its day: Today with the
+// browser's clock time, or the date; a bare clock time reads like a restart from today (#1104: the key is relative).
+test("Stability's recent restarts: Today with the clock, the date for an older day", async ({ browser }) => {
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
   let id: number;
@@ -187,12 +189,14 @@ test("Stability's recent restarts: the clock for today, the date for an older da
   const [today, older] = await times.evaluateAll((els) =>
     els.map((e) => {
       const d = new Date(e.getAttribute("datetime")!);
-      return [e.textContent, new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(d), new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d)];
+      // the clock time is bound with no-break spaces, so the comparison ignores which kind of space it is
+      const flat = (x: string | null) => (x ?? "").replace(/\s/g, " ");
+      return [flat(e.textContent), "Today " + flat(new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(d)), flat(new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(d)), flat(new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(d))];
     }),
   );
-  expect(today[0], "today's restart is only the clock time").toBe(today[1]);
+  expect(today[0], "today's restart says Today and the clock time").toBe(today[1]);
   expect(older[0], "an older restart carries its date").toBe(older[2]);
-  expect(older[0]).not.toBe(older[1]);
+  expect(older[0]).not.toBe(older[3]);
   await ctx.close();
 });
 
@@ -219,7 +223,7 @@ test("the policy page's pause time is the browser's clock", async ({ browser }) 
   await expect(line).toContainText("Live check paused by");
   const t = line.locator("time").first();
   const want = await page.evaluate(
-    (i) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(i)),
+    (i) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(i)),
     (await t.getAttribute("datetime"))!,
   );
   await expect(t).toHaveText(want);

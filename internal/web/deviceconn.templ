@@ -50,14 +50,14 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 						<p class="devcard-note">
 							@keepTogether(r.Sub)
 							if !r.StampAt.IsZero() {
-								{ r.StampLead + " " }<time data-visual-mask { ui.StampAttrs(r.StampAt, ui.StampDay)... }>{ r.StampText }</time>{ r.StampTail }
+								{ r.StampLead + " " }<time data-visual-mask { ui.StampAttrs(r.StampAt, ui.StampRelative)... }>{ r.StampText }</time>{ r.StampTail }
 							}
 							if r.Enables != "" {
 								{ " " + r.Enables }
 							}
 							if !r.Since.IsZero() {
 								{ " Since " }
-								<time data-visual-mask { ui.StampAttrs(r.Since, ui.StampDay)... }>{ r.SinceText }</time>.
+								<time data-visual-mask { ui.StampAttrs(r.Since, ui.StampRelative)... }>{ r.SinceText }</time>.
 							}
 						</p>
 					}

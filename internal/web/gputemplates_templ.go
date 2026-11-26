@@ -76,7 +76,7 @@ func policyTemplatesPage(p gtView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.ReadAt, ui.StampShort))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.ReadAt, ui.StampDateTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -95,9 +95,9 @@ func policyTemplatesPage(p gtView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var4 string
-				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.ReadAt, ui.StampShort))
+				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.ReadAt, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 13, Col: 128}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 13, Col: 134}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -854,7 +854,7 @@ func gtRow(p gtView, g gtGroup, d gtDevice) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(d.At, ui.StampShort))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(d.At, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -873,9 +873,9 @@ func gtRow(p gtView, g gtGroup, d gtDevice) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var42 string
-			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(d.At, ui.StampShort))
+			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(d.At, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 119, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 119, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -2012,7 +2012,7 @@ func gtPrevCard(p gtPreview, r gtPrevRow, rank string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.ReadAt, ui.StampShort))
+			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.ReadAt, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2031,9 +2031,9 @@ func gtPrevCard(p gtPreview, r gtPrevRow, rank string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var102 string
-		templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(r.ReadAt, ui.StampShort))
+		templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(r.ReadAt, ui.StampDateTime))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 269, Col: 123}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 269, Col: 129}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 		if templ_7745c5c3_Err != nil {
@@ -2251,7 +2251,7 @@ func gtReferenceCard(p gtPreview) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.RefAt, ui.StampShort))
+			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.RefAt, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2270,9 +2270,9 @@ func gtReferenceCard(p gtPreview) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var115 string
-		templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.RefAt, ui.StampShort))
+		templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.RefAt, ui.StampDateTime))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 319, Col: 208}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/gputemplates.templ`, Line: 319, Col: 214}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 		if templ_7745c5c3_Err != nil {

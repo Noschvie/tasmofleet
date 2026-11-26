@@ -204,7 +204,7 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 			tile.Href = base + fleetPath + "?filter=" + fleetNone
 		}
 		if r := s.BackupRun; r != nil {
-			tile.Hint, tile.HintAt, tile.HintAtText = "Last run ", r.StartedAt, ui.StampDayText(s.Now, r.StartedAt)
+			tile.Hint, tile.HintAt, tile.HintAtText = "Last run ", r.StartedAt, ui.StampRelativeText(s.Now, r.StartedAt)
 			if r.Failed > 0 {
 				tile.HintAfter = " · " + itoa(r.Failed) + " failed"
 				tile.Tone = ui.ToneWarn
@@ -422,7 +422,7 @@ func dashTxnCard(base string, now time.Time, t txView) ui.TxnData {
 	at := txBeganAt(t, time.Time{})
 	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: t.Outcome, StateTone: toneOf(t.Tone), Summary: strings.Join(parts, " · "),
 		OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Href: fmt.Sprintf("%s/transactions/%d", base, t.ID),
-		Started: at, StartedText: ui.StampDayText(now, at)}
+		Started: at, StartedText: ui.StampRelativeText(now, at)}
 }
 
 // dashResult is a transaction's result in the design system's words: Succeeded, Cancelled, Failed,
@@ -450,7 +450,7 @@ func dashResult(t txView) (string, ui.Tone) {
 func dashTxnRow(base string, now time.Time, t txView) ui.TxnRowData {
 	res, tone := dashResult(t)
 	at := txBeganAt(t, time.Time{})
-	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampDayText(now, at), WhenAt: at,
+	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampRelativeText(now, at), WhenAt: at,
 		Href: fmt.Sprintf("%s/transactions/%d", base, t.ID)}
 }
 

@@ -86,8 +86,8 @@ func backupDeleteAttrs(p backupsView, b backupRow) templ.Attributes {
 		"data-dlg-title":  "Delete this backup?",
 		"data-dlg-text":   b.DeleteText,
 		"data-dlg-at":     ui.StampISO(b.Taken),
-		"data-dlg-ts":     ui.StampDateTimeSec.Key,
-		"data-dlg-shown":  ui.StampText(b.Taken, ui.StampDateTimeSec),
+		"data-dlg-ts":     ui.StampDateTime.Key,
+		"data-dlg-shown":  ui.StampText(b.Taken, ui.StampDateTime),
 		"data-dlg-action": p.Base + "/backups/" + bkStr(b.ID) + "/delete",
 		"data-dlg-verb":   "Delete backup",
 		"data-dlg-danger": true, // the dialog's verb is danger-solid; dialog.js sets the tone from the opener

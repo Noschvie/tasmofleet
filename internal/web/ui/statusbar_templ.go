@@ -446,7 +446,7 @@ func sbWide(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.Since, StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.Since, StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -467,7 +467,7 @@ func sbWide(d ShellData) templ.Component {
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.Since))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 88, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 88, Col: 107}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -814,7 +814,7 @@ func sbJobs(s StatusBar) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(s.Now, StampClock))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(s.Now, StampTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -833,9 +833,9 @@ func sbJobs(s StatusBar) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var34 string
-				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(StampText(s.Now, StampClock))
+				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(StampText(s.Now, StampTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 140, Col: 105}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 140, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -981,7 +981,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1002,7 +1002,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.At))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 159, Col: 98}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 159, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -1015,7 +1015,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(b.countText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 159, Col: 154}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 159, Col: 159}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -1034,7 +1034,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1055,7 +1055,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.At))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 161, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 161, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -1068,7 +1068,7 @@ func sbBackupWide(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(b.countText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 161, Col: 147}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 161, Col: 152}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1157,7 +1157,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1178,7 +1178,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.At))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 171, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 171, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
@@ -1191,7 +1191,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(b.countText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 171, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 171, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {
@@ -1206,7 +1206,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.At, StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1227,7 +1227,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.At))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 173, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 173, Col: 72}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 			if templ_7745c5c3_Err != nil {
@@ -1240,7 +1240,7 @@ func sbBackupSheet(d ShellData, b StatusBackup) templ.Component {
 			var templ_7745c5c3_Var51 string
 			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(b.countText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 173, Col: 123}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 173, Col: 128}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 			if templ_7745c5c3_Err != nil {
@@ -1355,7 +1355,7 @@ func sbNarrow(d ShellData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(d.Status.Broker.Since, StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(d.Status.Broker.Since, StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1376,7 +1376,7 @@ func sbNarrow(d ShellData) templ.Component {
 			var templ_7745c5c3_Var57 string
 			templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(d.Status.Broker.Since))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 185, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 185, Col: 115}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var57))
 			if templ_7745c5c3_Err != nil {
@@ -1527,7 +1527,7 @@ func sbNarrow(d ShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.Since, StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(b.Since, StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1548,7 +1548,7 @@ func sbNarrow(d ShellData) templ.Component {
 				var templ_7745c5c3_Var63 string
 				templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(d.Status.dayText(b.Since))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 211, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 211, Col: 107}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 				if templ_7745c5c3_Err != nil {
@@ -1561,7 +1561,7 @@ func sbNarrow(d ShellData) templ.Component {
 				var templ_7745c5c3_Var64 string
 				templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(b.Host)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 211, Col: 150}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 211, Col: 155}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 				if templ_7745c5c3_Err != nil {
@@ -1862,7 +1862,7 @@ func sbSheetJobs(s StatusBar) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(s.Now, StampClock))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", StampAttrs(s.Now, StampTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -1881,9 +1881,9 @@ func sbSheetJobs(s StatusBar) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var78 string
-				templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(StampText(s.Now, StampClock))
+				templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.JoinStringErrs(StampText(s.Now, StampTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 267, Col: 105}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/ui/statusbar.templ`, Line: 267, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var78))
 				if templ_7745c5c3_Err != nil {

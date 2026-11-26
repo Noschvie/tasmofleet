@@ -377,7 +377,7 @@ templ devActList(rows []devActRow, base string) {
 	<ul class="dev-act">
 		for _, r := range rows {
 			<li>
-				<time class="dev-act-at" { ui.StampAttrs(r.At, ui.StampDateTimeSec)... }>{ ui.StampText(r.At, ui.StampDateTimeSec) }</time>
+				<time class="dev-act-at" { ui.StampAttrs(r.At, ui.StampDateTime)... }>{ ui.StampText(r.At, ui.StampDateTime) }</time>
 				if e := r.Event; e != nil {
 					<span class="dev-act-what"><span class="dev-act-more">{ string(e.Source) }{ healthMore(e.Source, e.Detail) }</span></span>
 					<span class="dev-act-st">
@@ -588,7 +588,7 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 						if r.Sub != "" || !r.SubAt.IsZero() {
 							<span class="sub">
 								if !r.SubAt.IsZero() {
-									<time data-visual-mask { ui.StampAttrs(r.SubAt, ui.StampDay)... }>{ r.SubAtText }</time>
+									<time data-visual-mask { ui.StampAttrs(r.SubAt, ui.StampRelative)... }>{ r.SubAtText }</time>
 								}
 								{ r.Sub }
 							</span>
@@ -608,7 +608,7 @@ templ stabilityCard(c stabCard, attrs templ.Attributes) {
 			<ul class="stab-boots">
 				for _, b := range c.Boots {
 					<li>
-						<span class="when"><time data-visual-mask { ui.StampAttrs(b.At, ui.StampClockOrDay)... }>{ b.AtText }</time></span>
+						<span class="when"><time data-visual-mask { ui.StampAttrs(b.At, ui.StampRelative)... }>{ b.AtText }</time></span>
 						<span>
 							{ b.Label }
 							if b.Raw != "" {

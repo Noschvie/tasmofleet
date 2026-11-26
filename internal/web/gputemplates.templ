@@ -10,7 +10,7 @@ templ policyTemplatesPage(p gtView) {
 			<div class="pol-dev-bar gt-bar">
 				<p class="gt-sum" role="status">{ p.Summary }</p>
 				if !p.ReadAt.IsZero() {
-					<span class="gt-read">Read live <time { ui.StampAttrs(p.ReadAt, ui.StampShort)... }>{ ui.StampText(p.ReadAt, ui.StampShort) }</time></span>
+					<span class="gt-read">Read live <time { ui.StampAttrs(p.ReadAt, ui.StampDateTime)... }>{ ui.StampText(p.ReadAt, ui.StampDateTime) }</time></span>
 				}
 				<form method="post" action={ templ.SafeURL(p.Base + policyTemplatesPath + "/read") } class="pol-inline">
 					<input type="hidden" name="csrf" value={ p.CSRF }/>
@@ -116,7 +116,7 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 					if d.Age != nil {
 						{ " · " }<time title={ stamp(d.Age.At) } { ui.StampAttrs(d.Age.At, ui.StampTitle)... }>{ d.Age.Words }</time>
 					} else if !d.At.IsZero() {
-						{ " " }<time { ui.StampAttrs(d.At, ui.StampShort)... }>{ ui.StampText(d.At, ui.StampShort) }</time>
+						{ " " }<time { ui.StampAttrs(d.At, ui.StampDateTime)... }>{ ui.StampText(d.At, ui.StampDateTime) }</time>
 					}
 					if d.ReadFailed {
 						{ " · refresh failed" }
@@ -266,7 +266,7 @@ templ gtPrevCard(p gtPreview, r gtPrevRow, rank string) {
 		<div class="sch">
 			<div>
 				<h2><a href={ templ.SafeURL(p.Base + r.Href) }>{ r.Name }</a></h2>
-				<p class="cnote">{ r.Meta } <time { ui.StampAttrs(r.ReadAt, ui.StampShort)... }>{ ui.StampText(r.ReadAt, ui.StampShort) }</time></p>
+				<p class="cnote">{ r.Meta } <time { ui.StampAttrs(r.ReadAt, ui.StampDateTime)... }>{ ui.StampText(r.ReadAt, ui.StampDateTime) }</time></p>
 			</div>
 		</div>
 		<div class="sbody sbody-plain">
@@ -316,7 +316,7 @@ templ gtReferenceCard(p gtPreview) {
 		<div class="sch">
 			<div>
 				<h2>Reference</h2>
-				<p class="cnote">{ p.RefHow }: <a class="mono" href={ templ.SafeURL(p.Base + p.RefHref) }>{ p.Ref }</a>, read live <time { ui.StampAttrs(p.RefAt, ui.StampShort)... }>{ ui.StampText(p.RefAt, ui.StampShort) }</time></p>
+				<p class="cnote">{ p.RefHow }: <a class="mono" href={ templ.SafeURL(p.Base + p.RefHref) }>{ p.Ref }</a>, read live <time { ui.StampAttrs(p.RefAt, ui.StampDateTime)... }>{ ui.StampText(p.RefAt, ui.StampDateTime) }</time></p>
 			</div>
 		</div>
 		<div class="sbody sbody-plain">

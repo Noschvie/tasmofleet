@@ -110,7 +110,7 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		Title: "Delete this backup?",
 		Text:  backupData{}.DeleteText(b),
 		Facts: []confirmFact{
-			{Name: "Taken", Value: ui.StampText(b.TakenAt, ui.StampDateTimeSec)},
+			{Name: "Taken", Value: ui.StampText(b.TakenAt, ui.StampDateTime)},
 			{Name: "Firmware", Value: b.Version},
 		},
 		Crumbs: crumbs,

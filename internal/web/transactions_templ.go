@@ -640,9 +640,9 @@ func txList(p txListView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var31 string
-						templ_7745c5c3_Var31, templ_7745c5c3_Err = templruntime.NewAttributeExpression(ui.StampDay.Key).Resolve(ctx)
+						templ_7745c5c3_Var31, templ_7745c5c3_Err = templruntime.NewAttributeExpression(ui.StampRelative.Key).Resolve(ctx)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 134}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 139}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 						if templ_7745c5c3_Err != nil {
@@ -655,7 +655,7 @@ func txList(p txListView) templ.Component {
 						var templ_7745c5c3_Var32 string
 						templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(h.When)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 145}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 150}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 						if templ_7745c5c3_Err != nil {
@@ -668,7 +668,7 @@ func txList(p txListView) templ.Component {
 						var templ_7745c5c3_Var33 string
 						templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(h.Suffix)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 164}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 110, Col: 169}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 						if templ_7745c5c3_Err != nil {
@@ -922,7 +922,7 @@ func txnBody(p txnPage) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.SubAt, ui.StampShort))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.SubAt, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -941,9 +941,9 @@ func txnBody(p txnPage) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var44 string
-			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.SubAt, ui.StampShort))
+			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.SubAt, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 160, Col: 182}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 160, Col: 188}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -956,7 +956,7 @@ func txnBody(p txnPage) templ.Component {
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(p.SubPost)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 160, Col: 202}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 160, Col: 208}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
@@ -1926,7 +1926,7 @@ func txnBody(p txnPage) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampClock))
+							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampTime))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -1945,9 +1945,9 @@ func txnBody(p txnPage) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var93 string
-						templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampClock))
+						templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampTime))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 287, Col: 139}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 287, Col: 137}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 						if templ_7745c5c3_Err != nil {
@@ -1983,7 +1983,7 @@ func txnBody(p txnPage) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampClock))
+							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampTime))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -2002,9 +2002,9 @@ func txnBody(p txnPage) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var95 string
-						templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampClock))
+						templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampTime))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 289, Col: 165}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 289, Col: 163}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 						if templ_7745c5c3_Err != nil {
@@ -2040,7 +2040,7 @@ func txnBody(p txnPage) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampClock))
+							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.Start, ui.StampTime))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -2059,9 +2059,9 @@ func txnBody(p txnPage) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var97 string
-						templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampClock))
+						templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(p.Sched.Start, ui.StampTime))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 291, Col: 156}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 291, Col: 154}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 						if templ_7745c5c3_Err != nil {
@@ -2074,7 +2074,7 @@ func txnBody(p txnPage) templ.Component {
 						var templ_7745c5c3_Var98 string
 						templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(p.Sched.Minutes))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 291, Col: 209}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 291, Col: 207}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 						if templ_7745c5c3_Err != nil {
@@ -2148,7 +2148,7 @@ func txnBody(p txnPage) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.BackAt, ui.StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.Sched.BackAt, ui.StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -2167,9 +2167,9 @@ func txnBody(p txnPage) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var102 string
-				templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(p.Sched.BackAt, p.Sched.BackAt))
+				templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(p.Sched.BackAt, p.Sched.BackAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 304, Col: 148}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 304, Col: 158}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 				if templ_7745c5c3_Err != nil {
@@ -2851,7 +2851,7 @@ func schedSub(s *txnSched) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Created, ui.StampDay))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Created, ui.StampRelative))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2870,9 +2870,9 @@ func schedSub(s *txnSched) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var131 string
-			templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(s.Created, s.Created))
+			templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(s.Created, s.Created))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 414, Col: 115}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 414, Col: 125}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var131))
 			if templ_7745c5c3_Err != nil {
@@ -2885,7 +2885,7 @@ func schedSub(s *txnSched) templ.Component {
 			var templ_7745c5c3_Var132 string
 			templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.JoinStringErrs(s.Tail)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 414, Col: 136}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 414, Col: 146}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var132))
 			if templ_7745c5c3_Err != nil {
@@ -2979,7 +2979,7 @@ func schedSub(s *txnSched) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.CancelledAt, ui.StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.CancelledAt, ui.StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -2998,9 +2998,9 @@ func schedSub(s *txnSched) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var137 string
-				templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(s.CancelledAt, s.CancelledAt))
+				templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(s.CancelledAt, s.CancelledAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 418, Col: 141}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 418, Col: 151}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 				if templ_7745c5c3_Err != nil {
@@ -3231,7 +3231,7 @@ func schedWhen(s *txnSched) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Start, ui.StampClock))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Start, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3250,9 +3250,9 @@ func schedWhen(s *txnSched) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var147 string
-			templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(s.Start, ui.StampClock))
+			templ_7745c5c3_Var147, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(s.Start, ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 140}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 138}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var147))
 			if templ_7745c5c3_Err != nil {
@@ -3270,7 +3270,7 @@ func schedWhen(s *txnSched) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Deadline(), ui.StampClock))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(s.Deadline(), ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3289,9 +3289,9 @@ func schedWhen(s *txnSched) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var148 string
-			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(s.Deadline(), ui.StampClock))
+			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(s.Deadline(), ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 318}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 314}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
 			if templ_7745c5c3_Err != nil {
@@ -3304,7 +3304,7 @@ func schedWhen(s *txnSched) templ.Component {
 			var templ_7745c5c3_Var149 string
 			templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(s.Minutes))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 354}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 435, Col: 350}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
 			if templ_7745c5c3_Err != nil {
@@ -6029,7 +6029,7 @@ func tmplCardView(c tmplCard) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(st.Backup.At, ui.StampShort))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(st.Backup.At, ui.StampDateTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -6048,9 +6048,9 @@ func tmplCardView(c tmplCard) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var286 string
-				templ_7745c5c3_Var286, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(st.Backup.At, ui.StampShort))
+				templ_7745c5c3_Var286, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(st.Backup.At, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 867, Col: 169}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 867, Col: 175}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var286))
 				if templ_7745c5c3_Err != nil {

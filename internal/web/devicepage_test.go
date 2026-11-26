@@ -14,6 +14,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // Tests of the design v2 device tabs (WP P3): what the overview, the console, the settings,
@@ -583,7 +584,7 @@ func TestStateChangesTimeIsServerZoneWithBrowserHook(t *testing.T) {
 		d.History = fakeHistory{[]store.HealthEvent{{At: at, From: model.HealthOnline, To: model.HealthOffline, Source: model.SourceHTTP}}}
 	})
 	_, body := e.do(t, "GET", "/devices/1/history", "operator", nil)
-	for _, want := range []string{`datetime="2026-10-22T09:41:07Z"`, `data-ts="datetime-s"`, `>2026-10-22 11:41:07</time>`} {
+	for _, want := range []string{`datetime="2026-10-22T09:41:07Z"`, `data-ts="date-time"`, `>22 Oct 2026, 11:41</time>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("history page lacks %s", want)
 		}
@@ -598,10 +599,10 @@ func TestBackupTimesAreInOneZone(t *testing.T) {
 	time.Local = time.FixedZone("UTC+2", 2*60*60)
 	t.Cleanup(func() { time.Local = old })
 	at := time.Date(2026, 10, 22, 22, 41, 7, 0, time.UTC) // 00:41 next day in UTC+2
-	if got := (backupData{}).DeleteText(model.Backup{TakenAt: at}); !strings.Contains(got, "2026-10-23 00:41:07") {
+	if got := (backupData{}).DeleteText(model.Backup{TakenAt: at}); !strings.Contains(got, "23 Oct 2026, 00:41") {
 		t.Errorf("delete text not in the server zone: %s", got)
 	}
-	if got := storeDate(at.AddDate(0, 0, 1), at); got != "23 Oct, 00:41" {
+	if got := ui.StampText(at, ui.StampDateTime); got != "23 Oct 2026, 00:41" {
 		t.Errorf("storage cell not in the server zone: %s", got)
 	}
 }

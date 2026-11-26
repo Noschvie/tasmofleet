@@ -335,7 +335,7 @@ func backupsTab(p backupsView) templ.Component {
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
-							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(j.Started, ui.StampShort))
+							templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(j.Started, ui.StampDateTime))
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
 							}
@@ -354,9 +354,9 @@ func backupsTab(p backupsView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var12 string
-						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(j.Started, ui.StampShort))
+						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(j.Started, ui.StampDateTime))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 104, Col: 100}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 104, Col: 106}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 						if templ_7745c5c3_Err != nil {
@@ -635,7 +635,7 @@ func backupRowItem(p backupsView, b backupRow) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(b.Taken, ui.StampShort))
+			templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(b.Taken, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -654,9 +654,9 @@ func backupRowItem(p backupsView, b backupRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var26 string
-		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(b.Taken, ui.StampShort))
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(b.Taken, ui.StampDateTime))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 149, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 149, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -1277,7 +1277,7 @@ func pruneDialog(p backupsView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(b.Taken, ui.StampShort))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(b.Taken, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1296,9 +1296,9 @@ func pruneDialog(p backupsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var51 string
-			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(b.Taken, ui.StampShort))
+			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(b.Taken, ui.StampDateTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 284, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 284, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 			if templ_7745c5c3_Err != nil {
@@ -1311,7 +1311,7 @@ func pruneDialog(p backupsView) templ.Component {
 			var templ_7745c5c3_Var52 string
 			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(b.Size)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 284, Col: 148}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/backuppages.templ`, Line: 284, Col: 154}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 			if templ_7745c5c3_Err != nil {

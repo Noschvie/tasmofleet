@@ -175,9 +175,9 @@ templ bulkResultPage(v bulkResultView) {
 				</div>
 				<p class="pghead-sub">
 					if v.Running {
-						Started <time { ui.StampAttrs(v.When, ui.StampClockSec)... }>{ ui.StampText(v.When, ui.StampClockSec) }</time>
+						Started <time { ui.StampAttrs(v.When, ui.StampTime)... }>{ ui.StampText(v.When, ui.StampTime) }</time>
 					} else {
-						Finished <time { ui.StampAttrs(v.When, ui.StampClockSec)... }>{ ui.StampText(v.When, ui.StampClockSec) }</time>
+						Finished <time { ui.StampAttrs(v.When, ui.StampTime)... }>{ ui.StampText(v.When, ui.StampTime) }</time>
 					}
 					if v.Took != "" {
 						if v.Running {

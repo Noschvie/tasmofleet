@@ -497,7 +497,7 @@ func httpRow(f transport.Facts) pathRow {
 
 func (r *pathRow) setSince(at, now time.Time) {
 	if !at.IsZero() {
-		r.Since, r.SinceText = at, ui.StampDayText(now, at)
+		r.Since, r.SinceText = at, ui.StampRelativeText(now, at)
 	}
 }
 

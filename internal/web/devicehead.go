@@ -87,7 +87,7 @@ func (h *handler) headWith(v view, d model.Device, hl model.Health, running *mod
 	}
 	if t.offline() {
 		t.OfflineSince = offlineSince(d, hl)
-		t.OfflineSinceText = ui.StampDayText(h.d.Clock.Now(), t.OfflineSince)
+		t.OfflineSinceText = ui.StampRelativeText(h.d.Clock.Now(), t.OfflineSince)
 		t.OfflineHTTP = offlineHTTPNote(hl)
 	}
 	return t

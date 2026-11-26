@@ -68,7 +68,7 @@ type tile struct {
 	BarTone                ui.Tone
 	SubPrefix              string    // "Last restart ": the sub line is this text and the time At
 	At                     time.Time // zero: the sub line is just Sub
-	AtText                 string    // the fallback text of At (StampDay), for a page without JavaScript
+	AtText                 string    // the fallback text of At (StampRelative), for a page without JavaScript
 	Fix                    bool      // "Make compliant…" for this device
 	Mask                   bool      // a reading the pixel comparison cannot reproduce
 }

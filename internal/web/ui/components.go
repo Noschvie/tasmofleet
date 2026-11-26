@@ -498,7 +498,7 @@ type KVRow struct {
 	Wide   bool      // a long value: on a phone it takes the whole row of a compact card (Identity)
 	Soft   bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
 	At     time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
-	Stamp  StampFmt  // how time.js shows At; the zero value is StampShort
+	Stamp  StampFmt  // how time.js shows At; the zero value is StampDateTime
 }
 
 // Tab is one tab of a tab row. Tabs are links (each tab its own route). A disabled tab says why.
@@ -652,7 +652,7 @@ type TxnData struct {
 	// Stopped devices were never started (a template transaction stops after the first failure); drawn grey.
 	Stopped int
 	// StartedText is "when it started" under the summary; empty draws none. When Started is set, StartedText is the
-	// fallback text of that instant (StampDay) and time.js shows it in the browser's zone.
+	// fallback text of that instant (StampRelative) and time.js shows it in the browser's zone.
 	StartedText string
 	Started     time.Time
 }
@@ -661,7 +661,7 @@ type TxnData struct {
 type TxnRowData struct {
 	ID, Title, Result, When, Href string
 	Tone                          Tone
-	WhenAt                        time.Time // when set, When is the fallback text of that instant (StampDay) and time.js shows it in the browser's zone
+	WhenAt                        time.Time // when set, When is the fallback text of that instant (StampRelative) and time.js shows it in the browser's zone
 }
 
 // ConsoleLine is one line of the console: time, text, kind ("cmd", "err", "reply" for the
@@ -843,10 +843,10 @@ func AvatarTone(username string) Tone {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// stampOf is the format of a KVRow's time: StampShort unless the row names another.
+// stampOf is the format of a KVRow's time: StampDateTime unless the row names another.
 func (r KVRow) stampOf() StampFmt {
 	if r.Stamp.Key == "" {
-		return StampShort
+		return StampDateTime
 	}
 	return r.Stamp
 }

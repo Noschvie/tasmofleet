@@ -199,7 +199,7 @@ func (h *handler) scanBodyData(r *http.Request, s discovery.ScanStatus) scanBody
 	default:
 		b.StatusLead, b.StatusAt = "Last scan "+string(s.State)+" ", s.FinishedAt
 	}
-	b.StatusAtText = ui.StampDayText(now, b.StatusAt)
+	b.StatusAtText = ui.StampRelativeText(now, b.StatusAt)
 
 	byMAC := h.proposalsByMAC(r)
 	devs, err := h.d.Inventory.List(r.Context())

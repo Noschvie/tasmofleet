@@ -412,18 +412,6 @@ func TestSettingsAdvancedOffersResetWithDialogAndPage(t *testing.T) {
 	}
 }
 
-// Why: the last backup sits in a 110 px column; a full date with the year overflows it, so the
-// current year is left out (the full time is in the title) and only an older backup names its year.
-func TestStoreDateFitsTheColumn(t *testing.T) {
-	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
-	if got := storeDate(now, time.Date(2026, 10, 23, 5, 45, 0, 0, time.UTC)); got != "23 Oct, 05:45" {
-		t.Errorf("this year: %q", got)
-	}
-	if got := storeDate(now, time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC)); got != "31 Dec 2025" {
-		t.Errorf("last year: %q", got)
-	}
-}
-
 // Why (#205): a user who deleted a backup directory by hand is left with rows that point
 // nowhere. They must be recognisable in both lists, offer no Download or Restore (which can
 // only fail), stay deletable so the entry can be removed, and the direct URLs must answer

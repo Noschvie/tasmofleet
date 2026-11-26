@@ -256,7 +256,7 @@ func TestDashboardTransactionsCard(t *testing.T) {
 		}
 	}
 	// Why: "Today"/"Yesterday" is the browser's call (#137), so the when of a row is a <time> time.js repaints
-	if !strings.Contains(card, `data-ts="day"`) {
+	if !strings.Contains(card, `data-ts="relative"`) {
 		t.Errorf("history rows are not day stamps for time.js: %s", card)
 	}
 	if strings.Contains(card, `/tf/transactions/1"`) {
@@ -289,7 +289,7 @@ func TestDashboardFinishedNewestTransactionIsARow(t *testing.T) {
 		t.Errorf("a finished transaction is drawn as the progress card: %s", card)
 	}
 	row := between(card, `<a class="att-row txn-row" href="/tf/transactions/2">`, `</a>`)
-	for _, want := range []string{"TX-0002", ">Succeeded<", `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`} {
+	for _, want := range []string{"TX-0002", ">Succeeded<", `<time data-ts="relative" datetime="` + at.UTC().Format(time.RFC3339) + `">`} {
 		if !strings.Contains(row, want) {
 			t.Errorf("the newest transaction's row lacks %q: %s", want, card)
 		}
@@ -313,7 +313,7 @@ func TestDashboardActiveTransactionCardShowsStart(t *testing.T) {
 	if card == "" || !strings.Contains(card, "seg-bar") {
 		t.Fatalf("a running transaction is not the progress card: %s", txnPart(body))
 	}
-	want := `<span class="txn-when">started <time data-ts="day" datetime="` + planned.UTC().Format(time.RFC3339) + `">`
+	want := `<span class="txn-when">started <time data-ts="relative" datetime="` + planned.UTC().Format(time.RFC3339) + `">`
 	if !strings.Contains(card, want) {
 		t.Errorf("the card does not say when the plan started (want %q): %s", want, card)
 	}
@@ -660,7 +660,7 @@ func TestDashboardNoBackupTileLinksToTheBackupsPage(t *testing.T) {
 	}
 	now := time.Now()
 	href, tone, hint := tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Failed: 2, Skipped: 1, Tried: 5})
-	if href != "/tf/devices/backups?filter=none" || !strings.HasPrefix(hint, "Last run <time") || !strings.Contains(hint, `data-ts="day"`) || !strings.HasSuffix(hint, " · 2 failed") || !strings.Contains(tone, "warn") {
+	if href != "/tf/devices/backups?filter=none" || !strings.HasPrefix(hint, "Last run <time") || !strings.Contains(hint, `data-ts="relative"`) || !strings.HasSuffix(hint, " · 2 failed") || !strings.Contains(tone, "warn") {
 		t.Errorf("failed run: href %q tone %q hint %q", href, tone, hint)
 	}
 	_, tone, hint = tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Skipped: 4, Tried: 3})

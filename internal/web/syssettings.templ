@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
@@ -364,11 +363,11 @@ templ sysPushRowView(row sysPushRow) {
 				}
 			</div>
 			<div class="sys-orphan-detail">
-				{ row.Owner } · { row.Host } · subscribed <time { ui.StampAttrs(row.Created, ui.StampStore)... }>{ storeDate(time.Now(), row.Created) }</time>
+				{ row.Owner } · { row.Host } · subscribed <time { ui.StampAttrs(row.Created, ui.StampDateTime)... }>{ ui.StampText(row.Created, ui.StampDateTime) }</time>
 				if row.LastError != "" {
 					{ " · " + row.LastError + ". The next event tries again." }
 				} else if !row.LastOK.IsZero() {
-					{ " · last delivery " }<time { ui.StampAttrs(row.LastOK, ui.StampStore)... }>{ storeDate(time.Now(), row.LastOK) }</time>
+					{ " · last delivery " }<time { ui.StampAttrs(row.LastOK, ui.StampDateTime)... }>{ ui.StampText(row.LastOK, ui.StampDateTime) }</time>
 				} else {
 					{ " · nothing sent yet" }
 				}
@@ -589,7 +588,7 @@ templ sysChannelStatus(ch sysChannel) {
 			<span>
 				{ ch.Lead }
 				if !ch.At.IsZero() {
-					<time { ui.StampAttrs(ch.At, ui.StampStore)... }>{ storeDate(time.Now(), ch.At) }</time>
+					<time { ui.StampAttrs(ch.At, ui.StampDateTime)... }>{ ui.StampText(ch.At, ui.StampDateTime) }</time>
 				}
 				{ ch.Tail }
 			</span>
@@ -673,7 +672,7 @@ templ sysOrphanRow(p sysPage, st sysStorage, o sysOrphan) {
 		}
 		<div class="bk-main">
 			<div class="bk-title">
-				<time { ui.StampAttrs(o.Taken, ui.StampShort)... }>{ ui.StampText(o.Taken, ui.StampShort) }</time>
+				<time { ui.StampAttrs(o.Taken, ui.StampDateTime)... }>{ ui.StampText(o.Taken, ui.StampDateTime) }</time>
 				if o.Kept {
 					@ui.Badge(ui.ToneAccent, "Kept")
 				}
@@ -704,7 +703,7 @@ templ sysOrphanRow(p sysPage, st sysStorage, o sysOrphan) {
 					href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
 					data-dialog="dlg-bkdel"
 					data-dlg-title="Delete this backup?"
-					data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTimeSec) }
+					data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTime.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTime) }
 					data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
 					data-dlg-verb="Delete backup"
 					data-dlg-danger
@@ -725,7 +724,7 @@ templ sysUnreferencedFiles(st sysStorage) {
 						<span class="sys-store-name mono" title={ f.Path }>{ f.Path }</span>
 					</div>
 					<div class="sys-orphan-detail">
-						{ f.Size + " · " }<time { ui.StampAttrs(f.Modified, ui.StampShort)... }>{ ui.StampText(f.Modified, ui.StampShort) }</time>
+						{ f.Size + " · " }<time { ui.StampAttrs(f.Modified, ui.StampDateTime)... }>{ ui.StampText(f.Modified, ui.StampDateTime) }</time>
 					</div>
 				</div>
 			</div>
@@ -746,7 +745,7 @@ templ sysSnapshotStatus(db sysDB) {
 				<span class="sys-status-dot t-warn" aria-hidden="true"></span>
 				<div class="sys-status-text">
 					<b>A scheduled snapshot was skipped</b>
-					<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the snapshot was not made up. Noticed <time { ui.StampAttrs(db.Missed, ui.StampDay)... }>{ ui.StampDayText(db.Now, db.Missed) }</time>. The next one is as scheduled.</span>
+					<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the snapshot was not made up. Noticed <time { ui.StampAttrs(db.Missed, ui.StampRelative)... }>{ ui.StampRelativeText(db.Now, db.Missed) }</time>. The next one is as scheduled.</span>
 				</div>
 			</div>
 		}
@@ -755,10 +754,10 @@ templ sysSnapshotStatus(db sysDB) {
 				<div class="sys-status st-fail">
 					<span class="sys-status-dot t-danger" aria-hidden="true"></span>
 					<div class="sys-status-text">
-						<b>Last attempt failed, <time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time></b>
+						<b>Last attempt failed, <time { ui.StampAttrs(db.Status.Attempt, ui.StampDateTime)... }>{ ui.StampText(db.Status.Attempt, ui.StampDateTime) }</time></b>
 						<span>
 							if !db.Status.Taken.IsZero() {
-								Last good snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Taken) }</time>
+								Last good snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampDateTime)... }>{ ui.StampText(db.Status.Taken, ui.StampDateTime) }</time>
 							} else {
 								No good snapshot yet
 							}
@@ -769,7 +768,7 @@ templ sysSnapshotStatus(db sysDB) {
 				<div class="sys-status st-on">
 					<span class="sys-status-dot t-ok" aria-hidden="true"></span>
 					<div class="sys-status-text">
-						<b>Last snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Taken) }</time></b>
+						<b>Last snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampDateTime)... }>{ ui.StampText(db.Status.Taken, ui.StampDateTime) }</time></b>
 						<span>{ strconv.Itoa(db.Status.Count) + " of " + strconv.Itoa(db.Kept) + " kept" }</span>
 					</div>
 				</div>
@@ -806,9 +805,9 @@ templ sysDownloadBlock(p sysPage, db sysDB) {
 		<div class="st-fail">
 			<div class="error" role="alert">
 				<b>The last scheduled snapshot failed.</b>
-				<time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time>: could not write <span class="mono">{ db.Dir + "/" + db.Status.File }</span> ({ db.Status.Reason }). Nothing was deleted.
+				<time { ui.StampAttrs(db.Status.Attempt, ui.StampDateTime)... }>{ ui.StampText(db.Status.Attempt, ui.StampDateTime) }</time>: could not write <span class="mono">{ db.Dir + "/" + db.Status.File }</span> ({ db.Status.Reason }). Nothing was deleted.
 				if !db.Status.Next.IsZero() {
-					The next attempt is <time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>;
+					The next attempt is <time { ui.StampAttrs(db.Status.Next, ui.StampDateTime)... }>{ ui.StampText(db.Status.Next, ui.StampDateTime) }</time>;
 				}
 				<a href={ templ.SafeURL(p.Base + "/audit") }>see the audit log</a>.
 			</div>
@@ -867,7 +866,7 @@ templ sysStoredBlock(db sysDB) {
 							}
 						</div>
 						<div class="sys-orphan-detail">
-							<time { ui.StampAttrs(f.Taken, ui.StampStore)... }>{ storeDate(time.Now(), f.Taken) }</time>{ " · " + f.Size }
+							<time { ui.StampAttrs(f.Taken, ui.StampDateTime)... }>{ ui.StampText(f.Taken, ui.StampDateTime) }</time>{ " · " + f.Size }
 							if f.Schema > 0 {
 								{ " · schema " + strconv.Itoa(f.Schema) }
 							}

@@ -138,7 +138,7 @@ func (s *txnSched) LateText() string {
 // BackFmt is how the time TasmoFleet came back reads: a clock time on the day of the start, else with its day.
 func (s *txnSched) BackFmt() ui.StampFmt {
 	if s.BackAt.Local().YearDay() == s.Start.Local().YearDay() && s.BackAt.Local().Year() == s.Start.Local().Year() {
-		return ui.StampClock
+		return ui.StampTime
 	}
 	return ui.StampStart
 }

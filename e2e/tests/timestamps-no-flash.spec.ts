@@ -91,7 +91,7 @@ for (const style of ["outerHTML", "innerHTML"] as const) {
         seen = document.querySelector("#flash-probe")?.textContent ?? "";
       });
       // @ts-expect-error htmx is a page global
-      window.htmx.swap(host, `<time id="flash-probe" datetime="2026-03-04T22:15:09Z" data-ts="datetime-s">SERVER-TEXT</time>`, { swapStyle: st });
+      window.htmx.swap(host, `<time id="flash-probe" datetime="2026-03-04T22:15:09Z" data-ts="date-time">SERVER-TEXT</time>`, { swapStyle: st });
       return seen;
     }, style);
     expect(got).not.toBe("SERVER-TEXT");
@@ -120,7 +120,7 @@ test("an innerHTML: out-of-band part outside the swap target is repainted by htm
       seen = outside.textContent ?? "";
     });
     // @ts-expect-error htmx is a page global
-    window.htmx.swap(host, `<p>main</p><div hx-swap-oob="innerHTML:#oob-outside"><time datetime="2026-03-04T22:15:09Z" data-ts="datetime-s">SERVER-TEXT</time></div>`, { swapStyle: "innerHTML" });
+    window.htmx.swap(host, `<p>main</p><div hx-swap-oob="innerHTML:#oob-outside"><time datetime="2026-03-04T22:15:09Z" data-ts="date-time">SERVER-TEXT</time></div>`, { swapStyle: "innerHTML" });
     return { seen, after: outside.textContent };
   });
   expect(got.after, "the part did land in its container").not.toBe("");

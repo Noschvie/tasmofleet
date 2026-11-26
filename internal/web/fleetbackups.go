@@ -71,7 +71,7 @@ func (w whyText) Plain() string { return w.Reason }
 func newWhy(now time.Time, reason string, since time.Time) whyText {
 	w := whyText{Reason: fleetSentence(reason), Since: since}
 	if !since.IsZero() {
-		w.SinceText, w.SinceFull = ui.StampDayText(now, since), ui.StampText(since, ui.StampTitle)
+		w.SinceText, w.SinceFull = ui.StampRelativeText(now, since), ui.StampText(since, ui.StampTitle)
 	}
 	return w
 }

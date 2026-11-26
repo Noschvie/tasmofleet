@@ -14,11 +14,11 @@ import (
 )
 
 // Why (#137): a transaction row's "when" is Today/Yesterday in the browser's zone, so with an
-// instant it is a <time data-ts="day">; without one (the styleguide's sample words) plain text.
+// instant it is a <time data-ts="relative">; without one (the styleguide's sample words) plain text.
 func TestTxnRowWhenIsADayStampWhenItHasAnInstant(t *testing.T) {
 	at := time.Date(2026, 10, 22, 9, 41, 0, 0, time.UTC)
 	got := comp(t, TxnRow(TxnRowData{ID: "TX-1", When: "Today 09:41", WhenAt: at, Href: "/x"}))
-	if !strings.Contains(got, `<time data-ts="day" datetime="2026-10-22T09:41:00Z">Today 09:41</time>`) {
+	if !strings.Contains(got, `<time data-ts="relative" datetime="2026-10-22T09:41:00Z">Today 09:41</time>`) {
 		t.Errorf("no day stamp: %s", got)
 	}
 	if got := comp(t, TxnRow(TxnRowData{ID: "TX-1", When: "2 days ago", Href: "/x"})); strings.Contains(got, "<time") {
@@ -154,7 +154,7 @@ func TestTxnCardStartedTime(t *testing.T) {
 	timed := base
 	timed.Started, timed.StartedText = at, "Today 17:20"
 	out := comp(t, TxnCard(timed))
-	if want := `<span class="txn-when">started <time data-ts="day" datetime="2026-11-22T17:20:00Z">Today 17:20</time></span>`; !strings.Contains(out, want) {
+	if want := `<span class="txn-when">started <time data-ts="relative" datetime="2026-11-22T17:20:00Z">Today 17:20</time></span>`; !strings.Contains(out, want) {
 		t.Errorf("want %s in %s", want, out)
 	}
 	plain := base
@@ -444,13 +444,13 @@ func TestSoftPartsBreakAtNaturalPoints(t *testing.T) {
 	}
 }
 
-// Why: a KV row's time is shown by time.js in the browser's zone. The default is the short date
-// and time; a row that names another format (a relative day for "Last sign-in") must get exactly
+// Why: a KV row's time is shown by time.js in the browser's zone. The default is the date and time
+// (date-time); a row that names another format (a relative day for "Last sign-in") must get exactly
 // that format, or Today/Yesterday would again be decided by the server's zone (#137).
-func TestKVRowTimeFormatDefaultsToShortAndHonoursStamp(t *testing.T) {
+func TestKVRowTimeFormatDefaultsToDateTimeAndHonoursStamp(t *testing.T) {
 	at := time.Date(2026, 10, 29, 9, 41, 0, 0, time.UTC)
-	got := renderC(t, KV([]KVRow{{Key: "Seen", Value: "x", At: at}, {Key: "Last", Value: "y", At: at, Stamp: StampDay}}), context.Background())
-	if !strings.Contains(got, `data-ts="short"`) || !strings.Contains(got, `data-ts="day"`) {
+	got := renderC(t, KV([]KVRow{{Key: "Seen", Value: "x", At: at}, {Key: "Last", Value: "y", At: at, Stamp: StampRelative}}), context.Background())
+	if !strings.Contains(got, `data-ts="date-time"`) || !strings.Contains(got, `data-ts="relative"`) {
 		t.Fatalf("formats:\n%s", got)
 	}
 }

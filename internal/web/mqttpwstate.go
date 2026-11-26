@@ -144,7 +144,7 @@ func passwordRow(d model.Device, f transport.Facts, pw pwView) pathRow {
 	st := mqttPasswordState(pwInputOf(d, f), !pw.LearnOff)
 	r := pathRow{Key: "Device MQTT password", Value: st.Word, Tone: st.Tone, Sub: st.Line, StampLead: st.Lead, StampAt: st.At, StampTail: st.Tail, Enables: st.Enables}
 	if !st.At.IsZero() {
-		r.StampText = ui.StampDayText(f.Now, st.At)
+		r.StampText = ui.StampRelativeText(f.Now, st.At)
 	}
 	if st.Kind == pwNotKnown && pw.Gap != GapNone {
 		r.Sub = gapText(pw.Gap, f) // the reason says what the generic line would, and why

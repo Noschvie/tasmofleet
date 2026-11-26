@@ -53,6 +53,16 @@ async function plan(page: Page): Promise<string> {
 
 test.use({ timezoneId: "Asia/Kolkata", locale: "en-US" });
 
+/**
+ * clockAt is how the browser under test writes hour:00 (time.js key time: no leading zero in a 12-hour
+ * locale, "3:00 AM"), asked of its own Intl so that neither ICU's spelling nor a hard-coded "03:00 AM" is
+ * in this file. It is a pattern: any white space in it also matches the no-break spaces the page writes.
+ */
+async function clockAt(page: Page, hour: number): Promise<string> {
+  const text = await page.evaluate((h) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(2026, 0, 1, h, 0)), hour);
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s");
+}
+
 // Why: a plan nobody can see is a plan nobody can cancel. The list shows it with its start in the browser's
 // zone, Cancel asks first and says nothing on the devices changes, and after the cancel the plan is in the
 // history as Cancelled with a way to plan it again. All along the status bar says nothing is running: the
@@ -63,13 +73,15 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
 
   // the page of the plan
   await expect(page.locator("#txn-state")).toHaveText("Scheduled");
-  await expect(page.locator(".upd-when-big")).toContainText(/^Starts \w{3}, \w{3} \d+ at 03:00 AM · in \d+/);
-  await expect(page.locator(".upd-rule")).toContainText("If TasmoFleet is down at 03:00 AM, the update starts as soon as TasmoFleet is back, but only until 04:00 AM (60 minutes after the start time).");
+  const at3 = await clockAt(page, 3);
+  const at4 = await clockAt(page, 4);
+  await expect(page.locator(".upd-when-big")).toContainText(new RegExp(`^Starts \\w{3}, \\w{3} \\d+ at ${at3} · in \\d+`));
+  await expect(page.locator(".upd-rule")).toContainText(new RegExp(`If TasmoFleet is down at ${at3}, the update starts as soon as TasmoFleet is back, but only until ${at4} \\(60 minutes after the start time\\)\\.`));
   await expect(page.locator(".upd-row-state")).toHaveText("Planned");
   await expect(page.getByRole("link", { name: "Retry failed" })).toHaveCount(0);
   await expect(page.locator("#sb-wide")).toContainText("No jobs running"); // a plan is not a running job
   await expect(page.locator("#sb-wide")).not.toContainText(id);
-  await expect(page.locator("#sb-wide")).toContainText(/1 scheduled\s*·\s*next \w{3}, \w{3} \d+ at 03:00 AM/); // #707
+  await expect(page.locator("#sb-wide")).toContainText(new RegExp(`1 scheduled\\s*·\\s*next \\w{3}, \\w{3} \\d+ at ${at3}`)); // #707
 
   // the list
   await page.goto(app.url + "/transactions");
@@ -77,14 +89,14 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   await expect(section.getByRole("heading")).toHaveText("Scheduled · 1");
   const row = section.locator(".upd-srow");
   await expect(row).toContainText(id);
-  await expect(row.locator(".upd-sstart")).toContainText(/^Starts \w{3} 03:00 AM/);
+  await expect(row.locator(".upd-sstart")).toContainText(new RegExp(`^Starts \\w{3} ${at3}`));
   await expect(page.locator("section.upd-hist")).toHaveCount(0); // nothing else happened yet
   await expect(page.locator(".upd-run")).toHaveCount(0); // not a running transaction
   await expect(page.locator("#sb-wide")).toContainText("No jobs running");
   await page.goto(app.url + "/");
   await expect(page.locator("main")).not.toContainText(id); // a plan is no transaction of the card, only a line above it
   const line = page.locator(".dash-plans");
-  await expect(line).toContainText(/1 scheduled\s*·\s*next \w{3}, \w{3} \d+ at 03:00 AM\s*·\s*in \d+/);
+  await expect(line).toContainText(new RegExp(`1 scheduled\\s*·\\s*next \\w{3}, \\w{3} \\d+ at ${at3}\\s*·\\s*in \\d+`));
   await expect(page.locator("#sb-wide")).toContainText("1 scheduled");
   await line.getByRole("link", { name: "1 scheduled" }).click(); // leads to the Scheduled section of Transactions (#707)
   await expect(page).toHaveURL(/\/transactions#scheduled$/);
@@ -97,7 +109,7 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   await expect(dlg).toBeVisible();
   await expect(dlg).toContainText(`Cancel ${id}?`);
   await expect(dlg).toContainText("It will not start and nothing on the devices changes.");
-  await expect(dlg).toContainText(/is planned for \w{3}, \w{3} \d+ at 03:00 AM\./); // the browser's zone, not the server's
+  await expect(dlg).toContainText(new RegExp(`is planned for \\w{3}, \\w{3} \\d+ at ${at3}\\.`)); // the browser's zone, not the server's
   await dlg.getByRole("button", { name: "Keep schedule" }).click();
   await expect(row).toBeVisible();
 

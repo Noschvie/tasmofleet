@@ -50,11 +50,11 @@ func TestRunNowNamesTheDevicesTheCooldownHeldBack(t *testing.T) {
 			if !strings.Contains(note, "Read less than 5 minutes ago, not read again:") || !strings.Contains(note, "kitchen") {
 				t.Errorf("the note names the cooldown and the device:\n%q", note)
 			}
-			want := ui.StampDayText(c.now, until)
+			want := ui.StampRelativeText(c.now, until)
 			if c.name == "across midnight" && strings.HasPrefix(want, "Today") {
 				t.Fatalf("a time on the next day must carry its date: %q", want)
 			}
-			if !strings.Contains(note, `data-ts="day"`) || !strings.Contains(note, ">"+want+"</time>") {
+			if !strings.Contains(note, `data-ts="relative"`) || !strings.Contains(note, ">"+want+"</time>") {
 				t.Errorf("the time %q is a day stamp:\n%q", want, note)
 			}
 		})

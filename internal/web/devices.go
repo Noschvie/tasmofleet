@@ -297,7 +297,7 @@ type backupData struct {
 // DeleteText is the text of the confirmation dialog of the delete button. The
 // newest backup of the device gets an extra warning on the confirm page (confirmpages.go).
 func (b backupData) DeleteText(x model.Backup) string {
-	return "Delete the backup of " + ui.StampText(x.TakenAt, ui.StampDateTimeSec) + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
+	return "Delete the backup of " + ui.StampText(x.TakenAt, ui.StampDateTime) + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
 }
 
 // deviceTabs is the device header and its tabs (devicehead.templ): the pages of one device.
@@ -334,7 +334,7 @@ type deviceTabs struct {
 	// holds it (neverAnswered). It takes the slot of the offline banner, so no tab says "Offline" about such a device.
 	NotYet       string
 	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
-	// OfflineSinceText is its fallback text (StampDay) for a page without JavaScript
+	// OfflineSinceText is its fallback text (StampRelative) for a page without JavaScript
 	OfflineSinceText string
 	// OfflineHTTP is what HTTP showed after the device went offline by its last will (offlineHTTPNote), "" when nothing
 	OfflineHTTP string

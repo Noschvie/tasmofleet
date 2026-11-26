@@ -340,7 +340,7 @@ func pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) tem
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.StampAt, ui.StampDay))
+						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.StampAt, ui.StampRelative))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -361,7 +361,7 @@ func pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) tem
 					var templ_7745c5c3_Var13 string
 					templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(r.StampText)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 53, Col: 110}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 53, Col: 115}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 					if templ_7745c5c3_Err != nil {
@@ -374,7 +374,7 @@ func pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) tem
 					var templ_7745c5c3_Var14 string
 					templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(r.StampTail)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 53, Col: 132}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 53, Col: 137}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 					if templ_7745c5c3_Err != nil {
@@ -422,7 +422,7 @@ func pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) tem
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.Since, ui.StampDay))
+						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(r.Since, ui.StampRelative))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -443,7 +443,7 @@ func pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) tem
 					var templ_7745c5c3_Var17 string
 					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(r.SinceText)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 60, Col: 87}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/deviceconn.templ`, Line: 60, Col: 92}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {

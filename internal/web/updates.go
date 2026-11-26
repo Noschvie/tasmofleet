@@ -1606,10 +1606,10 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		if t.Running+t.Queued > 0 {
 			// The card says when it started with the instant its history row below shows.
 			p.Running = append(p.Running, ui.TxnData{ID: txID(t.ID), Title: t.Title, State: res, StateTone: tone, Summary: t.RunSummary(),
-				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Started: at, StartedText: ui.StampDayText(now, at)})
+				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Started: at, StartedText: ui.StampRelativeText(now, at)})
 		}
 		row := txHistRow{ID: txID(t.ID), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
-			By: h.pr.Text(t.By), When: ui.StampDayText(now, at), At: at.Format(time.RFC3339), Href: href}
+			By: h.pr.Text(t.By), When: ui.StampRelativeText(now, at), At: at.Format(time.RFC3339), Href: href}
 		if !t.StartAt.IsZero() {
 			row.Due = at
 			if t.NotStarted+t.Early > 0 {

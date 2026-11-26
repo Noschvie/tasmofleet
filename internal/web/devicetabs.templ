@@ -72,7 +72,7 @@ templ settingsBody(p settingsPage, base, csrf string) {
 templ settingsBackgroundFail(b *backgroundFail) {
 	<span class="agebar-warn" data-bg-refresh="failed">Last background refresh failed <time title={ stamp(b.At) } { ui.StampAttrs(b.At, ui.StampTitle)... }>{ b.Words }</time>: { b.Why }.
 		if b.NextOn {
-			Next try <time { ui.StampAttrs(b.Next, ui.StampClockOrDay)... }>{ b.Text }</time>.
+			Next try <time { ui.StampAttrs(b.Next, ui.StampRelative)... }>{ b.Text }</time>.
 		} else if b.Due {
 			The next try is due.
 		}
@@ -277,7 +277,7 @@ templ driftPage(p driftView) {
 				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.unreadText()})
 			}
 			<div class="devdrift-bar">
-				<b>{ p.headline() } (<time { ui.StampAttrs(p.StoredAt, ui.StampShort)... }>{ ui.StampText(p.StoredAt, ui.StampShort) }</time>{ p.storedBy() })</b>
+				<b>{ p.headline() } (<time { ui.StampAttrs(p.StoredAt, ui.StampDateTime)... }>{ ui.StampText(p.StoredAt, ui.StampDateTime) }</time>{ p.storedBy() })</b>
 				<span class="devdrift-sp"></span>
 				if p.CanBackup {
 					<form method="post" action={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "/backup")) }>

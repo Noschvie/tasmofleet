@@ -364,7 +364,7 @@ templ discoveredBody(p discView) {
 					<p>
 						Discovery is listening on MQTT. New Tasmota devices show up here a few seconds after they join the network.
 						if !p.LastAnnounce.IsZero() {
-							Last announcement <time { ui.StampAttrs(p.LastAnnounce, ui.StampDay)... }>{ p.LastAnnounceText }</time>.
+							Last announcement <time { ui.StampAttrs(p.LastAnnounce, ui.StampRelative)... }>{ p.LastAnnounceText }</time>.
 						}
 					</p>
 				}
@@ -574,7 +574,7 @@ templ scanBox(b scanBodyView) {
 				<span data-visual-mask>
 					{ b.StatusLead }
 					if !b.StatusAt.IsZero() {
-						<time { ui.StampAttrs(b.StatusAt, ui.StampDay)... }>{ b.StatusAtText }</time>
+						<time { ui.StampAttrs(b.StatusAt, ui.StampRelative)... }>{ b.StatusAtText }</time>
 					}
 					{ b.StatusTail }
 				</span>
@@ -655,7 +655,7 @@ templ scanBody(b scanBodyView) {
 				<span data-visual-mask>
 					{ b.StatusLead }
 					if !b.StatusAt.IsZero() {
-						<time { ui.StampAttrs(b.StatusAt, ui.StampDay)... }>{ b.StatusAtText }</time>
+						<time { ui.StampAttrs(b.StatusAt, ui.StampRelative)... }>{ b.StatusAtText }</time>
 					}
 					{ b.StatusTail }
 				</span>

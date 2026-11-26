@@ -145,10 +145,10 @@ func TestGPIOTemplatesTabIsReadOnlyForOperators(t *testing.T) {
 func TestGPIOTemplatesTimestampsCarryDates(t *testing.T) {
 	e := gtEnv(t, gtFixture())
 	_, body := e.do(t, "GET", "/policy/templates", "admin", nil)
-	if !strings.Contains(body, `data-ts="short"`) {
+	if !strings.Contains(body, `data-ts="date-time"`) {
 		t.Error("no dated stamp on the page")
 	}
-	for _, bad := range []string{`data-ts="time"`, `data-ts="clock-day"`} {
+	for _, bad := range []string{`data-ts="time"`} {
 		if strings.Contains(body[strings.Index(body, `gt-bar`):], bad) {
 			t.Errorf("a bare clock stamp %s on the tab", bad)
 		}

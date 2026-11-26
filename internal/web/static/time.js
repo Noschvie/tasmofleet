@@ -8,38 +8,43 @@
 // No inline script: CSP forbids it.
 (function () {
   "use strict";
-  var D = { year: "numeric", month: "2-digit", day: "2-digit" };
-  var HM = { hour: "2-digit", minute: "2-digit" };
-  var HMS = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  // One table of every key (ui/stamp.go has the same keys, stamp_test.go compares them). A value is Intl
+  // options, or a function of the instant for a key with its own rule. Every visible date is one of:
+  //   date       "20 Nov 2026"
+  //   date-time  "20 Nov 2026, 14:17"
+  //   month-day  "20 Nov"
+  //   relative   "Today 14:17", "Yesterday 21:10", else the date-time (this year without the year)
+  //   time       "14:17", a clock time on a line that already names the day
+  // The browser's locale decides the order and 12 or 24 hours; the hour has no leading zero, the minute
+  // always two digits. clock-24 (a log column) and the future start of a scheduled update keep their own
+  // shape; title only sets the tooltip.
+  var DATE = { day: "numeric", month: "short", year: "numeric" };
+  var HM = { hour: "numeric", minute: "2-digit" };
   var SPECS = {
-    "datetime-s": Object.assign({}, D, HMS),
-    datetime: Object.assign({}, D, HM),
-    "time-s": HMS,
+    date: DATE,
+    "date-time": Object.assign({}, DATE, HM),
+    "month-day": { month: "short", day: "numeric" },
+    relative: relativeText,
     time: HM,
     // a log column: 24-hour like the device's own console, and no AM/PM to widen the fixed column
-    "clock-24": Object.assign({ hourCycle: "h23" }, HMS),
-    short: Object.assign({ year: "numeric", month: "short", day: "numeric" }, HM),
-    // a scheduled update's start (#604): "Sat 03:00", "Nov 7"
+    "clock-24": { hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" },
+    // a scheduled update's start (#604): "Sat 3:00 AM" and the sentence "Sat, Nov 7 at 3:00 AM"
     "weekday-time": Object.assign({ weekday: "short" }, HM),
-    "month-day": { month: "short", day: "numeric" },
+    start: startText,
+    // the tooltip only: the text stays (see FULL)
+    title: null,
   };
-  var FULL = Object.assign({}, D, HMS, { timeZoneName: "short" });
+  // the tooltip of an element that carries a title: the full instant with seconds and the zone's name
+  var FULL = { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZoneName: "short" };
   var cache = {};
   function fmt(key, spec) {
     if (!cache[key]) cache[key] = new Intl.DateTimeFormat(undefined, spec);
     return cache[key];
   }
-  // store: a storage table's "last backup" cell: this year without the year, older with only the day
-  function storeText(d) {
-    var thisYear = d.getFullYear() === new Date().getFullYear();
-    return fmt(thisYear ? "store-now" : "store-old", thisYear
-      ? Object.assign({ day: "numeric", month: "short" }, HM)
-      : { day: "numeric", month: "short", year: "numeric" }).format(d);
-  }
-  // day: "Today 09:41", "Yesterday 21:10", else "19 Aug, 20:02" ("19 Aug 2025, 20:02" in another
+  // relative: "Today 09:41", "Yesterday 21:10", else "19 Aug, 20:02" ("19 Aug 2025, 20:02" in another
   // year). Today and Yesterday are the calendar days of the browser's zone, now; the same rule as
-  // ui.StampDayText, which is the server's fallback.
-  function dayText(d) {
+  // ui.StampRelativeText, which is the server's fallback.
+  function relativeText(d) {
     var now = new Date();
     var days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
       new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
@@ -49,20 +54,13 @@
     if (days === 0) return "Today " + hm;
     if (days === 1) return "Yesterday " + hm;
     var sameYear = d.getFullYear() === now.getFullYear();
-    var t = fmt(sameYear ? "day-year" : "day-old", sameYear
+    var t = fmt(sameYear ? "relative-year" : "date-time", sameYear
       ? Object.assign({ day: "numeric", month: "short" }, HM)
-      : Object.assign({ day: "numeric", month: "short", year: "numeric" }, HM)).format(d);
+      : SPECS["date-time"]).format(d);
     // only the clock time at the end is bound: the date part may still wrap
     return t.slice(-clock.length) === clock ? t.slice(0, -clock.length) + hm : t;
   }
-  // clock-day: today's instant is the bare clock time, any other day is dayText (#422). The server's
-  // fallback is ui.StampClockOrDayText.
-  function clockOrDayText(d) {
-    var now = new Date();
-    var same = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-    return same ? fmt("time", HM).format(d) : dayText(d);
-  }
-  // start: "Sat, Nov 7 at 03:00", the start of a scheduled update in a sentence (#604); the server's fallback is
+  // start: "Sat, Nov 7 at 3:00 AM", the start of a scheduled update in a sentence (#604); the server's fallback is
   // ui.StampStart.
   function startText(d) {
     return fmt("start-day", { weekday: "short", month: "short", day: "numeric" }).format(d) + " at " + fmt("time", HM).format(d);
@@ -70,11 +68,9 @@
   // textOf is the text for a format key and an instant ("" when the key is unknown). "title"
   // leaves the text alone, so it is "" here and handled by the caller.
   function textOf(key, d) {
-    if (key === "store") return storeText(d);
-    if (key === "day") return dayText(d);
-    if (key === "clock-day") return clockOrDayText(d);
-    if (key === "start") return startText(d);
-    return SPECS[key] ? fmt(key, SPECS[key]).format(d) : "";
+    var spec = Object.prototype.hasOwnProperty.call(SPECS, key) ? SPECS[key] : null;
+    if (!spec) return "";
+    return typeof spec === "function" ? spec(d) : fmt(key, spec).format(d);
   }
   function paint(root) {
     root = root || document;

@@ -166,7 +166,7 @@ func uptimeTile(hl model.Health, now time.Time) tile {
 		tl.Value = humanDuration(time.Duration(hl.UptimeSec) * time.Second)
 	}
 	if at := restartAt(hl); !at.IsZero() {
-		tl.SubPrefix, tl.At, tl.AtText = "Last restart ", at, ui.StampDayText(now, at)
+		tl.SubPrefix, tl.At, tl.AtText = "Last restart ", at, ui.StampRelativeText(now, at)
 	}
 	return tl
 }

@@ -92,7 +92,7 @@ func TestUsersLastSeenIsADateNotAnAge(t *testing.T) {
 	if err := usersPage(usersViewOf(d, now, func(s string) string { return s })).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(b.String(), `data-ts="day"`); n != 2 {
+	if n := strings.Count(b.String(), `data-ts="relative"`); n != 2 {
 		t.Errorf("%d times carry data-ts=day, want 2 (not the active session)", n)
 	}
 }

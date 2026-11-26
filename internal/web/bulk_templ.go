@@ -823,7 +823,7 @@ func bulkResultPage(v bulkResultView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.When, ui.StampClockSec))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.When, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -842,9 +842,9 @@ func bulkResultPage(v bulkResultView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var37 string
-			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.When, ui.StampClockSec))
+			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.When, ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/bulk.templ`, Line: 178, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/bulk.templ`, Line: 178, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 			if templ_7745c5c3_Err != nil {
@@ -867,7 +867,7 @@ func bulkResultPage(v bulkResultView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.When, ui.StampClockSec))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.When, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -886,9 +886,9 @@ func bulkResultPage(v bulkResultView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var38 string
-			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.When, ui.StampClockSec))
+			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.When, ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/bulk.templ`, Line: 180, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/bulk.templ`, Line: 180, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 			if templ_7745c5c3_Err != nil {

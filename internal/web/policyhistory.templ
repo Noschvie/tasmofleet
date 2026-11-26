@@ -59,8 +59,8 @@ templ histEntryRow(e histEntry) {
 				<span class="pol-hv-main">
 					<span class="pol-hv-what"><span>{ e.Summary }</span></span>
 					<span class="pol-hv-meta">if !e.SameTime {
-						<time { ui.StampAttrs(e.To, ui.StampClock)... }>{ ui.StampText(e.To, ui.StampClock) }</time>{ "–" }
-					}<time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
+						<time { ui.StampAttrs(e.To, ui.StampTime)... }>{ ui.StampText(e.To, ui.StampTime) }</time>{ "–" }
+					}<time { ui.StampAttrs(e.At, ui.StampTime)... }>{ ui.StampText(e.At, ui.StampTime) }</time> · { e.By }</span>
 				</span>
 			</summary>
 			for _, v := range e.Versions {
@@ -70,7 +70,7 @@ templ histEntryRow(e histEntry) {
 					<span class="pol-hv-v">v{ vstr(v.ID) }</span>
 					<span class="pol-hv-main">
 						<span class="pol-hv-what"><span title={ v.WhatFull }>{ v.What }</span></span>
-						<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampClock)... }>{ ui.StampText(v.At, ui.StampClock) }</time> · { v.By }</span>
+						<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampTime)... }>{ ui.StampText(v.At, ui.StampTime) }</time> · { v.By }</span>
 					</span>
 				</a>
 			}
@@ -90,7 +90,7 @@ templ histEntryRow(e histEntry) {
 						@ui.Badge(ui.ToneOK, "Current")
 					}
 				</span>
-				<span class="pol-hv-meta"><time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
+				<span class="pol-hv-meta"><time { ui.StampAttrs(e.At, ui.StampTime)... }>{ ui.StampText(e.At, ui.StampTime) }</time> · { e.By }</span>
 			</span>
 		</a>
 	}

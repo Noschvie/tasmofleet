@@ -34,7 +34,7 @@ templ policyShell(h policyHead) {
 templ policyCooldownNote(h policyHead) {
 	@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "Read less than " + liveCooldownText() + " ago, not read again: ", Attrs: templ.Attributes{"data-cooldown": true}}) {
 		for _, c := range h.Cooldown {
-			{ c.Name + " (from " }<time { ui.StampAttrs(c.Until, ui.StampDay)... }>{ ui.StampDayText(h.Now, c.Until) }</time>{ ")" + c.Sep }
+			{ c.Name + " (from " }<time { ui.StampAttrs(c.Until, ui.StampRelative)... }>{ ui.StampRelativeText(h.Now, c.Until) }</time>{ ")" + c.Sep }
 		}
 		if h.CooldownMore > 0 {
 			{ "and " + plural(h.CooldownMore, "more device") }
@@ -53,7 +53,7 @@ templ policySummary(h policyHead) {
 				<span class="t-ok">{ h.Sum.Compliant } compliant</span>
 				{ " · " }<span class={ toneClass(h.Sum.DeviatingTone) }>{ h.Sum.Deviating } deviating</span>
 				if h.Line.State == "paused" && !h.Line.Shown.IsZero() {
-					{ " (values from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>{ ")" }
+					{ " (values from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampTime)... }>{ ui.StampText(h.Line.Shown, ui.StampTime) }</time>{ ")" }
 				}
 				{ " · " + h.Sum.NotJudged + " not judged" }
 			</p>
@@ -67,7 +67,7 @@ templ policySummary(h policyHead) {
 				{ " · " }
 				<span role="status">
 					if h.Line.State == "paused" {
-						Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(h.Line.PausedAt, ui.StampClock) }</time>
+						Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampTime)... }>{ ui.StampText(h.Line.PausedAt, ui.StampTime) }</time>
 					} else {
 						{ h.Line.Sub }
 					}

@@ -209,7 +209,7 @@ func usersViewOf(d auth.UsersPageData, now time.Time, nameOf func(subject string
 			row.Last, row.LastAt = "Active now", u.LastLogin.UTC().Format(time.RFC3339)
 		default:
 			// a date, not an age: a last sign-in can be older than today (#419)
-			row.Last, row.LastAt, row.LastDay = ui.StampDayText(now, u.LastLogin), u.LastLogin.UTC().Format(time.RFC3339), true
+			row.Last, row.LastAt, row.LastDay = ui.StampRelativeText(now, u.LastLogin), u.LastLogin.UTC().Format(time.RFC3339), true
 		}
 		if !u.Disabled {
 			switch u.Role {
@@ -681,11 +681,11 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	last := ui.KVRow{Key: "Last sign-in", Value: "Never"}
 	if !u.LastLogin.IsZero() {
 		// Today/Yesterday are decided in the browser's zone, like every other relative day
-		last = ui.KVRow{Key: "Last sign-in", Value: ui.StampDayText(now, u.LastLogin), Mask: true, At: u.LastLogin, Stamp: ui.StampDay}
+		last = ui.KVRow{Key: "Last sign-in", Value: ui.StampRelativeText(now, u.LastLogin), Mask: true, At: u.LastLogin, Stamp: ui.StampRelative}
 	}
 	v.Facts = append(v.Facts, last)
 	if !d.OTPExpiresAt.IsZero() {
-		otp := "Valid until " + ui.StampDayText(now, d.OTPExpiresAt)
+		otp := "Valid until " + ui.StampRelativeText(now, d.OTPExpiresAt)
 		if d.OTPExpired {
 			otp = "Expired: reset the password again"
 		}
@@ -693,11 +693,11 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	for _, s := range d.Sessions {
 		v.Sessions = append(v.Sessions, sessionView{ID: s.ID, Current: s.Current,
-			Started: ui.StampDayText(now, s.CreatedAt), StartedAt: s.CreatedAt.UTC().Format(time.RFC3339),
+			Started: ui.StampRelativeText(now, s.CreatedAt), StartedAt: s.CreatedAt.UTC().Format(time.RFC3339),
 			Seen: agoWords(now, s.LastSeen), SeenAt: s.LastSeen.UTC().Format(time.RFC3339)})
 	}
 	for _, e := range d.Audit {
-		a := activityView{When: ui.StampDayText(now, e.At), At: e.At.UTC().Format(time.RFC3339), Action: e.Action, Summary: auditShort(e)}
+		a := activityView{When: ui.StampRelativeText(now, e.At), At: e.At.UTC().Format(time.RFC3339), Action: e.Action, Summary: auditShort(e)}
 		a.Tone, a.Status = auditBadge(auditStatus(e))
 		v.Activity = append(v.Activity, a)
 	}

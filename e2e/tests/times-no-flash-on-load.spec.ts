@@ -9,6 +9,14 @@ import {
   writeTasmoAdminDir,
 } from "../support/stack";
 
+/** serverFallback is the text of a date-time stamp that the server writes (ui.StampDateTime, in its zone, UTC here): "4 Mar 2026, 22:15". */
+const serverFallback = (iso: string) => {
+  const d = new Date(iso);
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCDate()} ${mon} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+};
+
 // #635 (follow-up to #594): the Online and All chips on Devices are plain links, so every switch loads the
 // whole page. The server writes each <time data-ts> in its fixed fallback form (here UTC) and time.js, a
 // deferred script, rewrites it in the browser's locale and zone (here Asia/Tokyo, en-GB). The browser may
@@ -286,7 +294,7 @@ test("without JavaScript the server's text shows", async ({ browser }) => {
     javaScriptEnabled: false,
   });
   await page.goto(app.url + "/audit");
-  const t = page.locator("time[data-ts=datetime-s]").first();
+  const t = page.locator("time[data-ts=date-time]").first();
   await expect(t).toBeAttached({ timeout: 40_000 });
   // at once (noscript.css), not after app.css's one-second fallback: checked once, without a retry that would wait for it
   expect(
@@ -295,9 +303,7 @@ test("without JavaScript the server's text shows", async ({ browser }) => {
   ).toBe(true);
   // the server's fixed form in its own zone (UTC), not the Tokyo / en-GB form a script would write
   const iso = (await t.getAttribute("datetime")) ?? "";
-  expect(await t.textContent()).toBe(
-    iso.slice(0, 10) + " " + iso.slice(11, 19),
-  );
+  expect(await t.textContent()).toBe(serverFallback(iso));
   await ctx.close();
 });
 
@@ -315,7 +321,7 @@ test("when the browser cannot format a time, the server's text stays visible", a
     Intl.DateTimeFormat.prototype = Orig.prototype;
   });
   await page.goto(app.url + "/audit");
-  const t = page.locator("time[data-ts=datetime-s]").first();
+  const t = page.locator("time[data-ts=date-time]").first();
   await expect(t).toBeAttached({ timeout: 40_000 });
   await page.waitForFunction(
     () =>
@@ -334,9 +340,7 @@ test("when the browser cannot format a time, the server's text stays visible", a
     "visible once time.js has run",
   ).toBe(true);
   const iso = (await t.getAttribute("datetime")) ?? "";
-  expect(await t.textContent()).toBe(
-    iso.slice(0, 10) + " " + iso.slice(11, 19),
-  );
+  expect(await t.textContent()).toBe(serverFallback(iso));
   await ctx.close();
 });
 
@@ -348,13 +352,11 @@ test("when time.js never loads, the server's text shows after a moment", async (
   const { ctx, page } = await browserPage(browser);
   await page.route(/\/static\/time[^/]*\.js/, (route) => route.abort());
   await page.goto(app.url + "/audit");
-  const t = page.locator("time[data-ts=datetime-s]").first();
+  const t = page.locator("time[data-ts=date-time]").first();
   await expect(t).toBeAttached({ timeout: 40_000 });
   await expect(t).toBeVisible({ timeout: 10_000 });
   const iso = (await t.getAttribute("datetime")) ?? "";
-  expect(await t.textContent()).toBe(
-    iso.slice(0, 10) + " " + iso.slice(11, 19),
-  );
+  expect(await t.textContent()).toBe(serverFallback(iso));
   await ctx.close();
 });
 
@@ -374,7 +376,7 @@ test("a title-only time is never hidden, an unpainted time is", async ({
       document.body.appendChild(el);
       return el.checkVisibility({ visibilityProperty: true });
     };
-    return { title: mk("title"), datetime: mk("datetime-s") };
+    return { title: mk("title"), datetime: mk("date-time") };
   });
   expect(seen).toEqual({ title: true, datetime: false });
   await ctx.close();

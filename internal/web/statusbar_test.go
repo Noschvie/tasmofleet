@@ -294,7 +294,7 @@ func TestStatusBarBrokerSinceIsADayStamp(t *testing.T) {
 		}
 	})
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
-	if bar := barOf(body); strings.Count(bar, `data-ts="day"`) < 2 {
+	if bar := barOf(body); strings.Count(bar, `data-ts="relative"`) < 2 {
 		t.Errorf("broker since is not a day stamp: %s", bar)
 	}
 }

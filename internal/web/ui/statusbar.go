@@ -177,4 +177,4 @@ func (b StatusBackup) problemText() string {
 }
 
 // dayText is a time as the bar words it: "Today 03:00", "Yesterday 21:10", else a date.
-func (s StatusBar) dayText(t time.Time) string { return StampDayText(s.Now, t) }
+func (s StatusBar) dayText(t time.Time) string { return StampRelativeText(s.Now, t) }

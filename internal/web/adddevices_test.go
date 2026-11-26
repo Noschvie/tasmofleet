@@ -795,7 +795,7 @@ func TestScanBoxSummarisesTheLastScanAndLinksItsResults(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices/new", "admin", nil)
 	box := body[strings.Index(body, `id="card-scan"`):]
 	box = box[:strings.Index(box, "</section>")]
-	for _, want := range []string{`name="cidrs"`, ">Scan now</button>", `data-ts="day"`, "took 6s",
+	for _, want := range []string{`name="cidrs"`, ">Scan now</button>", `data-ts="relative"`, "took 6s",
 		"254 addresses · 1 Tasmota device: 0 already known, 0 new (in Discovered), 0 ignored.", `href="/tf/discovery/scan/abc123">All results</a>`} {
 		if !strings.Contains(box, want) {
 			t.Errorf("scan box lacks %q: %s", want, box)

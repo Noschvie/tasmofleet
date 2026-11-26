@@ -88,7 +88,7 @@ templ (h *handler) readValueCell(v string, at time.Time) {
 	} else {
 		<span class="dv-trunc" title={ v }>{ v }</span>
 		if !at.IsZero() {
-			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(at, ui.StampDay)... }>{ ui.StampDayText(h.d.Clock.Now(), at) }</time></span>
+			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(at, ui.StampRelative)... }>{ ui.StampRelativeText(h.d.Clock.Now(), at) }</time></span>
 		}
 	}
 }
@@ -107,7 +107,7 @@ templ (h *handler) groupTopicCell(d model.Device) {
 			}
 		</span>
 		if !d.GroupTopicReadAt.IsZero() {
-			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(d.GroupTopicReadAt, ui.StampDay)... }>{ ui.StampDayText(h.d.Clock.Now(), d.GroupTopicReadAt) }</time></span>
+			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(d.GroupTopicReadAt, ui.StampRelative)... }>{ ui.StampRelativeText(h.d.Clock.Now(), d.GroupTopicReadAt) }</time></span>
 		}
 	}
 }

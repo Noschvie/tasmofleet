@@ -244,7 +244,7 @@ func rulePageTempl(p rulePageView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.CooldownUntil, ui.StampDay))
+						templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(p.CooldownUntil, ui.StampRelative))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -263,9 +263,9 @@ func rulePageTempl(p rulePageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var7 string
-					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(p.Now, p.CooldownUntil))
+					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(p.Now, p.CooldownUntil))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 112, Col: 145}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 112, Col: 155}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -278,7 +278,7 @@ func rulePageTempl(p rulePageView) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(".")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 112, Col: 159}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 112, Col: 169}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -447,7 +447,7 @@ func rulePageTempl(p rulePageView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.At, ui.StampShort))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.At, ui.StampDateTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -466,9 +466,9 @@ func rulePageTempl(p rulePageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var15 string
-				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.At, ui.StampShort))
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.At, ui.StampDateTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 147, Col: 118}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 147, Col: 124}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -481,7 +481,7 @@ func rulePageTempl(p rulePageView) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(v.By)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 147, Col: 137}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyrule.templ`, Line: 147, Col: 143}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {

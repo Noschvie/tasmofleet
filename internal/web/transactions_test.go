@@ -203,7 +203,7 @@ func TestTransactionsRunningCardShowsStart(t *testing.T) {
 	j.jobs = []model.Job{{ID: 3, BatchID: 5, DeviceID: 2, State: model.JobQueued, TargetRelease: "16.1.0", CreatedAt: at}}
 	_, page := e.do(t, "GET", "/transactions", "operator", nil)
 	card := between(page, `class="txn-card"`, "</a>")
-	stamp := `<time data-ts="day" datetime="` + at.UTC().Format(time.RFC3339) + `">`
+	stamp := `<time data-ts="relative" datetime="` + at.UTC().Format(time.RFC3339) + `">`
 	if !strings.Contains(card, "started "+stamp) {
 		t.Errorf("the running card does not say when it started: %s", card)
 	}

@@ -107,7 +107,7 @@ templ txList(p txListView) {
 							<td class="upd-hst" data-label="Result">
 								@ui.Badge(h.Tone, h.Result)
 							</td>
-							<td class="upd-hwho" data-label="Started by"><span>{ h.By } · { h.WhenLabel }<time datetime={ h.At } data-ts={ ui.StampDay.Key }>{ h.When }</time>{ h.Suffix }</span></td>
+							<td class="upd-hwho" data-label="Started by"><span>{ h.By } · { h.WhenLabel }<time datetime={ h.At } data-ts={ ui.StampRelative.Key }>{ h.When }</time>{ h.Suffix }</span></td>
 						</tr>
 					}
 				}
@@ -157,7 +157,7 @@ templ txnBody(p txnPage) {
 			if p.Sched != nil {
 				<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · @schedSub(p.Sched)</p>
 			} else if p.Template {
-				<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · { p.SubPre }<time { ui.StampAttrs(p.SubAt, ui.StampShort)... }>{ ui.StampText(p.SubAt, ui.StampShort) }</time>{ p.SubPost }</p>
+				<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · { p.SubPre }<time { ui.StampAttrs(p.SubAt, ui.StampDateTime)... }>{ ui.StampText(p.SubAt, ui.StampDateTime) }</time>{ p.SubPost }</p>
 			} else {
 				<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · { p.Sub }</p>
 			}
@@ -284,11 +284,11 @@ templ txnBody(p txnPage) {
 			if p.Sched != nil && p.Sched.Kind == "ran" && !p.Sched.Started.IsZero() {
 				<p class="upd-prog-note">
 					if p.Sched.Instant() {
-						Started on time, at the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampClock)... }>{ ui.StampText(p.Sched.Start, ui.StampClock) }</time>.
+						Started on time, at the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampTime)... }>{ ui.StampText(p.Sched.Start, ui.StampTime) }</time>.
 					} else if p.Sched.OnTime() {
-						Started on time, { p.Sched.LateText() } after the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampClock)... }>{ ui.StampText(p.Sched.Start, ui.StampClock) }</time>.
+						Started on time, { p.Sched.LateText() } after the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampTime)... }>{ ui.StampText(p.Sched.Start, ui.StampTime) }</time>.
 					} else {
-						Started { p.Sched.LateText() } after the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampClock)... }>{ ui.StampText(p.Sched.Start, ui.StampClock) }</time>, within the { strconv.Itoa(p.Sched.Minutes) } minutes a late start is allowed.
+						Started { p.Sched.LateText() } after the planned <time { ui.StampAttrs(p.Sched.Start, ui.StampTime)... }>{ ui.StampText(p.Sched.Start, ui.StampTime) }</time>, within the { strconv.Itoa(p.Sched.Minutes) } minutes a late start is allowed.
 					}
 				</p>
 			}
@@ -301,7 +301,7 @@ templ txnBody(p txnPage) {
 				<div class="upd-notif">
 					<b>{ p.Sched.NoticeTitle }</b>
 					<p>{ p.Sched.Notice }</p>
-					<small>Sent once TasmoFleet was back, <time { ui.StampAttrs(p.Sched.BackAt, ui.StampDay)... }>{ ui.StampDayText(p.Sched.BackAt, p.Sched.BackAt) }</time>, when "Update job finished" is switched on in System, Notifications.</small>
+					<small>Sent once TasmoFleet was back, <time { ui.StampAttrs(p.Sched.BackAt, ui.StampRelative)... }>{ ui.StampRelativeText(p.Sched.BackAt, p.Sched.BackAt) }</time>, when "Update job finished" is switched on in System, Notifications.</small>
 				</div>
 			</div>
 		}
@@ -411,11 +411,11 @@ templ txnBody(p txnPage) {
 templ schedSub(s *txnSched) {
 	switch s.Kind {
 		case "waiting":
-			planned by { s.Who }, <time { ui.StampAttrs(s.Created, ui.StampDay)... }>{ ui.StampDayText(s.Created, s.Created) }</time> · { s.Tail }
+			planned by { s.Who }, <time { ui.StampAttrs(s.Created, ui.StampRelative)... }>{ ui.StampRelativeText(s.Created, s.Created) }</time> · { s.Tail }
 		case "cancelled":
 			planned by { s.Who }{ " for " }<time { ui.StampAttrs(s.Start, ui.StampStart)... }>{ ui.StampText(s.Start, ui.StampStart) }</time>
 			if !s.CancelledAt.IsZero() {
-				· cancelled by { s.CancelledBy }, <time { ui.StampAttrs(s.CancelledAt, ui.StampDay)... }>{ ui.StampDayText(s.CancelledAt, s.CancelledAt) }</time>
+				· cancelled by { s.CancelledBy }, <time { ui.StampAttrs(s.CancelledAt, ui.StampRelative)... }>{ ui.StampRelativeText(s.CancelledAt, s.CancelledAt) }</time>
 			}
 		default:
 			planned by { s.Who }{ " for " }<time { ui.StampAttrs(s.Start, ui.StampStart)... }>{ ui.StampText(s.Start, ui.StampStart) }</time>
@@ -432,7 +432,7 @@ templ schedWhen(s *txnSched) {
 	@ui.CardOf(ui.CardData{Class: "upd-prog", Aria: "When"}) {
 		<div class="upd-when-card">
 			<p class="upd-when-big"><span>Starts <time { ui.StampAttrs(s.Start, ui.StampStart)... }>{ ui.StampText(s.Start, ui.StampStart) }</time></span> <small>· { s.In }</small></p>
-			<p class="upd-rule"><b>If TasmoFleet is down at <time { ui.StampAttrs(s.Start, ui.StampClock)... }>{ ui.StampText(s.Start, ui.StampClock) }</time>,</b> the update starts as soon as TasmoFleet is back, but only until <time { ui.StampAttrs(s.Deadline(), ui.StampClock)... }>{ ui.StampText(s.Deadline(), ui.StampClock) }</time> ({ strconv.Itoa(s.Minutes) } minutes after the start time). If TasmoFleet is back later than that, the update is not started at all and TasmoFleet sends a notification. Devices are checked again when the update starts.</p>
+			<p class="upd-rule"><b>If TasmoFleet is down at <time { ui.StampAttrs(s.Start, ui.StampTime)... }>{ ui.StampText(s.Start, ui.StampTime) }</time>,</b> the update starts as soon as TasmoFleet is back, but only until <time { ui.StampAttrs(s.Deadline(), ui.StampTime)... }>{ ui.StampText(s.Deadline(), ui.StampTime) }</time> ({ strconv.Itoa(s.Minutes) } minutes after the start time). If TasmoFleet is back later than that, the update is not started at all and TasmoFleet sends a notification. Devices are checked again when the update starts.</p>
 		</div>
 		<p class="upd-prog-note">Until it starts you can cancel it here. A running update cannot be changed this way.</p>
 	}
@@ -864,7 +864,7 @@ templ tmplCardView(c tmplCard) {
 							<pre class="gt-cmd">{ st.Cmd }</pre>
 						</details>
 					} else if !st.Backup.At.IsZero() {
-						{ st.Text } · <a href={ templ.SafeURL(st.Backup.Href) }>backup <time { ui.StampAttrs(st.Backup.At, ui.StampShort)... }>{ ui.StampText(st.Backup.At, ui.StampShort) }</time></a>
+						{ st.Text } · <a href={ templ.SafeURL(st.Backup.Href) }>backup <time { ui.StampAttrs(st.Backup.At, ui.StampDateTime)... }>{ ui.StampText(st.Backup.At, ui.StampDateTime) }</time></a>
 					} else {
 						{ st.Text }
 					}

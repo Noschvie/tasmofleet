@@ -108,7 +108,7 @@ func (h *handler) backgroundFailOf(id model.DeviceID, snapAt time.Time) *backgro
 	if !f.Next.IsZero() {
 		b.Due = !f.Next.After(now)
 		b.NextOn = !b.Due
-		b.Text = ui.StampClockOrDayText(now, f.Next)
+		b.Text = ui.StampRelativeText(now, f.Next)
 	}
 	return b
 }

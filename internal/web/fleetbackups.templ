@@ -138,7 +138,7 @@ templ fleetMissed(v fleetView) {
 			<span class="sys-status-dot t-warn" aria-hidden="true"></span>
 			<div class="sys-status-text">
 				<b>A scheduled run was skipped</b>
-				<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the run was not made up. Noticed <time { ui.StampAttrs(v.Missed, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Missed) }</time>. The next run is as scheduled.</span>
+				<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the run was not made up. Noticed <time { ui.StampAttrs(v.Missed, ui.StampRelative)... }>{ ui.StampRelativeText(v.Now, v.Missed) }</time>. The next run is as scheduled.</span>
 			</div>
 		</div>
 	}
@@ -151,7 +151,7 @@ templ fleetNoSchedule(v fleetView) {
 			<b>No schedule</b>
 			<span>Scheduled backups are off. Devices are backed up only when someone starts it, here or on a device.</span>
 			if v.Run != nil {
-				<span>Last scheduled run <time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time> · { v.LastLine() }</span>
+				<span>Last scheduled run <time { ui.StampAttrs(v.Run.StartedAt, ui.StampRelative)... }>{ ui.StampRelativeText(v.Now, v.Run.StartedAt) }</time> · { v.LastLine() }</span>
 			}
 		</div>
 	</div>
@@ -175,7 +175,7 @@ templ fleetRunSums(v fleetView) {
 	<div class="sys-sums">
 		<div class="sys-sum">
 			<div class="sys-sum-label">Started</div>
-			<div class="sys-sum-value"><span class="sys-sum-sm"><time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time></span></div>
+			<div class="sys-sum-value"><span class="sys-sum-sm"><time { ui.StampAttrs(v.Run.StartedAt, ui.StampRelative)... }>{ ui.StampRelativeText(v.Now, v.Run.StartedAt) }</time></span></div>
 		</div>
 		@sysSum("Backed up", strconv.Itoa(v.Run.OK))
 		@fleetRunSum("Failed", v.Run.Failed, v.ChipHref(fleetFailed), "")
@@ -188,7 +188,7 @@ templ fleetWhy(w whyText) {
 	if w.Since.IsZero() {
 		{ w.Reason }
 	} else {
-		{ w.Reason + " since " }<time { ui.StampAttrs(w.Since, ui.StampDay)... } title={ w.SinceFull }>{ w.SinceText }</time>
+		{ w.Reason + " since " }<time { ui.StampAttrs(w.Since, ui.StampRelative)... } title={ w.SinceFull }>{ w.SinceText }</time>
 	}
 }
 
@@ -302,7 +302,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 			if r.Newest.IsZero() {
 				@ui.Badge(ui.ToneAccent, "No backup")
 			} else {
-				<time { ui.StampAttrs(r.Newest, ui.StampDay)... } title={ ui.StampText(r.Newest, ui.StampTitle) }>{ ui.StampDayText(v.Now, r.Newest) }</time>
+				<time { ui.StampAttrs(r.Newest, ui.StampRelative)... } title={ ui.StampText(r.Newest, ui.StampTitle) }>{ ui.StampRelativeText(v.Now, r.Newest) }</time>
 				<span class="muted">{ " · " + r.Ago }</span>
 			}
 		</td>
@@ -403,7 +403,7 @@ templ fleetStorage(p sysPage, c sysCard) {
 										@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneNeutral, Label: "Left out", Title: "Prune now leaves it alone: " + pr.LeftOut})
 									}
 								</div>
-								<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>
+								<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampDateTime)... }>{ ui.StampText(pr.Oldest, ui.StampDateTime) }</time>{ " · " + pr.Size }</div>
 							</div>
 						</div>
 					}
@@ -428,7 +428,7 @@ templ fleetPruneDialog(p sysPage) {
 			<p class="udlg-body"><b>{ plural(len(v.PruneNow), "backup") + " of " + plural(v.PruneNowDevices, "device") + ", " + v.PruneNowSize + " in all" }</b>, are deleted now instead of at their next backup. { pruneNowRules } { pruneLeftOutText(v.PruneLeftOut) } This cannot be undone; the audit log lists every backup.</p>
 			<div class="udlg-changes">
 				for _, run := range v.PruneNow {
-					<div><span>{ run.Name }</span><span class="mono"><time { ui.StampAttrs(run.Taken, ui.StampShort)... }>{ ui.StampText(run.Taken, ui.StampShort) }</time>{ " · " + humanBytes(run.Bytes) }</span></div>
+					<div><span>{ run.Name }</span><span class="mono"><time { ui.StampAttrs(run.Taken, ui.StampDateTime)... }>{ ui.StampText(run.Taken, ui.StampDateTime) }</time>{ " · " + humanBytes(run.Bytes) }</span></div>
 				}
 			</div>
 			<div class="udlg-foot">
@@ -548,7 +548,7 @@ templ sysScheduleNote(zone string, on bool, now, next time.Time) {
 	<p class="ufield-help">
 		Times are on the server's clock ({ zone }).
 		if on {
-			{ " Next run " }<time { ui.StampAttrs(next, ui.StampDay)... }>{ ui.StampDayText(now, next) }</time>.
+			{ " Next run " }<time { ui.StampAttrs(next, ui.StampRelative)... }>{ ui.StampRelativeText(now, next) }</time>.
 		}
 	</p>
 }

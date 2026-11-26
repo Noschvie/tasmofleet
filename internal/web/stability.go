@@ -320,7 +320,7 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 	// Last restart
 	row := stabRow{Key: "Last restart", Main: "Not seen yet", Sub: "TasmoFleet notes a restart when it sees one."}
 	if r.Last != nil {
-		row = stabRow{Key: "Last restart", Main: r.LastReason.Label, SubAt: r.Last.At, SubAtText: ui.StampDayText(now, r.Last.At),
+		row = stabRow{Key: "Last restart", Main: r.LastReason.Label, SubAt: r.Last.At, SubAtText: ui.StampRelativeText(now, r.Last.At),
 			Sub: " · " + agoWords(now, r.Last.At)}
 		if r.Last.Reason != "" {
 			row.Sub += " · Tasmota: “" + r.Last.Reason + "”"
@@ -415,7 +415,7 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 			if i == stabilityRecent {
 				break
 			}
-			sb := stabBoot{At: b.At, AtText: ui.StampClockOrDayText(now, b.At), Label: stability.Classify(b.Reason).Label}
+			sb := stabBoot{At: b.At, AtText: ui.StampRelativeText(now, b.At), Label: stability.Classify(b.Reason).Label}
 			if b.Reason != "" && b.Reason != sb.Label {
 				sb.Raw = b.Reason
 			}

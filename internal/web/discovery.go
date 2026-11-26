@@ -235,7 +235,7 @@ func (h *handler) discoveryData(r *http.Request) discView {
 		}
 	}
 	if !v.LastAnnounce.IsZero() {
-		v.LastAnnounceText = ui.StampDayText(now, v.LastAnnounce)
+		v.LastAnnounceText = ui.StampRelativeText(now, v.LastAnnounce)
 	}
 	for _, u := range h.d.Discovery.Unidentified() {
 		state := "online"

@@ -361,7 +361,7 @@ templ InfoTile(t InfoTileData) {
 		}
 		<div class="itile-s">
 			if !t.HintAt.IsZero() {
-				{ t.HintPrefix }<time data-visual-mask { StampAttrs(t.HintAt, StampDay)... }>{ t.HintAtText }</time>
+				{ t.HintPrefix }<time data-visual-mask { StampAttrs(t.HintAt, StampRelative)... }>{ t.HintAtText }</time>
 			} else {
 				{ t.Hint }
 			}
@@ -561,7 +561,7 @@ templ Banner(b BannerData) {
 		<span class={ "banner-dot", templ.KV("pulse", b.Pulse) } aria-hidden="true"></span>
 		<div class="banner-text">
 			if !b.TitleAt.IsZero() {
-				<b>{ b.Title }<time data-visual-mask { StampAttrs(b.TitleAt, StampDay)... }>{ b.TitleAtText }</time>{ b.TitleAfter }</b>
+				<b>{ b.Title }<time data-visual-mask { StampAttrs(b.TitleAt, StampRelative)... }>{ b.TitleAtText }</time>{ b.TitleAfter }</b>
 			} else if b.Title != "" {
 				<b>{ b.Title }</b>
 			}
@@ -773,7 +773,7 @@ templ StatTile(s StatTileData) {
 		<span class="stat-label"><span class={ "sdot-dot", s.Tone.class() } aria-hidden="true"></span>{ s.Label }</span>
 		<span class="stat-value">{ s.Value }</span>
 		if !s.HintAt.IsZero() {
-			<span class="stat-hint">{ s.Hint }<time { StampAttrs(s.HintAt, StampDay)... }>{ s.HintAtText }</time>{ s.HintAfter }</span>
+			<span class="stat-hint">{ s.Hint }<time { StampAttrs(s.HintAt, StampRelative)... }>{ s.HintAtText }</time>{ s.HintAfter }</span>
 		} else if s.Hint != "" {
 			<span class="stat-hint">{ s.Hint }</span>
 		}
@@ -880,7 +880,7 @@ templ TxnCard(t TxnData) {
 					if t.Started.IsZero() {
 						{ t.StartedText }
 					} else {
-						<time { StampAttrs(t.Started, StampDay)... }>{ t.StartedText }</time>
+						<time { StampAttrs(t.Started, StampRelative)... }>{ t.StartedText }</time>
 					}
 				</span>
 			}
@@ -897,7 +897,7 @@ templ TxnRow(r TxnRowData) {
 		if r.WhenAt.IsZero() {
 			<span class="txn-when">{ r.When }</span>
 		} else {
-			<span class="txn-when"><time { StampAttrs(r.WhenAt, StampDay)... }>{ r.When }</time></span>
+			<span class="txn-when"><time { StampAttrs(r.WhenAt, StampRelative)... }>{ r.When }</time></span>
 		}
 	</a>
 }

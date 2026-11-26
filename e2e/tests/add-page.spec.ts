@@ -366,7 +366,7 @@ test("Network scan: Scan now opens the live results, the box keeps a one-line su
   await expect(page).toHaveURL(/\/devices\/new$/);
   const scan = box(page, "scan");
   await expect(scan).toContainText("Scan finished.");
-  await expect(scan.locator("time[data-ts=day]")).toBeVisible();
+  await expect(scan.locator("time[data-ts=relative]")).toBeVisible();
   await expect(scan).toContainText("(in Discovered)");
   await expect(scan.locator("table")).toHaveCount(0);
   await scan.getByRole("link", { name: "All results" }).click();

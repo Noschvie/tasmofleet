@@ -273,7 +273,7 @@ func histEntryRow(e histEntry) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.To, ui.StampClock))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.To, ui.StampTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -292,9 +292,9 @@ func histEntryRow(e histEntry) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var11 string
-				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.To, ui.StampClock))
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.To, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 62, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 62, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -307,7 +307,7 @@ func histEntryRow(e histEntry) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs("–")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 62, Col: 105}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 62, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -326,7 +326,7 @@ func histEntryRow(e histEntry) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.At, ui.StampClock))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.At, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -345,9 +345,9 @@ func histEntryRow(e histEntry) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.At, ui.StampClock))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.At, ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 63, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 63, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -360,7 +360,7 @@ func histEntryRow(e histEntry) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(e.By)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 63, Col: 108}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 63, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -477,7 +477,7 @@ func histEntryRow(e histEntry) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.At, ui.StampClock))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(v.At, ui.StampTime))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -496,9 +496,9 @@ func histEntryRow(e histEntry) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var21 string
-				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.At, ui.StampClock))
+				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(v.At, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 73, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 73, Col: 113}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 				if templ_7745c5c3_Err != nil {
@@ -511,7 +511,7 @@ func histEntryRow(e histEntry) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(v.By)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 73, Col: 134}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 73, Col: 132}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {
@@ -662,7 +662,7 @@ func histEntryRow(e histEntry) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.At, ui.StampClock))
+				templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(e.At, ui.StampTime))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -681,9 +681,9 @@ func histEntryRow(e histEntry) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var30 string
-			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.At, ui.StampClock))
+			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(e.At, ui.StampTime))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 93, Col: 113}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 93, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -696,7 +696,7 @@ func histEntryRow(e histEntry) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(e.By)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 93, Col: 132}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policyhistory.templ`, Line: 93, Col: 130}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {

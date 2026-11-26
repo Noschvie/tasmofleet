@@ -362,7 +362,7 @@ func TestBackUpAllScopePageListsTheDevicesLeftOut(t *testing.T) {
 	fbk := &fakeBackupBatch{}
 	e := setupWith(t, func(d *Deps) { d.BackupBatch = fbk; d.BackupFleet = fleet })
 	_, body := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "left", "2"))
-	for _, want := range []string{"Left out: 1", "attic", "Offline since", `data-ts="day"`, `name="left" value="2"`} {
+	for _, want := range []string{"Left out: 1", "attic", "Offline since", `data-ts="relative"`, `name="left" value="2"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("scope page lacks %q", want)
 		}
@@ -509,10 +509,10 @@ func TestTableCellsCarryATitleForCutOffText(t *testing.T) {
 	}
 	// the times carry a title on their own <time>, which time.js writes in the reader's zone (a title
 	// in the server's zone would disagree with the text next to it)
-	if !regexp.MustCompile(`<td data-label="Newest backup"[^>]*><time [^>]*data-ts="day"[^>]* title="`).MatchString(devs) {
+	if !regexp.MustCompile(`<td data-label="Newest backup"[^>]*><time [^>]*data-ts="relative"[^>]* title="`).MatchString(devs) {
 		t.Error("the newest backup's time has no title for time.js")
 	}
-	if !regexp.MustCompile(`Offline since <time [^>]*data-ts="day"[^>]* title="`).MatchString(devs) {
+	if !regexp.MustCompile(`Offline since <time [^>]*data-ts="relative"[^>]* title="`).MatchString(devs) {
 		t.Error("the offline time has no title for time.js")
 	}
 	if strings.Contains(devs, `<td data-label="Newest backup" class="nowrap s" title=`) {

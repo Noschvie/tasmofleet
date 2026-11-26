@@ -615,7 +615,7 @@ func (h *handler) readValueCell(v string, at time.Time) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(at, ui.StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(at, ui.StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -634,9 +634,9 @@ func (h *handler) readValueCell(v string, at time.Time) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var29 string
-				templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(h.d.Clock.Now(), at))
+				templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(h.d.Clock.Now(), at))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/cells.templ`, Line: 91, Col: 124}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/cells.templ`, Line: 91, Col: 134}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 				if templ_7745c5c3_Err != nil {
@@ -744,7 +744,7 @@ func (h *handler) groupTopicCell(d model.Device) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(d.GroupTopicReadAt, ui.StampDay))
+					templ_7745c5c3_Err = templruntime.RenderAttributes(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_ElementWriter, "time", ui.StampAttrs(d.GroupTopicReadAt, ui.StampRelative))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -763,9 +763,9 @@ func (h *handler) groupTopicCell(d model.Device) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var34 string
-				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampDayText(h.d.Clock.Now(), d.GroupTopicReadAt))
+				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampRelativeText(h.d.Clock.Now(), d.GroupTopicReadAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/cells.templ`, Line: 110, Col: 156}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/cells.templ`, Line: 110, Col: 166}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {

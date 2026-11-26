@@ -193,8 +193,8 @@ func TestNeedsAttentionNamesTheAverageThatMadeTheLinkWeak(t *testing.T) {
 }
 
 // Why (#422): the restarts list holds up to five entries over days. A restart from three days ago
-// that shows only "12:31" reads like one from today; today's keeps the clock time, an older one
-// carries its date (same rule as the other day stamps of the page).
+// that shows only "12:31" reads like one from today; every entry says its day (Today, or its date),
+// the same relative stamp as the other lists of the page (#1104).
 func TestRecentRestartsCarryTheDateWhenNotToday(t *testing.T) {
 	now := time.Date(2026, 10, 22, 14, 0, 0, 0, time.UTC)
 	boots := []model.DeviceBoot{
@@ -205,8 +205,8 @@ func TestRecentRestartsCarryTheDateWhenNotToday(t *testing.T) {
 	if len(c.Boots) != 2 {
 		t.Fatalf("boots: %d", len(c.Boots))
 	}
-	if c.Boots[0].AtText != "12:00" {
-		t.Errorf("today's restart: %q, want the clock time only", c.Boots[0].AtText)
+	if c.Boots[0].AtText != "Today 12:00" {
+		t.Errorf("today's restart: %q, want Today and the clock time", c.Boots[0].AtText)
 	}
 	if c.Boots[1].AtText != "19 Oct, 12:31" {
 		t.Errorf("older restart: %q, want the date with the clock time", c.Boots[1].AtText)

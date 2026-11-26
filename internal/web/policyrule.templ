@@ -109,7 +109,7 @@ templ rulePageTempl(p rulePageView) {
 		if p.Cooldown {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "Devices of this rule that were read less than " + liveCooldownText() + " ago were not read again.", Attrs: templ.Attributes{"data-cooldown": true}}) {
 				if !p.CooldownUntil.IsZero() {
-					{ " All of them can be read again from " }<time { ui.StampAttrs(p.CooldownUntil, ui.StampDay)... }>{ ui.StampDayText(p.Now, p.CooldownUntil) }</time>{ "." }
+					{ " All of them can be read again from " }<time { ui.StampAttrs(p.CooldownUntil, ui.StampRelative)... }>{ ui.StampRelativeText(p.Now, p.CooldownUntil) }</time>{ "." }
 				}
 			}
 		}
@@ -144,7 +144,7 @@ templ rulePageTempl(p rulePageView) {
 											@ui.Badge(ui.ToneOK, "Current")
 										}
 									</span>
-									<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampShort)... }>{ ui.StampText(v.At, ui.StampShort) }</time> · { v.By }</span>
+									<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampDateTime)... }>{ ui.StampText(v.At, ui.StampDateTime) }</time> · { v.By }</span>
 								</span>
 							</a>
 						}
