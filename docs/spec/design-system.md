@@ -429,8 +429,9 @@ A row menu is a `<details>` with the ⋯ button and a 250 px panel (radius 10, `
 A destructive action of a row is an entry of its row menu, in danger-fg, not a red link beside the row's own text: a cached firmware file has one, its Delete (#1093); the action of the whole list ("Delete 6 unused") is a default button at the end of the list.
 
 The phone's two header buttons open two different things (#1077). The burger opens the navigation drawer: the brand,
-the pages and a foot with Account, What's new, the theme and Sign out; the foot is sticky at the bottom of the
-dialog (`dialog.drawer .dr-foot`), so it stays in view while the list scrolls, and the drawer's head carries a close
+the pages and a foot with Account, What's new, the theme and Sign out; the list scrolls and the foot does not
+(in the dialog the nav is the scroller, `dialog.drawer .dr > nav`, so the foot is never laid over a link that keyboard focus
+scrolled to; on a screen too short for the list's floor of three rows the whole drawer scrolls), and the drawer's head carries a close
 button (a 44 px icon button, "Close navigation"; `/nav`, the same list as a page, has none: outside a dialog it
 has nothing to close and could not act without JavaScript). The avatar, named Account, opens the account sheet
 (`ui.AccountSheet`, `dialog.sheet` under the header): the content of the desktop user menu, one component
@@ -842,7 +843,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
 2. S2: the Columns chooser pins left or right (F5, P2).
 3. S3: the policy live check can be paused (N3, N21).
 4. S4: About is full width: the version band, the components as a 2x2 grid, the effective configuration always visible in two tables (#351), and the source line below.
-5. S5: the phone drawer ends with a sticky foot: Account, What's new, the Light / Dark / Auto switch and Sign out; the avatar opens the account sheet, not the drawer (#1077).
+5. S5: the phone drawer ends with a foot that stays in view while the list scrolls (the whole drawer scrolls on a screen too short for three rows): Account, What's new, the Light / Dark / Auto switch and Sign out; the avatar opens the account sheet, not the drawer (#1077).
 6. S6: the live indicator and the connection banners only on pages that hold the event stream.
 7. S7: the navigation shows each role the pages it may open (#1106); pages enforce their permission. The style guide
    continues below the prototype's screen with the component gallery (the screen itself is the

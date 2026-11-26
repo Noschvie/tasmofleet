@@ -334,6 +334,42 @@ test("at 375 the drawer's Sign out stays in view with the list scrolled", async 
   await expect(signOut).toBeInViewport({ ratio: 1 });
 });
 
+// Why (#1077, A1-008, WCAG 2.4.11 Focus Not Obscured): the foot stays in view at the bottom of the drawer, so a link
+// that keyboard focus scrolls to must end above it; a sticky foot laid over the scrolling dialog hid the last links.
+// A short screen must not hide a link: the list keeps a floor of three rows and the dialog scrolls when even that
+// does not fit (landscape phone, 400 % zoom); focus must land inside the list's visible box and above the foot.
+for (const size of [
+  { width: 375, height: 520 },
+  { width: 568, height: 320 },
+  { width: 320, height: 256 },
+]) {
+  test(`at ${size.width} x ${size.height} no focused drawer link is hidden by the foot or outside the list`, async ({ page }) => {
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize(size);
+    await page.goto(app.url + "/about");
+    await page.getByLabel("Open navigation", { exact: true }).click();
+    const drawer = page.locator("dialog#nav-drawer");
+    await expect(drawer).toBeVisible();
+    const links = await drawer.locator("nav a").count();
+    expect(links, "the drawer lists the pages").toBeGreaterThan(8);
+    const hidden: string[] = [];
+    for (let i = 0; i < links + 1; i++) {
+      const r = await page.evaluate(() => {
+        const a = document.activeElement as HTMLElement | null;
+        const foot = document.querySelector("dialog#nav-drawer .dr-foot");
+        const nav = document.querySelector("dialog#nav-drawer .dr > nav");
+        if (!a || !foot || !nav || !a.closest("nav")) return null;
+        const ar = a.getBoundingClientRect();
+        const nr = nav.getBoundingClientRect();
+        return { name: a.textContent?.trim() ?? "", top: ar.top, bottom: ar.bottom, navTop: nr.top, navBottom: nr.bottom, footTop: foot.getBoundingClientRect().top };
+      });
+      if (r && (r.bottom > r.footTop + 0.5 || r.top < r.navTop - 0.5 || r.bottom > r.navBottom + 0.5)) hidden.push(r.name);
+      await page.keyboard.press("Tab");
+    }
+    expect(hidden, "links focused under the foot or outside the list").toEqual([]);
+  });
+}
+
 // Why (#1077, A1-009): the avatar was labelled "Account and theme" and opened the whole navigation, the same as the
 // burger. It opens the account menu's content in a sheet and no navigation; the burger keeps the navigation.
 test("at 375 the avatar opens the account sheet with Account, Theme and Sign out and no navigation link", async ({ page }) => {

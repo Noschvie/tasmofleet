@@ -30,5 +30,7 @@ test("navigation stays below the base path", { tag: "@core" }, async ({ page }) 
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   const hrefs = await page.locator("a[href]").evaluateAll((els) => els.map((e) => e.getAttribute("href")!));
-  for (const h of hrefs) expect(h.startsWith("/tasmofleet/") || h.startsWith("http"), h).toBeTruthy();
+  // the skip link (#1077) is a same-page fragment: it has no path to be below the base path
+  for (const h of hrefs.filter((h) => h !== "#main")) expect(h.startsWith("/tasmofleet/") || h.startsWith("http"), h).toBeTruthy();
+  expect(hrefs.filter((h) => h.startsWith("#")), "the only same-page link is the skip link").toEqual(["#main"]);
 });

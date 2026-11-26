@@ -449,7 +449,7 @@ func TestDrawerHasCloseButtonNavPageNot(t *testing.T) {
 }
 
 // Why (#1077, A1-008, A1-009): Account, Theme and Sign out sat at the end of a scrolling dialog, below the fold on
-// a phone with many pages, and the avatar opened that same long drawer. The foot stays in view (sticky) and holds
+// a phone with many pages, and the avatar opened that same long drawer. The foot stays in view (the list scrolls above it) and holds
 // the account entry under the one name Account.
 func TestDrawerFootIsAccountAndStaysInView(t *testing.T) {
 	d := admin()
@@ -462,8 +462,18 @@ func TestDrawerFootIsAccountAndStaysInView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`(?s)dialog\.drawer \.dr-foot \{[^}]*position: sticky;[^}]*bottom: 0`).Match(css) {
-		t.Error("the drawer's foot is not sticky at the bottom of the dialog")
+	// the nav scrolls and the foot does not: a sticky foot would lie over the link that focus scrolled to (2.4.11)
+	if !regexp.MustCompile(`(?s)dialog\.drawer \.dr > nav \{[^}]*overflow: auto`).Match(css) ||
+		!regexp.MustCompile(`(?s)dialog\.drawer \.dr-foot \{[^}]*flex: none`).Match(css) {
+		t.Error("the drawer's list is not the scroller above a fixed foot")
+	}
+	// the list keeps a floor and the dialog scrolls when even that does not fit: a nav shrunk to 0 hides focused links
+	if !regexp.MustCompile(`(?s)dialog\.drawer \.dr > nav \{[^}]*min-height: calc\(3 \* 44px\)`).Match(css) ||
+		regexp.MustCompile(`(?s)dialog\.drawer\[open\] \{[^}]*overflow: hidden`).Match(css) {
+		t.Error("the drawer's list has no floor, or the dialog cannot scroll on a short screen")
+	}
+	if regexp.MustCompile(`(?s)dialog\.drawer \.dr-foot \{[^}]*position: sticky`).Match(css) {
+		t.Error("the drawer's foot is sticky and covers focused links")
 	}
 }
 

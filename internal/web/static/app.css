@@ -4512,10 +4512,30 @@ html:has(dialog.drawer:modal) body {
 .dr-foot form {
   margin: 0;
 }
-/* in the dialog the foot stays in view: Account, Theme and Sign out are not scrolled away with a long list (#1077) */
+/* In the dialog the list scrolls and the foot does not: the nav is the scroller, so the foot is never laid over a
+   link that keyboard focus scrolled to (WCAG 2.4.11), and Account, Theme and Sign out stay in view (#1077). */
+dialog.drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.drawer .dr {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+dialog.drawer .dr > nav {
+  flex: 1;
+  /* a floor of three rows: on a screen too short for it (landscape phone, 400 % zoom) the whole dialog scrolls
+     instead of the list shrinking to nothing and hiding the focused link (WCAG 2.4.7, 1.4.10) */
+  min-height: calc(3 * 44px);
+  overflow: auto;
+  /* room for the focus ring, which the scroller would clip at the links' edges */
+  margin: 0 calc(-1 * var(--sp-4));
+  padding: 0 var(--sp-4);
+}
 dialog.drawer .dr-foot {
-  position: sticky;
-  bottom: 0;
+  flex: none;
   background: var(--color-surface);
   padding-bottom: var(--sp-8);
 }
