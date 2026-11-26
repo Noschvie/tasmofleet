@@ -488,14 +488,15 @@ func TestDeviceOverviewShowsProbedNetworkFactsWithoutSnapshot(t *testing.T) {
 }
 
 // Why: the row said "IP address" but showed the configured host (often a DNS name). The host
-// the fleet uses is the "Address"; the real IP comes from the device (Status 5) as its own row.
+// the fleet uses is the "Address" (followed by its Open web UI link, #1204); the real IP comes from the device (Status 5)
+// as its own row.
 func TestNetworkCardSeparatesTheConfiguredAddressFromTheDeviceIP(t *testing.T) {
 	e := setup(t)
 	d := e.inv.devs[1]
 	d.Address, d.Net = "tablet-charger.example.internal", probedNet
 	e.inv.devs[1] = d
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<dt>Address</dt><dd class="mono" data-visual-mask>tablet-charger.example.internal</dd>`, `<dt>IP address</dt><dd class="mono" data-visual-mask>10.0.0.77</dd>`} {
+	for _, want := range []string{`<dt>Address</dt><dd class="mono" data-visual-mask>tablet-charger.example.internal `, `<dt>IP address</dt><dd class="mono" data-visual-mask>10.0.0.77</dd>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("network card lacks %q", want)
 		}

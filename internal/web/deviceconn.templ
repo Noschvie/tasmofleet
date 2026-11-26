@@ -6,12 +6,13 @@ import "github.com/hellwand/tasmofleet/internal/web/ui"
 // then how TasmoFleet reaches the device and which way each action takes. It sits under Stability and the medium's card
 // (Wi-Fi or Ethernet), and is never dimmed (it explains an offline device). Both lists are folds, closed so the phone
 // overview keeps its height budget. The live refresh swaps the summaries and the lists by id (pathsLive), never the
-// folds, so an open fold stays open. The address rows are rendered also when the paths could not be read (c is nil).
+// folds, so an open fold stays open, and the address block (addrBlock), so "(last known)" follows the device. The
+// address rows are rendered also when the paths could not be read (c is nil).
 // The Forget button is the admin's: a viewer without it sees the card read-only.
 templ pathsCard(addr []ui.KVRow, c *pathCard) {
 	<section id="devpaths" class={ "devcard", ui.StackRank(4) } aria-labelledby="dc-paths">
 		<div class="devcard-head"><h2 id="dc-paths">{ connectionTitle }</h2></div>
-		@ui.KV(addr)
+		@addrBlock(addr, nil)
 		if c != nil {
 			<details class="fold">
 				@pathSummary("devpaths-facts-sum", c.FactsSummary(), nil)
@@ -24,6 +25,21 @@ templ pathsCard(addr []ui.KVRow, c *pathCard) {
 		}
 	</section>
 }
+
+// addrBlock is the address rows of the Connection card and, when the address opens (its row has the action), the one
+// line that says where it does not (#1204). The page and the live refresh draw it through this one component, so
+// they cannot differ; the refresh sends it also when the paths could not be read.
+templ addrBlock(rows []ui.KVRow, attrs templ.Attributes) {
+	<div id="devpaths-addr" { attrs... }>
+		@ui.KV(rows)
+		if len(rows) > 0 && rows[0].Action != nil {
+			<p class="devcard-note">{ webUINote }</p>
+		}
+	</div>
+}
+
+// webUINote is the caveat under the address: the device's own page is the browser's request, not TasmoFleet's.
+const webUINote = "The device's own page opens only where its address can be reached, such as your home network or a VPN."
 
 // pathsLive is the live refresh of the card: the four parts out of band.
 templ pathsLive(c pathCard) {

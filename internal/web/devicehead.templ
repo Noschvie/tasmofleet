@@ -208,6 +208,7 @@ templ deviceLiveParts(p deviceOverview) {
 	if p.Ident.Changed {
 		@identityCard(p.Ident)
 	}
+	@addrBlock(p.Addr, templ.Attributes{"hx-swap-oob": "true"})
 	if p.Paths != nil {
 		@pathsLive(*p.Paths)
 	}

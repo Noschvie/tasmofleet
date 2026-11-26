@@ -427,18 +427,33 @@ func sensorBoxOf(in overviewIn) *sensorBox {
 }
 
 // addressRows are the top of the Connection card: where TasmoFleet reaches the device. The IP the device reports is a
-// second row only when it says something else (the address is a DNS name, or the device moved).
-func addressRows(d model.Device, f snapFacts) []ui.KVRow {
+// second row only when it says something else (the address is a DNS name, or the device moved). The Address row carries
+// the "Open web UI" link of the list's one rule (deviceWebLink: no user information, no guessed https) and, while the
+// device is offline, says the address is the last known one: its page may still answer (only MQTT may be down), but
+// nothing proves the address is current (#1204). No usable address, no link.
+func addressRows(d model.Device, f snapFacts, off bool) []ui.KVRow {
 	addr := d.Address
 	if d.Port != 0 && d.Port != 80 {
 		addr = net.JoinHostPort(d.Address, strconv.Itoa(d.Port))
 	}
-	rows := []ui.KVRow{{Key: "Address", Value: addr, Mono: true, Mask: true}}
+	if off {
+		addr += " (last known)"
+	}
+	row := ui.KVRow{Key: "Address", Value: addr, Mono: true, Mask: true}
+	if l := deviceWebLink(d.Address, d.Port); l != nil {
+		row.Action = &ui.Btn{Label: "Open web UI", Kind: "link", Href: l.Href, Target: "_blank", Rel: "noopener noreferrer",
+			Aria: "Open web UI (opens in a new tab)", ID: addrWebUIID}
+	}
+	rows := []ui.KVRow{row}
 	if f.IP != "" && f.IP != d.Address {
 		rows = append(rows, ui.KVRow{Key: "IP address", Value: f.IP, Mono: true, Mask: true})
 	}
 	return rows
 }
+
+// addrWebUIID is the id of the Open web UI link: the live refresh swaps the address block, and htmx puts the focus
+// back on the element with the same id.
+const addrWebUIID = "devpaths-webui"
 
 // connOf is the card of the medium the device is on, titled by it: Wi-Fi or Ethernet. How TasmoFleet reaches the
 // device (Address, IP address and the paths) is the Connection card (addressRows, pathsCard); the device's MQTT broker is
@@ -613,7 +628,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Ident = h.identityWithHint(v, d, p.Updating != nil, off, facts, pf.Conflicts)
 	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
-	p.Addr = addressRows(d, facts)
+	p.Addr = addressRows(d, facts, off)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs, h.pwViewOf(ctx, v, d, tf, tp))
 		if shown != tf.HTTP { // the card says what the tile says (shownHTTP)
