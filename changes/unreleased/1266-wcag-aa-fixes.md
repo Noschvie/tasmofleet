@@ -1,4 +1,0 @@
----
-section: Fixed
----
-Six WCAG 2.2 AA failures that the design review found are fixed. The label of a hovered or pressed red button (Delete, Restart and the like) reads at 7.5:1 in the dark theme instead of 3.1:1 (#1266). The switch knob is dark in the dark theme and the checked warn switch has a darker track, so both show on their track at 3:1 or more (#1267). The fleet health bar and a rule's compliance bar fill with the text colour of their tone, 6:1 or more on the track, and a line in the track's colour divides online from offline from unknown, so they no longer differ by hue only (#1268). The sort links in a table header are at least 24 x 24 px (#1272). The device list shows a long name in full instead of cutting it after two lines (#1273). A control that takes the focus by keyboard scrolls clear of the sticky header and the status bar instead of under them (#1274). Focus under the pinned columns of a table (#1275) is not fixed yet

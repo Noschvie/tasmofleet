@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.48.1 "Kannonzaki" (2026-11-26)
+
+### Changed
+
+- The stylesheet switches layouts only at the widths the design system lists (phone below 45 rem, tablet from 45 rem, desktop from 75 rem, and four named component widths), and a test fails on a media query in px or on a width off the list. The 16 other widths folded into it, so a few layouts change at a neighbouring width: the relay boxes of a device (two columns up to 1199 px, one up to 719 px), the template grid of the new rule page (two columns up to 1199 px), the rule page's editor and devices card (side by side from 1200 px instead of 1344), its Applies to columns (from 720 px instead of 832), the separator in the device list's toolbar (from 1200 px instead of 1120) and the two phone rules at 719 and 640 px, which now follow the 720 px phone switch. All tones are one set now, `.t-ok`, `.t-warn`, `.t-danger`, `.t-neutral` and `.t-accent`, read by badges, banners, toasts, notes and the status bar; the `.tone-*` classes, `.t-bad` and the `--banner-*` and `--note-*` variables are gone, and a tone is called danger or accent where it was called bad or info. Colours do not change (#1102)
+- A link looks one way: accent text that is underlined in running text and on hover. In a table cell it is weight 500 with no underline at rest, whether it is a device name, an address or an external link (device names were the text colour in 600, addresses grey in 400), and a card header's link ("All devices", "History") and "Show N older releases" get an underline on hover instead of a darker colour. The mono font is for addresses, MACs, versions, ids and commands only: device names on the policy pages (a rule's Devices table, the deviations, the GPIO templates) and in the Identity card, the dates of the activity lists and the Recent restarts, and the "MQTT ✓ · HTTP ✓" of the Devices list are in the page font now (#1103)
+
+### Fixed
+
+- Six WCAG 2.2 AA failures that the design review found are fixed. The label of a hovered or pressed red button (Delete, Restart and the like) reads at 7.5:1 in the dark theme instead of 3.1:1 (#1266). The switch knob is dark in the dark theme and the checked warn switch has a darker track, so both show on their track at 3:1 or more (#1267). The fleet health bar and a rule's compliance bar fill with the text colour of their tone, 6:1 or more on the track, and a line in the track's colour divides online from offline from unknown, so they no longer differ by hue only (#1268). The sort links in a table header are at least 24 x 24 px (#1272). The device list shows a long name in full instead of cutting it after two lines (#1273). A control that takes the focus by keyboard scrolls clear of the sticky header and the status bar instead of under them (#1274). Focus under the pinned columns of a table (#1275) is not fixed yet
+
 ## 0.48.0 "Kannonzaki" (2026-11-26)
 
 ### Changed
