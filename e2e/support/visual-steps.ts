@@ -331,8 +331,8 @@ const customSteps: Record<string, (page: Page, vars: StepVars) => Promise<void>>
   },
   "must-change-password": async (page) => {
     await signIn(page, "ali", localPassword);
-    await page.getByLabel("One-time password").fill(localPassword);
-    await page.getByLabel("New password", { exact: true }).fill("fleet2026");
+    await page.getByLabel("Temporary password").fill(localPassword);
+    await page.getByLabel(/^New password/).fill("fleet2026");
     await page.getByLabel("Repeat new password").fill("fleet2025");
     await page.getByRole("button", { name: "Save and continue" }).click();
     await page.locator(".ufield-err").first().waitFor({ timeout: 10_000 });

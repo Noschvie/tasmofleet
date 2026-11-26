@@ -64,8 +64,12 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
   await page.goto(app.url + "/setup/account");
   await expect(page.getByRole("heading", { name: "Open the setup link" })).toBeVisible();
   await expect(page.locator("form")).toHaveCount(0);
+  // Why (#1111): where the link is, as a command to copy, not a placeholder to fill in; Copy shows only
+  // when the card's copy.js runs
+  await expect(page.getByText("docker logs tasmofleet", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy the Docker command" })).toBeVisible();
   expect((await page.goto(app.url + "/setup/account?token=not-the-token"))?.status()).toBe(403);
-  await expect(page.getByText("That link isn’t valid.")).toBeVisible();
+  await expect(page.getByText("That link is not valid.")).toBeVisible();
 
   const link = new URL(app.setupLink(), app.url);
   expect(link.pathname, "the first start prints the setup link to its log").toBe("/setup/account");

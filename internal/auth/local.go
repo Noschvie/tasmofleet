@@ -159,7 +159,7 @@ func (s *Service) localSubmit(w http.ResponseWriter, r *http.Request) {
 		// The right one-time password, but too late. Only someone who knows it
 		// gets this answer, so it may say what happened.
 		s.record(r, "local:"+user, "auth.login.local", "denied: one-time password expired", nil)
-		d.CSRFToken, d.Error = s.formToken(w, r), "This one-time password has expired. Ask an administrator for a new one."
+		d.CSRFToken, d.Error = s.formToken(w, r), "This temporary password has expired. Ask an admin for a new one."
 		s.o.Pages.Login(w, r, http.StatusUnauthorized, d)
 		return
 	}

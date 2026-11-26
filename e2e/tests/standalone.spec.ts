@@ -41,8 +41,9 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
       await page.goto(app.url + "/devices");
       await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
 
-      await page.getByLabel("One-time password").fill(initial);
-      await page.getByLabel("New password", { exact: true }).fill(newPassword);
+      await page.getByLabel("Temporary password").fill(initial);
+      // the rule is New password's help line (#1111), which is part of its label: match the start
+      await page.getByLabel(/^New password/).fill(newPassword);
       await page.getByLabel("Repeat new password").fill(newPassword);
       await page.getByRole("button", { name: "Save and continue" }).click();
       await page.goto(app.url + "/devices");
@@ -105,8 +106,8 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
       await op.getByRole("button", { name: "Sign in" }).click();
       // an account created by an admin must pick its own password first
       await expect(op.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
-      await op.getByLabel("One-time password").fill("operator-pass-123");
-      await op.getByLabel("New password", { exact: true }).fill("operator-own-pass-456");
+      await op.getByLabel("Temporary password").fill("operator-pass-123");
+      await op.getByLabel(/^New password/).fill("operator-own-pass-456");
       await op.getByLabel("Repeat new password").fill("operator-own-pass-456");
       await op.getByRole("button", { name: "Save and continue" }).click();
       const res = await op.goto(app.url + "/users");

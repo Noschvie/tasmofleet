@@ -27,7 +27,8 @@ func (f authFrame) static(name string) string {
 }
 
 // authDoc is the document of a standalone page: no navigation, the card centred. It follows the
-// system theme (no user preference is known before sign-in).
+// system theme (no user preference is known before sign-in). Its one script is copy.js, which shows
+// the copy buttons (setup step 1's Docker command, #1111); without it they stay hidden.
 templ authDoc(f authFrame) {
 	<!DOCTYPE html>
 	<html lang="en" data-theme-auto>
@@ -40,6 +41,7 @@ templ authDoc(f authFrame) {
 			<link rel="preload" href={ f.static("geist-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="preload" href={ f.static("geist-mono-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 			<link rel="stylesheet" href={ f.static("app.css") }/>
+			<script src={ f.static("copy.js") } defer></script>
 		</head>
 		<body class="page-auth">
 			<main id="main">
@@ -53,23 +55,21 @@ templ authDoc(f authFrame) {
 
 // loginPage is the sign-in page (screens signin, signin-v-error, signin-v-expired): the session
 // banner, the local form with "Keep me signed in" (a wrong sign-in that may be retried shows its error and the
-// attempts left under the password, N11), and the single sign-on button.
+// attempts left under the password, N11), and the single sign-on button. With single sign-on on, its button is
+// the one primary action and the local form, the break-glass way in, sits in the fold "Sign in with a local
+// account" (#1111), open while the page answers a local attempt.
 templ loginPage(f authFrame, d auth.LoginData) {
 	@authDoc(f) {
-		if d.Local {
-			<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/login/local") }>
-				<input type="hidden" name="csrf" value={ d.CSRFToken }/>
-				<input type="hidden" name="next" value={ d.Next }/>
-				@loginHead(d)
-				@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", NoAutocapitalize: true, NoSpellcheck: true, Autofocus: d.SSO == "" && d.Username == ""})
-				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "current-password", Error: loginFieldError(d), Autofocus: d.Username != ""})
-				@ui.Check("remember", "Keep me signed in on this device", "", d.Remember, false)
-				@ui.Button(ui.Btn{Label: "Sign in", Kind: "primary", Tall: true, Type: "submit"})
-			</form>
-			if d.SSO != "" {
-				<div class="or-rule">or</div>
-				@ui.Button(ui.Btn{Label: ssoLabel(d.SSO), Tall: true, ID: "sso", Href: ssoHref(d)})
-			}
+		if d.Local && d.SSO != "" {
+			@loginHead(d)
+			@ui.Button(ui.Btn{Label: ssoLabel(d.SSO), Kind: "primary", Tall: true, ID: "sso", Href: ssoHref(d)})
+			<details class="fold auth-local" open?={ localFoldOpen(d) }>
+				<summary>Sign in with a local account</summary>
+				@loginForm(d, "")
+			</details>
+		} else if d.Local {
+			@loginHead(d)
+			@loginForm(d, "primary")
 		} else {
 			@loginHead(d)
 			if d.SSO != "" {
@@ -81,19 +81,39 @@ templ loginPage(f authFrame, d auth.LoginData) {
 	}
 }
 
+// loginForm is the local sign-in form; kind is its Sign in button's (primary alone, default under single
+// sign-on). There is no reset by email: the line under it says who resets a forgotten password.
+templ loginForm(d auth.LoginData, kind string) {
+	<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/login/local") }>
+		<input type="hidden" name="csrf" value={ d.CSRFToken }/>
+		<input type="hidden" name="next" value={ d.Next }/>
+		@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", NoAutocapitalize: true, NoSpellcheck: true, Autofocus: d.SSO == "" && d.Username == ""})
+		@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "current-password", Error: loginFieldError(d), Autofocus: d.Username != ""})
+		@ui.Check("remember", "Keep me signed in on this device", "", d.Remember, false)
+		@ui.Button(ui.Btn{Label: "Sign in", Kind: kind, Tall: true, Type: "submit"})
+		<p class="auth-forgot">Forgot your password? Ask an admin to reset it.</p>
+	</form>
+}
+
+// localFoldOpen opens the local form's fold when the page answers a local attempt: an error (only local sign-in
+// sets one; a failed single sign-on ends on the message page) or the username that was typed.
+func localFoldOpen(d auth.LoginData) bool {
+	return d.Error != "" || d.Username != ""
+}
+
 // ssoHref starts single sign-on and keeps the way back: next is a query value, so it is escaped
 // ("/devices?q=a&tag=b" must arrive whole, not as two parameters).
 func ssoHref(d auth.LoginData) string {
 	return d.BasePath + "/login/sso?next=" + url.QueryEscape(d.Next)
 }
 
-// ssoLabel is the single sign-on button: "Sign in with SSO · Authentik", or just "Sign in with
-// SSO" when the identity provider has no name of its own (the default "Single sign-on").
+// ssoLabel is the single sign-on button: "Sign in with Authentik", or "Sign in with single sign-on" when the
+// identity provider has no name of its own (the default "Single sign-on").
 func ssoLabel(name string) string {
 	if name == "" || name == "Single sign-on" {
-		return "Sign in with SSO"
+		return "Sign in with single sign-on"
 	}
-	return "Sign in with SSO · " + name
+	return "Sign in with " + name
 }
 
 // loginHead is the title and the banners of the sign-in card.
@@ -110,7 +130,7 @@ templ loginHead(d auth.LoginData) {
 }
 
 // loginRetry is a wrong sign-in that may be tried again. Its error belongs to the password input and is shown
-// there, once, with the attempts line; an error without a retry (a lockout, an expired one-time password, a failed
+// there, once, with the attempts line; an error without a retry (a lockout, an expired temporary password, a failed
 // single sign-on) belongs to no input and stays a banner (#1098).
 func loginRetry(d auth.LoginData) bool {
 	return d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0
@@ -153,14 +173,9 @@ templ forcedPasswordPage(f authFrame, d auth.PasswordPageData) {
 		}
 		<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/account/password") }>
 			<input type="hidden" name="csrf" value={ d.CSRFToken }/>
-			@ui.Field(ui.FieldData{Label: "One-time password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(d.ErrField, "current", d.Error), Autofocus: focus(d.ErrField, "current", true)})
-			@ui.Field(ui.FieldData{Label: "New password", Name: "new", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "new", d.Error), Autofocus: focus(d.ErrField, "new", false)})
+			@ui.Field(ui.FieldData{Label: "Temporary password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(d.ErrField, "current", d.Error), Autofocus: focus(d.ErrField, "current", true)})
+			@ui.Field(ui.FieldData{Label: "New password", Name: "new", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters, different from the temporary one.", Error: fieldErr(d.ErrField, "new", d.Error), Autofocus: focus(d.ErrField, "new", false)})
 			@ui.Field(ui.FieldData{Label: "Repeat new password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "confirm", d.Error), Autofocus: focus(d.ErrField, "confirm", false)})
-			<ul class="pw-checks">
-				<li>At least { strconv.Itoa(auth.PasswordMinLength) } characters</li>
-				<li>Different from the temporary password</li>
-				<li>Both entries match</li>
-			</ul>
 			@ui.Button(ui.Btn{Label: "Save and continue", Kind: "primary", Tall: true, Type: "submit"})
 		</form>
 		@signOutForm(d.BasePath, d.CSRFToken)
@@ -277,7 +292,7 @@ templ accountPage(v accountView) {
 						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 						@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "name", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
 						@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: v.D.Email, Autocomplete: "email", Error: fieldErr(v.D.ErrField, "email", v.D.Error), Autofocus: focus(v.D.ErrField, "email", false)})
-						<button type="submit" class="btn">Save profile</button>
+						@ui.Button(ui.Btn{Label: "Save profile", Type: "submit"})
 					</form>
 				</details>
 			}
@@ -287,7 +302,7 @@ templ accountPage(v accountView) {
 					<form class="acct-form" method="post" action={ templ.SafeURL(v.D.BasePath + "/account/name") }>
 						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
 						@ui.Field(ui.FieldData{Label: "Display name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "name", Help: nameHelp(v.D.ProviderName), Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
-						<button type="submit" class="btn">Save display name</button>
+						@ui.Button(ui.Btn{Label: "Save display name", Type: "submit"})
 					</form>
 				</details>
 			}
@@ -299,7 +314,7 @@ templ accountPage(v accountView) {
 					@ui.Field(ui.FieldData{Label: "Current password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(v.D.ErrField, "current", v.D.Error), Autofocus: focus(v.D.ErrField, "current", true)})
 					@ui.Field(ui.FieldData{Label: "New password", Name: "new", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters.", Error: fieldErr(v.D.ErrField, "new", v.D.Error), Autofocus: focus(v.D.ErrField, "new", false)})
 					@ui.Field(ui.FieldData{Label: "Repeat new password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(v.D.ErrField, "confirm", v.D.Error), Autofocus: focus(v.D.ErrField, "confirm", false)})
-					<button type="submit" class="btn btn-primary acct-submit">Change password</button>
+					@ui.Button(ui.Btn{Label: "Change password", Kind: "primary", Type: "submit", Class: "acct-submit"})
 				</form>
 			}
 		}
@@ -357,7 +372,7 @@ type userRowView struct {
 templ usersPage(v usersView) {
 	@ui.PageHeader("Users", "Admins change everything. Operators can switch, restart and back up devices.") {
 		if !v.D.ViewOnly {
-			<a class="btn btn-primary" href={ templ.SafeURL(v.D.BasePath + "/users/new") }>Add local user</a>
+			@ui.Button(ui.Btn{Label: "Add local user", Kind: "primary", Href: v.D.BasePath + "/users/new"})
 		}
 	}
 	@usersBanners(v.D)
@@ -397,7 +412,9 @@ templ usersPage(v usersView) {
 					<span class="urow-meta">{ u.Last + " · " + u.Sessions }</span>
 				}
 				if u.Detail != "" {
-					<a class="btn" href={ templ.SafeURL(u.Detail) }>Details<span class="sr-only">{ " of " + u.Name }</span></a>
+					@ui.Button(ui.Btn{Label: "Details", Href: u.Detail}) {
+						<span class="sr-only">{ " of " + u.Name }</span>
+					}
 				} else {
 					@ui.RowMenu("Actions for "+u.Name, u.Menu, u.MenuOpensUp)
 				}
@@ -472,7 +489,7 @@ templ userAddPage(v userAddView) {
 		</div>
 		<div class="useradd-mode">
 			@ui.RadioCards("Password", "otp", []ui.Option{
-				{Value: "1", Label: "Generate a one-time password", Text: "Shown once after saving. Expires in 24 hours.", Checked: v.D.OTP},
+				{Value: "1", Label: "Generate a temporary password", Text: "Shown once after saving. Expires in 24 hours.", Checked: v.D.OTP},
 				{Value: "", Label: "Set an initial password", Text: "You tell them the password yourself.", Checked: !v.D.OTP},
 			})
 		</div>
@@ -481,11 +498,11 @@ templ userAddPage(v userAddView) {
 			@ui.Field(ui.FieldData{Label: "Repeat password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(v.D.ErrField, "confirm", v.D.Error), Autofocus: focus(v.D.ErrField, "confirm", false)})
 		</div>
 		<div class="useradd-foot">
-			<a class="btn" href={ templ.SafeURL(v.D.BasePath + "/users") }>Cancel</a>
+			@ui.Button(ui.Btn{Label: "Cancel", Href: v.D.BasePath + "/users"})
 			if v.StepUp != nil {
-				<a class="btn btn-primary" href={ templ.SafeURL(v.D.BasePath + "/users") } data-dialog={ v.StepUp.ID }>Add user</a>
+				@ui.Button(ui.Btn{Label: "Add user", Kind: "primary", Href: v.D.BasePath + "/users", Dialog: v.StepUp.ID})
 			} else {
-				<button type="submit" class="btn btn-primary" disabled?={ v.D.ViewOnly }>Add user</button>
+				@ui.Button(ui.Btn{Label: "Add user", Kind: "primary", Type: "submit", Disabled: v.D.ViewOnly})
 			}
 		</div>
 	}

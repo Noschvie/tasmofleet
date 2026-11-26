@@ -152,10 +152,10 @@ func TestSetupStepOneWithoutTokenHasNoForm(t *testing.T) {
 		if strings.Contains(body, "<form") || strings.Contains(body, `name="password"`) {
 			t.Errorf("invalid=%v: a form without a token", invalid)
 		}
-		if !strings.Contains(body, "container log") && !strings.Contains(body, "docker logs") {
+		if !strings.Contains(body, "TasmoFleet log") || !strings.Contains(body, "docker logs") {
 			t.Errorf("invalid=%v: the page does not say where the link is", invalid)
 		}
-		if invalid != strings.Contains(body, "That link isn’t valid.") {
+		if invalid != strings.Contains(body, "That link is not valid.") {
 			t.Errorf("invalid=%v: wrong token state", invalid)
 		}
 		if !strings.Contains(body, `<li class="is-current" aria-current="step">`) || strings.Contains(body, "is-done") {

@@ -7,7 +7,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
-// The user detail page and the one-time password page (design v2 screens user-u1..u5 and userotp,
+// The user detail page and the temporary password page (design v2 screens user-u1..u5 and userotp,
 // N4), in the app shell.
 
 templ userDetailPage(v userDetailView) {
@@ -112,9 +112,9 @@ templ userDetailPage(v userDetailView) {
 							<input type="hidden" name="subject" value={ v.D.User.Subject }/>
 							<input type="hidden" name="session" value={ s.ID }/>
 							if v.StepUp != nil {
-								<a class="btn" href={ templ.SafeURL(v.D.BasePath + detailPath(v.D.User)) } data-dialog={ v.StepUp.ID }>End session</a>
+								@ui.Button(ui.Btn{Label: "End session", Href: v.D.BasePath + detailPath(v.D.User), Dialog: v.StepUp.ID})
 							} else {
-								<button type="submit" class="btn">End session</button>
+								@ui.Button(ui.Btn{Label: "End session", Type: "submit"})
 							}
 						</form>
 					}
@@ -124,7 +124,7 @@ templ userDetailPage(v userDetailView) {
 		<section class="ulist ud-activity" aria-labelledby="ud-activity-h">
 			<div class="ulist-head">
 				<h2 id="ud-activity-h">Recent activity</h2>
-				<a class="btn btn-link" href={ templ.SafeURL(v.AuditHref) }>Audit log</a>
+				@ui.Button(ui.Btn{Label: "Audit log", Kind: "link", Href: v.AuditHref})
 			</div>
 			if len(v.Activity) == 0 {
 				<p class="ud-none">Nothing recorded yet.</p>
@@ -149,29 +149,32 @@ templ userDetailPage(v userDetailView) {
 // udSubmit is the submit of a fold's form: while changes need a step-up it opens that dialog.
 templ udSubmit(v userDetailView, label string) {
 	if v.StepUp != nil {
-		<a class="btn" href={ templ.SafeURL(v.D.BasePath + detailPath(v.D.User)) } data-dialog={ v.StepUp.ID }>{ label }</a>
+		@ui.Button(ui.Btn{Label: label, Href: v.D.BasePath + detailPath(v.D.User), Dialog: v.StepUp.ID})
 	} else {
-		<button type="submit" class="btn">{ label }</button>
+		@ui.Button(ui.Btn{Label: label, Type: "submit"})
 	}
 }
 
-// otpPage shows a generated password once: the value with a copy button, the username, when it
-// expires, the warning that it cannot be shown again, and Done (the user's page).
+// otpPage shows a generated password once: the value in a read-only field with a copy button (the field
+// selects the whole value on focus, copy.js), the username, when it expires, the warning that it cannot be
+// shown again, Done (the user's page) and Back to users. The value is in the markup once: the field's value,
+// which Copy reads (#1111).
 templ otpPage(o otpView) {
 	if o.D.Created {
-		@ui.PageHeader("Account created for "+o.D.User, "Give them this one-time password. It’s shown only once and expires in 24 hours.")
+		@ui.PageHeader("Account created for "+o.D.User, "Give them this temporary password. It’s shown only once and expires in 24 hours.")
 	} else {
-		@ui.PageHeader("Password reset for "+o.D.User, "Give them this one-time password. It’s shown only once and expires in 24 hours.")
+		@ui.PageHeader("Password reset for "+o.D.User, "Give them this temporary password. It’s shown only once and expires in 24 hours.")
 	}
-	@ui.CardOf(ui.CardData{Class: "otp-card", Aria: "One-time password"}) {
+	@ui.CardOf(ui.CardData{Class: "otp-card", Aria: "Temporary password"}) {
 		<div class="otp-value">
-			<output id="otp-value" class="mono" data-visual-mask>{ o.D.Password }</output>
+			<input id="otp-value" class="mono" type="text" value={ o.D.Password } readonly autocomplete="off" spellcheck="false" aria-label={ "Temporary password of " + o.D.User } data-visual-mask/>
 			@ui.CopyButton(ui.CopyData{From: "#otp-value"})
 		</div>
 		@ui.KV([]ui.KVRow{{Key: "Username", Value: o.D.User, Mono: true}, {Key: "Expires", At: o.Expires, Mask: true}})
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "Once you leave this page the password can’t be shown again. Reset it to get a new one."})
 	}
 	<div class="otp-foot">
-		<a class="btn btn-primary" href={ templ.SafeURL(o.Detail) }>Done</a>
+		@ui.Button(ui.Btn{Label: "Back to users", Href: o.D.BasePath + "/users"})
+		@ui.Button(ui.Btn{Label: "Done", Kind: "primary", Href: o.Detail})
 	</div>
 }

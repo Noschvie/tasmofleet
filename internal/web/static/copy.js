@@ -1,6 +1,9 @@
 // Copy buttons: <button data-copy-text="value" hidden> copies the value;
-// <button data-copy-from="#id" hidden> copies the text of that element (a
-// secret shown once must not be in the markup twice). The buttons are hidden
+// <button data-copy-from="#id" hidden> copies the text of that element, or
+// the value when it is an input or a textarea (a secret shown once must not
+// be in the markup twice). A read-only input that is such a source selects
+// its whole value when it gets the focus, so it can be copied by hand too
+// (the temporary password page, #1111). The buttons are hidden
 // in the markup and shown here, so without this file the page has no dead
 // button (the full value is in the title of its neighbour, or on screen).
 // No inline script: CSP forbids that.
@@ -55,7 +58,7 @@
     b.setAttribute("data-label", label);
     var from = b.getAttribute("data-copy-from");
     var src = from ? document.querySelector(from) : null;
-    write(src ? src.textContent : b.getAttribute("data-copy-text") || "")
+    write(src ? sourceText(src) : b.getAttribute("data-copy-text") || "")
       .then(
         function () {
           b.textContent = "Copied";
@@ -69,6 +72,33 @@
           b.textContent = label;
         }, 1500);
       });
+  });
+  // sourceText is what a data-copy-from source holds: a field's value (its text is empty), else its text.
+  function sourceText(src) {
+    if (src.tagName === "INPUT" || src.tagName === "TEXTAREA") {
+      return src.value;
+    }
+    return src.textContent;
+  }
+  // copySource is a read-only field that a copy button reads from, or null.
+  function copySource(t) {
+    if (!(t instanceof HTMLInputElement) || !t.readOnly || !t.id) {
+      return null;
+    }
+    return document.querySelector('button[data-copy-from="#' + CSS.escape(t.id) + '"]') ? t : null;
+  }
+  // such a field selects its whole value on focus, and again on a click that only placed the caret
+  document.addEventListener("focusin", function (e) {
+    var t = copySource(e.target);
+    if (t) {
+      t.select();
+    }
+  });
+  document.addEventListener("click", function (e) {
+    var t = copySource(e.target);
+    if (t && t.selectionStart === t.selectionEnd) {
+      t.select();
+    }
   });
   function showAll() {
     show(document.documentElement);

@@ -6462,21 +6462,19 @@ body.page-auth main {
   color: var(--color-text);
   font-weight: 600;
 }
-.pw-checks {
+/* the local form behind single sign-on: a fold that ends the card, its form a column like the card's (#1111) */
+.auth-card > details.auth-local {
   margin: 0;
-  padding: 0;
-  list-style: none;
+}
+.auth-local > form.auth-form {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-14);
+}
+.auth-forgot {
+  margin: 0;
   font-size: var(--fs-meta);
   color: var(--color-text-2);
-}
-.pw-checks li::before {
-  content: "○";
-  display: inline-block;
-  width: 14px;
-  margin-right: var(--sp-8);
   text-align: center;
 }
 .auth-signout {
@@ -14229,19 +14227,18 @@ a.pol-tpl {
   flex-wrap: wrap;
   gap: var(--sp-8);
 }
-.otp-value output {
+/* as specific as the base input rule's :not() chain, which would otherwise keep its font, background and border */
+.otp-value input:not([type="checkbox"]):not([type="radio"]) {
   flex: 1 1 260px;
   min-width: 0;
-  display: flex;
-  align-items: center;
   min-height: 48px;
   padding: 0 var(--sp-14);
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-control);
   background: var(--color-surface-2);
+  color: var(--color-text);
   font: 500 var(--fs-word) var(--font-mono);
   letter-spacing: 0.02em;
-  overflow-wrap: anywhere;
 }
 .otp-value .btn {
   min-height: 48px;
@@ -14253,26 +14250,39 @@ a.pol-tpl {
 }
 .otp-foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--sp-8);
   max-width: 560px;
   margin-top: var(--sp-14);
 }
-/* setup step 1: the card as wide as the wizard's, the log example */
+/* setup step 1: the card as wide as the wizard's, where to read the log: Docker's command with Copy, Unraid's log */
 .page-auth .auth-card:has(.setup-steps) {
   width: min(480px, 100%);
 }
-.setup-log {
+.setup-where {
   margin: 0;
   padding: var(--sp-10) var(--sp-12);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-control);
   background: var(--color-surface-2);
-  font: 400 var(--fs-small)/1.6 var(--font-mono);
-  white-space: pre-wrap;
+  font-size: var(--fs-body);
+}
+.setup-where li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto; /* the command wraps on a phone, Copy stays on its line */
+  align-items: center;
+  column-gap: var(--sp-8);
+}
+.setup-where .mono {
   overflow-wrap: anywhere;
 }
-.setup-log + .banner {
-  margin: 0;
+.setup-where-k {
+  font-weight: 600;
 }
 
 /* ==== page: What's new (/whats-new, N5) and the avatar's news dot (W3) ==== */

@@ -400,7 +400,10 @@ func TestOneTimePasswordIsShownOnceAndNotCached(t *testing.T) {
 	if strings.Contains(logs.String(), pw) {
 		t.Error("the password reached the log")
 	}
-	for _, want := range []string{"Password reset for lena", `data-copy-from="#otp-value"`, `<a class="btn btn-primary" href="/tf/users/lena">Done</a>`, "can’t be shown again"} {
+	// the value sits in a read-only field (select-on-focus, Copy reads its value), and the page has a way back to the
+	// list besides Done (#1111)
+	for _, want := range []string{"Password reset for lena", `<input id="otp-value" class="mono" type="text" value="` + pw + `" readonly`,
+		`data-copy-from="#otp-value"`, `<a class="btn" href="/tf/users">Back to users</a><a class="btn btn-primary" href="/tf/users/lena">Done</a>`, "can’t be shown again"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("OTP page lacks %q", want)
 		}

@@ -109,8 +109,10 @@ func TestOneTimePasswordResetSignsInOnceAndExpires(t *testing.T) {
 	}
 	e.clock.Advance(OTPValidity)
 	r = postLocal(e.browser(), "192.0.2.202", "ops", otp)
-	if r.code != http.StatusUnauthorized || !strings.Contains(pages.login.Error, "expired") {
-		t.Fatalf("expired one-time password: %d %q", r.code, pages.login.Error)
+	// The person holding it is told what happened and what to do, in the words every other page uses
+	// for this secret (#1111: "temporary password", and "admin" as the role is named everywhere).
+	if want := "This temporary password has expired. Ask an admin for a new one."; r.code != http.StatusUnauthorized || pages.login.Error != want {
+		t.Fatalf("expired temporary password: %d %q, want %q", r.code, pages.login.Error, want)
 	}
 	if ev := e.audit.last(); ev.Result != "denied: one-time password expired" {
 		t.Errorf("audit = %+v", ev)

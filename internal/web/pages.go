@@ -343,7 +343,7 @@ func userMenu(d auth.UsersPageData, u auth.UserRow, i int) ([]ui.MenuItem, []ui.
 		add("role-admin", "Make admin", raise, ui.DialogData{Title: "Make " + who + " an admin?", Body: "Admins change everything, including users and how people sign in.", Action: local, Verb: "Make admin",
 			Fields: []ui.KVRow{{Key: "action", Value: "role"}, {Key: "role", Value: "admin"}}}, false, false)
 	}
-	add("otp", "Reset password", g.Reset, ui.DialogData{Title: "Reset the password of " + who + "?", Body: "A one-time password is generated and shown once. The current password stops working; " + who + " chooses a new one at the next sign-in.", Action: local, Verb: "Reset password",
+	add("otp", "Reset password", g.Reset, ui.DialogData{Title: "Reset the password of " + who + "?", Body: "A temporary password is generated and shown once. The current password stops working; " + who + " chooses a new one at the next sign-in.", Action: local, Verb: "Reset password",
 		Fields: []ui.KVRow{{Key: "action", Value: "otp"}}}, false, false)
 	if u.Disabled {
 		add("enable", "Reactivate", g.Disable, ui.DialogData{Title: "Reactivate " + who + "?", Body: who + " can sign in again.", Action: local, Verb: "Reactivate",
@@ -511,11 +511,22 @@ func (p *Pages) OneTimePassword(w http.ResponseWriter, r *http.Request, status i
 		auth.DefaultPages{}.OneTimePassword(w, r, status, d)
 		return
 	}
-	v := p.h.view(r, "One-time password", "users", nil)
-	v.Crumbs = []ui.Crumb{{Label: "One-time password"}}
+	title, crumbs := otpPageNames(d)
+	v := p.h.view(r, title, "users", nil)
+	v.Crumbs = crumbs
 	o := otpView{D: d, Detail: d.BasePath + "/users/" + url.PathEscape(d.User),
 		Expires: d.ExpiresAt}
 	p.h.show(w, r, status, "users", v, otpPage(o))
+}
+
+// otpPageNames are the tab title and the trail's last step of the temporary password page: what happened, as
+// its heading says ("Password reset for lena", "Account created for lena"), so tab, trail and heading agree.
+func otpPageNames(d auth.OTPPageData) (string, []ui.Crumb) {
+	title := "Password reset"
+	if d.Created {
+		title = "Account created"
+	}
+	return title, []ui.Crumb{{Label: title}}
 }
 
 // SetupAccount renders setup step 1 (screens setup, setup-v-tokenerr, setup-v-error, N12): without
@@ -685,9 +696,9 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	v.Facts = append(v.Facts, last)
 	if !d.OTPExpiresAt.IsZero() {
-		otp := ui.KVRow{Key: "One-time password", Lead: "Valid until ", At: d.OTPExpiresAt, Stamp: ui.StampRelative, Value: ui.StampRelativeText(now, d.OTPExpiresAt), Mask: true}
+		otp := ui.KVRow{Key: "Temporary password", Lead: "Valid until ", At: d.OTPExpiresAt, Stamp: ui.StampRelative, Value: ui.StampRelativeText(now, d.OTPExpiresAt), Mask: true}
 		if d.OTPExpired {
-			otp = ui.KVRow{Key: "One-time password", Value: "Expired: reset the password again"}
+			otp = ui.KVRow{Key: "Temporary password", Value: "Expired: reset the password again"}
 		}
 		v.Facts = append(v.Facts, otp)
 	}
@@ -756,9 +767,9 @@ func createdBy(by string, nameOf func(string) string) string {
 	return " by " + nameOf(by)
 }
 
-// otpView is the one-time password page.
+// otpView is the temporary password page.
 type otpView struct {
 	D       auth.OTPPageData
 	Detail  string    // the user's detail page (Done)
-	Expires time.Time // when the one-time password stops working
+	Expires time.Time // when the temporary password stops working
 }

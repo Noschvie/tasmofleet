@@ -56,17 +56,25 @@ test("a user in no mapped group gets no session", { tag: "@core" }, async ({ pag
   await expect(page.getByText("nina")).toHaveCount(0);
 });
 
-// One login page for both methods (decision 2026-10-19): the IdP button and the
-// local form side by side, no automatic redirect, and the local account is the
-// break-glass access while the IdP is configured.
-test("the login page offers the IdP button and the local form together", async ({ page }) => {
+// One login page for both methods (decision 2026-10-19): no automatic redirect, and the local
+// account is the break-glass access while the IdP is configured. Single sign-on is the first
+// and only primary action; the local form waits in a fold (#1111) and opens again with the
+// answer to a wrong password, so the person sees the error and tries again in place.
+test("the login page offers the IdP first and the local form in a fold", async ({ page }) => {
   app.cli(["user", "passwd", "--create", "--role", "admin", "breakglass"], "e2e-fake-password-1\n");
   await page.goto(app.url + "/login");
-  await expect(page.getByRole("link", { name: "Sign in with SSO" })).toBeVisible();
-  await expect(page.getByLabel("Username")).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeVisible();
+  const sso = page.getByRole("link", { name: "Sign in with single sign-on" });
+  await expect(sso).toBeVisible();
+  await expect(sso).toHaveClass(/btn-primary/);
+  await expect(page.getByLabel("Username")).toBeHidden();
+  await page.getByText("Sign in with a local account").click();
   await page.getByLabel("Username").fill("breakglass");
-  await page.getByLabel("Password").fill("e2e-fake-password-1");
+  await page.getByLabel("Password").fill("wrong-password-xx");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.locator(".ufield-err")).toContainText("Wrong username or password");
+  // by name: the password's label also holds its error text, which says "username"
+  await expect(page.locator('input[name="password"]')).toBeVisible();
+  await page.locator('input[name="password"]').fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
 });

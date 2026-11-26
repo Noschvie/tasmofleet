@@ -51,10 +51,7 @@ var markupExemptions = []markupBlock{
 		"release.templ":         {"btn": 2},
 	}},
 	{Name: "#1092 buttons: accounts", Files: map[string]map[string]int{
-		"accountpages.templ": {"btn": 8},
-		"messagepage.templ":  {"btn": 2},
-		"setup.templ":        {"btn": 1},
-		"userdetail.templ":   {"btn": 6},
+		"messagepage.templ": {"btn": 2},
 	}},
 	{Name: "#1092 buttons: system", Files: map[string]map[string]int{
 		"audit.templ":       {"btn": 3},

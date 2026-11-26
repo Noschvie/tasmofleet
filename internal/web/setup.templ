@@ -25,10 +25,6 @@ func setupStepsAt(current int) []setupStep {
 	return steps
 }
 
-// setupLogExample is how the setup link looks in the container log (the line of the created
-// admin account); the token is never shown on a page.
-const setupLogExample = "$ docker logs <container> 2>&1 | grep setup=\n… user=admin setup=https://…/setup/account?token=…"
-
 // setupStepsBar is the step indicator of every setup page.
 templ setupStepsBar(current int) {
 	<ol class="setup-steps" aria-label="Setup steps">
@@ -117,7 +113,7 @@ templ setupView(p setupPage) {
 			}
 			<label class="ucheck"><input type="checkbox" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span>Use TLS</span></label>
 			<div class="sys-test">
-				<button type="submit" class="btn" formaction={ templ.SafeURL(p.Base + setupPath + "/mqtt-test") } formnovalidate>Test connection</button>
+				@ui.Button(ui.Btn{Label: "Test connection", Type: "submit", FormAction: p.Base + setupPath + "/mqtt-test", NoValidate: true})
 				if p.MQTTResult != "" {
 					if testNote("MQTT connection test", p.MQTTResult).Failed {
 						<span class="sys-test-res t-danger" role="alert">MQTT connection test: { p.MQTTResult }</span>
@@ -138,19 +134,21 @@ templ setupView(p setupPage) {
 }
 
 // setupAccountPage is setup step 1 (N12), a standalone card: without a valid token it says where
-// the link is (the container log) and has no form; with the token it is the first admin's
-// password form (step 2 "Admin account"). The token is only in the hidden field, never in text.
+// the link is (the TasmoFleet log, read with Docker's command or Unraid's log view, #1111) and has no
+// form; with the token it is the first admin's password form (step 2 "Admin account"). The token is
+// only in the hidden field, never in text.
 templ setupAccountPage(f authFrame, d auth.SetupAccountData) {
 	@authDoc(f) {
 		if d.NeedToken {
 			@setupStepsBar(1)
 			<h1>Open the setup link</h1>
-			<p class="setup-lead">The server printed a one-time setup link to its log when it started for the first time. It proves you’re the person running the server.</p>
-			<pre class="setup-log mono">{ setupLogExample }</pre>
+			<p class="setup-lead">Open the setup link from the TasmoFleet log. It is printed once at start.</p>
+			<ul class="setup-where">
+				<li><span class="setup-where-k">Docker:</span> <span class="mono">{ setupLogCommand }</span>@ui.CopyButton(ui.CopyData{Text: setupLogCommand, Aria: "Copy the Docker command"})</li>
+				<li><span class="setup-where-k">Unraid:</span> open the container’s log</li>
+			</ul>
 			if d.TokenInvalid {
-				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "That link isn’t valid.", Text: "Every start of the server prints a fresh one; open the newest line of the log. The link stops working once the admin has a password.", Alert: true})
-			} else {
-				<p class="setup-lead">Open that link in this browser to choose the admin password. It works until the admin has one.</p>
+				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "That link is not valid.", Text: "Use the newest setup link in the log.", Alert: true})
 			}
 		} else {
 			@setupStepsBar(2)

@@ -91,20 +91,40 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
     }),
     "menu item reachable",
   ).toBe(true);
-  // a reset generates a one-time password, shown once
+  // a reset generates a temporary password, shown once
   await reset.click();
   const dlg = page.locator("dialog[open]");
   await expect(dlg).toContainText("Reset the password of Lena Berg?");
   await dlg.getByRole("button", { name: "Reset password" }).click();
   await expect(page.getByRole("heading", { name: "Password reset for lena" })).toBeVisible();
-  const otp = ((await page.locator("#otp-value").textContent()) ?? "").trim();
+  const otp = await page.locator("#otp-value").inputValue();
   expect(otp.length, "a generated password is shown").toBeGreaterThanOrEqual(12);
+  // Why (#1111): the admin reads the value out or types it over, so it is the one-time code's mono
+  // --fs-word type, where l, 1, O and 0 differ, not the base input's body sans
+  const look = await page.locator("#otp-value").evaluate((e) => {
+    const probe = document.createElement("span");
+    probe.style.cssText = "font-family: var(--font-mono); font-size: var(--fs-word)";
+    document.body.append(probe);
+    const want = getComputedStyle(probe),
+      got = getComputedStyle(e);
+    const r = { font: got.fontFamily === want.fontFamily, size: got.fontSize === want.fontSize };
+    probe.remove();
+    return r;
+  });
+  expect(look, "the temporary password is in the one-time code's mono type").toEqual({ font: true, size: true });
+  // Why (#1111): Copy hands over exactly that value: the value sits in a read-only field, whose text is empty
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(app.url).origin });
+  await page.locator(".otp-value").getByRole("button", { name: "Copy" }).click();
+  await expect(page.locator(".otp-value").getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText()), "Copy puts the temporary password on the clipboard").toBe(otp);
 
-  // Why (N4): the one-time password signs lena in once and makes her choose her own at once
+  // Why (N4): the temporary password signs lena in once and makes her choose her own at once; with
+  // single sign-on on, her local form is behind "Sign in with a local account" (#1111)
   const lenaCtx = await browser.newContext();
   const lp = await lenaCtx.newPage();
   const signInLena = async (p: Page) => {
     await p.goto(app.url + "/login");
+    await p.getByText("Sign in with a local account").click();
     await p.getByLabel("Username").fill("lena");
     await p.getByLabel("Password", { exact: true }).fill(otp);
     await p.getByRole("button", { name: "Sign in", exact: true }).click();

@@ -27,6 +27,11 @@ type SetupService interface {
 
 const setupPath = "/setup"
 
+// setupLogCommand is the command that shows the setup link on Docker (setup step 1, #1111). Its last word is the
+// container's name, an identifier (the name the README's docker run and compose examples give the container),
+// not the product name in text; the token is never shown on a page.
+const setupLogCommand = "docker logs tasmofleet"
+
 func (h *handler) registerSetup(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
 	if h.d.Setup == nil || h.d.SysConfig == nil {
 		return
