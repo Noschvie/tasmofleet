@@ -4,7 +4,7 @@
 //     at the edge.
 //  2. Say which side has more: data-more-start / data-more-end on a strip that overflows and is not
 //     at that end. app.css fades that edge (#1079), so a tab that is out of sight can be found. A strip
-//     that does not scroll sideways (the Devices list's chips wrap) gets neither attribute.
+//     that does not scroll sideways (the Devices list's chips wrap from 45rem) gets neither attribute.
 // Without JavaScript there is no fade; the strip still scrolls.
 (function () {
   "use strict";

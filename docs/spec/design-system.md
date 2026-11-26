@@ -526,6 +526,16 @@ into the row menu (⋯). Pinned columns, column widths and the Columns chooser c
 45rem a table either scrolls sideways (`.dense` tables with few columns) or turns into phone cards, one block
 per row with label before value. A table without rows shows `ui.Empty` instead of a header.
 
+The Columns chooser (#1133) has two parts, because the common job and the rare one differ. It opens on a plain list:
+one checkbox per column in the user's order, the columns fixed to an edge (Name, Actions) ticked and disabled with
+their "Pinned left · always" note, and "Reset to default" at the foot. Pinning, the arrows and dragging by the grip
+sit in a closed fold of the menu, "Customize order" (`details.colorder`), with the help for them ("Drag ⋮⋮ or use ↑ ↓
+to reorder …") and the note on pinned columns. A column has one checkbox, in the list; the fold's rows have none. The
+fold belongs to the menu: closing the menu (Escape, a click elsewhere) closes it, a page load starts with it closed, and
+only the reload that a pin, a move or a row drag asks for opens menu and fold again, so a second pin is one click away.
+A list swap keeps an open fold open (`tables.js`). The saved layout (`table.KEY`) and the `data-colid`, `data-colrow`,
+`data-pin` and `data-move` hooks are what they were.
+
 A screen reader needs two more things from a table (#1094). Every header cell is `scope="col"` (`ui.Table` writes
 it), and a table with no visible heading of its own has a caption: `TableData.Caption` is the first child of the
 `<table>`, drawn only with `CaptionVisible` and otherwise `sr-only` (a page whose h1 or card title names the table
@@ -581,7 +591,15 @@ the chips (`.dv-chips`, `.add-chips`, `.pol-pills`, `.cks`) keeps its own name: 
 strip that scrolls fades its edge (see Page header, crumbs and tabs). The Devices toolbar is one row where
 it fits; where the chip names make it longer, search and Columns stay on the first line and the chips and
 the Chip and Tag pickers wrap below them, and Columns never covers a filter. The `Columns button shares the
-toolbar's vertical centre and height` spec holds this at 1280 px. The Devices list has one chip per state the
+toolbar's vertical centre and height` spec holds this at 1280 px. Below 45rem (#1133) the toolbar is two lines before the
+list: the search field, then the chips as one strip that scrolls sideways and fades the edge that has more
+(`tabs.js`), with a "Filters" button at its end. Chip, Tag and Sort are one fold behind that button
+(`details.dv-filters`, inside the same GET form, so the filter works without JavaScript); the button reads
+"Filters (N)" while N of Chip and Tag are on, so a closed fold still says the list is narrowed (Sort is no filter and
+is not counted). The open fold takes a line of its own under the strip. From 45rem the button is gone and the pickers
+sit with the chips as before. "Select all N" is no row above the cards: it is a button of the bulk bar on a phone, there
+once a card is ticked (the table's header box does it from 45rem), and every card keeps its own box. The first device
+starts above 400 px with 60 devices (`devices-phone-toolbar.spec.ts`). The Devices list has one chip per state the
 dashboard counts, after All: Online, Offline and Unknown (#1132). Each is a link on `?health=online`, `offline` or
 `unknown`, the same address the tile of that name opens, so a tile and its chip count and list the same devices;
 the other chips (Update available, Differs from policy, No backup) are `?chip=` filters. A device that never

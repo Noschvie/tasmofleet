@@ -104,6 +104,27 @@ func (p devicesPage) healthChip(base string) (label, href string, n int, ok bool
 	return strings.ToUpper(p.Filter.Health[:1]) + p.Filter.Health[1:], base + "/devices?" + p.Sort.values(f.values()).Encode(), p.Summary.States[st], true
 }
 
+// activeFilters counts the filters the Filters fold holds that are on: the Chip and the Tag picker. Sort is no
+// filter, and the chips and the search stay on screen, so they do not count.
+func (p devicesPage) activeFilters() int {
+	n := 0
+	for _, v := range []string{p.Filter.Family, p.Filter.Tag} {
+		if v != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// filtersLabel is the summary of the Filters fold: "Filters", or "Filters (2)" while the list is narrowed by Chip and
+// Tag, so a person who left the fold shut still sees that it is.
+func (p devicesPage) filtersLabel() string {
+	if n := p.activeFilters(); n > 0 {
+		return "Filters (" + strconv.Itoa(n) + ")"
+	}
+	return "Filters"
+}
+
 // countLine is the subtitle: "54 online · 4 offline · 2 unknown".
 func (p devicesPage) countLine() string {
 	s := p.Summary
@@ -133,55 +154,64 @@ templ devicesContent(v view, p devicesPage) {
 					<input type="hidden" name="health" value={ p.Filter.Health }/>
 				}
 				<input type="hidden" name="dir" value={ p.Sort.Dir }/>
-				<div class="dv-chips">
-					for _, c := range p.Summary.Chips {
-						@ui.Chip(ui.ChipData{Label: c.Label, Count: c.Text(), Title: c.Title(), Href: p.chipHref(v.Base, c.Key), Current: c.Key == p.Filter.Chip && (c.Key != "" || p.Filter.Health == "")})
-						if c.Key == "" {
-							for _, sc := range stateChips {
-								{{ href, on := p.stateChip(v.Base, sc.State) }}
-								@ui.Chip(ui.ChipData{Label: sc.Label, Count: strconv.Itoa(p.stateCount(sc.State)), Title: stateTitle(on), Href: href, Current: on})
+				<div class="dv-filterbar">
+					<div class="dv-chips">
+						for _, c := range p.Summary.Chips {
+							@ui.Chip(ui.ChipData{Label: c.Label, Count: c.Text(), Title: c.Title(), Href: p.chipHref(v.Base, c.Key), Current: c.Key == p.Filter.Chip && (c.Key != "" || p.Filter.Health == "")})
+							if c.Key == "" {
+								for _, sc := range stateChips {
+									{{ href, on := p.stateChip(v.Base, sc.State) }}
+									@ui.Chip(ui.ChipData{Label: sc.Label, Count: strconv.Itoa(p.stateCount(sc.State)), Title: stateTitle(on), Href: href, Current: on})
+								}
 							}
 						}
-					}
-					if label, href, n, ok := p.healthChip(v.Base); ok {
-						@ui.Chip(ui.ChipData{Label: label, Count: strconv.Itoa(n), Title: "Show all states again", Href: href, Current: true})
-					}
-					<span class="dv-vsep" aria-hidden="true"></span>
-					<label class={ "dv-pick", templ.KV("on", p.Filter.Family != "") }>
-						Chip
-						<select name="family" aria-label="Chip" data-autosubmit>
-							<option value="">All</option>
-							for _, f := range p.Families {
-								<option value={ f.Value } selected?={ f.Value == p.Filter.Family }>{ f.Label } · { strconv.Itoa(f.N) }</option>
-							}
-						</select>
-					</label>
-					<label class={ "dv-pick", templ.KV("on", p.Filter.Tag != "") }>
-						Tag
-						<select name="tag" aria-label="Tag" data-autosubmit>
-							<option value="">All</option>
-							for _, f := range p.Tags {
-								<option value={ f.Value } selected?={ f.Value == p.Filter.Tag }>{ f.Label } · { strconv.Itoa(f.N) }</option>
-							}
-						</select>
-					</label>
+						if label, href, n, ok := p.healthChip(v.Base); ok {
+							@ui.Chip(ui.ChipData{Label: label, Count: strconv.Itoa(n), Title: "Show all states again", Href: href, Current: true})
+						}
+					</div>
+					// Chip, Tag and Sort are one fold on a phone (#1133, A1-024); from 45rem the fold shows open and
+					// its summary is hidden, so the wide toolbar is what it was. It stays in this GET form: the
+					// selects keep their names, and the noscript Filter button submits them.
+					<details class="dv-filters">
+						<summary class={ templ.KV("on", p.activeFilters() > 0) }>{ p.filtersLabel() }</summary>
+						<div class="dv-fbody">
+							<span class="dv-vsep" aria-hidden="true"></span>
+							<label class={ "dv-pick", templ.KV("on", p.Filter.Family != "") }>
+								Chip
+								<select name="family" aria-label="Chip" data-autosubmit>
+									<option value="">All</option>
+									for _, f := range p.Families {
+										<option value={ f.Value } selected?={ f.Value == p.Filter.Family }>{ f.Label } · { strconv.Itoa(f.N) }</option>
+									}
+								</select>
+							</label>
+							<label class={ "dv-pick", templ.KV("on", p.Filter.Tag != "") }>
+								Tag
+								<select name="tag" aria-label="Tag" data-autosubmit>
+									<option value="">All</option>
+									for _, f := range p.Tags {
+										<option value={ f.Value } selected?={ f.Value == p.Filter.Tag }>{ f.Label } · { strconv.Itoa(f.N) }</option>
+									}
+								</select>
+							</label>
+							<label class="dv-sort">
+								Sort
+								<select name="sort" aria-label="Sort" data-autosubmit>
+									for _, o := range p.sortOptions() {
+										<option value={ o.Key } selected?={ o.Key == p.Sort.Key }>{ o.Label }</option>
+									}
+								</select>
+							</label>
+						</div>
+					</details>
 				</div>
-				<span class="dv-grow"></span>
-				<label class="dv-sort">
-					Sort
-					<select name="sort" aria-label="Sort" data-autosubmit>
-						for _, o := range p.sortOptions() {
-							<option value={ o.Key } selected?={ o.Key == p.Sort.Key }>{ o.Label }</option>
-						}
-					</select>
-				</label>
 				<noscript>@ui.Button(ui.Btn{Label: "Filter", Type: "submit"})</noscript>
 			</form>
 			if v.Features.DeviceCmd {
 				<form id="picker" method="post" action={ templ.SafeURL(v.Base + "/devices/bulk/power") }>
 					<input type="hidden" name="csrf" value={ v.CSRF }/>
 					@devicesTable(v, p)
-					@bulkBar(v)
+					@bulkBar(v, len(p.Rows))
 				</form>
 			} else {
 				@devicesTable(v, p)
@@ -237,8 +267,10 @@ templ devicesTableBody(v view, p devicesPage) {
 	}
 }
 
-// bulkBar is the bar of the selected devices (F5 markup; P2 adds nothing but its place).
-templ bulkBar(v view) {
+// bulkBar is the bar of the selected devices (F5 markup; P2 adds nothing but its place). Select all is a
+// button of the bar on a phone (CSS shows it below 45rem; the table's header box does it above), and select.js keeps
+// its count (data-select-total, n devices at the first render) true after a list swap (#1133).
+templ bulkBar(v view, n int) {
 	<div class="bulkbar" data-bulkbar hidden role="region" aria-label="Selected devices">
 		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" id="bulk-note" data-bar-note hidden></span></span>
 		<div class="bulk-acts">
@@ -260,6 +292,7 @@ templ bulkBar(v view) {
 			<button type="submit" data-needs-device name="action" value="OFF">Power off</button>
 		</div>
 		<span class="bulk-sep" aria-hidden="true"></span>
+		<button type="button" class="bulk-all" data-pick="all" data-picker="picker">Select all <span data-select-total>{ strconv.Itoa(n) }</span></button>
 		<button type="button" class="bulk-clear" data-pick="none" data-picker="picker">Clear</button>
 	</div>
 }

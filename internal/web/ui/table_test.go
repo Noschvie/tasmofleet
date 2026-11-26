@@ -49,20 +49,24 @@ func TestTableFrame(t *testing.T) {
 // selection box shares the device id with its table row (select.js), and each live part is
 // swapped by the event the stream sends for that device.
 func TestDeviceCardEscapesAndWiresLiveParts(t *testing.T) {
-	out := renderC(t, DeviceCards(DeviceListData{Select: true, Cards: []DeviceCardData{{
+	out := renderC(t, DeviceCards(DeviceListData{Cards: []DeviceCardData{{
 		ID: "7", Name: `<img src=x onerror=alert(1)>`, Href: "/tf/devices/7", Meta: []string{"10.0.0.7", "esp32", "14.3.0"}, Select: true,
 	}}}), context.Background())
 	if strings.Contains(out, "<img") || !strings.Contains(out, "&lt;img src=x onerror=alert(1)&gt;") {
 		t.Errorf("name not escaped: %s", out)
 	}
 	for _, want := range []string{`data-id="7"`, `name="id" value="7"`, `sse-swap="health-7"`, `sse-swap="power-7"`, `sse-swap="uptime-7"`, `sse-swap="wifi-7"`,
-		`href="/tf/devices/7"`, `dcard-meta-part">10.0.0.7</span> · `, `dcard-meta-part">esp32</span> · `, `dcard-meta-part">14.3.0</span>`, "Select all 1", "data-select-all-row hidden"} {
+		`href="/tf/devices/7"`, `dcard-meta-part">10.0.0.7</span> · `, `dcard-meta-part">esp32</span> · `, `dcard-meta-part">14.3.0</span>`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "style=") {
 		t.Error("no inline style (CSP)")
+	}
+	// Why (#1133): the phone list is the cards and nothing above them; "Select all N" is a button of the bulk bar.
+	if strings.Contains(out, "Select all") || strings.Contains(out, "data-select-all") {
+		t.Errorf("no Select all row above the cards: %s", out)
 	}
 	ro := renderC(t, DeviceCard(DeviceCardData{ID: "1", Name: "a", Href: "/d/1"}), context.Background())
 	if strings.Contains(ro, "checkbox") {

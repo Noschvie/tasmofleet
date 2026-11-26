@@ -983,16 +983,18 @@ func colWeight(cd colDef, p tablePref) float64 {
 	return cd.Weight
 }
 
-// columnsMenu is the Columns chooser of the prototype (D19): the column fixed left on top, then
-// every movable column in the user's order with its drag grip, show/hide box, Pin left, Pin right
-// and the move buttons, the column fixed right at the bottom, and Reset to default. A column the
-// user cannot hide (Lock) shows a ticked, disabled box.
+// columnsMenu is the Columns chooser of the prototype (D19), in two parts (#1133). First what almost everyone comes
+// for: the column fixed left on top, a show/hide box for every movable column in the user's order, the column fixed
+// right at the bottom. A column the user cannot hide (Lock) shows a ticked, disabled box. Then the closed fold
+// "Customize order", which holds the rare jobs: the draggable rows with their grip, Pin left, Pin right and the move
+// buttons, the help for them and the note on pinned columns. The fold keeps no box of its own (data-colid is looked
+// up in the menu, so a column has one), and a closed fold takes its buttons out of the tab order. Reset to default
+// stays outside it, in reach whatever the fold shows.
 func columnsMenu(cols []colDef, order []int, pref tablePref) string {
 	var b strings.Builder
-	b.WriteString(`<p class="colhint">Drag ⋮⋮ or use ↑ ↓ to reorder. Drag a header edge to resize; double-click it to fit. Saved for you, for this table.</p>`)
 	fixedRow := func(cd colDef) {
 		note := map[string]string{sideLeft: "Pinned left · always", sideRight: "Pinned right · always"}[cd.Side]
-		b.WriteString(`<div class="colrow is-fixed"><span class="colgrip" aria-hidden="true"></span><label><input type="checkbox" checked disabled> ` +
+		b.WriteString(`<div class="colrow is-fixed"><label><input type="checkbox" checked disabled> ` +
 			html.EscapeString(cd.Label) + `</label><span class="colfix">` + note + `</span></div>`)
 	}
 	for _, cd := range cols {
@@ -1000,15 +1002,26 @@ func columnsMenu(cols []colDef, order []int, pref tablePref) string {
 			fixedRow(cd)
 		}
 	}
+	for _, i := range order {
+		cd := cols[i]
+		label := html.EscapeString(cd.Label)
+		if cd.Lock {
+			b.WriteString(`<div class="colrow colcheck"><label><input type="checkbox" checked disabled> ` + label + `</label></div>`)
+		} else {
+			b.WriteString(`<div class="colrow colcheck"><label><input type="checkbox" data-colid="` + cd.ID + `"` + map[bool]string{true: " checked", false: ""}[!pref.hidden(cd)] + `> ` + label + `</label></div>`)
+		}
+	}
+	for _, cd := range cols {
+		if cd.Fixed && cd.Side == sideRight {
+			fixedRow(cd)
+		}
+	}
+	b.WriteString(`<details class="colorder"><summary>Customize order</summary>` +
+		`<p class="colhint">Drag ⋮⋮ or use ↑ ↓ to reorder. Drag a header edge to resize; double-click it to fit. Saved for you, for this table.</p>`)
 	for n, i := range order {
 		cd := cols[i]
 		label := html.EscapeString(cd.Label)
-		b.WriteString(`<div class="colrow" draggable="true" data-colrow="` + cd.ID + `"><span class="colgrip" aria-hidden="true">⋮⋮</span>`)
-		if cd.Lock {
-			b.WriteString(`<label><input type="checkbox" checked disabled> ` + label + `</label>`)
-		} else {
-			b.WriteString(`<label><input type="checkbox" data-colid="` + cd.ID + `"` + map[bool]string{true: " checked", false: ""}[!pref.hidden(cd)] + `> ` + label + `</label>`)
-		}
+		b.WriteString(`<div class="colrow" draggable="true" data-colrow="` + cd.ID + `"><span class="colgrip" aria-hidden="true">⋮⋮</span><span class="collabel">` + label + `</span>`)
 		side := pref.side(cd)
 		for _, s := range []string{sideLeft, sideRight} {
 			b.WriteString(`<button type="button" class="colpin" data-pin="` + s + `" data-pinid="` + cd.ID + `" aria-pressed="` +
@@ -1020,12 +1033,7 @@ func columnsMenu(cols []colDef, order []int, pref tablePref) string {
 		}
 		b.WriteString(move("up", "↑", n == 0) + move("down", "↓", n == len(order)-1) + `</div>`)
 	}
-	for _, cd := range cols {
-		if cd.Fixed && cd.Side == sideRight {
-			fixedRow(cd)
-		}
-	}
-	b.WriteString(`<div class="colfoot"><span>Pinned columns keep their side when you scroll sideways.</span>` +
-		`<button type="button" class="colreset" data-cols-reset>Reset to default</button></div>`)
+	b.WriteString(`<p class="colnote">Pinned columns keep their side when you scroll sideways.</p></details>` +
+		`<div class="colfoot"><button type="button" class="colreset" data-cols-reset>Reset to default</button></div>`)
 	return b.String()
 }

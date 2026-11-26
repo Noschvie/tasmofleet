@@ -56,9 +56,9 @@ test("the Devices without a backup tile opens exactly those devices", async ({ p
   await page.goto(app.url + "/devices?chip=nobackup");
   await expect(page.locator("table[data-table=devices] tbody tr")).toHaveCount(total - 1);
 
-  // On a phone the chip row wraps (#678, it used to be a strip wider than the screen that had to be
-  // scrolled to the active chip, coordinator review of #408): the active chip lies inside the row's box,
-  // in view without a swipe, or the list looks unfiltered.
+  // On a phone the chip row is a strip that scrolls (#1133; it wrapped from #678 to #1132, and before that it
+  // had to be scrolled to the active chip, coordinator review of #408): tabs.js brings the active chip into the
+  // strip's box, in view without a swipe, or the list looks unfiltered.
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(app.url + "/devices?chip=nobackup");
   const inside = await page.evaluate(() => {

@@ -1618,6 +1618,9 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     top: calc(100% + 6px);
     width: 400px;
     max-width: calc(100vw - 32px);
+    /* with Customize order open the menu holds every column twice: it scrolls inside the window instead of below it */
+    max-height: 70dvh;
+    overflow-y: auto;
     padding: var(--sp-6);
     background: var(--color-surface);
     /* the prototype's --border is below the 1.3:1 overlay guard (layout guard g); strong as every menu */
@@ -1641,6 +1644,53 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     height: 36px;
     padding: 0 var(--sp-4) 0 var(--sp-8);
     border-radius: var(--r-sm);
+  }
+  /* the show/hide list: one box per column, no buttons (#1133) */
+  .colpanel .colrow.colcheck {
+    padding: 0 var(--sp-8);
+  }
+  .colpanel .colrow.colcheck:hover {
+    background: var(--color-surface-2);
+  }
+  /* "Customize order": a closed fold with the pins, the arrows and the draggable rows */
+  .colpanel .colorder {
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-4);
+    border-top: var(--hair-w) solid var(--color-border);
+  }
+  .colpanel .colorder > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-8);
+    list-style: none;
+    height: var(--ctl-sm);
+    padding: 0 var(--sp-8);
+    border-radius: var(--r-sm);
+    font: 600 var(--fs-ui) var(--font-sans);
+    cursor: pointer;
+  }
+  .colpanel .colorder > summary::-webkit-details-marker {
+    display: none;
+  }
+  .colpanel .colorder > summary::after {
+    content: "▾";
+    font-size: var(--fs-badge);
+    color: var(--color-text-2);
+  }
+  .colpanel .colorder[open] > summary::after {
+    content: "▴";
+  }
+  .colpanel .colorder > summary:hover {
+    background: var(--color-surface-2);
+  }
+  .colpanel .collabel {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
   }
   .colpanel .colrow[draggable="true"]:hover {
     background: var(--color-surface-2);
@@ -1710,16 +1760,20 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     background: var(--color-accent-bg);
     color: var(--color-accent-fg);
   }
+  .colpanel .colnote {
+    margin: 0;
+    padding: var(--sp-6) var(--sp-8) var(--sp-2);
+    font-size: var(--fs-badge);
+    color: var(--color-text-3);
+  }
   .colpanel .colfoot {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     gap: var(--sp-8);
     margin-top: var(--sp-6);
     padding: var(--sp-6) var(--sp-4) var(--sp-2) var(--sp-8);
     border-top: var(--hair-w) solid var(--color-border);
-    font-size: var(--fs-badge);
-    color: var(--color-text-3);
   }
   .colpanel .colreset {
     flex: none;
@@ -7364,19 +7418,6 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     flex-direction: column;
     gap: var(--sp-8);
   }
-  .dcards-all {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-8);
-    height: var(--ctl-sm);
-    padding: 0 var(--sp-4);
-    font-size: var(--fs-ui);
-    color: var(--color-text-2);
-  }
-  .dcards-all[hidden] {
-    display: none;
-  }
-  .dcards-all input,
   .dcard-sel input {
     width: 18px;
     height: 18px;
@@ -7549,6 +7590,10 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   background: none;
   color: var(--color-accent-fg);
 }
+/* Select all N: a phone's way to take the whole list (the table's header box does it from 45rem; #1133) */
+.bulkbar:has(> .bulk-acts) .bulk-all {
+  display: none;
+}
 .bulkbar:has(> .bulk-acts) .bulk-sep {
   width: 1px;
   height: 20px;
@@ -7590,7 +7635,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   .bulkbar:has(> .bulk-acts) {
     bottom: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--sp-8) var(--sp-6);
     width: auto;
     max-width: none;
@@ -7608,13 +7653,22 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     margin: 0;
     font-size: var(--fs-body);
   }
+  .bulkbar:has(> .bulk-acts) .bulk-all,
   .bulkbar:has(> .bulk-acts) .bulk-clear {
     grid-row: 1;
-    grid-column: 2;
     height: var(--ctl-sm);
     background: none;
     color: var(--color-accent-fg);
     font-size: var(--fs-body);
+  }
+  .bulkbar:has(> .bulk-acts) .bulk-all {
+    display: inline-block;
+    grid-column: 2;
+    padding: 0 var(--sp-10);
+    border: 0;
+  }
+  .bulkbar:has(> .bulk-acts) .bulk-clear {
+    grid-column: 3;
   }
   .bulkbar:has(> .bulk-acts) .bulk-acts {
     display: grid;
@@ -7681,13 +7735,34 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   padding-bottom: var(--sp-2);
   overflow-x: auto;
 }
-/* The Devices list shows every filter at once: the chips wrap onto further lines instead of scrolling
-   sideways, so a phone never hides "Not compliant" or the Chip and Tag pickers off its edge (#678).
-   The other chip rows (Backups, Policy) keep the scroll strip above. */
-.dv-list .dv-chips {
+/* The Devices list's chips and pickers are one wrapping group from 45rem (#678): .dv-filterbar is the group, the
+   chip strip and the Filters body dissolve into it. On a phone the chips are one strip that scrolls sideways and
+   fades the edge that has more (tabs.js, #1079), with the Filters button at its end, and the open Filters body takes
+   the line below: four rows of controls before the first device pushed it to y 550 (#1133). The other chip rows
+   (Backups, Policy) keep the scroll strip above. */
+.dv-filterbar {
+  display: flex;
   flex-wrap: wrap;
-  padding-bottom: 0;
-  overflow-x: visible;
+  align-items: center;
+  max-width: 100%;
+}
+@media (min-width: 45rem) {
+  .dv-filterbar {
+    gap: var(--sp-6);
+  }
+  .dv-list .dv-chips {
+    display: contents;
+  }
+}
+@media (max-width: 44.99rem) {
+  .dv-filterbar {
+    flex: 1 1 100%;
+    gap: var(--sp-8);
+  }
+  .dv-list .dv-chips {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 .dv-vsep {
   flex: none;
@@ -7742,8 +7817,71 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   font: 500 var(--fs-meta) var(--font-sans);
   cursor: pointer;
 }
-.dv-grow {
-  flex: 1;
+/* Filters (#1133): Chip, Tag and Sort in one fold. Its details is no box of its own: the summary is one more item of
+   the toolbar's group next to the chip strip, and the open body takes a line of its own (phone; ::details-content is
+   the box that holds it, a closed one has none, so a closed fold costs no line). From 45rem the summary is gone and
+   the body is shown open, its pickers items of the group as before. A browser without ::details-content keeps the
+   fold at every width: the body is then the item itself. */
+.dv-filters {
+  display: contents;
+}
+.dv-filters > summary {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-6);
+  height: var(--ctl);
+  padding: 0 var(--sp-12);
+  border: var(--hair-w) solid var(--color-control-border);
+  border-radius: var(--r-pill);
+  background: var(--color-surface);
+  color: var(--color-text-2);
+  font: 500 var(--fs-meta) var(--font-sans);
+  white-space: nowrap;
+  list-style: none;
+  cursor: pointer;
+}
+.dv-filters > summary::-webkit-details-marker {
+  display: none;
+}
+.dv-filters > summary::after {
+  content: "▾";
+  font-size: var(--fs-badge);
+}
+.dv-filters[open] > summary::after {
+  content: "▴";
+}
+.dv-filters > summary.on {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+.dv-fbody {
+  display: flex;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+@supports selector(::details-content) {
+  .dv-filters::details-content {
+    flex: 0 0 100%;
+  }
+  .dv-filters:not([open])::details-content {
+    display: none;
+  }
+  @media (min-width: 45rem) {
+    .dv-filters > summary {
+      display: none;
+    }
+    .dv-filters::details-content,
+    .dv-filters:not([open])::details-content {
+      display: contents;
+      content-visibility: visible;
+    }
+    .dv-fbody {
+      display: contents;
+    }
+  }
 }
 .dv-sort {
   display: none;
@@ -7802,6 +7940,9 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   }
 }
 @media (max-width: 44.99rem) {
+  .dv-list .dv-q {
+    flex-basis: 100%;
+  }
   .dv-sort {
     display: flex;
   }
@@ -8083,9 +8224,6 @@ td.pcell .pwr {
   border-radius: var(--r-sm);
 }
 /* phone cards: the status badge without its dot (the name carries the dot), MQTT down last */
-.dcards-all {
-  font-weight: 400;
-}
 /* the device list's bulk bar is in the flow below the list and sticks to the window's bottom
    edge while the list is in view, as in the prototype (the page grows by the bar); the other
    bars stay fixed (F5) */

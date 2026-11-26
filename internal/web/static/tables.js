@@ -30,6 +30,10 @@
   var desktop = window.matchMedia("(min-width: 45rem)"); // the table (not the phone list) shows from here
   var timers = {};
   var openKey = "";
+  // Whether the "Customize order" fold of that menu is open (#1133). Client state only: it ends with the menu (the
+  // toggle handler below closes the fold when its menu closes), so a menu always opens on its checkboxes, and a
+  // page load starts with it closed, except for the reload a pin, a move or a row drag asks for (reopen).
+  var orderOpen = false;
   // The Columns menu a pin reloaded the page for (applyDoc), read once when this page starts. It
   // must not be read later: a page that has asked for its reload keeps running until the new one
   // arrives, and an enhance() of it (a coalesced cell refit, the fonts) used to take the flag, so
@@ -1522,7 +1526,7 @@
       );
       if (open) {
         open.open = false;
-        var s = open.querySelector("summary");
+        var s = open.querySelector(":scope > summary");
         if (s) {
           s.focus();
         }
@@ -1946,6 +1950,8 @@
     );
     if (open && target instanceof Element && target.contains(open)) {
       openKey = open.getAttribute("data-key") || "";
+      var fold = open.querySelector(".colorder");
+      orderOpen = !!fold && fold.open;
     }
   });
 
@@ -1956,6 +1962,19 @@
       if (d instanceof HTMLDetailsElement && d.classList.contains("colmenu")) {
         var key = d.getAttribute("data-key") || "";
         openKey = d.open ? key : openKey === key ? "" : openKey;
+        if (!d.open) {
+          // a closed menu forgets its fold: the next opening shows the checkboxes only
+          var fold = d.querySelector(".colorder");
+          if (fold) {
+            fold.open = false;
+          }
+          orderOpen = false;
+        }
+      } else if (
+        d instanceof HTMLDetailsElement &&
+        d.classList.contains("colorder")
+      ) {
+        orderOpen = d.open;
       }
     },
     true,
@@ -2079,6 +2098,8 @@
       if (menu && desktop.matches) {
         menu.open = true;
         openKey = reopen;
+        // only the buttons of the fold ask for this reload (a pin, a move, a row drag): it opens with them
+        orderOpen = true;
       }
       reopen = "";
     }
@@ -2088,6 +2109,10 @@
       );
       if (wrap && !wrap.open) {
         wrap.open = true;
+      }
+      var fold = wrap && wrap.querySelector(".colorder");
+      if (fold && orderOpen && !fold.open) {
+        fold.open = true;
       }
     }
   }

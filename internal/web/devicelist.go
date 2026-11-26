@@ -64,7 +64,7 @@ func (h *handler) deviceList(ctx context.Context, p *devicesPage) error {
 		return err
 	}
 	p.Table = template.HTML(b.String()) // #nosec G203 -- rendered by templ, which escapes every value
-	l := ui.DeviceListData{Select: p.RowsData.Select}
+	var l ui.DeviceListData
 	for i, row := range p.RowsData.Rows {
 		id := strconv.FormatInt(int64(row.Device.ID), 10)
 		meta := []string{row.Device.Address}

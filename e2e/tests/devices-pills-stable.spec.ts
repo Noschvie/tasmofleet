@@ -53,8 +53,10 @@ async function pills(page: Page): Promise<Record<string, Box>> {
       const label = (a.firstChild?.textContent ?? "").trim();
       add(label, a);
     }
-    const pick = document.querySelector(".dv-chips .dv-pick");
-    if (pick) add("Chip dropdown", pick);
+    // The Chip dropdown lives in the Filters fold (#1133): on a phone it is folded away until Filters is opened.
+    // Wide, it must be found here: a selector that matched nothing used to skip this check silently.
+    const pick = document.querySelector(".dv-filterbar .dv-pick");
+    if (pick && pick.checkVisibility()) add("Chip dropdown", pick);
     return out;
   });
 }
@@ -96,10 +98,16 @@ for (const scheme of ["light", "dark"] as const) {
       );
       expect(options.length, "the fleet has chip families").toBeGreaterThan(0);
 
-      // the row wraps (#678): nothing to scroll, the Chip dropdown is reachable where it is
-      const scroll = await page.locator(".dv-chips").evaluate((c) => c.scrollWidth - c.clientWidth);
-      expect(scroll, "the pill row does not scroll sideways").toBeLessThanOrEqual(0);
+      // from 45rem the row wraps (#678): nothing to scroll, the Chip dropdown is reachable where it is; a phone's
+      // chips are one strip that scrolls (#1133) and the dropdown is in the Filters fold, opened to select
+      const phone = width < 720;
+      if (!phone) {
+        const scroll = await page.locator(".dv-chips").evaluate((c) => c.scrollWidth - c.clientWidth);
+        expect(scroll, "the pill row does not scroll sideways").toBeLessThanOrEqual(0);
+      }
       const before = await pills(page);
+      if (!phone) expect(before["Chip dropdown"], "the Chip dropdown is measured").toBeTruthy();
+      if (phone) await page.locator(".dv-filters > summary").click();
       if (shots) {
         mkdirSync(shots, { recursive: true });
         await page.screenshot({ path: `${shots}/pills-${width}-${scheme}-before.png` });

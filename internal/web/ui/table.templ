@@ -188,18 +188,15 @@ type DeviceCardData struct {
 	Stability templ.Component
 }
 
-// DeviceListData is the phone card list: "Select all N" and one card per device.
+// DeviceListData is the phone card list: one card per device. "Select all N" is a button of the bulk bar (#1133),
+// not a row above the cards.
 type DeviceListData struct {
-	Select bool
-	Cards  []DeviceCardData
+	Cards []DeviceCardData
 }
 
 // DeviceCards renders the phone list of the device list.
 templ DeviceCards(l DeviceListData) {
 	<div class="dcards">
-		if l.Select {
-			<label class="dcards-all" data-select-all-row hidden><input type="checkbox" data-select-all aria-label="Select all devices"/><span>Select all { strconv.Itoa(len(l.Cards)) }</span></label>
-		}
 		<ul class="dcard-list" role="list">
 			for _, c := range l.Cards {
 				@DeviceCard(c)

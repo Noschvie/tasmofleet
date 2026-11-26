@@ -199,8 +199,13 @@ test("Columns menu hides and shows columns, and Reset to default restores the ta
   await page.goto(app.url + "/audit");
   await resetAll(page, "/audit", "table.audit");
   const menu = page.locator('table[data-table="audit"]').locator("xpath=ancestor::*[contains(@class,'tablewrap')]").first().locator("details.colmenu");
-  await menu.locator("summary").click();
+  await menu.locator(":scope > summary").click();
   await expect(menu.getByRole("checkbox", { name: "When" })).toBeDisabled(); // the identifying column cannot be hidden
+  // #1133: the menu opens on its checkboxes; pinning and order wait in the closed "Customize order" fold
+  await expect(menu.getByRole("checkbox", { name: "Target" })).toBeVisible();
+  await expect(menu.locator("[data-pin]:visible, [data-move]:visible")).toHaveCount(0);
+  await expect(menu.locator("details.colorder")).not.toHaveAttribute("open", "");
+  await expect(menu.getByText("Customize order")).toBeVisible();
   if (shots) {
     mkdirSync(shots, { recursive: true });
     await page.screenshot({ path: join(shots, "audit-columns-menu-1280.png"), fullPage: false });
@@ -268,7 +273,7 @@ async function deviceFrame(page: Page) {
 /** Ticks or unticks a column in the Columns menu and returns the layout the page saved. */
 async function showColumn(page: Page, id: string, on: boolean): Promise<{ w: Record<string, number> }> {
   const menu = page.locator("details.colmenu").first();
-  if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator("summary").click();
+  if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator(":scope > summary").click();
   const done = saved(page, "table.devices");
   const box = menu.locator(`[data-colid="${id}"]`);
   await (on ? box.check() : box.uncheck());
@@ -426,7 +431,10 @@ test("a layout stored with stretched widths before 0.36.1 fits its window again,
     // a save that changes nothing (Status down and up again; each move saves and reloads)
     for (const dir of ["down", "up"]) {
       const menu = page.locator("details.colmenu").first();
-      if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator("summary").click();
+      if (!(await menu.evaluate((d) => (d as HTMLDetailsElement).open))) await menu.locator(":scope > summary").click();
+      // the arrows are in the Customize order fold; the reload of the first move opens menu and fold again (#1133)
+      const fold = menu.locator("details.colorder");
+      if (!(await fold.evaluate((d) => (d as HTMLDetailsElement).open))) await fold.locator(":scope > summary").click();
       const done = saved(page, "table.devices");
       const reloaded = page.waitForEvent("load");
       await menu.locator(`[data-move="${dir}"][data-moveid="status"]`).click();

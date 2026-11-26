@@ -736,3 +736,55 @@ func TestApplyTablePrefsKeepsTheCaptionFirst(t *testing.T) {
 		}
 	}
 }
+
+// Why (#1133, A1-026): hiding a column is the common job of the Columns menu, pinning and re-ordering the rare one,
+// and the menu put 48 small buttons (two pins and two arrows per column) between a person and the box they came for.
+// The boxes come first, as a plain list; the pins, the arrows and the draggable rows sit in a "Customize order" fold
+// that starts closed, so they are neither on screen nor in the tab order until it is opened. The attributes the script
+// reads (data-colid, data-colrow, data-pin, data-move) stay as they were, and Reset to default stays outside the fold.
+func TestColumnsMenuKeepsPinningAndOrderInAClosedFold(t *testing.T) {
+	out := string(applyTablePrefs([]byte(sampleWithRow()), map[string]string{"table.devices": `{"p":{"wifi":"left"}}`}))
+	menu := regexp.MustCompile(`(?s)<div class="colpanel".*?</div></details>`).FindString(out)
+	if menu == "" {
+		t.Fatalf("no Columns menu: %s", out)
+	}
+	start := strings.Index(menu, `<details class="colorder">`)
+	if start < 0 {
+		t.Fatalf("no closed Customize order fold in the menu: %s", menu)
+	}
+	endRel := strings.Index(menu[start:], "</details>")
+	if endRel < 0 {
+		t.Fatalf("the fold never closes: %s", menu)
+	}
+	before, fold, after := menu[:start], menu[start:start+endRel], menu[start+endRel:]
+	if !strings.Contains(fold, "<summary>Customize order</summary>") {
+		t.Errorf("the fold is named Customize order: %s", fold)
+	}
+	// every box is before the fold: hiding a column never needs it
+	if n := strings.Count(before, `type="checkbox"`); n != strings.Count(menu, `type="checkbox"`) || n < 13 {
+		t.Errorf("%d of %d checkboxes before the fold, want all of the 13 columns", n, strings.Count(menu, `type="checkbox"`))
+	}
+	// every control that pins, moves or drags sits inside it, and nothing else of them outside
+	for _, attr := range []string{`data-pin="`, `data-move="`, `draggable="true"`, `data-colrow="`} {
+		if strings.Contains(before, attr) || strings.Contains(after, attr) || !strings.Contains(fold, attr) {
+			t.Errorf("%s belongs in the fold only", attr)
+		}
+	}
+	if got, want := strings.Count(fold, `data-colrow="`), strings.Count(before, `data-colid="`); got != want {
+		t.Errorf("%d draggable rows in the fold for %d hideable columns", got, want)
+	}
+	if strings.Contains(fold, `type="checkbox"`) {
+		t.Error("a column has one box, in the list before the fold (data-colid is looked up in the menu)")
+	}
+	for _, want := range []string{`data-pin="left" data-pinid="wifi" aria-pressed="true"`, `data-move="up" data-moveid="status"`} {
+		if !strings.Contains(fold, want) {
+			t.Errorf("the fold lost %q", want)
+		}
+	}
+	if !strings.Contains(after, "data-cols-reset") || strings.Contains(fold, "data-cols-reset") {
+		t.Error("Reset to default stays outside the fold, always in reach")
+	}
+	if !strings.Contains(fold, "Drag ⋮⋮ or use ↑ ↓ to reorder") || !strings.Contains(fold, "Pinned columns keep their side") {
+		t.Errorf("the help for ordering and pinning is in the fold, not above the boxes: %s", fold)
+	}
+}

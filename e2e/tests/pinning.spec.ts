@@ -97,7 +97,13 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
   expect(await postPref(page, {})).toBe(204);
   await page.reload();
   const menu = page.locator("details.colmenu").first();
-  await menu.locator("summary").click();
+  await menu.locator(":scope > summary").click();
+  // #1133: the menu opens on its checkboxes. No pin or arrow is on screen (or in the tab order) until
+  // Customize order is opened: hiding a column must not mean facing 48 small buttons.
+  await expect(menu.locator("input[data-colid]").first()).toBeVisible();
+  await expect(menu.locator("[data-pin]:visible, [data-move]:visible")).toHaveCount(0);
+  await menu.locator("details.colorder > summary").click();
+  await expect(menu.locator("[data-pin]:visible").first()).toBeVisible();
   // defaults: Name pinned left and Actions pinned right for good, Power pinned right
   await expect(
     menu.locator(".colrow.is-fixed", { hasText: "Name" }),
@@ -125,10 +131,12 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
   await expect
     .poll(async () => (await heads(page)).slice(-2), { timeout: 20_000 })
     .toEqual(["Status", "Power"]);
-  // the page opens the menu again once enhance() has fitted the table: that takes a while on a slow runner
+  // the page opens the menu again once enhance() has fitted the table: that takes a while on a slow runner.
+  // It opens the fold too: the pin was a fold's button, so the next pin is one click away (#1133)
   await expect(page.locator("details.colmenu[open]").first()).toBeVisible({
     timeout: 20_000,
   });
+  await expect(page.locator("details.colorder[open]").first()).toBeVisible();
   // Wi-Fi to the left: right after Name
   saved = page.waitForResponse(
     (r) => r.url().endsWith("/prefs/table.devices") && r.status() === 204,
@@ -145,6 +153,9 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
     timeout: 20_000,
   });
   await page.reload();
+  // a plain load starts with the menu and its fold closed
+  await expect(page.locator("details.colmenu[open]")).toHaveCount(0);
+  await expect(page.locator("details.colorder[open]")).toHaveCount(0);
   // heads() reads once and answers [] while a navigation is under way: poll it, with the time a
   // slow runner needs to lay the table out again
   await expect
@@ -160,6 +171,7 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
 
   // pressing a pressed pin unpins: Wi-Fi goes back among the scrolling columns
   await page.locator("details.colmenu > summary").first().click();
+  await page.locator("details.colorder > summary").click();
   saved = page.waitForResponse(
     (r) => r.url().endsWith("/prefs/table.devices") && r.status() === 204,
   );
@@ -188,6 +200,7 @@ test("a list swap right after the Columns menu opened keeps it open", async ({
     const live = document.querySelector("#devtable")!;
     const menu = live.querySelector<HTMLDetailsElement>("details.colmenu")!;
     menu.open = true;
+    menu.querySelector<HTMLDetailsElement>("details.colorder")!.open = true;
     // what htmx does for a swap of #devtable, with no task between the opening and the swap
     live.dispatchEvent(
       new CustomEvent("htmx:beforeSwap", {
@@ -197,12 +210,15 @@ test("a list swap right after the Columns menu opened keeps it open", async ({
     );
     const fresh = menu.cloneNode(true) as HTMLDetailsElement;
     fresh.open = false; // the server renders it closed
+    fresh.querySelector<HTMLDetailsElement>("details.colorder")!.open = false;
     menu.replaceWith(fresh);
     live.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
     return live.querySelector<HTMLDetailsElement>("details.colmenu")!.open;
   });
   expect(opened).toBe(true);
   await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
+  // the fold that was open stays open over the swap (#1133): a person in the middle of reordering is not thrown out
+  await expect(page.locator("details.colorder[open]").first()).toBeVisible();
 });
 
 // #273: a pin saves, asks for a reload and leaves a note for the NEXT page to open the Columns
@@ -226,6 +242,34 @@ test("the reopen note of a pin is for the next page, not for the one that is abo
   );
   await page.reload();
   await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
+  await expect(page.locator("details.colorder[open]").first()).toBeVisible();
+});
+
+// #1133: the Customize order fold belongs to its menu. A menu that closes (Escape, a click elsewhere) forgets it, so
+// the next opening shows the checkboxes only; a fold that is shut stays shut over a list swap.
+test("the Customize order fold ends with its Columns menu", async ({ page }) => {
+  await open(page, 1280);
+  const menu = page.locator("details.colmenu").first();
+  await menu.locator(":scope > summary").click();
+  await menu.locator("details.colorder > summary").click();
+  await expect(menu.locator("[data-pin]:visible").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toHaveAttribute("open", "");
+  await expect(menu.locator("details.colorder")).not.toHaveAttribute("open", "");
+  await menu.locator(":scope > summary").click();
+  await expect(menu.locator("[data-pin]:visible, [data-move]:visible")).toHaveCount(0);
+  // a swap of the list while the fold is shut leaves it shut
+  await page.evaluate(() => {
+    const live = document.querySelector("#devtable")!;
+    live.dispatchEvent(new CustomEvent("htmx:beforeSwap", { bubbles: true, detail: { target: live } }));
+    const m = live.querySelector<HTMLDetailsElement>("details.colmenu")!;
+    const fresh = m.cloneNode(true) as HTMLDetailsElement;
+    fresh.open = false;
+    m.replaceWith(fresh);
+    live.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
+  });
+  await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
+  await expect(page.locator("details.colorder[open]")).toHaveCount(0);
 });
 
 for (const saved of [false, true]) {
@@ -450,8 +494,8 @@ test("phone: the device cards' selection drives the bulk bar and is shared with 
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(375);
   expect(box.y + box.height).toBeLessThanOrEqual(900 + 0.5);
-  // Select all N ticks every card
-  await page.getByRole("checkbox", { name: "Select all devices" }).check();
+  // Select all N is a button of the bar (#1133), there once the first card is ticked: it ticks every card
+  await bar.getByRole("button", { name: `Select all ${n}`, exact: true }).click();
   await expect(bar).toContainText(`${n} devices selected`);
   await bar.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(bar).toBeHidden();

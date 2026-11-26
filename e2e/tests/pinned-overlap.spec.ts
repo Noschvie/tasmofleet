@@ -286,7 +286,7 @@ for (const width of [1280, 1440]) {
           r.status() === 204,
       );
     try {
-      await menu.locator("summary").click();
+      await menu.locator(":scope > summary").click();
       for (const name of ["OTA URL", "Group topic"]) {
         const done = saved();
         await menu.getByRole("checkbox", { name }).check();
@@ -314,7 +314,7 @@ for (const width of [1280, 1440]) {
     } finally {
       // leave the shared fleet's layout as it was found
       await page.goto(stack.app.url + "/devices");
-      await page.locator("details.colmenu").first().locator("summary").click();
+      await page.locator("details.colmenu > summary").first().click();
       await page.locator("details.colmenu [data-cols-reset]").first().click();
       await page.waitForLoadState("load");
     }
@@ -335,7 +335,7 @@ async function withSavedLayout(
   await page.locator(".pwr").first().waitFor({ state: "attached", timeout: 20_000 });
   const menu = page.locator("details.colmenu").first();
   try {
-    await menu.locator("summary").click();
+    await menu.locator(":scope > summary").click();
     for (const name of ["OTA URL", "Group topic"]) {
       const done = page.waitForResponse(
         (r) =>
@@ -354,7 +354,7 @@ async function withSavedLayout(
     await body();
   } finally {
     await page.goto(stack.app.url + "/devices");
-    await page.locator("details.colmenu").first().locator("summary").click();
+    await page.locator("details.colmenu > summary").first().click();
     await page.locator("details.colmenu [data-cols-reset]").first().click();
     await page.waitForLoadState("load");
   }

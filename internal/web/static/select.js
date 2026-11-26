@@ -65,6 +65,10 @@
     document.querySelectorAll("[data-select-count]").forEach(function (c) {
       c.textContent = n + " of " + list.length + " selected";
     });
+    // "Select all N" of the device list's bulk bar: N is every device of the list, after a list swap too
+    form.querySelectorAll("[data-select-total]").forEach(function (c) {
+      c.textContent = String(list.length);
+    });
     form.querySelectorAll("[data-bar-count]").forEach(function (c) {
       c.textContent = String(n);
     });
@@ -317,7 +321,7 @@
   // (about 90 swaps a second on 60 devices) are such swaps: the one thing in them that syncAll reads is the
   // health badge, which only touches its own row (below). The list reload and the scan results hold boxes.
   var SELECTION =
-    '[data-select-all], [data-plan-devices], [data-needs-device], [data-bulkbar], [data-bar-note], [data-needs-selection], [data-select-suffix], [data-select-n], [data-needs-pair], [data-bar-count], [data-bar-label], input[type="checkbox"][name="id"], input[type="checkbox"][name="device"]';
+    '[data-select-all], [data-plan-devices], [data-needs-device], [data-bulkbar], [data-bar-note], [data-needs-selection], [data-select-suffix], [data-select-n], [data-needs-pair], [data-bar-count], [data-bar-label], [data-select-total], input[type="checkbox"][name="id"], input[type="checkbox"][name="device"]';
   function within(t, sel) {
     return t.matches(sel) || !!t.querySelector(sel);
   }

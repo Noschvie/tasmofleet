@@ -304,14 +304,14 @@ test("tablet and phone: the devices table and the navigation never scroll sidewa
   }
 });
 
-// #678: the Devices list's filter chips used to sit in one row that scrolled sideways, so on a phone "Not
-// compliant", "No backup" and the Chip and Tag pickers were hidden until the person swiped, and the filter
-// field stopped at 380 px while its line was wider (three quarters of it at 540 px). A person must see every
-// filter without swiping, and the field must use its whole line. 375 and 412 are the phone widths of the
-// report; 540 is where the field's cap shows. On a wide screen (1280) the field stays a field of 380 px, not a
-// bar. The other chip rows (Backups, Policy) keep their strip.
+// #678 and #1133: the Devices list's filters. #678 made the chips wrap so that nothing hid off the edge, and a phone
+// then spent four lines on them (chips on three rows, Chip, Tag, Sort) before the first device (A1-024). On a phone the
+// chips are one strip that scrolls sideways and fades the edge that has more, and Chip, Tag and Sort are one Filters
+// fold at the strip's end. The filter field fills its line. 375 and 412 are the phone widths of the report; 540 is
+// where the field's cap would show. From 45rem the chips and the pickers wrap as one group and the field stays a field
+// of 380 px, not a bar (1280). The other chip rows (Backups, Policy) keep their strip.
 for (const scheme of ["light", "dark"] as const) {
-  test(`phone: the Devices list's chips wrap inside their row and the filter field fills its line (${scheme})`, async ({ page }) => {
+  test(`phone: the Devices list's chips are one scrolling strip with a Filters fold, the filter field fills its line (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setExtraHTTPHeaders(admin);
     const bad: string[] = [];
@@ -320,26 +320,68 @@ for (const scheme of ["light", "dark"] as const) {
       await page.goto(app.url + "/devices");
       await expect(page.getByRole("link", { name: "lamp-1m", exact: true })).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
+      const phone = width < 720;
       const m = await page.evaluate(() => {
-        const row = document.querySelector(".dv-list .dv-chips")!;
-        const box = row.getBoundingClientRect();
-        const outside = [...row.children]
-          .filter((c) => c.getClientRects().length > 0) // the separator is not drawn while the row wraps
+        const bar = document.querySelector(".dv-list .dv-filterbar")!;
+        const strip = document.querySelector<HTMLElement>(".dv-list .dv-chips")!;
+        const box = bar.getBoundingClientRect();
+        const chips = [...strip.querySelectorAll(".chip")].filter((c) => c.getClientRects().length > 0);
+        const tops = new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top)));
+        // everything of the group that is drawn lies inside the group's box; a phone's chips are the strip's to scroll
+        const outside = [...bar.querySelectorAll(innerWidth < 720 ? ".dv-pick, .dv-filters > summary" : ".chip, .dv-pick")]
+          .filter((c) => c.getClientRects().length > 0)
           .map((c) => ({ el: c, r: c.getBoundingClientRect() }))
           .filter(({ r }) => r.left < box.left - 0.5 || r.right > box.right + 0.5)
           .map(({ el, r }) => `${(el.textContent || el.className).trim().slice(0, 20)} [${Math.round(r.left)}..${Math.round(r.right)}]`);
         const tools = document.querySelector(".dv-list .dv-tools")!.getBoundingClientRect();
         const q = document.querySelector(".dv-list .dv-q")!.getBoundingClientRect();
-        return { row: `[${Math.round(box.left)}..${Math.round(box.right)}]`, outside, scrolls: row.scrollWidth - row.clientWidth, q: q.width, line: tools.width, labels: [...row.children].map((c) => c.textContent ?? "").join("|") };
+        const sum = document.querySelector(".dv-filters > summary")!;
+        const visible = (sel: string) => [...document.querySelectorAll(sel)].some((e) => e.checkVisibility() && e.getClientRects().length > 0);
+        return {
+          row: `[${Math.round(box.left)}..${Math.round(box.right)}]`,
+          outside,
+          lines: tops.size,
+          scrolls: strip.scrollWidth - strip.clientWidth,
+          more: strip.hasAttribute("data-more-end"),
+          mask: getComputedStyle(strip).maskImage,
+          q: q.width,
+          line: tools.width,
+          labels: [...document.querySelectorAll(".dv-list .chip")].map((c) => c.textContent ?? "").join("|"),
+          summary: sum.checkVisibility() ? sum.textContent!.trim() : "",
+          pickers: visible(".dv-pick, .dv-sort"),
+        };
       });
-      for (const want of ["Differs from policy", "No backup", "Chip", "Tag"]) if (!m.labels.includes(want)) bad.push(`${width}px: the chip row has no "${want}", the guard would measure a shorter row`);
-      if (m.outside.length) bad.push(`${width}px: outside the row ${m.row}: ${m.outside.join(", ")}`);
-      if (m.scrolls > 0) bad.push(`${width}px: the chip row scrolls sideways by ${m.scrolls}px`);
-      if (width < 720) {
+      for (const want of ["Differs from policy", "No backup"]) if (!m.labels.includes(want)) bad.push(`${width}px: the chip row has no "${want}", the guard would measure a shorter row`);
+      if (m.outside.length) bad.push(`${width}px: outside the group ${m.row}: ${m.outside.join(", ")}`);
+      if (phone) {
+        if (m.lines !== 1) bad.push(`${width}px: the chips are on ${m.lines} lines, not one strip`);
         if (Math.abs(m.q - m.line) > 0.5) bad.push(`${width}px: the filter field is ${m.q}px in a line of ${m.line}px`);
-      } else if (Math.abs(m.q - 380) > 0.5) bad.push(`${width}px: the filter field is ${m.q}px, not its 380px`);
+        if (m.summary !== "Filters") bad.push(`${width}px: the Filters button reads "${m.summary}"`);
+        if (m.pickers) bad.push(`${width}px: Chip, Tag or Sort show while Filters is closed`);
+      } else {
+        if (m.scrolls > 0) bad.push(`${width}px: the chip row scrolls sideways by ${m.scrolls}px`);
+        if (m.summary) bad.push(`${width}px: the Filters button shows on a wide screen`);
+        if (!m.pickers) bad.push(`${width}px: Chip and Tag are not on screen`);
+        if (Math.abs(m.q - 380) > 0.5) bad.push(`${width}px: the filter field is ${m.q}px, not its 380px`);
+      }
+      if (width < 450) {
+        if (m.scrolls <= 0) bad.push(`${width}px: the strip does not scroll, the test would prove nothing about it`);
+        if (!m.more || m.mask === "none") bad.push(`${width}px: a strip with more to the right fades that edge (data-more-end ${m.more}, mask ${m.mask})`);
+      }
+      if (width === 375) {
+        // Filters opens to the pickers, on a line of their own under the strip
+        await page.locator(".dv-filters > summary").click();
+        await expect(page.getByRole("combobox", { name: "Chip" })).toBeVisible();
+        await expect(page.getByRole("combobox", { name: "Sort" })).toBeVisible();
+        const lines = await page.evaluate(() => {
+          const strip = document.querySelector(".dv-list .dv-chips")!.getBoundingClientRect();
+          const pick = document.querySelector(".dv-list .dv-pick")!.getBoundingClientRect();
+          return { strip: strip.bottom, pick: pick.top };
+        });
+        if (lines.pick < lines.strip) bad.push(`375px: the open Filters body sits beside the strip (${lines.pick} < ${lines.strip})`);
+      }
     }
-    expect(bad, "chips hidden from the person or a filter field short of its line").toEqual([]);
+    expect(bad, "a filter hidden off the edge, a strip on several lines, or a filter field short of its line").toEqual([]);
   });
 }
 

@@ -482,6 +482,9 @@ test("reorder: dragging a header and the move buttons change the order; it survi
 
   // keyboard: the move buttons of the Columns menu; Name and Actions cannot be moved
   await page.locator("details.colmenu > summary").first().click();
+  // the arrows are in the Customize order fold (#1133)
+  await expect(page.getByRole("button", { name: "Move Status up" })).toBeHidden();
+  await page.locator("details.colorder > summary").click();
   await expect(
     page.locator("[data-moveid=name], [data-moveid=actions]"),
   ).toHaveCount(0);
