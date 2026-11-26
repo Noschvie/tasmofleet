@@ -97,7 +97,7 @@ Theme-independent tokens (all on `:root`):
 | Type sizes | `--fs-h1` 22px (weight 600), `--fs-h2-lg` 15px (release notes only), `--fs-h2` 14px, `--fs-h2-sm` 13px, `--fs-title-sm` 16px, `--fs-empty` 17px, `--fs-auth` 20px, `--fs-error` 26px, `--fs-base` 14px, `--fs-body` 13.5px, `--fs-ui` 13px, `--fs-meta` 12.5px, `--fs-small` 12px, `--fs-badge` 11.5px, `--fs-stat` 28px (the stat tile value, `600 28px/1`, tabular figures; measured in F4), `--fs-word` 18px (`600 18px/1.25`, a word as a tile value). `TestStylesheetWritesTokens` fails on a px or rem font size, and on a weight other than 400, 500 and 600, written outside the token blocks; `TestMoreTokensRowsEqualStylesheet` fails when this row leaves out a `--fs-*` token or states another value |
 | Radii | `--r-control` 7px, `--r-card` 10px, `--r-panel` 12px, `--r-banner` 9px, `--r-code` 8px, `--r-sm` 6px, `--r-badge` 5px, `--r-xs` 4px, `--r-mark` 2px, `--r-pill` 999px; dots and avatars use `50%`. `--r-mark` is for marks (a pin, a column handle's focus, a locked checkbox); a bar, a track or a count pill whose ends are round uses `--r-pill`. A radius is never a px value and never a `--sp-*` token |
 | Spacing | `--sp-N` is N pixels, for the values the prototype uses: 1-12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40. The prototype is not on a 4px grid, nothing is rounded |
-| Card gap | `--card-gap`: the space between sibling cards, down and across, on every page: card stacks, the device overview, its tile row. The value is 16 px (`--sp-16`); the token still reads `--sp-12` and the card stacks write 16 px directly until #1101 makes them one. `device-layout.spec.ts` fails when two cards come closer |
+| Card gap | `--card-gap: var(--sp-16)`: the space between sibling cards, down and across, on every page: card stacks, the device overview, including the tile row's distance to the card below it (the tiles inside the row keep `--sp-10`, see Stat tiles), the policy pages. It is the only card gap: every container that spaces cards (`.cstacks`, `.cstack`, `.devlive`, `.dev-pair`, `.pol-cards`) writes the token, and a card in one of them has no bottom margin of its own, so a gap is one value, not a gap plus a margin. `card-stacks.spec.ts` measures 16 px between sibling cards on the Dashboard, the device overview (tile row included), System settings and the policy pages; `device-layout.spec.ts` fails when two cards come closer |
 | Controls | `--ctl` 34px (44px on phones), `--ctl-sm` 32px (44px on phones), `--ctl-lg` 40px (44px on phones): the tall button and the full-width row targets (fold summaries, the drawer, row menus), `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
 | Inline values made tokens | `--backdrop`, `--color-scrim`, `--color-on-danger`, `--color-knob`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
@@ -152,7 +152,11 @@ set the heading sizes, so a heading needs no size of its own unless the table gi
 - Spacing tokens are named by pixel value (`--sp-N`); the prototype is not on a 4 px grid and nothing
   is rounded. The gaps that recur: 8 between buttons, 10 inside cards, 16 between cards
   (`--card-gap`), 16 card padding and below the page header. Spacing in `gap`, `padding` and `margin`
-  uses the `--sp-N` tokens, never a px literal (#1101 replaces the about 420 literals left).
+  uses the `--sp-N` tokens, never a px or rem literal: `TestStylesheetWritesTokens` fails on one outside the token blocks. A negative
+  margin is `calc(-1 * var(--sp-N))`; a size the scale has no step for (the room above a fixed bar, a column
+  left of a checkbox, a chevron's room) is a calc of tokens with the role in a comment, or `--ctl` where it is
+  a touch target. `em` stays for a pad relative to the text it sits in; `scroll-margin` is not spacing between
+  boxes.
 - Radii: controls 7, cards 10, dialogs and the auth card 12, banners and toasts 9, code 8, menu items
   6, badges 5, marks 2, pills 999 (bars, tracks, count pills), dots and avatars 50 %. Menus use the card
   radius, 10 (`--r-card`). Always a `--r-*` token.

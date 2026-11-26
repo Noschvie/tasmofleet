@@ -81,8 +81,8 @@ for (const width of [768, 1024]) {
       await settled(page);
       await page.waitForTimeout(800);
       await expectLayout(page, `${name} ${width}px`);
-      // the policy pages keep their own card gap (--card-gap, 20 to 24 px), see card-stacks.spec.ts
-      expect(await cardStackGaps(page, name.startsWith("policy") ? 25 : 17), `${name}: card stacks`).toEqual([]);
+      // one card gap (--card-gap, 16 px) on every page, the policy pages too (#1101), see card-stacks.spec.ts
+      expect(await cardStackGaps(page, 17), `${name}: card stacks`).toEqual([]);
     });
   }
 }

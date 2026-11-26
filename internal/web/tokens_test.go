@@ -428,6 +428,44 @@ var (
 	focusSelectorRe = regexp.MustCompile(`:focus(?:-visible|-within)?\b|\.is-focus\b`)
 )
 
+var (
+	spacingPropRe = regexp.MustCompile(`^(?:(?:row-|column-|grid-)?gap|(?:padding|margin)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?)$`)
+	absLengthRe   = regexp.MustCompile(`(-?\d*\.?\d+)(px|rem)\b`)
+)
+
+// stripFunc removes every name(...) call from v, nested parentheses included, so a fallback inside it
+// (var(--x, 8px), env(safe-area-inset-top, 0px)) is not read as a value of the declaration.
+func stripFunc(v, name string) string {
+	var out strings.Builder
+	for {
+		i := strings.Index(v, name+"(")
+		if i < 0 || (i > 0 && (unicode.IsLetter(rune(v[i-1])) || v[i-1] == '-')) {
+			if i >= 0 { // the name ends another identifier: keep that much and go on after it
+				out.WriteString(v[:i+len(name)+1])
+				v = v[i+len(name)+1:]
+				continue
+			}
+			out.WriteString(v)
+			return out.String()
+		}
+		out.WriteString(v[:i])
+		depth := 0
+		j := i + len(name)
+		for ; j < len(v); j++ {
+			if v[j] == '(' {
+				depth++
+			} else if v[j] == ')' {
+				depth--
+				if depth == 0 {
+					j++
+					break
+				}
+			}
+		}
+		v = v[min(j, len(v)):]
+	}
+}
+
 // componentLocalDurations are the animation durations the Motion row of design-system.md lists as
 // belonging to one component (spinners, busy pulses, shimmer): the backticked bare times in that row.
 func componentLocalDurations(t *testing.T) map[string]bool {
@@ -626,6 +664,51 @@ func TestStylesheetWritesTokens(t *testing.T) {
 			}
 		})
 	})
+
+	// Why: spacing written as a literal is how the stylesheet got three card gaps (12, 14 and 16 px) and
+	// 470 gap, padding and margin values that copy a neighbour's number: 6, 7 and 10 px next to 8, and
+	// rem sizes that land between two tokens. A spacing is a --sp-N token (or a calc of tokens, or a
+	// --ctl size for a touch target), so one value changes in one place and the scale stays closed.
+	// Zero stays, and so do the lengths that are not px or rem: em is relative to the text it sits in (a
+	// 0.2em pad on code), the same exception #1100 made for font sizes; an em value may not be used to get
+	// a fixed size past this check, a reviewer reads every new one. A literal inside a var() fallback or
+	// an env() fallback is not judged (the safe-area insets fall back to 0px); scroll-margin and
+	// scroll-padding are not spacing between boxes and are not covered.
+	t.Run("spacing is --sp-* tokens", func(t *testing.T) {
+		outsideTokens(t, func(r cssRule, d cssDecl) {
+			if !spacingPropRe.MatchString(d.prop) {
+				return
+			}
+			rest := stripFunc(stripFunc(stripImportant(d.val), "var"), "env")
+			for _, m := range absLengthRe.FindAllStringSubmatch(rest, -1) {
+				if f, _ := strconv.ParseFloat(m[1], 64); f != 0 {
+					report(t, r, d, "a px or rem spacing ("+m[1]+m[2]+"); use a --sp-N token, a calc of tokens, or calc(-1 * var(--sp-N)) for a negative one")
+					return
+				}
+			}
+		})
+	})
+}
+
+// Why: the spacing guard must not judge a fallback inside var() or env() (the safe-area insets fall
+// back to 0px, a token may fall back to a literal) and must still see a literal beside them and inside
+// calc(); a guard that skips too much lets a literal through, one that skips too little blocks the
+// safe-area rules.
+func TestStripFuncKeepsWhatIsOutsideTheCall(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"var(--sp-8, 8px) 12px", " 12px"},
+		{"calc(var(--a, calc(1px + 2px)) + 10px)", "calc( + 10px)"},
+		{"max(env(safe-area-inset-top, 0px), 6px)", "max(, 6px)"},
+		{"var(--sp-4)", ""},
+	} {
+		got := stripFunc(stripFunc(c.in, "var"), "env")
+		if got != c.want {
+			t.Errorf("stripFunc(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	if got := stripFunc("somevar(1px)", "var"); got != "somevar(1px)" {
+		t.Errorf("a name that ends another identifier was stripped: %q", got)
+	}
 }
 
 // Why: the design system page is what the next person reads. The tokens #1099 adds (scrim, on-colours,
@@ -683,6 +766,13 @@ func TestMoreTokensRowsEqualStylesheet(t *testing.T) {
 		if _, ok := base[m[1]]; !ok {
 			t.Errorf("the Type sizes row of design-system.md names %s, app.css has no such token", m[1])
 		}
+	}
+	// the Card gap row sits in the Tokens table above, not in More tokens, but it is the same promise:
+	// the gap between sibling cards is the one token, and the page says what it is
+	if m := regexp.MustCompile("`--card-gap: ([^`]+)`").FindStringSubmatch(doc); m == nil {
+		t.Error("design-system.md does not write --card-gap with its value in the Card gap row")
+	} else if got := base["--card-gap"]; got != normValue(m[1]) {
+		t.Errorf("design-system.md says --card-gap is %q, app.css has %q", m[1], got)
 	}
 	// the radii row names every --r-* token with its pixel value
 	var radii string

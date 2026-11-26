@@ -47,7 +47,7 @@ for (const width of [1440, 1100, 800, 600, 375]) {
     await page.goto(app.url + href);
     await expect(page.locator(".devcard").first()).toBeVisible();
     const bad = await page.evaluate(() => {
-      const gap = parseFloat(getComputedStyle(document.querySelector(".devlive")!).getPropertyValue("--card-gap")) || 12;
+      const gap = parseFloat(getComputedStyle(document.querySelector(".devlive")!).getPropertyValue("--card-gap")) || 16;
       const cards = [...document.querySelectorAll(".devcard")].filter((c) => c.getBoundingClientRect().height > 0);
       const name = (c: Element) => c.querySelector("h2")?.textContent ?? "?";
       const out: string[] = [];
