@@ -7999,7 +7999,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     width: 100px;
   }
   table.devtable col.c-addr {
-    width: 132px;
+    width: 158px; /* a 15-character address or a 5-digit port in 13px mono and the link icon (136 px) inside the cell's padding (20 px), 2 px to spare (#906); tableprefs.go: 15.8 */
   }
   table.devtable col.c-up {
     width: 120px; /* "seen 30s ago" is 12 characters of 13px mono plus padding */

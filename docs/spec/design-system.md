@@ -536,6 +536,17 @@ only the reload that a pin, a move or a row drag asks for opens menu and fold ag
 A list swap keeps an open fold open (`tables.js`). The saved layout (`table.KEY`) and the `data-colid`, `data-colrow`,
 `data-pin` and `data-move` hooks are what they were.
 
+A column is as wide as its content needs, and a saved layout keeps the widths a person set (#906, #912). The default
+Address column fits a 15-character address (or a 5-digit port) with its link icon, so the icon is never cut. A saved
+width is the person's choice with one exception: a column too narrow for its own content while others have room is not
+what they chose. The fit step (`tables.js`, `donateRoom`) then moves the room: a column that scrolls with the table and
+whose cells run past their boxes takes what it lacks from the columns that have more than their content needs on one
+line (the measure of the double-click fit), the widest first, so no donor wraps a line or loses content and the table
+keeps its width. A column is helped all or nothing, the smallest shortfall first: a cell that is cut on purpose (a long
+URL, hundreds of pixels short) finds no donor and stays as saved. The selection box, the pinned columns and the row menu
+neither give nor ask, and a column the person resized in this page (drag, arrow keys, double-click fit, Home) is left as
+they set it until the page is left. The donated widths are drawn only: a save stores the widths the person set (`data-give` on each `<col>` says what a fit moved), so hiding and showing a column takes nothing more from the donors each time.
+
 A screen reader needs two more things from a table (#1094). Every header cell is `scope="col"` (`ui.Table` writes
 it), and a table with no visible heading of its own has a caption: `TableData.Caption` is the first child of the
 `<table>`, drawn only with `CaptionVisible` and otherwise `sr-only` (a page whose h1 or card title names the table

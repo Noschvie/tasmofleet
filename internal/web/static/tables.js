@@ -26,6 +26,7 @@
   // the columns pinned right (SPARE, a column of data-cols that is none of the registry's). Its row menu
   // column is as wide as its button and padding (ACT_PX, tableprefs.go menuPx) and has no saved width.
   var ACT_PX = 48;
+  var HANDLE_PX = 12; // the resize handle in a header: what a fit adds to the header's own width (fitWidth, donateRoom)
   var SPARE = "~";
   var desktop = window.matchMedia("(min-width: 45rem)"); // the table (not the phone list) shows from here
   var timers = {};
@@ -423,6 +424,7 @@
       if (!el) {
         return;
       }
+      el.removeAttribute("data-give"); // what donateRoom moved is drawn again by this fit
       if (!el.hasAttribute("data-w")) {
         el.setAttribute("data-w", el.getAttribute("width") || "");
       }
@@ -476,6 +478,7 @@
         col[i].setAttribute("width", String(Math.ceil(w)));
       }
     });
+    donateRoom(table, c, col, rows);
     // the table is as wide as its columns (the spare cell has no width of its own)
     var sum = 0;
     col.forEach(function (el, i) {
@@ -484,6 +487,144 @@
       }
     });
     table.style.minWidth = sum + "px";
+  }
+
+  // The columns the person resized in this page (drag, arrow keys, double-click fit, Home), per table key and
+  // column id. It starts at that resize and ends with the page: a reload or a new visit starts empty, and it is
+  // never stored (the same way `recent` and `resizing` below live in the page script; the pages are full
+  // navigations, there is no hx-boost). A column in it is neither given room (donateRoom) nor asked for any, so
+  // a drag follows the pointer even where it makes a column narrower than its content (#790).
+  var resizedHere = {};
+  function markResized(table, id) {
+    var key = keyOf(table);
+    (resizedHere[key] || (resizedHere[key] = {}))[id] = true;
+  }
+
+  // Room for a saved layout's cut cell (#912). A saved width stays what the person chose, with one exception: a
+  // column too narrow for its own content (its cells run past their boxes) while other columns have room
+  // beyond what their own content needs is not what the person chose, so the room moves. It is taken from
+  // the columns that can spare it, down to the width of their content on one line, the measure of the
+  // double-click fit (fitWidth: want), so no donor changes a line break. The table keeps its width. Only
+  // columns that scroll with the table take part: a pinned column was fitted to its content already, the
+  // selection checkbox and the row menu have a width of their own. A column is helped all or nothing, the
+  // smallest shortfall first: a cell that is cut on purpose (a long URL, hundreds of pixels short) finds no
+  // donor and stays as saved. Every fit starts from the saved widths (data-w), so a second fit changes
+  // nothing. The room is drawn, not stored: each <col> a donation touched says by how much (data-give, negative for
+  // a donor), and a save stores the widths without it (undonate), so hiding and showing a column, or any other
+  // save, does not take room from the donors again each time.
+  function donateRoom(table, c, col, rows) {
+    var mine = resizedHere[keyOf(table)] || {},
+      at = [];
+    c.forEach(function (cd, i) {
+      if (col[i] && cd.id !== "" && !cd.spare && !cd.side && !mine[cd.id]) {
+        at.push(i);
+      }
+    });
+    // one layout for all the cells: a column whose cells all hold within their boxes costs no probe. A cell can
+    // seem cut with nothing cut (the Address link's hidden "opens in a new tab" text runs past the box): what a
+    // column needs is measured below, and only a column that lacks width is cut.
+    var cutAt = at.filter(function (i) {
+      return rows.some(function (r) {
+        return r.cells[i].scrollWidth > r.cells[i].clientWidth;
+      });
+    });
+    if (!cutAt.length) {
+      return;
+    }
+    var cells = [],
+      of = [];
+    cutAt.forEach(function (i) {
+      rows.forEach(function (r) {
+        cells.push(r.cells[i]);
+        of.push(i);
+      });
+    });
+    var need = {};
+    minContents(cells).forEach(function (w, k) {
+      need[of[k]] = Math.max(need[of[k]] || 0, w);
+    });
+    var lack = cutAt
+      .map(function (i) {
+        return [i, Math.ceil(need[i]) - Number(col[i].getAttribute("width"))];
+      })
+      .filter(function (l) {
+        return l[1] > 0; // a cell that only seems cut (a hidden or clipped part) asks for nothing
+      })
+      .sort(function (a, b) {
+        return a[1] - b[1];
+      });
+    if (!lack.length) {
+      return;
+    }
+    // What a donor needs is the measure of the double-click fit (fitWidth: want): its widest content on one line,
+    // header and resize handle included. Measured here for all the donors in one go, from the same cached probes
+    // as the pinned columns', so a fit that lands on a layout that is cut costs no probe of its own.
+    var donors = at.filter(function (i) {
+        return !lack.some(function (l) {
+          return l[0] === i;
+        });
+      }),
+      th = headers(table),
+      probe = [],
+      owner = [],
+      want = {};
+    donors.forEach(function (i) {
+      rows.forEach(function (r) {
+        probe.push(r.cells[i]);
+        owner.push(i);
+      });
+    });
+    var body = probe.length;
+    donors.forEach(function (i) {
+      probe.push(th[i]);
+      owner.push(i);
+    });
+    maxContents(probe).forEach(function (w, k) {
+      want[owner[k]] = Math.max(want[owner[k]] || 0, k < body ? w : w + HANDLE_PX);
+    });
+    var give = [];
+    donors.forEach(function (i) {
+      var w = Number(col[i].getAttribute("width")),
+        room = w - Math.ceil(want[i]);
+      if (room > 0) {
+        give.push([i, w, room]);
+      }
+    });
+    lack.forEach(function (l) {
+      var spare = give.reduce(function (a, g) {
+        return a + g[2];
+      }, 0);
+      if (spare < l[1]) {
+        return;
+      }
+      takeFromWidest(give, l[1]).forEach(function (t) {
+        var g = give.filter(function (x) {
+          return x[0] === t[0];
+        })[0];
+        g[2] -= g[1] - t[1];
+        g[1] = t[1];
+        moveWidth(col[t[0]], t[1] - Number(col[t[0]].getAttribute("width")));
+      });
+      moveWidth(col[l[0]], l[1]);
+    });
+  }
+
+  // A column's width changes by `by` pixels in a donation: drawn now, and noted on its <col> (data-give).
+  function moveWidth(el, by) {
+    el.setAttribute("width", String(Number(el.getAttribute("width")) + by));
+    el.setAttribute("data-give", String((Number(el.getAttribute("data-give")) || 0) + by));
+  }
+
+  // The widths of the visible columns without what donateRoom moved: the ones a person set, which a save stores
+  // and the next fit donates from again.
+  function undonate(table, px) {
+    table.querySelectorAll(":scope > colgroup > col[data-give]").forEach(function (el) {
+      var id = el.getAttribute("data-id");
+      if (id in px) {
+        px[id] -= Number(el.getAttribute("data-give"));
+      }
+    });
+    return px;
   }
 
   // A layout saved before #828 has no content widths (tableprefs.go: tablePref.B): before 0.36.1 the widths a
@@ -772,21 +913,33 @@
       return a + g[2];
     }, 0);
     if (slack >= deficit) {
-      // the widest columns give first, so the narrow ones keep their size
-      give.sort(function (a, b) {
-        return b[1] - a[1];
-      });
-      give.forEach(function (g) {
-        var take = Math.min(g[2], deficit);
-        deficit -= take;
-        if (take > 0) {
-          col[g[0]].style.width = Math.floor(g[1] - take) + "px";
-        }
+      takeFromWidest(give, deficit).forEach(function (t) {
+        col[t[0]].style.width = t[1] + "px";
       });
     } else {
       var w2 = th[s].getBoundingClientRect().width;
       col[s].style.width = Math.max(40, Math.floor(w2 - deficit)) + "px";
     }
+  }
+
+  // `give` lists [column, width, room] of the columns that can give up room: the widest ones give first, so the
+  // narrow ones keep their size, none gives more than its room. Returns [column, new whole width] for each
+  // column that gave, adding up to `deficit` (when the rooms hold it). Shared by cutAtPins and donateRoom.
+  function takeFromWidest(give, deficit) {
+    var out = [];
+    give
+      .slice()
+      .sort(function (a, b) {
+        return b[1] - a[1];
+      })
+      .forEach(function (g) {
+        var take = Math.min(g[2], deficit);
+        deficit -= take;
+        if (take > 0) {
+          out.push([g[0], Math.floor(g[1] - take)]);
+        }
+      });
+    return out;
   }
 
   // widths of cells' content at its narrowest (min-content), in each cell's own font and
@@ -969,13 +1122,13 @@
   }
 
   function snapshot(table) {
-    return { hidden: hiddenIdx(table), weight: layoutWidths(table).px };
+    return { hidden: hiddenIdx(table), weight: undonate(table, layoutWidths(table).px) };
   }
 
   function document_(table) {
     var c = cols(table),
       hid = hiddenIdx(table),
-      drawn = layoutWidths(table).px,
+      drawn = undonate(table, layoutWidths(table).px),
       px = pxTable(table) ? wholePixels(drawn) : null,
       sum = 0,
       w = {},
@@ -1239,7 +1392,7 @@
     var cell = headers(table)[n],
       ths = getComputedStyle(cell),
       cells = [];
-    var want = contentWidth(cell, ths) + 12; // 12: the resize handle
+    var want = contentWidth(cell, ths) + HANDLE_PX;
     Array.prototype.forEach.call(table.tBodies, function (tb) {
       Array.prototype.forEach.call(tb.rows, function (row) {
         var td = row.cells[n];
@@ -1282,6 +1435,7 @@
     var fit = fitWidth(table, v.th.cellIndex),
       snap = takeSnap(table),
       weight = {};
+    markResized(table, v.id);
     Object.keys(snap.px).forEach(function (id) {
       weight[id] = snap.px[id];
     });
@@ -1343,6 +1497,7 @@
         weight[id] = snap.px[id];
       });
       weight[a.id] = Math.max(MIN_PX, snap.px[a.id] + dx);
+      markResized(table, a.id);
       write(table, hiddenIdx(table), weight);
       return;
     }
@@ -1547,6 +1702,7 @@
     if (pxTable(table)) {
       // #828: its default pixels (the weights are tenths of them); the others keep theirs
       px[v.id] = v.def * 10;
+      markResized(table, v.id);
       write(table, hiddenIdx(table), px);
       return;
     }

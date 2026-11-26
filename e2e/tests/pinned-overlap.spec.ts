@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { hoverTip, withKnownIssues } from "../support/layout";
+import { hoverTip } from "../support/layout";
 import { openSavedLayoutList, ownerWindow } from "../support/saved-layout";
 import { designAdmin } from "../support/seed";
 import { startVisualStack, type VisualStack } from "../support/visual-stack";
@@ -549,7 +549,6 @@ test(`Devices list, a saved layout at ${ownerWindow} px (fixture): the bubble of
   await openSavedLayoutList(page, stack.app.url, { width: ownerWindow });
   const { hovered, bad } = await titledBubbles(page);
   expect(hovered, "the rows carry titled elements").toBeGreaterThan(6);
-  // red on main: the bubble of the two-line OTA URL covers the row above (knownLayoutIssues names the issue)
-  const red = withKnownIssues(`devices list saved layout ${ownerWindow}px bubbles`, ["r"], bad.length ? [{ guard: "r", bad }] : []);
-  expect(red.flatMap((r) => r.bad)).toEqual([]);
+  // #908: the bubble of the two-line OTA URL covered the row above; tooltip.js measures it at left 0 now (#1073)
+  expect(bad).toEqual([]);
 });

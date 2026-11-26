@@ -196,7 +196,7 @@ const sampleTable = `<p>x</p><table class="devtable dense" data-table="devices">
 // column widths, no forced layout) but still carry the menu.
 func TestApplyTablePrefsDefaults(t *testing.T) {
 	out := string(applyTablePrefs([]byte(sampleTable), nil))
-	for _, want := range []string{`class="devtable dense pl1 pl2 hc11 hc12 pr14 pr15"`, `data-cols=",name:28:l:fix,status:17,reach:15,firmware:14,family:10,address:13,uptime:11,wifi:12,restart:18,otaurl:24:off,grouptopic:14:off,~,power:7:r,actions:5:r:fix"`,
+	for _, want := range []string{`class="devtable dense pl1 pl2 hc11 hc12 pr14 pr15"`, `data-cols=",name:28:l:fix,status:17,reach:15,firmware:14,family:10,address:15.8,uptime:11,wifi:12,restart:18,otaurl:24:off,grouptopic:14:off,~,power:7:r,actions:5:r:fix"`,
 		`data-order="status,reach,firmware,family,address,uptime,wifi,restart,otaurl,grouptopic,power"`, `<div class="tablewrap" data-key="devices">`, `<div class="tablescroll"><table`, `data-colid="family" checked`, `data-cols-reset`, `<col class="c-sel">`, "</table></div></div><p>y</p>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
@@ -517,7 +517,7 @@ func TestColumnOrderIsRenderedOnTheServer(t *testing.T) {
 	if got := heads(out); got != ",Name,Address,Status,MQTT · HTTP,Firmware,Chip,Uptime,Wi-Fi,Last restart,OTA URL,Group topic,,Power,Actions" {
 		t.Errorf("header order %q", got)
 	}
-	if !strings.Contains(out, `data-cols=",name:28:l:fix,address:13,status:17,`) || !strings.Contains(out, "tfix") || !strings.Contains(out, `<td colspan="13">empty</td>`) {
+	if !strings.Contains(out, `data-cols=",name:28:l:fix,address:15.8,status:17,`) || !strings.Contains(out, "tfix") || !strings.Contains(out, `<td colspan="13">empty</td>`) {
 		t.Errorf("script map, forced layout or the empty row wrong:\n%s", out)
 	}
 	if !strings.Contains(out, `power:7:r,actions:5:r:fix"`) || strings.Contains(out, `data-moveid="actions"`) || strings.Contains(out, `data-moveid="name"`) {
@@ -616,8 +616,10 @@ func TestPixelTableDrawsItsColumnsInPixels(t *testing.T) {
 		`<col data-id="firmware" width="180"><col data-id="family" width="60">`,
 		// the room a wider frame has spare goes to the empty column before the columns pinned right
 		`<col class="spare"><col data-id="power" width="70"><col data-id="actions" width="48"></colgroup>`,
-		// 43 + (28+17+15+18+6+13+11+12+18+7) tenths + 48 = 43 + 1450 + 48
-		`data-basew="1541"`,
+		// Address has no stored width here: its default, 158 px, fits a 15-character address and its icon (#906)
+		`<col data-id="address" width="158">`,
+		// 43 + (28+17+15+18+6+15.8+11+12+18+7) tenths + 48 = 43 + 1478 + 48
+		`data-basew="1569"`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Errorf("saved layout: missing %q in\n%s", want, saved)
@@ -628,8 +630,13 @@ func TestPixelTableDrawsItsColumnsInPixels(t *testing.T) {
 	}
 	// a layout without widths (only hidden columns) has the default widths, which are no stretch either
 	hid := string(applyTablePrefs([]byte(sampleTable), map[string]string{"table.devices": `{"h":["family"]}`}))
-	if !strings.Contains(hid, `data-basew="1441"`) || strings.Contains(hid, "data-legacy") {
-		t.Errorf("hidden columns only: want data-basew 1541 - 100:\n%s", hid)
+	if !strings.Contains(hid, `data-basew="1469"`) || strings.Contains(hid, "data-legacy") {
+		t.Errorf("hidden columns only: want data-basew 1569 - 100:\n%s", hid)
+	}
+	// #906: only the default moved. An Address width the person saved is theirs and is drawn as stored
+	own := string(applyTablePrefs([]byte(sampleTable), map[string]string{"table.devices": `{"w":{"address":13},"c":true}`}))
+	if !strings.Contains(own, `<col data-id="address" width="130">`) {
+		t.Errorf("a stored Address width must be drawn as stored:\n%s", own)
 	}
 }
 

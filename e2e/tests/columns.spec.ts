@@ -361,6 +361,12 @@ test("showing a column adds its width and stores the other columns as they were 
     for (const id of ids) expect(px(one[id], before[id]), `${id} keeps its saved width when Last restart is shown`).toBeLessThanOrEqual(1);
     const mean = ids.reduce((a, id) => a + before[id], 0) / ids.length;
     expect(px(one.restart, mean), "the new column gets the mean of the saved widths").toBeLessThanOrEqual(1);
+    // Last restart is too narrow for its date at the mean and is drawn wider with room from the columns that have spare
+    // (#912); that room is drawn, not stored. A hide and show that stored it would take a little more from them each
+    // time, until Last restart is cut again, so the second round stores the same widths as the first.
+    await showColumn(page, "restart", false);
+    const round = (await showColumn(page, "restart", true)).w;
+    for (const id of Object.keys(one)) expect(px(round[id], one[id]), `${id} is stored as before after a second hide and show of Last restart`).toBeLessThanOrEqual(1);
     const shown = await deviceFrame(page);
     expect(shown.scroll, "one more column still fits a 1920 px window").toBeLessThanOrEqual(shown.client);
     // Two more columns add their own widths and nothing else. (Before #828 three more columns also fitted the
@@ -708,8 +714,10 @@ test("#828: the last data column can be narrowed to its content; the room become
 });
 
 test("#828: a saved layout is drawn at its saved widths in any wider frame, the spare room before the columns pinned right", async ({ page }) => {
-  // the layout as this version saves it: content pixels (tenths in w), marked "c"
-  const content = { w: { name: 22, status: 16.5, wifi: 11.5, firmware: 10, family: 9, address: 16, uptime: 9.5, power: 7.5 }, h: ["reach", "restart"], o: owner828.o, c: true };
+  // the layout as this version saves it: content pixels (tenths in w), marked "c". Every column is wide enough for its
+  // content (Uptime, Firmware): a cut column takes room from the others that have spare (#912), and this case is about
+  // the frame, which never changes a width
+  const content = { w: { name: 22, status: 16.5, wifi: 11.5, firmware: 11, family: 9, address: 16, uptime: 12, power: 7.5 }, h: ["reach", "restart"], o: owner828.o, c: true };
   try {
     for (const size of [issueSizes[1], issueSizes[2]]) {
       await openDevices(page, content, size);

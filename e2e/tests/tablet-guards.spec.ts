@@ -2,7 +2,7 @@ import { test, expect } from "../support/fixtures";
 import { insertProposals } from "../support/discovery-seed";
 import { cardStackGaps, expectLayout, expectTableGuards } from "../support/layout";
 import { pageList, settled } from "../support/page-list";
-import { openSavedLayoutList, ownerWindow } from "../support/saved-layout";
+import { openSavedLayoutList, ownerWide, ownerWindow } from "../support/saved-layout";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 import { checkTablePage, tablePageCases } from "../support/table-pages";
@@ -110,8 +110,115 @@ test(`devices list with a saved layout at ${ownerWindow}px: layout guards and ta
   await openSavedLayoutList(page, app.url, { width: ownerWindow });
   await page.waitForTimeout(800);
   await expectLayout(page, `devices list saved layout ${ownerWindow}px`);
-  // Last restart is cut by 2-3 px beside spare room in other columns (#912, tolerated through knownLayoutIssues).
+  // #912: Last restart shows its whole date: the fit step gives a column that is too narrow for its content the room of columns with spare
   await expectTableGuards(page, `devices list saved layout ${ownerWindow}px`);
+});
+
+// #906: the Address cell is an address and the icon that opens it. A person reads and copies the address from the list,
+// and a cut icon looks like a broken page; the widest usual value is a 15-character address (an IPv4 one, or a 5-digit
+// port on a short one, in the same monospace width) and nothing may be cut while another column has room (guard s).
+// The fixture's own addresses are the second kind; the first row also gets the widest IPv4 address to be sure.
+const cutAddress = () => {
+  const out: string[] = [];
+  const rows = [...document.querySelectorAll('table[data-table="devices"] tbody tr')].filter((r) => (r as HTMLElement).offsetParent !== null);
+  rows.forEach((tr, n) => {
+    const td = tr.querySelector<HTMLElement>('td[data-label="Address"]');
+    const a = td?.querySelector<HTMLElement>("a.ext");
+    if (!td || !a) return;
+    if (n === 0) a.firstChild!.textContent = "255.255.255.255"; // 15 characters, the widest IPv4 address
+    // The whole link (address and icon) ends inside the cell's content box. Guard s lets an icon use the padding, but then
+    // the cell's text-overflow draws an ellipsis dot after it: that is a cut cell to a person. Not scrollWidth: the
+    // link's hidden "opens in a new tab" text runs past the box without being seen.
+    const box = td.getBoundingClientRect();
+    const linkEnd = a.getBoundingClientRect().right;
+    const contentEnd = box.right - parseFloat(getComputedStyle(td).paddingRight);
+    if (linkEnd > contentEnd) out.push(`${a.firstChild!.textContent}: the link ends at ${Math.round(linkEnd * 10) / 10}, the cell's content box at ${Math.round(contentEnd * 10) / 10}`);
+  });
+  return { rows: rows.length, out };
+};
+
+test("devices list at 1280px: every Address shows the whole address and its link icon (#906)", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.setExtraHTTPHeaders(adam);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/devices");
+  await settled(page);
+  await expect(page.locator('table[data-table="devices"] tbody tr td[data-label="Address"] a.ext').first()).toBeVisible();
+  const m = await page.evaluate(cutAddress);
+  expect(m.rows, "the list has rows").toBeGreaterThan(10);
+  expect(m.out).toEqual([]);
+});
+
+// #912: a saved layout keeps the widths a person set, but a width that is narrower than the column's own content
+// while other columns have room is not what they chose: room that sits in the wrong column is a defect. The room is
+// taken from columns that have spare beyond their content and given to the cut one; the table keeps its width, a
+// column that wraps on purpose (OTA URL, two lines) is not cut and keeps its width, and a donor still shows all of
+// its content.
+const savedWidths = () => {
+  const ths = [...document.querySelectorAll<HTMLElement>('table[data-table="devices"] thead th')];
+  return Object.fromEntries(ths.map((th) => [th.textContent!.trim() || "select", Math.round(th.getBoundingClientRect().width)]));
+};
+const cutCells = () => {
+  const out: Record<string, number> = {};
+  const rows = [...document.querySelectorAll('table[data-table="devices"] tbody tr')].filter((r) => (r as HTMLElement).offsetParent !== null);
+  for (const tr of rows)
+    for (const td of tr.querySelectorAll<HTMLElement>("td[data-label]")) {
+      const over = td.scrollWidth - td.clientWidth;
+      // Address: its link's hidden "opens in a new tab" text runs past the box without being seen (#906 checks it by the icon)
+      if (over > 0 && td.dataset.label !== "Address") out[td.dataset.label!] = Math.max(out[td.dataset.label!] ?? 0, over);
+    }
+  return out;
+};
+
+test(`devices list with a saved layout at ${ownerWindow}px: the cut Last restart gets the room of the columns that have spare (#912)`, async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSavedLayoutList(page, app.url, { width: ownerWindow });
+  const saved = ownerWide.w as Record<string, number>;
+  const w = await page.evaluate(savedWidths);
+  const cut = await page.evaluate(cutCells);
+  expect(cut["Last restart"], "Last restart shows its whole date").toBeUndefined();
+  // the donors show all of their content, and the one cell that wraps on purpose is no cut cell
+  expect(cut, "no cell of a column that scrolls with the table is cut").toEqual({});
+  // the room moved, the table did not grow: the widths add up to what the layout saved (selection + columns + row menu)
+  const total = Object.values(w).reduce((a, b) => a + b, 0);
+  const stored = 43 + Math.round(Object.values(saved).reduce((a, b) => a + b, 0) * 10) - Math.round(saved.actions * 10) + 48;
+  expect(Math.abs(total - stored), `the columns add up to ${total} px, the layout saved ${stored} px`).toBeLessThanOrEqual(3);
+  // a column that is wide enough keeps the width the person set
+  expect(w["OTA URL"], "OTA URL wraps, it is not cut: it keeps its saved width").toBe(Math.round(saved.otaurl * 10));
+  expect(w["Group topic"], "Group topic keeps its saved width").toBe(Math.round(saved.grouptopic * 10));
+});
+
+// #912: the person's own resize in this page wins over the fit. A column narrowed by a drag stays where the pointer
+// left it, even below its content (a cut cell has its title): otherwise a drag would be undone by the next fit, which
+// runs on every column change and every list update, and no column could be made narrower than its date.
+test(`devices list with a saved layout at ${ownerWindow}px: a column narrowed by a drag stays narrow (#912)`, async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSavedLayoutList(page, app.url, { width: ownerWindow });
+  const frame = page.locator("#devtable .tablescroll");
+  await frame.evaluate((f) => (f.scrollLeft = 600));
+  const th = page.locator('table[data-table="devices"] thead th', { hasText: "Last restart" });
+  const before = (await th.boundingBox())!.width;
+  const h = (await th.locator(".colhandle").boundingBox())!;
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(h.x + h.width / 2 - 40, h.y + h.height / 2, { steps: 8 });
+  await page.mouse.up();
+  // the list update that follows a drag (a live refresh, a filter) lays the table out again: wait for that swap, not for time
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const onSwap = (e: Event) => {
+          if ((e.target as Element).id !== "devtable") return;
+          document.removeEventListener("htmx:afterSwap", onSwap);
+          queueMicrotask(() => resolve());
+        };
+        document.addEventListener("htmx:afterSwap", onSwap);
+        const t = document.getElementById("devtable")!;
+        (window as any).htmx.ajax("GET", t.getAttribute("hx-get")!, { target: t, swap: "innerHTML" });
+      }),
+  );
+  const after = (await th.boundingBox())!.width;
+  expect(Math.abs(after - (before - 40)), `Last restart was ${before} px, dragged by -40 px, is ${after} px`).toBeLessThanOrEqual(2);
 });
 
 // #727: a live reload of /devices/table (the page does one right after it connects and again after
