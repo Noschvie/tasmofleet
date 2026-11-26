@@ -158,6 +158,75 @@ for (const vp of widths) {
   }
 }
 
+/**
+ * A phone shows the filter chips of /devices as one strip that scrolls sideways, and fades the edge that has more
+ * (#1133, #1079). Chromium scrolls a focused element into view only when none of it shows, so Tab onto a chip that
+ * is half in the strip left it where it was: the person saw a few pixels of it, inside the fade, and the Filters
+ * button next to the strip lay over its centre (the nightly walk above found that). So a chip that takes the
+ * keyboard focus must lie whole inside the strip and clear of the faded edge (WCAG 2.4.11). The walk above only
+ * asks for an uncovered centre; the clearance from the fade is what this adds, so it is not a duplicate of it.
+ */
+test("a chip that takes keyboard focus on /devices at 375 px lies whole inside its strip, clear of the fade (WCAG 2.4.11, #1274)", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setExtraHTTPHeaders(adm);
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto(app.url + "/devices");
+  await settle(page);
+  const strip = page.locator(".dv-list .dv-chips");
+  await expect(strip).toBeVisible();
+  const chips = await strip.locator("a.chip, button.chip").count();
+  expect(chips, "chips in the strip").toBeGreaterThan(4);
+  // the strip must really scroll here, or there is nothing to test
+  expect(await strip.evaluate((s) => s.scrollWidth > s.clientWidth + 1), "the strip scrolls sideways").toBe(true);
+
+  /** reach is how far the focused chip lies over the strip's edge or into the fade of an edge that has more. */
+  const reach = () =>
+    page.evaluate(() => {
+      const a = document.activeElement as HTMLElement | null;
+      const s = document.querySelector<HTMLElement>(".dv-list .dv-chips");
+      if (!a || !s || !s.contains(a)) return { inStrip: false as const };
+      // the width of the fade is the token itself, measured the way the stylesheet reads it
+      const probe = document.createElement("div");
+      probe.style.width = "var(--sp-32)";
+      document.body.append(probe);
+      const fade = probe.getBoundingClientRect().width;
+      probe.remove();
+      const c = a.getBoundingClientRect();
+      const r = s.getBoundingClientRect();
+      const left = s.hasAttribute("data-more-start") ? fade : 0;
+      const right = s.hasAttribute("data-more-end") ? fade : 0;
+      return {
+        inStrip: true as const,
+        label: (a.textContent ?? "").trim().slice(0, 24),
+        reach: Math.max(0, Math.round(r.left + left - c.left), Math.round(c.right - (r.right - right))),
+        pageX: Math.round(document.scrollingElement!.scrollLeft),
+      };
+    });
+
+  // Tab from the top of the page into the strip and on through every chip, then Shift+Tab back through all of them.
+  // The key press is what makes the focus visible by keyboard (:focus-visible); a script's focus() is not the test.
+  let key = "Tab";
+  let inside = 0;
+  for (let step = 0; step < 60; step++) {
+    await page.keyboard.press(key);
+    const now = await reach();
+    if (!now.inStrip) {
+      if (inside === 0) continue; // still on the way to the strip
+      if (key === "Tab") {
+        key = "Shift+Tab"; // left the strip at its end: walk back through it
+        inside = 0;
+        continue;
+      }
+      break;
+    }
+    inside++;
+    // the focus lands at once (no smooth scrolling), but the strip's own scroll event updates the fade attributes a
+    // frame later: poll the DOM state, never a timer
+    await expect.poll(reach, { message: `chip ${now.label} (${key})`, timeout: 5_000 }).toMatchObject({ inStrip: true, reach: 0, pageX: 0 });
+  }
+  expect(inside, "chips walked through on the way back").toBe(chips);
+});
+
 test("the name of a device is shown in full under the text-spacing override (WCAG 1.4.12, #1273)", async ({ page }) => {
   await page.setExtraHTTPHeaders(adm);
   await page.setViewportSize({ width: 1280, height: 800 });

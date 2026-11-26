@@ -5,6 +5,8 @@
 //  2. Say which side has more: data-more-start / data-more-end on a strip that overflows and is not
 //     at that end. app.css fades that edge (#1079), so a tab that is out of sight can be found. A strip
 //     that does not scroll sideways (the Devices list's chips wrap from 45rem) gets neither attribute.
+//  3. Keep a chip or tab that takes the keyboard focus whole inside the strip and clear of the fade
+//     (WCAG 2.4.11, #1274): the browser scrolls a focused element into view only when none of it shows.
 // Without JavaScript there is no fade; the strip still scrolls.
 (function () {
   "use strict";
@@ -92,6 +94,19 @@
     later(function () {
       strips(document).forEach(mark);
     });
+  });
+  // Tab onto a chip that is half in the strip: the browser leaves the strip where it is, so the person sees a few
+  // pixels of it inside the fade and the control next to the strip lies over its centre. scrollIntoView does the
+  // scroll; app.css gives the strip scroll-padding-inline of the fade's width, so the chip lands clear of the
+  // fade. :focus-visible only: a mouse press focuses a link too, and moving the strip under the pointer then could
+  // lose the click. block "nearest" leaves the vertical position to the browser (the root's scroll-padding-block
+  // keeps it clear of the bars).
+  document.addEventListener("focusin", function (e) {
+    var t = e.target;
+    if (!(t instanceof Element) || !t.matches(":focus-visible")) return;
+    var strip = t.closest(STRIPS);
+    if (strip && scrolls(strip))
+      t.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
   // scroll does not bubble; capturing it on the document covers a strip that arrives later too
   document.addEventListener(

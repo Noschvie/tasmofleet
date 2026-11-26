@@ -5651,6 +5651,12 @@ a.att-more:hover {
 /* A strip that scrolls sideways (the tab rows, the filter chips) fades the edge that has more: tabs.js sets
    data-more-end while there is more to the right and data-more-start while there is more to the left (#1079).
    A colour mask, so it follows both themes; a strip that fits, or that wraps, carries neither attribute. */
+/* A tab or chip that takes the keyboard focus is scrolled in clear of the fade: tabs.js scrolls it into view and this
+   is the clearance, the fade's own width (#1274). */
+.utabs,
+.dv-chips {
+  scroll-padding-inline: var(--sp-32);
+}
 .utabs[data-more-end],
 .dv-chips[data-more-end] {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--sp-32)), transparent);

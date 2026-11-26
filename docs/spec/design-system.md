@@ -123,7 +123,7 @@ shadow, layer above 4, transition duration, radius or focus ring written as a li
 | Marks | `--r-mark: 2px` |
 | Other | `--lh-tight` 1.15, `--grid-cols` 12, `--busy-ring` (the busy indicator's ring) |
 
-The focus ring is held to HIG and WCAG in [design-references.md](design-references.md), rows 55 to 58: inputs, a ring inside a clipping container, and focus hidden by pinned table columns (open, #1275) are weaker than the reference. Focus is kept clear of the sticky header and the fixed status bar by the root's `scroll-padding-block: var(--header-h) calc(var(--sb-h) + var(--sp-8))` (row 57, #1274); a target's own `scroll-margin` adds to it, so none writes a bar's height again.
+The focus ring is held to HIG and WCAG in [design-references.md](design-references.md), rows 55 to 58: inputs, a ring inside a clipping container, and focus hidden by pinned table columns (open, #1275) are weaker than the reference. Focus is kept clear of the sticky header and the fixed status bar by the root's `scroll-padding-block: var(--header-h) calc(var(--sb-h) + var(--sp-8))` (row 57, #1274); a target's own `scroll-margin` adds to it, so none writes a bar's height again. A strip that scrolls sideways (the tab rows, the filter chips) keeps a tab or chip that takes keyboard focus whole and clear of its fade the same way: `scroll-padding-inline: var(--sp-32)`, the fade's width, and a `focusin` handler in `tabs.js` that scrolls it into view (#1274); the browser alone leaves a half-visible one where it is.
 
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
 width including the scrollbar, which is what the prototype's root measures, and fixed elements
