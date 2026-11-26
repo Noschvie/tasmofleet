@@ -23,7 +23,9 @@ import (
 //  2. the second crumb is the sub-navigation tab that is lit, or, on a page that lights none
 //     (a page of one device, the account page), the object the page is about: a device is named
 //     by its name and hangs directly under the area ("Devices / kitchen"), never "Device";
-//  3. no crumb repeats an earlier one (a start typed in twice reads "Devices / List / Devices / x").
+//  3. no crumb repeats an earlier one (a start typed in twice reads "Devices / List / Devices / x");
+//  4. a trail under three steps is not drawn (#1106): it would only repeat the top bar, the tab and the h1. A
+//     device's page is the exception, its Devices crumb leads back to the list as the person left it (#127).
 //
 // A handler writes only the end of the trail; the start comes from ui.ShellData.Trail, which reads
 // the same model that draws the tabs. These tables catch a page that still types its own start,
@@ -44,6 +46,8 @@ type trailPage struct {
 	// fragment: the answer is an htmx out-of-band swap of the trail, not a page. The swap replaces
 	// the whole trail, so it must be the full one (want), not only its end.
 	fragment bool
+	// none: the trail is under three steps, so the page draws none (rule 4); the lit group is still checked.
+	none bool
 }
 
 type trailScene struct {
@@ -83,6 +87,17 @@ func checkTrail(t *testing.T, e *env, p trailPage) {
 		t.Errorf("%s %s: status %d, want %d", p.method, p.path, res.StatusCode, want)
 		return
 	}
+	if p.none {
+		if strings.Contains(body, `id="crumbs"`) {
+			t.Errorf("%s %s: a trail under three steps is drawn: %q", p.method, p.path, strings.Join(crumbsOf(t, body), " / "))
+		}
+		group := trailBarGroup.FindStringSubmatch(body)
+		pt := phoneTitle.FindStringSubmatch(body)
+		if group == nil || pt == nil || html.UnescapeString(pt[1]) != group[1] {
+			t.Errorf("%s %s: the lit group %v and the phone title %v must name the same area", p.method, p.path, group, pt)
+		}
+		return
+	}
 	trail := crumbsOf(t, body)
 	got := strings.Join(trail, " / ")
 	if p.want != "" && got != p.want {
@@ -111,7 +126,13 @@ func checkTrail(t *testing.T, e *env, p trailPage) {
 		t.Errorf("%s %s: trail %q does not start with the lit group %q", p.method, p.path, got, group[1])
 		return
 	}
-	if tab := trailLitTab.FindStringSubmatch(body); tab != nil {
+	if tab := trailLitTab.FindStringSubmatch(body); tab == nil && p.object == "" && strings.Contains(body, `<div class="sn sn-empty">`) {
+		// the group has one page, so there is no tab row (#1106): the entry crumb is that page, the top-bar button's target
+		btn := regexp.MustCompile(`<a class="tb-group" href="([^"]*)" aria-current="true">`).FindStringSubmatch(body)
+		if btn == nil || !strings.Contains(body, `href="`+btn[1]+`">`+html.EscapeString(trail[1])+`</a>`) {
+			t.Errorf("%s %s: trail %q: %q is not the one page of the lit group", p.method, p.path, got, trail[1])
+		}
+	} else if tab != nil {
 		if p.object != "" {
 			t.Errorf("%s %s: the page is about %q and must light no tab, but %q is lit", p.method, p.path, p.object, tab[1])
 		}
@@ -148,8 +169,8 @@ func trailScenes() []trailScene {
 	return []trailScene{
 		{"devices", setup, func(t *testing.T, e *env) []trailPage {
 			return []trailPage{
-				{method: "GET", path: "/", want: "Dashboard"},
-				{method: "GET", path: "/devices", want: "Devices / List"},
+				{method: "GET", path: "/", none: true},
+				{method: "GET", path: "/devices", none: true},
 				{method: "GET", path: "/devices/9999", want: "Devices / List / Device not found", status: 404},
 				{method: "GET", path: "/devices/1", want: "Devices / kitchen", object: "kitchen"},
 				{method: "GET", path: "/devices/1/edit", want: "Devices / kitchen / Edit", object: "kitchen"},
@@ -157,8 +178,8 @@ func trailScenes() []trailScene {
 				// the rename and the identity refresh swap the trail of the page the person is on
 				{method: "POST", path: "/devices/1/probe", form: url.Values{"csrf": {"tok"}}, hdr: []string{"HX-Request", "true"},
 					want: "Devices / kitchen", fragment: true},
-				{method: "GET", path: "/audit", want: "System / Audit log"},
-				{method: "GET", path: "/about", want: "System / About"},
+				{method: "GET", path: "/audit", none: true},
+				{method: "GET", path: "/about", none: true},
 				{method: "GET", path: "/whats-new", want: "System / About / What’s new"},
 			}
 		}},
@@ -213,13 +234,13 @@ func trailScenes() []trailScene {
 		}, func(t *testing.T, e *env) []trailPage {
 			// a deleted device's backup lives on the Backups tab, which is the tab that must be lit (it was nav "system")
 			return []trailPage{
-				{method: "GET", path: "/devices/backups", want: "Devices / Backups"},
-				{method: "GET", path: "/backups/8/delete", want: "Devices / Backups / Delete"},
-				{method: "GET", path: "/backups/9/delete", want: "Devices / Backups / Delete"},
+				{method: "GET", path: "/devices/backups", none: true},
+				{method: "GET", path: "/backups/8/delete", want: "Devices / Device backups / Delete"},
+				{method: "GET", path: "/backups/9/delete", want: "Devices / Device backups / Delete"},
 			}
 		}},
 		{"fleet backups", func(t *testing.T) *env { e, _ := cleanupEnv(t); return e }, func(t *testing.T, e *env) []trailPage {
-			return []trailPage{{method: "GET", path: "/devices/backups/prune", want: "Devices / Backups / Prune now"}}
+			return []trailPage{{method: "GET", path: "/devices/backups/prune", want: "Devices / Device backups / Prune now"}}
 		}},
 		{"compare", func(t *testing.T) *env { e, _, _ := newDiffEnv(t); return e }, func(t *testing.T, e *env) []trailPage {
 			return []trailPage{
@@ -239,13 +260,13 @@ func trailScenes() []trailScene {
 			return []trailPage{
 				// rule 2: a transaction lives on the Transactions tab of Updates, however it was started
 				{method: "GET", path: "/devices/1/history", want: "Devices / kitchen", object: "kitchen"},
-				{method: "GET", path: "/transactions", want: "Updates / Transactions"},
+				{method: "GET", path: "/transactions", none: true},
 				{method: "GET", path: "/transactions/7", want: "Updates / Transactions / TX-0007"},
 				{method: "GET", path: "/transactions/8", want: "Updates / Transactions / TX-0008"},
 				{method: "GET", path: "/transactions/7/cancel", want: "Updates / Transactions / TX-0007 / Cancel"},
 				{method: "GET", path: "/jobs/1/cancel", want: "Updates / Transactions / TX-0007 / Cancel update"},
 				{method: "GET", path: "/transactions/8/retry", want: "Updates / Transactions / TX-0008 / Retry"},
-				{method: "GET", path: "/firmware", want: "Updates / Firmware"},
+				{method: "GET", path: "/firmware", none: true},
 			}
 		}},
 		{"policy", func(t *testing.T) *env {
@@ -255,7 +276,7 @@ func trailScenes() []trailScene {
 			return e
 		}, func(t *testing.T, e *env) []trailPage {
 			return []trailPage{
-				{method: "GET", path: "/policy", want: "Devices / Policy"},
+				{method: "GET", path: "/policy", none: true},
 				{method: "GET", path: "/policy/io", want: "Devices / Policy / Import / export"},
 				{method: "GET", path: "/policy/history", want: "Devices / Policy / History"},
 				{method: "GET", path: "/policy/rules/new?command=SaveData", want: "Devices / Policy / Save data (s)"},
@@ -272,7 +293,7 @@ func trailScenes() []trailScene {
 			return e
 		}, func(t *testing.T, e *env) []trailPage {
 			return []trailPage{
-				{method: "GET", path: "/settings/system", want: "System / Settings"},
+				{method: "GET", path: "/settings/system", none: true},
 				// rule 3: System confirmations start with System, and the tab they came from follows the entry
 				{method: "GET", path: "/settings/system/reset", want: "System / Settings / Advanced / Reset"},
 			}
@@ -284,7 +305,7 @@ func trailScenes() []trailScene {
 			}
 			return s.env
 		}, func(t *testing.T, e *env) []trailPage {
-			return []trailPage{{method: "GET", path: "/settings/system/snapshots", want: "System / Snapshots"}}
+			return []trailPage{{method: "GET", path: "/settings/system/snapshots", none: true}}
 		}},
 		{"remove a browser", func(t *testing.T) *env {
 			e, st, _, _ := pushSettingsEnv(t, &fakeNotify{})
@@ -300,7 +321,7 @@ func trailScenes() []trailScene {
 			return fwEnv(t, &fakeMgrFW{releases: baseRelease(), arts: []model.Artifact{{ID: 5, Release: "16.1.0", Filename: "tasmota32.bin", Size: 1024, SHA256: "def456"}}})
 		}, func(t *testing.T, e *env) []trailPage {
 			return []trailPage{
-				{method: "GET", path: "/firmware", want: "Updates / Firmware"},
+				{method: "GET", path: "/firmware", none: true},
 				{method: "GET", path: "/firmware/artifacts/5/delete", want: "Updates / Firmware / Delete"},
 			}
 		}},

@@ -103,7 +103,11 @@ func scanFirmware(raw string) (text, tip string) {
 }
 
 func (h *handler) scanRender(w http.ResponseWriter, r *http.Request, status int, t scanTab) {
-	h.show(w, r, status, "discovery_scan", h.view(r, "Network scan", "discovery", t), scanPage(t))
+	v := h.view(r, "Network scan", "discovery", t)
+	// The results are reached from Add devices, which is no menu entry since #1106 (it lights List): the trail
+	// names it, so the way back to it stays one click (Devices / List / Add devices / Network scan).
+	v.Crumbs = []ui.Crumb{{Label: addTitle, Path: "/devices/new"}, {Label: "Network scan"}}
+	h.show(w, r, status, "discovery_scan", v, scanPage(t))
 }
 
 // scanTabData builds the page for one scan (nil: the latest one, if any).

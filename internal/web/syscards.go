@@ -73,7 +73,7 @@ var sysLayout = []sysTabDef{
 	// Backups is the Devices -> Backups page, not a tab of the Settings page (sysRender splits it off, like
 	// Snapshots). The entry stays in its place: sysAdvanced is an index into this list. The device table
 	// is the one long list of the page, so on a phone it comes last and every short card sits above it (#684).
-	{sysBackupsSlug, "Backups", []int{2, 1}, []sysCardDef{
+	{sysBackupsSlug, "Device backups", []int{2, 1}, []sysCardDef{
 		{ID: "lastrun", Title: "Last run", Stack: 0, Phone: 1},
 		{ID: "devices", Title: "Devices", Stack: 0, Phone: 6},
 		{ID: "storage", Title: "Storage", Note: "Totals of every backup, deleted devices' included.", Stack: 1, Phone: 2},
@@ -109,7 +109,7 @@ var sysLayout = []sysTabDef{
 	}},
 	// Snapshots is the System -> Snapshots page, not a tab of the Settings page (sysRender splits it
 	// off): its schedule settings are saved through the same form machinery, with the page's own save bar.
-	{sysSnapshotsSlug, "Snapshots", []int{2, 1}, []sysCardDef{
+	{sysSnapshotsSlug, "TasmoFleet backup", []int{2, 1}, []sysCardDef{
 		{ID: "download", Title: "Download a snapshot", Stack: 0, Phone: 1},
 		{ID: "stored", Title: "Stored snapshots", Stack: 0, Phone: 3},
 		{ID: "snapshots", Title: "Schedule", Stack: 1, Phone: 2, Keys: []string{"SNAPSHOT_DAYS", "SNAPSHOT_TIME", "SNAPSHOT_KEEP"}},

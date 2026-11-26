@@ -194,7 +194,7 @@ func deviceDeletePage(p devDeleteView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "> <span class=\"rcard-body\"><b>Keep the backups</b><span>They stay under System → Backups with the device’s name, where you can download them.</span></span></label> <label class=\"rcard\"><input type=\"radio\" name=\"backups\" value=\"delete\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "> <span class=\"rcard-body\"><b>Keep the backups</b><span>They stay under Devices → Device backups with the device’s name, where you can download them.</span></span></label> <label class=\"rcard\"><input type=\"radio\" name=\"backups\" value=\"delete\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

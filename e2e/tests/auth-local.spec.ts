@@ -19,21 +19,22 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => app.stop());
 
-// Why (D17, F4): the style guide shows sample data only, so every signed-in user may open it, an
-// operator too, from the System menu (the navigation is the same for every role). It is still behind
-// the sign-in: signed out, the address leads to the sign-in page, not to the guide.
-test("the style guide needs a sign-in and is open to an operator from the System menu", async ({ page }) => {
+// Why (D17, #1106): the style guide shows sample data only, so every signed-in user may open it, an
+// operator too. It is still behind the sign-in: signed out, the address leads to the sign-in page, not
+// to the guide. The menu shows each role only what it may open (#1106), so an operator has no System
+// group at all (all its pages are admin-only), and the pages still refuse on their own.
+test("the style guide needs a sign-in and is open to an operator; the operator's menu has no System group", async ({ page }) => {
   await page.goto(app.url + "/styleguide");
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: "Styleguide" })).toHaveCount(0);
   await page.getByLabel("Username").fill("helper");
   await page.getByLabel("Password").fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.goto(app.url + "/devices");
-  await openMenu(page, "System");
-  await expect(page, "an operator's System button leads to a page the role may open").toHaveURL(/\/styleguide$/);
+  await page.goto(app.url + "/styleguide");
   await expect(page.getByRole("heading", { name: "Styleguide", level: 1 })).toBeVisible();
-  await expect(page.locator("nav.sn-in").getByRole("link", { name: "Users" }), "the menu is the same for every role").toBeVisible();
+  await page.goto(app.url + "/devices");
+  await expect(page.locator("nav.tb-groups").getByRole("link", { name: "System" }), "no group the role cannot open").toHaveCount(0);
+  await expect(page.locator(`header.top a[href$="/users"]`), "no entry that refuses the role").toHaveCount(0);
   const users = await page.request.get(app.url + "/users");
   expect(users.status(), "the page itself refuses what the role may not do").toBe(403);
   await signOut(page);

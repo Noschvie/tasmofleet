@@ -659,8 +659,8 @@ func TestAboutMasksConfigAndShowsVersion(t *testing.T) {
 
 // Why (#351): the 60-odd effective settings were hidden behind a disclosure; they are the
 // reason to open About, so they are always visible in two tables side by side (order kept, the
-// first half left), values in monospace as in Advanced. Styleguide has its own menu entry, so the
-// version card offers only "What's new".
+// first half left), values in monospace as in Advanced. The version card offers only "What's new"; the
+// style guide is a link in Licence and links (TestAboutIsWhereTheStyleguideIsLinked).
 func TestAboutShowsConfigInTwoTablesWithoutDisclosure(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/about", "admin", nil)
@@ -686,6 +686,48 @@ func TestAboutShowsConfigInTwoTablesWithoutDisclosure(t *testing.T) {
 	// a configured value is code, like the Advanced tab
 	if !strings.Contains(card, `<code>`) {
 		t.Error("config values are not in monospace")
+	}
+}
+
+// Why (#1106, A1-005): the style guide is a developer's page, not a task, so it left the menu; About is the one
+// place that links it, or nobody would find it again.
+func TestAboutIsWhereTheStyleguideIsLinked(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/about", "admin", nil)
+	i := strings.Index(body, `aria-labelledby="about-proj"`)
+	if i < 0 {
+		t.Fatal("no Licence and links card")
+	}
+	card := body[i:]
+	card = card[:strings.Index(card, "</section>")]
+	if !strings.Contains(card, `<a href="/tf/styleguide">Styleguide</a>`) {
+		t.Errorf("About does not link the style guide: %s", card)
+	}
+	if n := strings.Count(body, `href="/tf/styleguide"`); n != 1 {
+		t.Errorf("%d links to the style guide on About, want 1 (no menu entry)", n)
+	}
+}
+
+// Why (#1106, A1-006): "Backups" next to "Snapshots" made people look in two groups for one word. Each page is named
+// by what it holds, the same in the menu, the h1 and the browser tab.
+func TestBackupPagesAreNamedByTheirObject(t *testing.T) {
+	for _, c := range []struct{ path, name string }{
+		{"/devices/backups", "Device backups"},
+		{"/settings/system/snapshots", "TasmoFleet backup"},
+	} {
+		var body string
+		if c.path == "/devices/backups" {
+			e, _ := cleanupEnv(t)
+			_, body = e.do(t, "GET", c.path, "admin", nil)
+		} else {
+			s := snapSetup(t, true)
+			_, body = s.do(t, "GET", c.path, "admin", nil)
+		}
+		for _, want := range []string{"<h1>" + c.name + "</h1>", "<title>" + c.name + " - TasmoFleet</title>", `aria-current="page">` + c.name + `</a>`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s lacks %q", c.path, want)
+			}
+		}
 	}
 }
 

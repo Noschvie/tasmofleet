@@ -10,12 +10,10 @@ import "strings"
 type NavItem struct {
 	Key, Label, Path string
 	Current          bool
-	Badge            int  // a count that needs attention (new devices on "Add"); 0 = none
-	Admin            bool // the page answers 403 to other roles: a crumb of it is plain text for them
 }
 
-// NavGroupData is one top-bar group with its pages. Path is where the group button leads: its
-// first page the user may open (an operator's System button leads to the style guide).
+// NavGroupData is one top-bar group with the pages of it this user may open. Path is where the group button
+// leads: its first page.
 type NavGroupData struct {
 	Key, Label, Path string
 	Current          bool
@@ -33,7 +31,7 @@ type Crumb struct {
 // key "device" is a page of one device (its tabs and the pages that act on it): it belongs to the
 // Devices group and lights no sub-navigation entry, because a device is reached from several
 // tabs and hangs directly under the group in the trail. Pages outside the menu (messages, not found, the setup) belong to Dashboard, as the prototype's error
-// screens do, so the top bar keeps its sub-navigation row and the title never jumps.
+// screens do, so the header has the dashboard's height (no sub-navigation row, #1106) and the title never jumps.
 func NavGroup(nav string) string {
 	switch nav {
 	case "dashboard", "", "setup":
@@ -58,11 +56,14 @@ var groupLabels = map[string]string{"dashboard": "Dashboard", "devices": "Device
 // A page outside the menu belongs to Dashboard, as in NavGroup.
 func AreaLabel(nav string) string { return groupLabels[NavGroup(nav)] }
 
-// navItemKey is the sub-navigation entry a page lights up.
+// navItemKey is the sub-navigation entry a page lights up. A page that is no entry lights the one it is reached
+// from (#1106): Add devices is the Devices list's button, the style guide is linked from About.
 func navItemKey(nav string) string {
 	switch nav {
 	case "discovery":
-		return "add"
+		return "devices"
+	case "styleguide":
+		return "about"
 	case "updates":
 		return "transactions"
 	case "system":
@@ -71,10 +72,11 @@ func navItemKey(nav string) string {
 	return nav
 }
 
-// Groups lists the groups and pages of the navigation. The switched-on features decide (a
-// missing service has no page, so it has no entry); the role does not: every role sees the same
-// navigation and each page enforces its own permission (design v2 F4, plan S7), so the menu
-// reads the same for everybody and the style guide is reachable for all.
+// Groups lists the groups and the pages of the navigation this user may open (#1106). The switched-on features
+// decide (a missing service has no page, so it has no entry), and so does the role: an admin-only page is no entry
+// for anybody else, and a group left without an entry is not shown (an operator has no System group). The pages
+// still enforce their own permission (403); the menu only stops offering what would refuse. Each page has one
+// entry: Add devices is the Devices list's button and the style guide is linked from About, not entries of their own.
 func (d ShellData) Groups() []NavGroupData {
 	type entry struct {
 		key, label, path string
@@ -82,52 +84,37 @@ func (d ShellData) Groups() []NavGroupData {
 		admin            bool // the page answers 403 to other roles
 	}
 	cur := navItemKey(d.Nav)
-	build := func(key, label string, items []entry) NavGroupData {
-		g := NavGroupData{Key: key, Label: label, Current: NavGroup(d.Nav) == key}
-		for _, e := range items {
-			if e.on {
-				it := NavItem{Key: e.key, Label: e.label, Path: e.path, Current: e.key == cur && g.Current, Admin: e.admin}
-				if e.key == "add" {
-					it.Badge = d.NewDevices
-				}
-				g.Items = append(g.Items, it)
-			}
-		}
-		// The group button leads to the first page this user may open, so it is never a 403.
+	var out []NavGroupData
+	add := func(key string, items ...entry) {
+		g := NavGroupData{Key: key, Label: groupLabels[key], Current: NavGroup(d.Nav) == key}
 		for _, e := range items {
 			if e.on && (d.IsAdmin || !e.admin) {
-				g.Path = e.path
-				break
+				g.Items = append(g.Items, NavItem{Key: e.key, Label: e.label, Path: e.path, Current: g.Current && e.key == cur})
 			}
 		}
-		if g.Path == "" && len(g.Items) > 0 {
-			g.Path = g.Items[0].Path
+		if len(g.Items) == 0 {
+			return
 		}
-		return g
-	}
-	out := []NavGroupData{
-		build("dashboard", groupLabels["dashboard"], []entry{{"dashboard", "Overview", "/", true, false}}),
-		build("devices", groupLabels["devices"], []entry{
-			{"devices", "List", "/devices", true, false},
-			{"policy", "Policy", "/policy", d.Policy, false},
-			{"backups", "Backups", "/devices/backups", d.Backups, false},
-			{"add", "Add", "/devices/new", true, true},
-		}),
-	}
-	if g := build("updates", groupLabels["updates"], []entry{
-		{"transactions", "Transactions", "/transactions", d.Transactions, false},
-		{"firmware", "Firmware", "/firmware", d.Firmware, false},
-	}); len(g.Items) > 0 {
+		g.Path = g.Items[0].Path // the group button leads to its first page, which this user may open
 		out = append(out, g)
 	}
-	out = append(out, build("system", groupLabels["system"], []entry{
-		{"settings", "Settings", "/settings/system", d.SysConfig, true},
-		{"snapshots", "Snapshots", "/settings/system/snapshots", d.Snapshots, true},
-		{"audit", "Audit log", "/audit", true, true},
-		{"users", "Users", "/users", true, true},
-		{"about", "About", "/about", true, true},
-		{"styleguide", "Styleguide", "/styleguide", true, false},
-	}))
+	add("dashboard", entry{"dashboard", "Dashboard", "/", true, false})
+	add("devices",
+		entry{"devices", "List", "/devices", true, false},
+		entry{"policy", "Policy", "/policy", d.Policy, false},
+		entry{"backups", "Device backups", "/devices/backups", d.Backups, false},
+	)
+	add("updates",
+		entry{"transactions", "Transactions", "/transactions", d.Transactions, false},
+		entry{"firmware", "Firmware", "/firmware", d.Firmware, false},
+	)
+	add("system",
+		entry{"settings", "Settings", "/settings/system", d.SysConfig, true},
+		entry{"snapshots", "TasmoFleet backup", "/settings/system/snapshots", d.Snapshots, true},
+		entry{"audit", "Audit log", "/audit", true, true},
+		entry{"users", "Users", "/users", true, true},
+		entry{"about", "About", "/about", true, true},
+	)
 	return out
 }
 
@@ -142,34 +129,46 @@ func (d ShellData) currentGroup() (NavGroupData, bool) {
 }
 
 // WayBack is where a refused or missing page leads back to, by name and path (below the base path): the
-// entry the page lights up when this user may open it and it is more than the group's own first page, else
-// the group (its button's target: the first page of it the user may open), else the dashboard. Nothing
-// here decides who may open what: it reads the same model as the tabs, so the button never leads to the
-// page that refused (#1085).
+// entry the page lights up when it is more than the group's own first page, else the group (its button's
+// target), else the dashboard. Nothing here decides who may open what: it reads the same model as the tabs,
+// which lists only pages this user may open, so the button never leads to the page that refused (#1085).
+// An admin page refused to an operator has no group they can see, so it leads to the dashboard.
 func (d ShellData) WayBack() (label, path string) {
 	g, ok := d.currentGroup()
 	if !ok || g.Key == "dashboard" {
 		return "Dashboard", "/"
 	}
 	for _, it := range g.Items {
-		if it.Current && (d.IsAdmin || !it.Admin) && it.Path != g.Path {
+		if it.Current && it.Path != g.Path {
 			return it.Label, it.Path
 		}
 	}
 	return g.Label, g.Path
 }
 
-// Trail is the breadcrumb trail of the page, and the only place that builds its start (#1000):
-// the group (the top-bar button), then the sub-navigation entry the page lights up, then the
-// page's own steps (Crumbs, which therefore holds no group and no entry). The trail and the
-// lit entry cannot disagree, because both come from Groups(). A page that lights no entry (a
-// device, the account page) goes straight from the group to its own steps. Without own steps
-// the trail ends at the entry, or at the title when the page is deeper than the entry. Pages
-// outside the groups get Dashboard / title.
+// Trail is the breadcrumb trail the page draws: nil below three steps (#1106). A trail of one or two steps only
+// repeats the top bar, the sub-navigation and the h1 ("Devices / List" above "Devices"), so it is not drawn. The
+// one exception is a trail that starts with a crumb keeping the list query: on a device's page the Devices crumb
+// is the only way back to the list as the person left it (#127; the top-bar Devices opens the plain list). The
+// full page and the out-of-band swaps (CrumbsOOB) both draw what Trail returns, so they cannot disagree.
 func (d ShellData) Trail() []Crumb {
+	t := d.trail()
+	if len(t) < 3 && (len(t) == 0 || !t[0].KeepQuery) {
+		return nil
+	}
+	return t
+}
+
+// trail is the whole trail of the page, and the only place that builds its start (#1000): the group (the top-bar
+// button), then the sub-navigation entry the page lights up, then the page's own steps (Crumbs, which therefore
+// holds no group and no entry). The trail and the lit entry cannot disagree, because both come from Groups(). A
+// page that lights no entry (a device) goes straight from the group to its own steps. Without own steps the trail
+// ends at the entry, or at the title when the page is deeper than the entry. Pages outside the groups this user
+// sees get Dashboard / title.
+func (d ShellData) trail() []Crumb {
 	home := Crumb{Label: "Dashboard", Path: "/"}
 	g, ok := d.currentGroup()
-	if !ok || len(g.Items) == 0 {
+	if !ok {
 		return append([]Crumb{home}, d.steps()...)
 	}
 	var item NavItem
@@ -197,12 +196,10 @@ func (d ShellData) Trail() []Crumb {
 	entry := Crumb{Label: item.Label}
 	// A page that is the entry's own answer (a POST result titled like it) is the entry: no doubled crumb.
 	below := len(d.Crumbs) > 0 || (!onItem && d.Title != item.Label)
-	if below && (d.IsAdmin || !item.Admin) { // not a link the person cannot open
-		entry.Path = item.Path
-	}
 	if !below {
 		return []Crumb{group, entry}
 	}
+	entry.Path = item.Path // every entry is a page this user may open (Groups)
 	return append([]Crumb{group, entry}, d.steps()...)
 }
 

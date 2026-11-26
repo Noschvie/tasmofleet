@@ -297,9 +297,11 @@ func TestNoRoleGetsTheSignOutCard(t *testing.T) {
 }
 
 // Why (A3-021, A5-023, A2-026, A6-039, A7-027): an operator who opens a page above the role by a bookmark
-// is still somewhere. The page lights the group the address belongs to (a device's page stays inside the device's
-// header with its tabs), the trail says where the page would have been, the first button leads back to what the
-// person can open there, the second to the dashboard, and the words say what to do instead of listing nouns.
+// is still somewhere. The page lights the group the address belongs to when that group is in their menu (a device's
+// page stays inside the device's header with its tabs), the trail says where the page would have been, the first
+// button leads back to what the person can open there, the second to the dashboard, and the words say what to do
+// instead of listing nouns. A System page has no group in an operator's menu (#1106: it holds only admin pages), so
+// nothing is lit, the two-step trail is not drawn and the way back is the dashboard.
 func TestOperator403KeepsItsPlace(t *testing.T) {
 	a, tweak := realAuth(t)
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) {
@@ -314,10 +316,10 @@ func TestOperator403KeepsItsPlace(t *testing.T) {
 		{"/devices/1/settings", "Devices", "", "Devices / kitchen / Not allowed", "Back to kitchen", "/tf/devices/1"},
 		{"/devices/1/edit", "Devices", "", "Devices / kitchen / Not allowed", "Back to kitchen", "/tf/devices/1"},
 		{"/devices/9999/settings", "Devices", "List", "Devices / List / Not allowed", "Back to Devices", "/tf/devices"},
-		{"/devices/new", "Devices", "Add", "Devices / Add / Not allowed", "Back to Devices", "/tf/devices"},
+		{"/devices/new", "Devices", "List", "Devices / List / Not allowed", "Back to Devices", "/tf/devices"},
 		{"/policy/rules/new", "Devices", "Policy", "Devices / Policy / Not allowed", "Back to Policy", "/tf/policy"},
-		{"/settings/system", "System", "Settings", "System / Settings / Not allowed", "Back to System", "/tf/styleguide"},
-		{"/audit", "System", "Audit log", "System / Audit log / Not allowed", "Back to System", "/tf/styleguide"},
+		{"/settings/system", "", "", "", "Back to dashboard", "/tf/"},
+		{"/audit", "", "", "", "Back to dashboard", "/tf/"},
 	}
 	for _, c := range cases {
 		t.Run(c.path, func(t *testing.T) {
@@ -331,7 +333,11 @@ func TestOperator403KeepsItsPlace(t *testing.T) {
 			if got := litTab(body); got != c.tab {
 				t.Errorf("lit tab %q, want %q", got, c.tab)
 			}
-			if got := strings.Join(crumbsOf(t, body), " / "); got != c.trail {
+			if c.trail == "" {
+				if strings.Contains(body, `id="crumbs"`) {
+					t.Errorf("a two-step trail is drawn")
+				}
+			} else if got := strings.Join(crumbsOf(t, body), " / "); got != c.trail {
 				t.Errorf("trail %q, want %q", got, c.trail)
 			}
 			if !strings.Contains(body, `href="`+c.backHref+`">`+c.back+`</a>`) {
@@ -457,7 +463,8 @@ func adminGETRoutes(t *testing.T) []string {
 // Why: navOfPath is a second table of the routes (which group a page belongs to) next to the routes themselves, and
 // the 403 is drawn before any handler runs. Without this guard a new admin page lights Dashboard for an operator
 // while its admin page lights Devices. Every admin-only GET page that an admin can open lights, for an operator's 403,
-// the same top-bar group.
+// the same top-bar group, when the operator's menu has that group; a group the operator does not see (System, which
+// holds only admin pages, #1106) is not lit, and no other group is lit instead.
 func TestDeniedPageLightsTheAdminPagesGroup(t *testing.T) {
 	a, tweak := realAuth(t)
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) {
@@ -483,6 +490,13 @@ func TestDeniedPageLightsTheAdminPagesGroup(t *testing.T) {
 		if resp.StatusCode != http.StatusForbidden {
 			t.Errorf("%s: an operator got %d", path, resp.StatusCode)
 			continue
+		}
+		if !strings.Contains(op, `class="tb-group" href="`) {
+			t.Errorf("%s: the operator's 403 has no top bar", path)
+			continue
+		}
+		if !regexp.MustCompile(`class="tb-group" href="[^"]*"(?: aria-current="true")?>` + regexp.QuoteMeta(want) + `<`).MatchString(op) {
+			want = "" // the operator's menu has no such group
 		}
 		if got := litGroup(op); got != want {
 			t.Errorf("%s: the admin's page lights %q, the operator's 403 lights %q", path, want, got)

@@ -57,18 +57,22 @@ func TestNoPageCarriesInlineScriptOrStyle(t *testing.T) {
 	}
 }
 
-// Why (F4, plan S7): the navigation is the same for every role, so the menu reads the same for
-// everybody and the style guide (open to all, D17) is reachable from the System group; each page
-// enforces its own permission. The shell still says who is signed in and with which role.
+// Why (#1106, decision 1): the menu offers each role only the pages it may open, so an operator never follows an
+// entry to a refusal; System holds only admin pages, so an operator has no System group. Hiding an entry is not the
+// permission: the page itself still refuses an operator who types its address. The shell still says who is signed
+// in and with which role.
 func TestShellMenuMatchesRole(t *testing.T) {
 	e := setup(t)
 	_, admin := e.do(t, "GET", "/devices", "admin", nil)
 	_, operator := e.do(t, "GET", "/devices", "operator", nil)
-	if !strings.Contains(admin, ">System<") || !strings.Contains(operator, ">System<") {
-		t.Fatalf("System group: admin %v, operator %v", strings.Contains(admin, ">System<"), strings.Contains(operator, ">System<"))
+	if !strings.Contains(admin, ">System<") || strings.Contains(operator, ">System<") {
+		t.Fatalf("System group: admin %v (want true), operator %v (want false)", strings.Contains(admin, ">System<"), strings.Contains(operator, ">System<"))
+	}
+	if strings.Contains(operator, `href="/tf/audit"`) {
+		t.Error("the operator's menu offers the Audit log, which refuses them")
 	}
 	if resp, _ := e.do(t, "GET", "/audit", "operator", nil); resp.StatusCode != 403 {
-		t.Fatalf("Audit log is in the operator's menu, so the page itself must refuse: status %d", resp.StatusCode)
+		t.Fatalf("Audit log is not in the operator's menu, but the page itself must still refuse: status %d", resp.StatusCode)
 	}
 	if !strings.Contains(operator, "Operator · ") {
 		t.Fatalf("the role is not shown: %.300s", operator)
@@ -76,13 +80,14 @@ func TestShellMenuMatchesRole(t *testing.T) {
 }
 
 // Why: a page that draws its own breadcrumb trail (not ported yet) must not get a second one
-// from the shell; a page without one gets the shell's.
+// from the shell; a page without one gets the shell's, and a page whose trail is under three
+// steps gets none (#1106: it would only repeat the top bar, the tab and the h1).
 func TestOneTrailPerPage(t *testing.T) {
 	e := setup(t)
-	for _, p := range []string{"/devices/1", "/devices", "/about", "/audit"} {
+	for p, want := range map[string]int{"/devices/1": 1, "/devices/1/edit": 1, "/devices": 0, "/about": 0, "/audit": 0} {
 		_, body := e.do(t, "GET", p, "admin", nil)
-		if n := strings.Count(body, `aria-label="Breadcrumb"`); n != 1 {
-			t.Errorf("%s: %d breadcrumb trails", p, n)
+		if n := strings.Count(body, `aria-label="Breadcrumb"`); n != want {
+			t.Errorf("%s: %d breadcrumb trails, want %d", p, n, want)
 		}
 	}
 }
@@ -115,13 +120,14 @@ func TestNavPageListsTheMenu(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/nav", "operator", nil)
 	main := body[strings.Index(body, `<main id="main">`):]
-	for _, want := range []string{">Overview<", ">List<", ">Sign out<", `aria-label="Theme"`} {
+	for _, want := range []string{`class="dr-item" href="/tf/">Dashboard<`, `class="dr-item" href="/tf/devices"`, ">Sign out<", `aria-label="Theme"`} {
 		if !strings.Contains(main, want) {
 			t.Errorf("/nav lacks %q", want)
 		}
 	}
-	if !strings.Contains(main, ">Styleguide<") {
-		t.Error("/nav does not offer an operator the System pages the drawer lists")
+	// the same list as the drawer for the role: no System group for an operator (#1106)
+	if strings.Contains(main, ">System<") || strings.Contains(main, `href="/tf/audit"`) {
+		t.Error("/nav offers an operator the admin-only System pages")
 	}
 }
 

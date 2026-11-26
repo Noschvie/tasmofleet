@@ -87,14 +87,17 @@ for (const vp of viewports) {
         // the error page (design v2, P9) centres its own title block: a layout of its own
         if (document.querySelector("main .errpage")) return `error ${r.top.toFixed(2)}/${r.left.toFixed(2)}`;
         // the first-run setup is a page without navigation (main.bare): the card centred under the brand
-        const kind = document.querySelector("main.bare") ? "bare" : !head ? "ported" : document.querySelector("main nav.crumb.trail") ? "trail" : document.querySelector("main .crumb") ? "crumb" : head.getBoundingClientRect().height > 70 ? "wrapped" : "none";
+        // a ported page draws the shell's crumbs only from three steps on, and a group with one page has no tab row
+        // (#1106): the chrome above the title differs by those rows, so each combination is a kind of its own
+        const ported = "ported" + (document.querySelector("main nav.crumbs") ? "+trail" : "") + (document.querySelector("header.top > .sn-empty") ? "-tabs" : "");
+        const kind = document.querySelector("main.bare") ? "bare" : !head ? ported : document.querySelector("main nav.crumb.trail") ? "trail" : document.querySelector("main .crumb") ? "crumb" : head.getBoundingClientRect().height > 70 ? "wrapped" : "none";
         return `${kind} ${r.top.toFixed(2)}/${r.left.toFixed(2)}`;
       });
       expect(await page.locator("main h1").count(), `${path} has exactly one h1`).toBe(1);
       expect(await page.locator("main > h1, main > section > h1").count(), `${path}: the h1 belongs in .page-head`).toBe(0);
     }
     // identical within each kind of header
-    for (const kind of ["none", "trail", "crumb", "wrapped", "ported"]) {
+    for (const kind of ["none", "trail", "crumb", "wrapped", "ported", "ported+trail", "ported-tabs", "ported+trail-tabs"]) {
       const same = Object.values(pos).filter((v) => v.startsWith(kind + " "));
       expect(new Set(same).size, `${kind}: h1 top/left differ between pages: ${JSON.stringify(pos)}`).toBeLessThanOrEqual(1);
     }
@@ -241,9 +244,9 @@ test("users: no Deactivate, Delete or role change on your own row", async ({ pag
   }
 });
 
-// Why: the Users page had no menu entry (only the address). Admins find it under System. The
-// navigation is the same for every role (F4): an operator sees it too, and the page refuses them.
-test("nav: System menu has Users for every role; the page enforces the role", async ({ page }) => {
+// Why: the Users page had no menu entry (only the address). Admins find it under System. An operator's
+// menu shows only what the role may open (#1106), so it has no System group; the page still refuses them.
+test("nav: System menu has Users for admins; the page enforces the role", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/about");
   const users = page.locator("nav.sn-in a", { hasText: "Users" });
@@ -251,7 +254,7 @@ test("nav: System menu has Users for every role; the page enforces the role", as
   expect(await users.getAttribute("href")).toMatch(/\/users$/);
   await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
   await page.goto(app.url + "/devices");
-  await expect(page.locator("nav.tb-groups a", { hasText: "System" })).toHaveCount(1);
+  await expect(page.locator("nav.tb-groups a", { hasText: "System" })).toHaveCount(0);
   const r = await page.request.get(app.url + "/users", { headers: { "X-authentik-username": "olivia", "X-authentik-groups": "ops" } });
   expect(r.status()).toBe(403);
 });

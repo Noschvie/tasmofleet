@@ -159,7 +159,9 @@ func TestStyleguideSeveritySampleIsTheAppsSeverityControl(t *testing.T) {
 // still be on the page, or the fix would be to delete the samples.
 func TestStyleguideHasOneH1OneBreadcrumbAndUniqueIDs(t *testing.T) {
 	e := setup(t)
-	_, body := e.do(t, "GET", "/styleguide", "operator", nil)
+	// an admin: their trail is System / About / Styleguide, so the shell draws its one landmark (an operator's
+	// trail is two steps and draws none, #1106)
+	_, body := e.do(t, "GET", "/styleguide", "admin", nil)
 	seen := map[string]int{}
 	for _, m := range regexp.MustCompile(`\sid="([^"]+)"`).FindAllStringSubmatch(body, -1) {
 		seen[m[1]]++

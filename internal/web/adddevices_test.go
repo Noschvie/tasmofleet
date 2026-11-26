@@ -825,22 +825,26 @@ func TestScanBoxOfARunningScanLinksTheLiveView(t *testing.T) {
 	}
 }
 
-// Why: the trail of the Add page and of the results page: Devices / Add, and Devices / Add / Network
-// scan, so the way back is one click; the list page keeps its heading "Devices" but the menu and the
-// trail call it List.
+// Why: the trail of the Add page and of the results page: Devices / List / Add devices, and Devices / List / Add
+// devices / Network scan, so the way back to Add devices is one click; Add devices is the List's button and no menu
+// entry (#1106), so it lights List. The list page draws no trail (two steps only repeat the menu, #1106) and keeps
+// its heading "Devices".
 func TestTrailsOfListAddAndScanResults(t *testing.T) {
 	_, fd := setupDiscovery(t)
 	e := setupWith(t, func(d *Deps) { d.Discovery = fd })
 	crumbs := func(path string) string {
 		_, body := e.do(t, "GET", path, "admin", nil)
 		i := strings.Index(body, `<nav class="crumbs"`)
+		if i < 0 {
+			return ""
+		}
 		return regexp.MustCompile(`<[^>]*>`).ReplaceAllString(body[i:i+strings.Index(body[i:], "</nav>")], "")
 	}
 	for path, want := range map[string]string{
-		"/devices":               "Devices/List",
-		"/devices/new":           "Devices/Add",
-		"/discovery/scan":        "Devices/Add/Network scan",
-		"/discovery/scan/abc123": "Devices/Add/Network scan",
+		"/devices":               "",
+		"/devices/new":           "Devices/List/Add devices",
+		"/discovery/scan":        "Devices/List/Add devices/Network scan",
+		"/discovery/scan/abc123": "Devices/List/Add devices/Network scan",
 	} {
 		if got := strings.Join(strings.Fields(crumbs(path)), ""); got != strings.ReplaceAll(want, " ", "") {
 			t.Errorf("%s: trail %q, want %q", path, got, want)

@@ -33,7 +33,7 @@ templ deviceDeletePage(p devDeleteView) {
 					<legend class="sr-only">What happens to the backups</legend>
 					<label class="rcard">
 						<input type="radio" name="backups" value="keep" checked?={ p.Choice != "delete" }/>
-						<span class="rcard-body"><b>Keep the backups</b><span>They stay under System → Backups with the device’s name, where you can download them.</span></span>
+						<span class="rcard-body"><b>Keep the backups</b><span>They stay under Devices → Device backups with the device’s name, where you can download them.</span></span>
 					</label>
 					<label class="rcard">
 						<input type="radio" name="backups" value="delete" checked?={ p.Choice == "delete" }/>

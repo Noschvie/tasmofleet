@@ -4258,6 +4258,13 @@ summary.um-btn::-webkit-details-marker {
 :root {
   --header-h: calc(52px + 40px + 2 * var(--hair-w));
 }
+/* A group with one page draws no tabs (.sn-empty, #1106): the header is the top bar and its bottom hairline.
+   :has() follows an hx-boost swap of the header; the phone header below keeps its own height. */
+@media (min-width: 45rem) {
+  :root:has(header.top > .sn-empty) {
+    --header-h: calc(52px + var(--hair-w));
+  }
+}
 .sn-in {
   height: 40px;
   display: flex;
@@ -6872,19 +6879,6 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-}
-
-/* count pill on a navigation entry: "Add devices 5" */
-.nav-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 var(--sp-6);
-  border-radius: var(--r-pill);
-  font: 500 var(--fs-badge) var(--font-sans);
-  white-space: nowrap;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
 }
 
 /* phones: a crumb link is a touch target without moving the line */

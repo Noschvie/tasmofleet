@@ -125,15 +125,18 @@ func TestUsersMenuExplainsDisabledActions(t *testing.T) {
 	}
 }
 
-// Why: the own account page is reached from the account menu only; it has the trail of every
-// other page, the profile, and for a local account the password form.
+// Why: the own account page is reached from the account menu only; it has the profile, and for a local account
+// the password form. Its trail (System / Account) is two steps, so it draws none (#1106).
 func TestAccountPageShowsProfileAndPasswordForm(t *testing.T) {
 	pages := NewPages()
 	setupWith(t, func(d *Deps) { d.Pages = pages })
 	body := renderAccountPage(t, pages, func(w http.ResponseWriter, r *http.Request) {
 		pages.ChangePassword(w, r, http.StatusOK, auth.PasswordPageData{BasePath: "/tf", CSRFToken: "tok", Local: true, DisplayName: "Ada Admin", Email: "ada@example.org"})
 	})
-	for _, want := range []string{`aria-label="Breadcrumb"`, "<h1>Your account</h1>", "Ada Admin", "ada@example.org", "Local password", `action="/tf/account/password"`, `action="/tf/account/profile"`} {
+	if strings.Contains(body, `aria-label="Breadcrumb"`) {
+		t.Error("the account page draws a two-step trail")
+	}
+	for _, want := range []string{"<h1>Your account</h1>", "Ada Admin", "ada@example.org", "Local password", `action="/tf/account/password"`, `action="/tf/account/profile"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("account page lacks %q", want)
 		}

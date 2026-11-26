@@ -456,17 +456,49 @@ func TestDiscoveryProposalFactsStayVisibleOnPhones(t *testing.T) {
 	}
 }
 
-// Why: the "Add devices" badge tells an admin that devices wait for them: new devices to add and
-// known devices at a new address to confirm (design v2). A conflict is no such device, and
-// operators cannot open the page, so they get no badge.
-func TestAddDevicesBadgeCountsNewDevices(t *testing.T) {
+// Why (#1106, A1-003): the Devices list's one Add devices button tells an admin that discovered devices wait for
+// them: new devices to add and known devices at a new address to confirm. The count is in words, because a bare
+// number does not say what it counts, and it is on the button because the menu has no Add entry any more; a
+// conflict is no such device. Scan network opened the same page, so it left the header. Operators cannot open the
+// page, so they get no button.
+func TestAddDevicesButtonCountsNewDevices(t *testing.T) {
 	e, _ := setupDiscovery(t)
-	badge := `<span class="nav-badge"><span class="sr-only">, new: </span>2</span>`
-	if _, body := e.do(t, "GET", "/devices", "admin", nil); !strings.Contains(body, badge) {
-		t.Errorf("admin: no badge counting the new device and the address change")
+	_, body := e.do(t, "GET", "/devices", "admin", nil)
+	head := body[strings.Index(body, "<h1>Devices</h1>"):]
+	head = head[:strings.Index(head, `id="list-notice"`)]
+	if !strings.Contains(head, `href="/tf/devices/new">Add devices · 2 new</a>`) {
+		t.Errorf("admin: the header's Add devices does not count the new device and the address change: %s", head)
 	}
-	if _, body := e.do(t, "GET", "/devices", "operator", nil); strings.Contains(body, `class="nav-badge"`) {
-		t.Errorf("operator sees the Add devices badge")
+	if n := strings.Count(head, `href="/tf/devices/new`); n != 1 {
+		t.Errorf("the header has %d ways to the Add devices page, want 1: %s", n, head)
+	}
+	if strings.Contains(head, "Scan network") || strings.Contains(body, `class="nav-badge"`) {
+		t.Errorf("Scan network or a menu badge is still there")
+	}
+	if _, body := e.do(t, "GET", "/devices", "operator", nil); strings.Contains(body, "Add devices") {
+		t.Errorf("operator sees Add devices")
+	}
+}
+
+// Why (#1106): with no device yet, the empty list's card carries the ways to add the first ones; buttons in the
+// header to the same page would be the same choice twice on one screen.
+func TestEmptyDeviceListHasNoHeaderButtons(t *testing.T) {
+	e := setupWith(t, func(d *Deps) {
+		d.Inventory = newInv()
+		d.Discovery = &fakeDiscovery{}
+	})
+	_, body := e.do(t, "GET", "/devices", "admin", nil)
+	i := strings.Index(body, "<h1>Devices</h1>")
+	if i < 0 {
+		t.Fatalf("no Devices heading: %.300s", body)
+	}
+	head := body[i:]
+	head = head[:strings.Index(head, `id="list-notice"`)]
+	if strings.Contains(head, `class="btn`) {
+		t.Errorf("the empty list's header has buttons: %s", head)
+	}
+	if !strings.Contains(body, "No devices yet") || !strings.Contains(body, ">Scan network</a>") {
+		t.Errorf("the empty card lost its ways to add devices")
 	}
 }
 

@@ -4,7 +4,7 @@ Back up the whole data directory (the `/data` volume): it holds the database and
 configuration backups (`.dmp`). Before every database migration TasmoFleet writes a copy next
 to the database, `<db>.pre-<N>` (the newest three are kept), so an upgrade can be undone.
 
-**System, Snapshots** (admins only, after a password confirmation, or a sign-in at your identity provider; a proxy-header sign-in ticks a checkbox instead) downloads
+**System, TasmoFleet backup** (admins only, after a password confirmation, or a sign-in at your identity provider; a proxy-header sign-in ticks a checkbox instead) downloads
 a consistent snapshot of the database, made with SQLite `VACUUM INTO` while TasmoFleet runs. The
 file holds every user's password hash and the encrypted device, broker and OIDC secrets; the key
 that decrypts them, `secret.key`, is a separate file and is only included (as a `.tar`) when you
@@ -17,7 +17,7 @@ one out. It needs no password, because the file stays on the server, and it does
 are by the minute.
 The time in a file name is UTC, which the `Z` marks, so the names stay unique and in order when the clocks change in
 autumn: `tasmofleet-20261106-0800Z.db` was taken at 09:00 in Central European Time (10:00 in summer time).
-`SNAPSHOT_TIME` is on the container clock, and the list on the Snapshots page shows each snapshot on your browser's clock.
+`SNAPSHOT_TIME` is on the container clock, and the list on the TasmoFleet backup page shows each snapshot on your browser's clock.
 They sit on the same disk as the database, so they protect against a bad upgrade or a deleted row,
 not against a dead disk: keep a copy elsewhere.
 

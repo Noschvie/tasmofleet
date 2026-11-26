@@ -16,7 +16,7 @@ Wording follows the prototype
 
 This document is the style guide in the repository: tokens, type, spacing, every component with its
 variants and states, the usage rules and the deviations. The same components live on the page
-**`/styleguide`** (System → Styleguide, and linked from About), open to every signed-in user: it shows
+**`/styleguide`** (linked from About, no menu entry since #1106), open to every signed-in user: it shows
 sample data only (D17). If a component is not on the style guide, it is not part of the design system.
 
 ## Where things live
@@ -24,7 +24,7 @@ sample data only (D17). If a component is not on the style guide, it is not part
 | What | Where |
 | --- | --- |
 | Tokens | the top of `internal/web/static/app.css`: theme-independent `:root`, then the light block, the no-JS `prefers-color-scheme` block and the explicit dark block |
-| Shell | templ `ui.Shell` (`internal/web/ui/shell.templ`): top bar, sub-navigation, user menu, phone header, drawer, crumbs, live indicator and banners, toast region; one navigation model (`ui/nav.go`) feeds all of them |
+| Shell | templ `ui.Shell` (`internal/web/ui/shell.templ`): top bar, sub-navigation, user menu, phone header, drawer, crumbs, live indicator and banners, toast region; one navigation model (`ui/nav.go`: `Groups` lists the pages this role may open, `Trail` the crumbs a page draws) feeds all of them |
 | Components | `internal/web/ui/components.templ` (props in `components.go`), CSS block "Components (design v2, WP F4)" in `app.css` |
 | Style guide page | `internal/web/styleguide.templ` (`sgSections` lists the sections), route `GET /styleguide` |
 | Style guide screenshots | `docs/design/styleguide/`, written by `make styleguide-docs` |
@@ -409,7 +409,7 @@ Also: [desktop, dark](../design/styleguide/lists-desktop-dark.png) · [phone, li
 
 ### Page header, crumbs and tabs
 
-The page header is the h1 (`600 22px/1.2`), a subtitle line and the page's buttons on the right. The crumbs sit above it (`/` separators). One rule builds every trail (#1000): `ui.ShellData.Trail` puts the area (the lit top-bar group) and the lit sub-navigation tab in front, both read from the model that draws the tabs, and the page adds only its own steps (`Crumbs` is the end of the trail, never a full one). So the trail and the lit tab agree by construction, and a handler never types an area or tab label. The rules: (1) a page under a tab names that tab (`Devices / List / Bulk action`); (2) a device is reached from several tabs, so it hangs directly under the area and lights no tab (`Devices / kitchen / Edit`; nav key `device`), while a transaction lives on the Transactions tab (`Updates / Transactions / TX-0012`); (3) one name per place: System pages start with `System`, a device is named by its name, never "Device"; a page below a Settings tab names that tab (`System / Settings / Advanced / Reset`, label from `sysLayout`); (4) the trail shows where the page lives, not where the person came from (the way back is Cancel's job). A crumb is a link only when the person may open it, and System has no page of its own. `TestEveryTrailAgreesWithTheLitTab` holds the rules over the pages. Tabs are links with an underline (`inset 0 -2px 0` accent) and an optional count; a tab that cannot be used now is disabled with the reason as its title. On a phone the tab row scrolls sideways, and so does every filter chip row that does not wrap. A strip that scrolls shows that there is more (#1079): `tabs.js` sets `data-more-start` / `data-more-end` on the strip while there is more on that side (updated on scroll, on resize and when a swap brings a strip in), `app.css` fades that edge with a colour mask (`mask-image`, 32 px) and the selected tab or chip is scrolled to the middle on load. A strip that fits or wraps carries neither attribute and no fade; without JavaScript there is no fade. The phone's top bar names the area, the lit top-bar group (`ui.AreaLabel`: Dashboard, Devices, Updates, System), and never the page's own title: the bar is one line that cannot break at a word, so the page's name (a device's name, "Users" above the h1 "Users") is the h1 below and the bar does not repeat it. The setup steps keep their numbers on a phone and show only the current step's label, under the row; and the device header shows Restart and Back up there, with Edit, Replace device, a rule and Delete in one "⋯" menu (`hx-preserve`, so the live refresh does not close it); a wide screen shows the four buttons as before.
+The page header is the h1 (`600 22px/1.2`), a subtitle line and the page's buttons on the right. The crumbs sit above it (`/` separators). One rule builds every trail (#1000): `ui.ShellData.Trail` puts the area (the lit top-bar group) and the lit sub-navigation tab in front, both read from the model that draws the tabs, and the page adds only its own steps (`Crumbs` is the end of the trail, never a full one). So the trail and the lit tab agree by construction, and a handler never types an area or tab label. The rules: (1) a page under a tab names that tab (`Devices / List / Bulk action`); (2) a device is reached from several tabs, so it hangs directly under the area and lights no tab (`Devices / kitchen / Edit`; nav key `device`), while a transaction lives on the Transactions tab (`Updates / Transactions / TX-0012`); (3) one name per place: System pages start with `System`, a device is named by its name, never "Device"; a page below a Settings tab names that tab (`System / Settings / Advanced / Reset`, label from `sysLayout`); (4) the trail shows where the page lives, not where the person came from (the way back is Cancel's job); (5) a trail is drawn only from three steps on (#1106): "Devices / List" above the h1 "Devices" only repeats the top bar, the lit tab and the title, so the dashboard, the lists and every page one step below a tab draw no crumbs. The one exception is a device's page (`Devices / kitchen`): its Devices crumb carries `data-keep-query` and leads back to the list as the person left it (#127), which the top-bar Devices does not. A page that is no menu entry lights the entry it is reached from: Add devices lights List (`Devices / List / Add devices`), the style guide lights About. A crumb is a link only when the person may open it (every entry of their menu is), and System has no page of its own. `TestEveryTrailAgreesWithTheLitTab` holds the rules over the pages. A group with one page (the dashboard; Updates with only Firmware) has no tab row: its top-bar button is the page's link, and the drawer shows it as one link under no heading. Tabs are links with an underline (`inset 0 -2px 0` accent) and an optional count; a tab that cannot be used now is disabled with the reason as its title. On a phone the tab row scrolls sideways, and so does every filter chip row that does not wrap. A strip that scrolls shows that there is more (#1079): `tabs.js` sets `data-more-start` / `data-more-end` on the strip while there is more on that side (updated on scroll, on resize and when a swap brings a strip in), `app.css` fades that edge with a colour mask (`mask-image`, 32 px) and the selected tab or chip is scrolled to the middle on load. A strip that fits or wraps carries neither attribute and no fade; without JavaScript there is no fade. The phone's top bar names the area, the lit top-bar group (`ui.AreaLabel`: Dashboard, Devices, Updates, System), and never the page's own title: the bar is one line that cannot break at a word, so the page's name (a device's name, "Users" above the h1 "Users") is the h1 below and the bar does not repeat it. The setup steps keep their numbers on a phone and show only the current step's label, under the row; and the device header shows Restart and Back up there, with Edit, Replace device, a rule and Delete in one "⋯" menu (`hx-preserve`, so the live refresh does not close it); a wide screen shows the four buttons as before.
 
 Component: `ui.PageHeader(title, sub)`, `ui.Crumbs(trail, base)`, `ui.Tabs(label, tabs)`.
 
@@ -453,7 +453,7 @@ Also: [desktop, dark](../design/styleguide/states-desktop-dark.png) · [phone, l
 
 The status code (mono), a title (`600 26px`), what happened, the path that failed and two ways on, in a card centred on the page (560 px at most, the sign-in card's surface and radius). Used for 404, 403 and a feature that is switched off. The browser tab's `<title>` is the title, so the tab and the heading say one thing.
 
-- **The place stays.** An error page lights the group its address belongs to and ends the trail in "Not found" or "Not allowed" (`navOfPath`; `TestDeniedPageLightsTheAdminPagesGroup` compares it with the admin pages). The navigation is still the same for every role: an operator sees Add and System, and the refusal is where the way back starts, so no entry is hidden.
+- **The place stays.** An error page lights the group its address belongs to and ends the trail in "Not found" or "Not allowed" (`navOfPath`; `TestDeniedPageLightsTheAdminPagesGroup` compares it with the admin pages). An operator's menu has no admin-only entry (#1106), so their refusal of an admin page below Devices lights Devices (`Devices / List / Not allowed`), and one of a System page lights nothing (System holds only admin pages) and leads back to the dashboard.
 - **Two ways on.** The way back first and primary, the dashboard second: "Back to Policy" (the entry the page lights, when the person may open it and it is more than the group's first page) or "Back to Devices" / "Back to System" (the group button's own target, its first page this role may open; `ShellData.WayBack`), then "Go to dashboard". A page outside every group leads to the dashboard and the devices. A button never leads to the page that refused.
 - **The path line** shows the address that failed, in mono. A switched-off feature shows an admin the setting that turns it on instead (`FIRMWARE_BASE_URL`), with "Open the system settings" as the primary button.
 - **Words by role.** 403 for an operator: "Only admins can do this" and "You are signed in as olivia with the operator role. Ask an admin if you need this." A switched-off feature for an operator: "This feature is switched off. An admin can turn it on." (no setting name: the operator cannot change it). 404: "This page doesn’t exist" with "Check the address, or go back to the dashboard." (typographic apostrophe, no guess at a cause).
@@ -735,10 +735,14 @@ same ring until the page arrives.
   table above differ. v1 names (`--color-success*`, `--color-divider`, `--space-*`, the generated ramps) do
   not exist and get no alias.
 
-- **Navigation is the same for every role** (F4, S7). Every role sees all groups and pages; each page
-  enforces its own permission (403). A group button leads to the first page the role may open, so it
-  never ends on a 403 (an operator's System button opens the style guide). Feature switches still
-  decide: a missing service has no page and no entry.
+- **Navigation shows what the role may open** (#1106, replacing F4/S7's "the same for every role"). An
+  entry whose page answers 403 to the role is not in its menu, and a group left without entries is not
+  shown (an operator has no System group); each page still enforces its own permission (403), so hiding
+  is not the check. A group button leads to its first page, so it never ends on a 403, and neither does
+  the way back of an error page (`ShellData.WayBack`). Feature switches still decide: a missing service
+  has no page and no entry. Each page has one entry: Add devices is the Devices list's primary button
+  (with the waiting devices in words, "Add devices · 5 new"), not an entry; the style guide is linked
+  from About. Pages are named by their object: Device backups, TasmoFleet backup.
 - **Components take text, not markup.** No `templ.Raw`, no style attribute, no inline script; sizes
   from data are SVG attributes. `components_test.go` feeds a hostile string through every
   text-carrying component.
@@ -773,14 +777,14 @@ Results, ids and dates (one word per thing; #1105 and #1104 bring the app in lin
 
 The structure deviations S1-S7 are listed with their reasons in the plan (section 0.2); in short:
 
-1. S1: `/styleguide` (the prototype's UI-states screen, open to every signed-in user) is the last
-   item of the System menu and linked from About.
+1. S1: `/styleguide` (the prototype's UI-states screen, open to every signed-in user) is linked from
+   About and is no menu entry (#1106: a developer's page, not a task).
 2. S2: the Columns chooser pins left or right (F5, P2).
 3. S3: the policy live check can be paused (N3, N21).
 4. S4: About is full width: the version band, the components as a 2x2 grid, the effective configuration always visible in two tables (#351), and the source line below.
 5. S5: the phone drawer ends with the account, What's new, the Light / Dark / Auto switch and Sign out.
 6. S6: the live indicator and the connection banners only on pages that hold the event stream.
-7. S7: the navigation is the same for every role; pages enforce their permission. The style guide
+7. S7: the navigation shows each role the pages it may open (#1106); pages enforce their permission. The style guide
    continues below the prototype's screen with the component gallery (the screen itself is the
    prototype's to the pixel, the gallery starts where the prototype's page ends).
 8. The device list's Restart uses the shared `dlg-row` dialog; its trigger is a link (`a`), not a

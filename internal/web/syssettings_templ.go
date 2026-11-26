@@ -404,7 +404,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 	})
 }
 
-// snapshotsPage is System -> Snapshots (admins): the database snapshot download, the stored snapshots,
+// snapshotsPage is System -> TasmoFleet backup (admins; "Snapshots" before #1106): the database snapshot download, the stored snapshots,
 // the schedule (saved through the page's own save bar) and how to restore. The settings are the
 // snapshot tab of sysLayout, the same fields and the same save as on the Settings page.
 func snapshotsPage(p sysPage) templ.Component {
@@ -424,7 +424,7 @@ func snapshotsPage(p sysPage) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = ui.PageHeader("Snapshots", "Copies of TasmoFleet’s own database. Device backups are a separate thing.").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.PageHeader("TasmoFleet backup", "Copies of TasmoFleet’s own database. Device backups are a separate thing.").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

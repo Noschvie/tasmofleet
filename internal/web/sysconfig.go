@@ -335,10 +335,10 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 	h.show(w, r, status, "system_settings", v, sysSettingsPage(p))
 }
 
-// snapshotsRender draws System -> Snapshots: only its own tab, with the stored snapshots read now.
+// snapshotsRender draws System -> TasmoFleet backup: only its own tab, with the stored snapshots read now.
 func (h *handler) snapshotsRender(w http.ResponseWriter, r *http.Request, status int, p sysPage) {
 	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug != sysSnapshotsSlug })
-	v := h.view(r, "Snapshots", "snapshots", nil)
+	v := h.view(r, "TasmoFleet backup", "snapshots", nil)
 	if r.URL.Query().Get("ok") == "snapshot-deleted" {
 		v.Flash = "Snapshot deleted."
 	}

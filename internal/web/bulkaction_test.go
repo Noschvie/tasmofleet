@@ -278,7 +278,7 @@ func TestTransactionsRunWithoutFirmwareButNoUpdateStarts(t *testing.T) {
 		t.Error("the transactions list offers New update without firmware")
 	}
 	_, devs := e.do(t, "GET", "/devices", "admin", nil)
-	if !strings.Contains(devs, `href="/tf/transactions">Transactions</a>`) {
+	if !strings.Contains(devs, `<a class="tb-group" href="/tf/transactions">Updates</a>`) { // its group's one page (#1106)
 		t.Error("the nav has no Transactions entry: the result of a bulk backup could not be found again")
 	}
 	if strings.Contains(devs, "Update firmware") || !strings.Contains(devs, `formaction="/tf/devices/bulk/backup"`) {

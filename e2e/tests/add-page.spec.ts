@@ -70,16 +70,17 @@ const box = (page: import("@playwright/test").Page, id: string) => page.locator(
 
 // Why: the four ways to add devices are one page, so there are fewer clicks and fewer menus: Discovered and
 // Network scan in the wide column on the left, Add manually and Import in the narrow one on the right, no
-// tabs, and the sub-navigation says List · Policy · Backups · Add.
-test("four boxes in two columns, no tabs, the menu says List, Policy, Backups, Add", { tag: "@core" }, async ({ page }) => {
+// tabs. Add devices is the List's button and no menu entry (#1106), so the sub-navigation says List · Policy ·
+// Device backups with List lit, and the trail names the page under List.
+test("four boxes in two columns, no tabs, the menu says List, Policy, Device backups", { tag: "@core" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/devices/new");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add devices");
   await expect(page.locator("nav.utabs")).toHaveCount(0);
   const sub = page.getByRole("navigation", { name: "Devices" });
-  await expect(sub.getByRole("link")).toHaveText([/^List$/, /^Policy$/, /^Backups$/, /^Add/]);
-  await expect(page.locator("#crumbs")).toContainText("Devices");
-  await expect(page.locator("#crumbs")).toContainText("Add");
+  await expect(sub.getByRole("link")).toHaveText([/^List$/, /^Policy$/, /^Device backups$/]);
+  await expect(sub.getByRole("link", { name: "List" })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("#crumbs")).toHaveText(/^\s*Devices\s*\/\s*List\s*\/\s*Add devices\s*$/);
   const b = async (id: string) => (await box(page, id).boundingBox())!;
   const [disc, scan, manual, imp] = [await b("discovered"), await b("scan"), await b("manual"), await b("import")];
   expect(disc.x).toBeLessThan(manual.x);

@@ -286,13 +286,13 @@ func schedulePlan(s schedule.Schedule) string {
 	return strings.Join(days, ", ") + " at " + s.Clock()
 }
 
-// backupsRender draws Devices -> Backups: only the Backups part of the settings layout, with the
+// backupsRender draws Devices -> Device backups: only the Backups part of the settings layout, with the
 // fleet read now. An operator sees the same page without anything that starts or changes a run.
 func (h *handler) backupsRender(w http.ResponseWriter, r *http.Request, status int, p sysPage) {
 	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug != sysBackupsSlug })
 	// view takes the stream's sequence number before the fleet below is read (#160), so a backup stored
 	// while the page is built is told to the browser as a resync. The cards follow a run from the stream (#950).
-	v := h.view(r, "Backups", "backups", nil)
+	v := h.view(r, "Device backups", "backups", nil)
 	v.Live = true
 	v.Flash = backupsNotice(r)
 	if r.URL.Query().Get("ok") == "saved" {

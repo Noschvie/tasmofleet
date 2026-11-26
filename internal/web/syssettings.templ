@@ -97,11 +97,11 @@ templ sysSettingsPage(p sysPage) {
 	}
 }
 
-// snapshotsPage is System -> Snapshots (admins): the database snapshot download, the stored snapshots,
+// snapshotsPage is System -> TasmoFleet backup (admins; "Snapshots" before #1106): the database snapshot download, the stored snapshots,
 // the schedule (saved through the page's own save bar) and how to restore. The settings are the
 // snapshot tab of sysLayout, the same fields and the same save as on the Settings page.
 templ snapshotsPage(p sysPage) {
-	@ui.PageHeader("Snapshots", "Copies of TasmoFleet’s own database. Device backups are a separate thing.")
+	@ui.PageHeader("TasmoFleet backup", "Copies of TasmoFleet’s own database. Device backups are a separate thing.")
 	@sysErrors(p)
 	if p.DB != nil && p.DB.Warn != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.DB.Warn, Alert: true})

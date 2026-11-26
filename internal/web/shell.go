@@ -21,7 +21,7 @@ func shellData(v view) ui.ShellData {
 	return ui.ShellData{
 		Title: v.Title, Nav: v.Nav, Path: v.Path, Base: v.Base, CSRF: v.CSRF,
 		UserName: v.User.Name, UserMethod: v.User.Method, RoleName: v.RoleName, IsAdmin: v.IsAdmin,
-		Flash: v.Flash, Banner: v.Banner, Live: v.Live, EventSeq: v.EventSeq, Theme: v.Theme, NewDevices: v.NewDevices, News: v.News, Version: v.Version,
+		Flash: v.Flash, Banner: v.Banner, Live: v.Live, EventSeq: v.EventSeq, Theme: v.Theme, News: v.News, Version: v.Version,
 		Transactions: v.Features.Transactions, Firmware: v.Features.Firmware, Policy: v.Features.Policy,
 		Discovery: v.Features.Discovery, SysConfig: v.Features.SysConfig, Snapshots: v.Features.Snapshots, Backups: v.Features.Backups,
 		Crumbs: v.Crumbs,
@@ -66,9 +66,6 @@ func (h *handler) page(r *http.Request, v view, prefs map[string]string, content
 	v.Theme = themeOf(prefs)
 	v.News = newsCount(prefs)
 	v.Version = h.d.Version
-	if v.IsAdmin && h.d.Discovery != nil { // full pages only: fragments and POST results draw no navigation
-		v.NewDevices = h.newDeviceCount(r)
-	}
 	d := shellData(v)
 	d.Status = h.statusBar(r.Context(), v.Base, v.Live)
 	var inner bytes.Buffer
@@ -115,9 +112,6 @@ func (h *handler) navPage(w http.ResponseWriter, r *http.Request) {
 	prefs := h.userPrefs(r)
 	v.Theme = themeOf(prefs)
 	v.Version = h.d.Version // page sets it too, but the drawer content is built from v before that
-	if v.IsAdmin && h.d.Discovery != nil {
-		v.NewDevices = h.newDeviceCount(r)
-	}
 	b, err := h.page(r, v, prefs, ui.NavList(shellData(v)))
 	if err != nil {
 		h.fail(w, r, err)

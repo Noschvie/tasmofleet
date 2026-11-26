@@ -138,10 +138,10 @@ func Load(environ []string) (Config, error) {
 		}
 	}
 	if v, set := env["BACKUP_INTERVAL"]; set {
-		c.Warnings = append(c.Warnings, Prefix+"BACKUP_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.33: device backups run on chosen weekdays at a time of day, set on Devices, Backups; an interval stored in the database became daily 03:00). Delete it.")
+		c.Warnings = append(c.Warnings, Prefix+"BACKUP_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.33: device backups run on chosen weekdays at a time of day, set on Devices, Device backups; an interval stored in the database became daily 03:00). Delete it.")
 	}
 	if v, set := env["SNAPSHOT_INTERVAL"]; set {
-		c.Warnings = append(c.Warnings, Prefix+"SNAPSHOT_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.34: database snapshots run on chosen weekdays at a time of day, set on System, Snapshots; an interval stored in the database became daily 03:00). Delete it.")
+		c.Warnings = append(c.Warnings, Prefix+"SNAPSHOT_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.34: database snapshots run on chosen weekdays at a time of day, set on System, TasmoFleet backup; an interval stored in the database became daily 03:00). Delete it.")
 	}
 	if _, set := env["MQTT_ACL_CONFIRMED"]; set { // its value (a broker and user) is not echoed
 		c.Warnings = append(c.Warnings, Prefix+"MQTT_ACL_CONFIRMED is set but no longer exists and is ignored (removed in 0.41: the checkbox on System, MQTT is \"Hide the broker ACL warning\" and its setting is MQTT_ACL_WARNING_HIDDEN, written by the checkbox, not by hand; a value stored in the database was carried over). Delete it.")

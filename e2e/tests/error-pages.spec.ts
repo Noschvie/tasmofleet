@@ -73,17 +73,22 @@ test("a refused device page stays inside the device's header with its tabs", asy
   await expect(page).toHaveURL(`${app.url}/devices/${id}`);
 });
 
+// Why (#1085, #1106): an operator's menu has only pages they may open. A refused page below Devices keeps that group
+// lit; System holds only admin pages and is not in their menu, so its refusal lights nothing and leads back to the
+// dashboard, never to a group the operator cannot see.
 test("an operator keeps the group of an admin page and its way back", async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.setViewportSize({ width: 1280, height: 800 });
   for (const [path, group, back] of [
     ["/devices/new", "Devices", "Back to Devices"],
-    ["/settings/system", "System", "Back to System"],
-    ["/audit", "System", "Back to System"],
+    ["/settings/system", "", "Back to dashboard"],
+    ["/audit", "", "Back to dashboard"],
   ]) {
     const res = await page.goto(app.url + path);
     expect(res?.status(), path).toBe(403);
-    await expect(page.locator("nav[aria-label='Main'] a[aria-current='true']"), path).toHaveText(group);
+    const lit = page.locator("nav[aria-label='Main'] a[aria-current='true']");
+    if (group) await expect(lit, path).toHaveText(group);
+    else await expect(lit, path).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 }), path).toHaveText("Only admins can do this");
     await expect(page.locator(".errpage").getByRole("link", { name: back }), path).toBeVisible();
   }

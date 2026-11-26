@@ -9,6 +9,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // Why: a restart interrupts a device, so only admins may send it, it goes
@@ -100,6 +101,35 @@ func TestDeletePageListsBackupsAndOffersBothChoices(t *testing.T) {
 	}
 }
 
+// Why (#1106, A1-006): deleting a device can keep its backups, and the page says where to find them afterwards.
+// That pointer must name the menu path a person actually sees (group and entry), or they look for the backups
+// under a group that does not have them, the confusion the rename removes.
+func TestDeletePageNamesWhereKeptBackupsLive(t *testing.T) {
+	var where string
+	for _, g := range (ui.ShellData{Backups: true}).Groups() {
+		for _, it := range g.Items {
+			if it.Path == "/devices/backups" {
+				where = g.Label + " → " + it.Label
+			}
+		}
+	}
+	if where == "" {
+		t.Fatal("the menu has no entry for /devices/backups")
+	}
+	e := setup(t)
+	e.bk.list = []model.Backup{{ID: 1, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: time.Date(2026, 10, 15, 3, 0, 0, 0, time.UTC), Size: 10}}
+	_, body := e.do(t, "GET", "/devices/1/delete", "admin", nil)
+	i := strings.Index(body, "<b>Keep the backups</b>")
+	if i < 0 {
+		t.Fatalf("the delete page offers no Keep choice:\n%.1500s", body)
+	}
+	card := body[i:]
+	card = card[:strings.Index(card, "</label>")]
+	if !strings.Contains(card, "They stay under "+where+" with the device") {
+		t.Errorf("the Keep choice must point to %q, got %s", where, card)
+	}
+}
+
 // Why (#951): the admin reads the sentence under "Delete the backups too" just before an
 // irreversible delete, so it has to state the count correctly. One backup run (a dump plus its
 // snapshot is ONE run, not two files) must read in the singular, several in the plural; the
@@ -186,7 +216,7 @@ func TestNoGetFallbackCarriesTheCSRFToken(t *testing.T) {
 func TestShellMarksAutoThemeAndHasAccountMenu(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
-	for _, want := range []string{`<html lang="en" data-theme-auto>`, `<nav class="tb-groups" aria-label="Main">`, `<dialog id="nav-drawer" class="drawer"`, `<p class="dr-label">Devices</p>`} {
+	for _, want := range []string{`<html lang="en" data-theme-auto>`, `<nav class="tb-groups" aria-label="Main">`, `<dialog id="nav-drawer" class="drawer"`, `<a class="dr-item" href="/tf/devices"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

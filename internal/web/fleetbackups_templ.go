@@ -19,7 +19,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
-// fleetBackupsPage is Devices -> Backups (#409): the last scheduled run, the device table, the storage
+// fleetBackupsPage is Devices -> Device backups (#409, named by its object since #1106): the last scheduled run, the device table, the storage
 // totals, the schedule form and the backups of deleted devices. The device table is the one long list, so
 // every other card is short and it comes last on a phone (#684). Back up all now acts on the whole fleet,
 // not on the table: it is in the page header, and the broker notice (#853) stands once below it. The schedule is the backups entry of
@@ -62,7 +62,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.PageHeader("Backups", "Device backups for the whole fleet").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.PageHeader("Device backups", "Device backups for the whole fleet").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

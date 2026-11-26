@@ -17,8 +17,6 @@ type ShellData struct {
 	Crumbs []Crumb
 	// Theme is the user's choice, "light" or "dark"; "" follows the system (Auto).
 	Theme string
-	// NewDevices is the badge on "Add": discovered devices waiting to be added.
-	NewDevices int
 	// News is how many releases are new since the user last opened What's new (N5): the avatar's
 	// dot and "N new since last visit" in the user menu; 0 draws neither.
 	News int

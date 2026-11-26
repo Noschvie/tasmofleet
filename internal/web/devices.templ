@@ -95,13 +95,10 @@ func (p devicesPage) countLine() string {
 
 templ devicesContent(v view, p devicesPage) {
 	@ui.PageHeader("Devices", p.countLine()) {
-		if v.IsAdmin {
-			if v.Features.Discovery {
-				@ui.Button(ui.Btn{Label: "Scan network", Href: v.Base + "/devices/new#card-scan"})
-			}
-			if p.RowsData.AddHref != "" {
-				@ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: p.RowsData.AddHref})
-			}
+		// One way to the Add devices page (#1106): Scan network opened the same page, and the empty list's card
+		// carries the ways to add the first devices, so the header has no button while the list is empty.
+		if p.RowsData.AddHref != "" && !p.RowsData.None {
+			@ui.Button(ui.Btn{Label: addDevicesLabel(p.New), Kind: "primary", Href: p.RowsData.AddHref})
 		}
 	}
 	<div id="list-notice" aria-live="polite"></div>

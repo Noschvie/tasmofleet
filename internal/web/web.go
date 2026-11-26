@@ -423,14 +423,12 @@ type view struct {
 	Theme    string // the user's theme choice, "" = Auto
 	// Crumbs is the end of the page's breadcrumb trail, below its group and sub-navigation entry: those two
 	// come from Nav (ui.ShellData.Trail), so a handler never types an area or tab label. Nil ends at the title.
-	Crumbs []ui.Crumb
-	// NewDevices counts discovered devices waiting to be added (admins with discovery)
-	NewDevices int
-	Version    string // the running version, as About prints it (shell header)
-	News       int    // releases new since the user last opened What's new (N5, avatar dot)
-	Features   struct{ Updates, Transactions, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, Backups, BulkCommand, BulkBackup, BulkRestart bool }
-	Banner     string // a standing notice for admins, e.g. no device networks yet
-	Static     bool   // style guide only: partials render their open variant (data-static)
+	Crumbs   []ui.Crumb
+	Version  string // the running version, as About prints it (shell header)
+	News     int    // releases new since the user last opened What's new (N5, avatar dot)
+	Features struct{ Updates, Transactions, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, Backups, BulkCommand, BulkBackup, BulkRestart bool }
+	Banner   string // a standing notice for admins, e.g. no device networks yet
+	Static   bool   // style guide only: partials render their open variant (data-static)
 	// SortPath is the page URL the sort links of its tables return to when the
 	// request is not a GET of that page (the result of a POST).
 	SortPath string
@@ -510,8 +508,8 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 }
 
 // newDeviceCount is the number of discovered devices waiting for an admin: new devices to add
-// and known devices at a new address to confirm (design v2: the badge on "Add devices" in the
-// sub-navigation and the drawer, and on the Discovered tab). A failed read shows no badge.
+// and known devices at a new address to confirm (the count on the Devices list's Add devices button,
+// #1106, and on the Discovered tab). A failed read shows no count.
 func (h *handler) newDeviceCount(r *http.Request) int {
 	props, err := h.d.Discovery.Proposals(r.Context())
 	if err != nil {

@@ -88,6 +88,7 @@ type devicesPage struct {
 	Summary  fleetSummary // N7: Summary.Chips are the filter chips with their counts
 	Sort     tableSort
 	SortBase string // the page's URL with the filters, without the sort
+	New      int    // discovered devices waiting for an admin (newDeviceCount): the count on Add devices
 	// Table and Cards are the rendered device table and phone cards (devicelist.go).
 	Table, Cards template.HTML
 }
@@ -244,6 +245,15 @@ func (h *handler) devicesPageData(r *http.Request, v view) (devicesPage, error) 
 	return p, nil
 }
 
+// addDevicesLabel is the Devices list's Add devices button with the discovered devices that wait, in words
+// ("Add devices · 5 new", #1106): a bare number does not say what it counts.
+func addDevicesLabel(n int) string {
+	if n <= 0 {
+		return "Add devices"
+	}
+	return "Add devices · " + strconv.Itoa(n) + " new"
+}
+
 // facets turns value counts into select options, sorted by value.
 func facets(n map[string]int, label func(string) string) []facet {
 	out := make([]facet, 0, len(n))
@@ -261,6 +271,9 @@ func (h *handler) devices(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.fail(w, r, err)
 		return
+	}
+	if v.IsAdmin && h.d.Discovery != nil { // read per page view, for the header only: the table partial has no button
+		p.New = h.newDeviceCount(r)
 	}
 	v.Data, v.Live = p, true
 	h.show(w, r, http.StatusOK, "devices", v, devicesContent(v, p))

@@ -94,28 +94,28 @@ func labels(gs []NavGroupData) string {
 	return b.String()
 }
 
-// Why: a missing service has no page, so a menu entry to it is a dead end. The role does not
-// change the menu (F4, plan S7): every role sees the same navigation, so the style guide (open to
-// all, D17) is reachable, and each page enforces its own permission. The groups and pages are
-// the prototype's (design v2 SUB table).
+// Why: a missing service has no page, so a menu entry to it is a dead end. The role decides too (#1106): an
+// operator sees only the pages they may open, so no entry and no group button ends on a 403, and the pages still
+// refuse on their own. The groups and pages are the prototype's (design v2 SUB table) without the entries #1106
+// moved to a button (Add devices) or to About (the style guide).
 func TestMenuFollowsRoleAndFeatures(t *testing.T) {
-	if got, want := labels(admin().Groups()), "Dashboard[Overview;]Devices[List;Policy;Backups;Add;]Updates[Transactions;Firmware;]System[Settings;Snapshots;Audit log;Users;About;Styleguide;]"; got != want {
+	if got, want := labels(admin().Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]System[Settings;TasmoFleet backup;Audit log;Users;About;]"; got != want {
 		t.Errorf("admin menu\n got %s\nwant %s", got, want)
 	}
 	op := admin()
 	op.IsAdmin, op.RoleName = false, "operator"
-	if got, want := labels(op.Groups()), labels(admin().Groups()); got != want {
-		t.Errorf("operator menu differs from the admin's\n got %s\nwant %s", got, want)
+	if got, want := labels(op.Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]"; got != want {
+		t.Errorf("operator menu\n got %s\nwant %s", got, want)
 	}
-	bare := ShellData{Title: "x", Nav: "dashboard", UserName: "o", UserMethod: "header", RoleName: "operator"}
-	if got, want := labels(bare.Groups()), "Dashboard[Overview;]Devices[List;Add;]System[Audit log;Users;About;Styleguide;]"; got != want {
+	bare := ShellData{Title: "x", Nav: "dashboard", UserName: "o", UserMethod: "header", RoleName: "admin", IsAdmin: true}
+	if got, want := labels(bare.Groups()), "Dashboard[Dashboard;]Devices[List;]System[Audit log;Users;About;]"; got != want {
 		t.Errorf("deployment without services\n got %s\nwant %s", got, want)
 	}
 	// Transactions run without a firmware cache (backups, commands): their page stays in the menu, so the
 	// result of a bulk backup can be found again (#881).
 	tx := bare
 	tx.Transactions = true
-	if got, want := labels(tx.Groups()), "Dashboard[Overview;]Devices[List;Add;]Updates[Transactions;]System[Audit log;Users;About;Styleguide;]"; got != want {
+	if got, want := labels(tx.Groups()), "Dashboard[Dashboard;]Devices[List;]Updates[Transactions;]System[Audit log;Users;About;]"; got != want {
 		t.Errorf("transactions without firmware\n got %s\nwant %s", got, want)
 	}
 	fw := bare
@@ -125,23 +125,16 @@ func TestMenuFollowsRoleAndFeatures(t *testing.T) {
 			t.Errorf("Updates without transactions leads to %s, want its only page /firmware", g.Path)
 		}
 	}
-	// A group button never leads to a 403: an operator's System and Devices buttons go to the first
-	// page the role may open.
+	// A group button leads to its first page, which the role may open.
 	for _, c := range []struct {
 		d     ShellData
 		group string
 		want  string
-	}{{admin(), "system", "/settings/system"}, {op, "system", "/styleguide"}, {op, "devices", "/devices"}} {
+	}{{admin(), "system", "/settings/system"}, {bare, "system", "/audit"}, {op, "devices", "/devices"}} {
 		for _, g := range c.d.Groups() {
 			if g.Key == c.group && g.Path != c.want {
 				t.Errorf("%s (admin %v) leads to %s, want %s", c.group, c.d.IsAdmin, g.Path, c.want)
 			}
-		}
-	}
-	got := render(t, op)
-	for _, link := range []string{"/users", "/audit", "/styleguide", "/devices/new"} {
-		if !strings.Contains(got, link) {
-			t.Errorf("operator page lacks the menu link %q", link)
 		}
 	}
 }
@@ -150,8 +143,9 @@ func TestMenuFollowsRoleAndFeatures(t *testing.T) {
 // drawer from the one navigation model, so they cannot disagree.
 func TestCurrentPageMarkedEverywhere(t *testing.T) {
 	for nav, want := range map[string][2]string{
-		"policy": {"Devices", "Policy"}, "discovery": {"Devices", "Add"}, "snapshots": {"System", "Snapshots"}, "firmware": {"Updates", "Firmware"},
-		"updates": {"Updates", "Transactions"}, "users": {"System", "Users"}, "system": {"System", "Settings"}, "dashboard": {"Dashboard", "Overview"},
+		"policy": {"Devices", "Policy"}, "discovery": {"Devices", "List"}, "snapshots": {"System", "TasmoFleet backup"}, "firmware": {"Updates", "Firmware"},
+		"updates": {"Updates", "Transactions"}, "users": {"System", "Users"}, "system": {"System", "Settings"}, "dashboard": {"Dashboard", "Dashboard"},
+		"backups": {"Devices", "Device backups"}, "styleguide": {"System", "About"},
 	} {
 		d := admin()
 		d.Nav = nav
@@ -159,10 +153,11 @@ func TestCurrentPageMarkedEverywhere(t *testing.T) {
 		if !regexp.MustCompile(`class="tb-group" href="[^"]*" aria-current="true">` + want[0] + `<`).MatchString(got) {
 			t.Errorf("%s: top bar does not mark %s", nav, want[0])
 		}
-		if !regexp.MustCompile(`class="sn-item" href="[^"]*" aria-current="page">` + want[1] + `<`).MatchString(got) {
+		// the dashboard is a one-page group: it has no sub-navigation row to mark (#1106)
+		if nav != "dashboard" && !regexp.MustCompile(`class="sn-item" href="[^"]*" aria-current="page">\s*`+want[1]+`\s*<`).MatchString(got) {
 			t.Errorf("%s: sub-navigation does not mark %s", nav, want[1])
 		}
-		if !regexp.MustCompile(`class="dr-item" href="[^"]*" aria-current="page">` + want[1] + `<`).MatchString(got) {
+		if !regexp.MustCompile(`class="dr-item" href="[^"]*" aria-current="page">\s*` + want[1] + `\s*<`).MatchString(got) {
 			t.Errorf("%s: drawer does not mark %s", nav, want[1])
 		}
 		if n := strings.Count(got, `aria-current="true"`); n != 1 {
@@ -171,10 +166,11 @@ func TestCurrentPageMarkedEverywhere(t *testing.T) {
 	}
 }
 
-// Why: the crumbs say where a page sits (#1000): the group, then the sub-navigation entry the page
+// Why: the trail says where a page sits (#1000): the group, then the sub-navigation entry the page
 // lights up (the first entry too, so /transactions reads Updates / Transactions and not Updates), then
 // the page's own steps. A device lights no entry and hangs directly under its group; System has no page
-// of its own, so it is never a link.
+// of its own, so it is never a link. This is the whole trail (trail); which of them a page draws is
+// TestTrailStartsAtThreeSteps (#1106).
 func TestTrailFollowsTheNavigation(t *testing.T) {
 	cases := []struct {
 		nav, path, title string
@@ -183,10 +179,10 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 	}{
 		{"dashboard", "/", "Dashboard", nil, "Dashboard"},
 		{"devices", "/devices", "Devices", nil, "Devices>/devices|List"},
-		{"backups", "/devices/backups", "Backups", nil, "Devices>/devices|Backups"},
+		{"backups", "/devices/backups", "Device backups", nil, "Devices>/devices|Device backups"},
 		{"policy", "/policy", "Policy", nil, "Devices>/devices|Policy"},
-		{"discovery", "/devices/new", "Add devices", nil, "Devices>/devices|Add"},
-		{"snapshots", "/settings/system/snapshots", "Snapshots", nil, "System|Snapshots"},
+		{"discovery", "/devices/new", "Add devices", nil, "Devices>/devices|List>/devices|Add devices"},
+		{"snapshots", "/settings/system/snapshots", "TasmoFleet backup", nil, "System|TasmoFleet backup"},
 		{"transactions", "/transactions", "Transactions", nil, "Updates>/transactions|Transactions"},
 		{"firmware", "/firmware", "Firmware", nil, "Updates>/transactions|Firmware"},
 		{"about", "/about", "About", nil, "System|About"},
@@ -222,17 +218,17 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 	for _, c := range cases {
 		d := admin()
 		d.Nav, d.Path, d.Title, d.Crumbs = c.nav, c.path, c.title, c.steps
-		if got := flat(d.Trail()); got != c.want {
+		if got := flat(d.trail()); got != c.want {
 			t.Errorf("%s %s: %s, want %s", c.nav, c.path, got, c.want)
 		}
 	}
-	// a page outside the menu (not found, setup) keeps the sub-navigation row: the title must
-	// not jump up by its height
-	for _, nav := range []string{"", "setup"} {
+	// a page outside the menu (not found, setup) has the dashboard's header, without a sub-navigation row
+	// (#1106): the title must not jump between them
+	for _, nav := range []string{"", "setup", "dashboard"} {
 		d := admin()
 		d.Nav = nav
-		if got := render(t, d); !strings.Contains(got, `<div class="sn"><nav class="shell-in sn-in" aria-label="Dashboard">`) {
-			t.Errorf("nav %q: no sub-navigation row", nav)
+		if got := render(t, d); !strings.Contains(got, `<div class="sn sn-empty"></div>`) {
+			t.Errorf("nav %q: header differs from the dashboard's", nav)
 		}
 	}
 }
@@ -241,7 +237,7 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 // navigation has. Both come out of Groups(), so a page below an entry names exactly the entry the
 // menu lights, in the group the top bar lights; renaming an entry cannot leave a stale trail.
 func TestTrailNamesTheLitEntry(t *testing.T) {
-	for _, nav := range []string{"transactions", "firmware", "devices", "policy", "backups", "discovery", "snapshots", "audit", "users", "about", "system"} {
+	for _, nav := range []string{"transactions", "firmware", "devices", "policy", "backups", "discovery", "snapshots", "audit", "users", "about", "system", "styleguide"} {
 		d := admin()
 		d.Nav, d.Path, d.Title, d.Crumbs = nav, "/somewhere/deeper", "Deeper", []Crumb{{Label: "Deeper"}}
 		g, ok := d.currentGroup()
@@ -264,20 +260,23 @@ func TestTrailNamesTheLitEntry(t *testing.T) {
 	}
 }
 
-// Why (#1000): a crumb that is a link the person cannot open ends on a 403. An operator sees the
-// entry of an admin-only page as plain text (the menu still lists it), an admin gets the link.
+// Why (#1000, #1106): a crumb that is a link the person cannot open ends on a 403. An operator's trail never
+// names an admin-only page: About is no entry of theirs, so What's new hangs under the dashboard (and, two steps
+// long, is not drawn); an admin gets About as a link. Policy is open to every role and stays a link.
 func TestTrailLinksOnlyWhatThePersonMayOpen(t *testing.T) {
 	d := admin()
 	d.Nav, d.Path, d.Title, d.Crumbs = "about", "/whats-new", "What’s new", []Crumb{{Label: "What’s new"}}
-	if got := d.Trail(); got[1].Path != "/about" {
+	if got := d.Trail(); len(got) != 3 || got[1].Path != "/about" {
 		t.Errorf("admin: About is not linked: %v", got)
 	}
 	d.IsAdmin = false
-	if got := d.Trail(); got[1].Label != "About" || got[1].Path != "" {
-		t.Errorf("operator: About must be plain text: %v", got)
+	for _, c := range d.trail() {
+		if c.Label == "About" || c.Label == "System" {
+			t.Errorf("operator: the trail names %q, a page they cannot open: %v", c.Label, d.trail())
+		}
 	}
 	d.Nav, d.Path, d.Title, d.Crumbs = "policy", "/policy/history", "History", []Crumb{{Label: "History"}}
-	if got := d.Trail(); got[1].Path != "/policy" {
+	if got := d.Trail(); len(got) != 3 || got[1].Path != "/policy" {
 		t.Errorf("operator: Policy is open to every role and must stay a link: %v", got)
 	}
 }
@@ -458,19 +457,6 @@ func TestInitials(t *testing.T) {
 		if got := Initials(in); got != want {
 			t.Errorf("Initials(%q) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-// Why: discovered devices wait until an admin adds them; the count on "Add devices" (sub-nav
-// and drawer) is how they notice without opening the page, and no count means no pill.
-func TestAddDevicesBadge(t *testing.T) {
-	d := admin()
-	if strings.Contains(render(t, d), `class="nav-badge"`) {
-		t.Fatal("a badge without waiting devices")
-	}
-	d.NewDevices = 5
-	if got := render(t, d); strings.Count(got, `<span class="nav-badge"><span class="sr-only">, new: </span>5</span>`) != 2 {
-		t.Fatalf("the count is not on Add devices in both menus: %s", got)
 	}
 }
 
