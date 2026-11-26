@@ -233,7 +233,7 @@ func styleguidePage(v sgView) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.CardOf(ui.CardData{Title: sgTitle("live"), Sub: "Top bar, right of the navigation. Reconnecting and offline also show a banner.", Class: "sg-sec sg-live", ID: "sg-live", LabelledBy: "sg-live-h"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.CardOf(ui.CardData{Title: sgTitle("live"), Sub: "Status bar, left. Reconnecting and offline also show a banner.", Class: "sg-sec sg-live", ID: "sg-live", LabelledBy: "sg-live-h"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var5), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

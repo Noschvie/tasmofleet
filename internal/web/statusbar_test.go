@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/clock"
 	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/inventory"
 	"github.com/hellwand/tasmofleet/internal/model"
 )
 
@@ -22,7 +24,7 @@ func TestEveryShellPageHasTheStatusBar(t *testing.T) {
 	e := setup(t)
 	for _, p := range shellPages {
 		resp, body := e.do(t, "GET", p, "operator", nil)
-		if resp.StatusCode != 200 || !strings.Contains(body, `<main id="main">`) {
+		if resp.StatusCode != 200 || !strings.Contains(body, `<main id="main" tabindex="-1">`) {
 			continue
 		}
 		bar := barOf(body)
@@ -368,5 +370,37 @@ func TestStreamCarriesNoticesAsJSONWithBasePath(t *testing.T) {
 	}
 	if m["id"] != "7-1" || m["title"] != "Scheduled backup: 1 of 3 devices failed" || m["text"] != "Failed: a\nline" || m["path"] != "/tf/devices" {
 		t.Errorf("notice = %v", m)
+	}
+}
+
+// failingList is an inventory whose List fails: the bar must not take the page down over it.
+type failingList struct{ *fakeInv }
+
+func (failingList) List(context.Context) ([]model.Device, error) { return nil, errors.New("db down") }
+
+// Why (#1077, A1-014): the phone bar said "All good" on a fleet with no device at all. The bar learns that from the
+// inventory on every render, keeps nothing, and where the read fails or there is no inventory it makes no claim
+// (the text it had before), because a bar that fails on a database hiccup would take every page with it.
+func TestStatusBarKnowsAnEmptyFleet(t *testing.T) {
+	now := clock.Real{}
+	for _, c := range []struct {
+		name string
+		inv  inventory.Service
+		want bool
+	}{
+		{"no device", newInv(), true},
+		{"a device", newInv(model.Device{ID: 1, Name: "kitchen"}), false},
+		{"the read fails", failingList{newInv()}, false},
+		{"no inventory", nil, false},
+	} {
+		h := &handler{d: Deps{Clock: now, Inventory: c.inv}}
+		if got := h.statusBar(t.Context(), "", false).NoDevices; got != c.want {
+			t.Errorf("%s: NoDevices = %v, want %v", c.name, got, c.want)
+		}
+	}
+	e := setupWith(t, func(d *Deps) { d.Inventory = newInv() })
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	if bar := barOf(body); !strings.Contains(bar, "No devices yet") || strings.Contains(bar, "All good") {
+		t.Errorf("an empty fleet's phone line: %s", bar)
 	}
 }

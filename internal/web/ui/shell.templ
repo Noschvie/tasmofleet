@@ -48,6 +48,8 @@ templ Shell(d ShellData, content templ.Component) {
 				sse-connect={ d.Base + "/events?since=" + strconv.FormatUint(d.EventSeq, 10) }
 			}
 		>
+			// The first thing a keyboard reaches: it jumps over the header and the navigation to the page (WCAG 2.4.1, #1077).
+			<a class="skip sr-only" href="#main">Skip to content</a>
 			<header class="top">
 				@topBar(d)
 				@subNav(d)
@@ -62,7 +64,8 @@ templ Shell(d ShellData, content templ.Component) {
 				<span hidden data-bn-events={ d.Base + "/events?only=notice" }></span>
 			}
 			@NavDrawer(d)
-			<main id="main">
+			@AccountSheet(d)
+			<main id="main" tabindex="-1">
 				@Crumbs(d.Trail(), d.Base)
 				if d.Live {
 					@connBanners()
@@ -236,26 +239,40 @@ templ userMenuOf(d ShellData, static bool) {
 			<span class="um-caret" aria-hidden="true">▼</span>
 		</summary>
 		<div class="um-menu">
-			<div class="um-who"><div class="um-name" data-visual-mask>{ d.UserName }</div><div class="um-role" data-visual-mask>{ d.RoleLine() }</div></div>
-			<div class="um-theme">
-				<span>Theme</span>
-				@themeSwitch(d)
-			</div>
-			<p class="um-note" data-theme-note hidden?={ d.Theme != "" }>Auto follows your system</p>
-			<a class="um-item um-news" href={ templ.SafeURL(d.Base + "/whats-new") }>
-				What’s new
-				if d.News > 0 {
-					<span class="bdg t-accent">{ newsText(d.News) }</span>
-				}
-			</a>
-			if d.UserMethod == "local" {
-				<a class="um-item" href={ templ.SafeURL(d.Base + "/account") }>Account &amp; password</a>
-			} else {
-				<a class="um-item" href={ templ.SafeURL(d.Base + "/account") }>Account</a>
-			}
-			<form method="post" action={ templ.SafeURL(d.Base + "/logout") }><input type="hidden" name="csrf" value={ d.CSRF }/><button type="submit" class="um-item">Sign out</button></form>
+			@accountMenu(d)
 		</div>
 	</details>
+}
+
+// accountMenu is what the account holds, in the desktop user menu and in the phone's account sheet (one component, so
+// the two cannot say different things): who is signed in and their role, the theme, What's new, the account page and
+// Sign out. The one entry for the account page is named Account; the page itself says what it holds (#1077).
+templ accountMenu(d ShellData) {
+	<div class="um-who"><div class="um-name" data-visual-mask>{ d.UserName }</div><div class="um-role" data-visual-mask>{ d.RoleLine() }</div></div>
+	<div class="um-theme">
+		<span>Theme</span>
+		@themeSwitch(d)
+	</div>
+	<p class="um-note" data-theme-note hidden?={ d.Theme != "" }>Auto follows your system</p>
+	<a class="um-item um-news" href={ templ.SafeURL(d.Base + "/whats-new") }>
+		What’s new
+		if d.News > 0 {
+			<span class="bdg t-accent">{ newsText(d.News) }</span>
+		}
+	</a>
+	<a class="um-item" href={ templ.SafeURL(d.Base + "/account") }>Account</a>
+	<form method="post" action={ templ.SafeURL(d.Base + "/logout") }><input type="hidden" name="csrf" value={ d.CSRF }/><button type="submit" class="um-item">Sign out</button></form>
+}
+
+// AccountSheet is the phone's account menu: a modal <dialog> the avatar opens (dialog.js). Without JavaScript the
+// avatar leads to /nav, which has the account entries in its foot. It carries the same content as the desktop user
+// menu and no navigation.
+templ AccountSheet(d ShellData) {
+	<dialog id="account-sheet" class="sheet" aria-label="Account">
+		<div class="as-body">
+			@accountMenu(d)
+		</div>
+	</dialog>
 }
 
 // themeSwitch is the segmented Light / Dark / Auto control (D11). theme.js applies a choice at
@@ -277,12 +294,13 @@ func ariaBool(b bool) string {
 }
 
 // phoneHeader is the top bar below 45rem: menu button, the area's name (AreaLabel, not the page title), avatar. Both
-// buttons are links to /nav, the drawer as a page; dialog.js opens the drawer instead.
+// buttons are links to /nav, the drawer as a page; dialog.js opens the drawer from the menu button and the account
+// sheet from the avatar (#1077).
 templ phoneHeader(d ShellData) {
 	<div class="ph">
 		<a class="ph-btn ph-menu" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Open navigation"><span class="burger" aria-hidden="true"><span></span><span></span><span></span></span></a>
 		<span class="ph-title" id="ph-title">{ AreaLabel(d.Nav) }</span>
-		<a class="ph-btn ph-me" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Account and theme">
+		<a class="ph-btn ph-me" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="account-sheet" aria-label="Account">
 			@avatar(d.UserName, d.News)
 		</a>
 	</div>
@@ -292,18 +310,27 @@ templ phoneHeader(d ShellData) {
 // the buttons that open it lead to /nav, which shows the same list as a page.
 templ NavDrawer(d ShellData) {
 	<dialog id="nav-drawer" class="drawer" aria-label="Navigation">
-		@NavList(d)
+		@navList(d, true)
 	</dialog>
 }
 
-// NavList is the content of the drawer and of /nav: the brand, every group with its pages (a group with one page
-// is one link), then the account, the theme and Sign out.
+// NavList is the content of /nav and, with a close button, of the drawer: the brand, every group with its pages (a
+// group with one page is one link), then the account, the theme and Sign out.
 templ NavList(d ShellData) {
+	@navList(d, false)
+}
+
+// navList is NavList; inDialog adds the close button, which only the dialog has: on /nav there is nothing to close,
+// and without JavaScript the button could not act (#1077).
+templ navList(d ShellData, inDialog bool) {
 	<div class="dr">
 		<div class="dr-brand">
 			@BrandMark("22")
 			TasmoFleet
 			@versionLink(d)
+			if inDialog {
+				@Button(Btn{Label: "×", Icon: true, Aria: "Close navigation", Class: "dr-close", Attrs: templ.Attributes{"data-close": true}})
+			}
 		</div>
 		<nav aria-label="Main">
 			for _, g := range d.Groups() {
@@ -335,7 +362,7 @@ templ NavList(d ShellData) {
 			}
 		</nav>
 		<div class="dr-foot">
-			<a class="dr-item" href={ templ.SafeURL(d.Base + "/account") }>Account · { d.UserName }</a>
+			<a class="dr-item" href={ templ.SafeURL(d.Base + "/account") }>Account</a>
 			<a class="dr-item" href={ templ.SafeURL(d.Base + "/whats-new") }>
 				What’s new
 				if d.News > 0 {

@@ -3736,6 +3736,33 @@ dialog.dlg > * {
     opacity: 0.3;
   }
 }
+/* skip link (#1077): the first thing a keyboard reaches. It is .sr-only until it has focus (the layout guards and
+   screen readers treat it like any hidden-until-needed text), then it undoes that and sits fixed over the header. */
+.skip:focus {
+  position: fixed;
+  top: var(--sp-8);
+  left: var(--sp-8);
+  z-index: var(--z-header-menu);
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  background: var(--color-surface);
+  color: var(--color-accent-fg);
+  border: var(--hair-w) solid var(--color-border-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-lg);
+  font: 500 var(--fs-ui) var(--font-sans);
+  text-decoration: none;
+}
+/* <main> takes the focus the skip link moves to it (tabindex -1: no Tab stop); it is no control, and the one focus ring
+   around the whole page would be noise. It is the page's reading position, which the next Tab continues from. */
+main[tabindex="-1"] {
+  outline: none;
+}
 header.top {
   position: sticky;
   top: 0;
@@ -3786,9 +3813,11 @@ header.top {
 }
 .dr-brand .ver {
   margin-left: var(--sp-4);
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--ctl-lg); /* a touch target in the phone drawer */
+  display: block;
+  min-width: 0; /* a long version (a build from a branch) is cut, it never pushes the close button out of the drawer (#1077) */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--ctl-lg); /* a touch target in the phone drawer */
 }
 .brand:hover {
   color: var(--color-text);
@@ -4096,6 +4125,15 @@ html[data-live="offline"] .sb-stale {
     background: var(--color-danger);
     animation: none;
   }
+  /* the toggle's word and its caret: the summary names the control it is (#1077) */
+  .sb-tog {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-6);
+    color: var(--color-text-2);
+    font-size: var(--fs-small);
+  }
   .sb-car {
     color: var(--color-text-3);
     font-size: var(--fs-badge);
@@ -4238,10 +4276,12 @@ summary.um-btn::-webkit-details-marker {
   color: var(--color-text-3);
   text-align: right;
 }
-.um-menu form {
+.um-menu form,
+.as-body form {
   margin: 0;
 }
-.um-menu .um-item {
+.um-menu .um-item,
+.as-body .um-item {
   width: 100%;
   display: flex;
   align-items: center;
@@ -4257,7 +4297,8 @@ summary.um-btn::-webkit-details-marker {
   text-decoration: none;
   text-box: normal;
 }
-.um-menu .um-item:hover {
+.um-menu .um-item:hover,
+.as-body .um-item:hover {
   background: var(--color-surface-2);
 }
 
@@ -4422,6 +4463,10 @@ html:has(dialog.drawer:modal) body {
   padding: 0 var(--sp-8);
   font: 600 var(--fs-base) var(--font-sans);
 }
+.dr-brand .dr-close {
+  margin-left: auto;
+  flex: none;
+}
 .dr-group {
   margin-top: var(--sp-12);
 }
@@ -4467,6 +4512,13 @@ html:has(dialog.drawer:modal) body {
 .dr-foot form {
   margin: 0;
 }
+/* in the dialog the foot stays in view: Account, Theme and Sign out are not scrolled away with a long list (#1077) */
+dialog.drawer .dr-foot {
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface);
+  padding-bottom: var(--sp-8);
+}
 .dr-theme {
   height: 44px;
   display: flex;
@@ -4475,6 +4527,32 @@ html:has(dialog.drawer:modal) body {
   gap: var(--sp-8);
   padding: 0 var(--sp-10);
   font: 500 var(--fs-base) var(--font-sans);
+}
+
+/* account sheet (phones): the user menu's content in a modal under the avatar (#1077) */
+dialog.sheet {
+  position: fixed;
+  inset: var(--header-h) var(--sp-8) auto auto;
+  margin: 0;
+  width: min(300px, calc(100% - 2 * var(--sp-8)));
+  max-width: none;
+  max-height: calc(100dvh - var(--header-h) - var(--sp-16));
+  padding: 0;
+  overflow: auto;
+  border: var(--hair-w) solid var(--color-border-strong);
+  border-radius: var(--r-card);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lg);
+}
+dialog.sheet::backdrop {
+  background: var(--backdrop);
+}
+.as-body {
+  padding: var(--sp-6);
+}
+.as-body .um-item {
+  height: var(--ctl-lg);
 }
 
 /* crumbs (ui.Crumbs) and the trails of pages not ported yet (.crumb.trail) */
@@ -14416,7 +14494,8 @@ a.pol-tpl {
   background: var(--color-accent);
   border: 1.5px solid var(--color-surface);
 }
-.um-menu .um-news {
+.um-menu .um-news,
+.as-body .um-news {
   justify-content: space-between;
   gap: var(--sp-8);
 }

@@ -492,11 +492,11 @@ test("phone: every control is a 44 px touch target", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     for (const t of await smallTargets(page)) small.push(`${name}: ${t}`);
   }
-  // the phone drawer holds the theme switch and the account links
+  // the phone's account sheet holds the theme switch and the account links
   await page.goto(app.url + "/");
-  await page.getByRole("link", { name: "Account and theme" }).click();
-  await expect(page.locator("#nav-drawer [data-theme-choice]").first()).toBeVisible();
-  for (const t of await smallTargets(page)) small.push(`drawer: ${t}`);
+  await page.getByRole("link", { name: "Account", exact: true }).first().click();
+  await expect(page.locator("#account-sheet [data-theme-choice]").first()).toBeVisible();
+  for (const t of await smallTargets(page)) small.push(`account sheet: ${t}`);
   expect(small, "touch targets below 44 px").toEqual([]);
 });
 

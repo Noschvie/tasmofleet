@@ -238,19 +238,12 @@ func FirstName(name string) string {
 	return name
 }
 
-// RoleLine says what the user may do and how they signed in, under their name in the user menu.
+// RoleLine says what the user may do under their name in the account menu: "Admin" or "Operator". How they signed
+// in is not in it (#1077): the account page explains that, and the menu has to be readable by someone who does not
+// know what a proxy or SSO is. No role, no line.
 func (d ShellData) RoleLine() string {
-	role := d.RoleName
-	if role != "" {
-		role = strings.ToUpper(role[:1]) + role[1:]
+	if d.RoleName == "" {
+		return ""
 	}
-	switch d.UserMethod {
-	case "local":
-		return role + " · Local account"
-	case "header":
-		return role + " · Signed in by the proxy"
-	case "", "oidc":
-		return role + " · SSO"
-	}
-	return role + " · SSO (" + d.UserMethod + ")"
+	return strings.ToUpper(d.RoleName[:1]) + d.RoleName[1:]
 }

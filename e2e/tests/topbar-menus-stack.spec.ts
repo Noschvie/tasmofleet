@@ -60,7 +60,7 @@ async function coveredPoints(page: Page, panel: string): Promise<string[]> {
 const menus = [
   { width: 1280, name: "user menu", trigger: "details.usermenu > summary", panel: ".um-menu" },
   { width: 375, name: "navigation drawer", trigger: 'a[aria-label="Open navigation"]', panel: "dialog#nav-drawer" },
-  { width: 375, name: "account and theme drawer", trigger: 'a[aria-label="Account and theme"]', panel: "dialog#nav-drawer" },
+  { width: 375, name: "account sheet", trigger: "a.ph-me", panel: "dialog#account-sheet" },
 ];
 
 for (const m of menus) {

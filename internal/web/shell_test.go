@@ -32,7 +32,7 @@ func TestEveryPageRendersThroughTheShell(t *testing.T) {
 			if resp.StatusCode != 200 && resp.StatusCode != 404 {
 				continue // a redirect or a refusal has no page
 			}
-			if !strings.HasPrefix(body, "<!doctype html>") || strings.Count(body, `<main id="main">`) != 1 || strings.Count(body, "</main>") != 1 ||
+			if !strings.HasPrefix(body, "<!doctype html>") || strings.Count(body, `<main id="main" tabindex="-1">`) != 1 || strings.Count(body, "</main>") != 1 ||
 				!strings.Contains(body, `<header class="top">`) || !strings.Contains(body, `hx-headers='{`) && !strings.Contains(body, `hx-headers="{`) {
 				t.Errorf("%s %s: not the app shell: %.200s", role, p, body)
 			}
@@ -74,7 +74,7 @@ func TestShellMenuMatchesRole(t *testing.T) {
 	if resp, _ := e.do(t, "GET", "/audit", "operator", nil); resp.StatusCode != 403 {
 		t.Fatalf("Audit log is not in the operator's menu, but the page itself must still refuse: status %d", resp.StatusCode)
 	}
-	if !strings.Contains(operator, "Operator · ") {
+	if !strings.Contains(operator, `<div class="um-role" data-visual-mask>Operator</div>`) {
 		t.Fatalf("the role is not shown: %.300s", operator)
 	}
 }
@@ -119,7 +119,7 @@ func TestThemePreference(t *testing.T) {
 func TestNavPageListsTheMenu(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/nav", "operator", nil)
-	main := body[strings.Index(body, `<main id="main">`):]
+	main := body[strings.Index(body, `<main id="main" tabindex="-1">`):]
 	for _, want := range []string{`class="dr-item" href="/tf/">Dashboard<`, `class="dr-item" href="/tf/devices"`, ">Sign out<", `aria-label="Theme"`} {
 		if !strings.Contains(main, want) {
 			t.Errorf("/nav lacks %q", want)
@@ -168,7 +168,7 @@ func TestUITextSaysTasmoFleet(t *testing.T) {
 func TestNavPageShowsTheVersion(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Version = "9.9.9+dev" })
 	_, body := e.do(t, "GET", "/nav", "operator", nil)
-	main := body[strings.Index(body, `<main id="main">`):]
+	main := body[strings.Index(body, `<main id="main" tabindex="-1">`):]
 	if !strings.Contains(main, `class="ver"`) || !strings.Contains(main, ">9.9.9+dev</a>") {
 		t.Error("the no-JS menu page has no version")
 	}

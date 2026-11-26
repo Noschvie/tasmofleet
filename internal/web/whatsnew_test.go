@@ -106,7 +106,7 @@ func TestWhatsNewPage(t *testing.T) {
 		if res.StatusCode != 200 {
 			t.Fatalf("%s: /whats-new status %d", role, res.StatusCode)
 		}
-		main := first[strings.Index(first, `<main id="main">`):]
+		main := first[strings.Index(first, `<main id="main" tabindex="-1">`):]
 		for _, want := range []string{"What’s new in TasmoFleet", "You’re on " + latest, `id="v` + latest + `"`, "Installed", "New since your last visit"} {
 			if !strings.Contains(main, want) {
 				t.Errorf("%s: first visit lacks %q", role, want)
@@ -191,7 +191,7 @@ func TestHeaderVersionIsTheAboutVersion(t *testing.T) {
 // without opening anything.
 func outsideFolds(t *testing.T, page string) string {
 	t.Helper()
-	i := strings.Index(page, `<main id="main">`)
+	i := strings.Index(page, `<main id="main" tabindex="-1">`)
 	if i < 0 {
 		t.Fatal("no <main> in the page")
 	}
@@ -230,7 +230,7 @@ func TestWhatsNewShowsNoDeveloperDetailOutsideTheFolds(t *testing.T) {
 	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)
 	}
-	out := outsideFolds(t, `<main id="main">`+b.String()+"</main>")
+	out := outsideFolds(t, `<main id="main" tabindex="-1">`+b.String()+"</main>")
 	if m := developerDetail.FindString(out); m != "" {
 		t.Errorf("a release written the old way shows %q outside the folds: %s", m, out)
 	}
@@ -270,10 +270,10 @@ func TestWhatsNewBreakingIsAWarnBannerFirst(t *testing.T) {
 	if first := strings.Index(three, `<div class="wn-sec">`); first < banner {
 		t.Errorf("the banner (%d) does not come before the headline lists (%d)", banner, first)
 	}
-	if n := strings.Count(outsideFolds(t, `<main id="main">`+three+"</main>"), "The old API key setting is gone"); n != 1 {
+	if n := strings.Count(outsideFolds(t, `<main id="main" tabindex="-1">`+three+"</main>"), "The old API key setting is gone"); n != 1 {
 		t.Errorf("the Breaking headline stands %d times outside Details, want once (in the banner)", n)
 	}
-	if strings.Contains(outsideFolds(t, `<main id="main">`+three+"</main>"), "Nothing to set up") {
+	if strings.Contains(outsideFolds(t, `<main id="main" tabindex="-1">`+three+"</main>"), "Nothing to set up") {
 		t.Error("plain Upgrade notes stand outside Details")
 	}
 	if !strings.Contains(three, "Nothing to set up") {

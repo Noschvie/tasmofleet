@@ -132,10 +132,12 @@ type authedUI struct {
 type countInv struct {
 	*fakeInv
 	reads atomic.Int64
+	gets  atomic.Int64 // reads of one device, which the device header makes; the status bar's list of the fleet (#1077) is not one
 }
 
 func (c *countInv) Get(ctx context.Context, id model.DeviceID) (model.Device, error) {
 	c.reads.Add(1)
+	c.gets.Add(1)
 	return c.fakeInv.Get(ctx, id)
 }
 
@@ -373,9 +375,9 @@ func TestOperator403KeepsItsPlace(t *testing.T) {
 	}
 	// A refusal that is no page the person reads (an htmx request, a POST) draws no device header: it needs
 	// no read of the device, the jobs or the router.
-	reads := a.inv.reads.Load()
+	reads := a.inv.gets.Load()
 	_, frag := a.get(t, e, "operator", "/devices/1/settings", "HX-Request", "true")
-	if strings.Contains(frag, "devhd") || a.inv.reads.Load() != reads {
+	if strings.Contains(frag, "devhd") || a.inv.gets.Load() != reads {
 		t.Errorf("an htmx refusal drew the device header or read the inventory")
 	}
 }

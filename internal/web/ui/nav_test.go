@@ -193,3 +193,23 @@ func flatTrail(trail []Crumb) string {
 	}
 	return strings.Join(parts, "|")
 }
+
+// Why (#1077, A1-013): the line under the name in the account menu said how the person signed in
+// ("Admin · Signed in by the proxy", "Operator · SSO"). That is not what the line is for: it tells
+// what the person may do here, and the sign-in words ask a visitor to know what a proxy is. The
+// account page is where the sign-in method is explained, so the line names the role and nothing else.
+func TestRoleLineNamesTheRoleOnly(t *testing.T) {
+	for _, c := range []struct{ method, role, want string }{
+		{"local", "admin", "Admin"},
+		{"header", "admin", "Admin"},
+		{"oidc", "operator", "Operator"},
+		{"", "operator", "Operator"},
+		{"ldap", "viewer", "Viewer"},
+		{"header", "", ""},
+	} {
+		d := ShellData{UserMethod: c.method, RoleName: c.role}
+		if got := d.RoleLine(); got != c.want {
+			t.Errorf("method %q role %q: RoleLine = %q, want %q", c.method, c.role, got, c.want)
+		}
+	}
+}

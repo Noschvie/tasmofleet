@@ -88,11 +88,11 @@ func TestResultBadgesUseOneWordPerState(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Jobs, d.OTA = &fakeJobs{jobs: jobs}, &fakeOTA{} })
 
 	_, list := e.do(t, "GET", "/transactions", "operator", nil)
-	requireResultWords(t, "transactions list", between(list, `<main id="main">`, "</main>"))
+	requireResultWords(t, "transactions list", between(list, `<main id="main" tabindex="-1">`, "</main>"))
 	for batch := range 6 {
 		_, page := e.do(t, "GET", "/transactions/"+string(rune('1'+batch)), "operator", nil)
 		// the per-device row of a job is the one place where "Done" ends a step of that job
-		main := between(page, `<main id="main">`, "</main>")
+		main := between(page, `<main id="main" tabindex="-1">`, "</main>")
 		requireResultWords(t, "transaction "+string(rune('1'+batch)), main, "Done")
 		// the progress line and the cancel text name the state by the same word as its badge
 		if strings.Contains(strings.ToLower(main), "queued") {

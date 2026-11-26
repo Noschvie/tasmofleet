@@ -56,6 +56,11 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 			sb.Broker = &ui.StatusBroker{Host: b.Host, Connected: b.Connected, Since: b.Since}
 		}
 	}
+	if h.d.Inventory != nil { // a failed read says nothing: the bar must never take a page down
+		if devs, err := h.d.Inventory.List(ctx); err == nil {
+			sb.NoDevices = len(devs) == 0
+		}
+	}
 	sb.Jobs, sb.More, sb.Plans = h.statusJobs(ctx, base)
 	if h.d.OTA != nil {
 		sb.Plans.Href = scheduledHref(base)

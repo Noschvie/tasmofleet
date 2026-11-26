@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestShellPutsContentInMain(t *testing.T) {
 	d := admin()
 	d.Flash = "Saved."
 	got := render(t, d)
-	main := got[strings.Index(got, `<main id="main">`):strings.Index(got, "</main>")]
+	main := got[strings.Index(got, `<main id="main" tabindex="-1">`):strings.Index(got, "</main>")]
 	if !strings.Contains(main, `<h1 id="page">Page</h1>`) {
 		t.Fatalf("content not inside <main>: %s", main)
 	}
@@ -327,7 +328,7 @@ func TestConnBannersSitInTheFlowOfMain(t *testing.T) {
 	if strings.Contains(header, "conn-banners") {
 		t.Fatal("the connection banners sit in the sticky header, where they float over the page")
 	}
-	main := got[strings.Index(got, `<main id="main">`):strings.Index(got, "</main>")]
+	main := got[strings.Index(got, `<main id="main" tabindex="-1">`):strings.Index(got, "</main>")]
 	at := strings.Index(main, `class="conn-banners"`)
 	if at < 0 {
 		t.Fatalf("the connection banners are not in <main>: %s", main)
@@ -400,25 +401,132 @@ func TestBannerHiddenOnSetupPage(t *testing.T) {
 	}
 }
 
-// Why: how the user signed in decides what the account menu promises: only a local account has a
-// password this app can change, everybody has an account page (who they are, how they sign
-// in); everybody can sign out and pick a theme.
+// Why (#1077, A1-007): a keyboard user reached the page's content only after the brand, four groups, the
+// sub-navigation and the account menu, on every page (WCAG 2.4.1 Bypass Blocks). The first thing in the body is
+// a link to <main>, and <main> takes focus (tabindex -1) so that following the link moves the reading position
+// there, not only the scroll. The link is first: a Tab before the header is the one that bypasses it.
+func TestShellSkipLinkFirstAndMainFocusable(t *testing.T) {
+	got := render(t, admin())
+	body := got[strings.Index(got, "<body"):]
+	body = body[strings.Index(body, ">")+1:]
+	if !strings.HasPrefix(strings.TrimSpace(body), `<a class="skip sr-only" href="#main">Skip to content</a>`) {
+		t.Errorf("the first child of body is not the skip link: %.160s", body)
+	}
+	if !strings.Contains(got, `<main id="main" tabindex="-1">`) {
+		t.Error("main cannot take the focus the skip link moves there")
+	}
+	if bare := renderBare(t, admin()); strings.Contains(bare, "Skip to content") {
+		t.Error("the bare pages have nothing to skip and must not carry the link")
+	}
+}
+
+func renderBare(t *testing.T, d ShellData) string {
+	t.Helper()
+	var b strings.Builder
+	if err := Bare(d, body("<p>x</p>")).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// Why (#1077, A1-008): the phone drawer is a modal that covers the page; its only ways out were Escape (no key on
+// a phone) and a tap on the scrim, which nothing says. It has a close button in its head. /nav shows the same
+// list as a page, where a close button has nothing to close (and without JavaScript could not act), so only the
+// dialog carries it.
+func TestDrawerHasCloseButtonNavPageNot(t *testing.T) {
+	var dlg strings.Builder
+	if err := NavDrawer(admin()).Render(context.Background(), &dlg); err != nil {
+		t.Fatal(err)
+	}
+	head := dlg.String()
+	head = head[strings.Index(head, `<div class="dr-brand">`):strings.Index(head, "</nav>")]
+	if !strings.Contains(head, `data-close`) || !strings.Contains(head, `aria-label="Close navigation"`) {
+		t.Errorf("the drawer head has no close button: %s", head)
+	}
+	if page := drawer(t, admin()); strings.Contains(page, "data-close") {
+		t.Error("/nav shows a close button that cannot act")
+	}
+}
+
+// Why (#1077, A1-008, A1-009): Account, Theme and Sign out sat at the end of a scrolling dialog, below the fold on
+// a phone with many pages, and the avatar opened that same long drawer. The foot stays in view (sticky) and holds
+// the account entry under the one name Account.
+func TestDrawerFootIsAccountAndStaysInView(t *testing.T) {
+	d := admin()
+	foot := drawer(t, d)
+	foot = foot[strings.Index(foot, `<div class="dr-foot">`):]
+	if !strings.Contains(foot, `>Account</a>`) || strings.Contains(foot, "Account ·") {
+		t.Errorf("the drawer's account entry must be named Account: %s", foot)
+	}
+	css, err := os.ReadFile("../static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?s)dialog\.drawer \.dr-foot \{[^}]*position: sticky;[^}]*bottom: 0`).Match(css) {
+		t.Error("the drawer's foot is not sticky at the bottom of the dialog")
+	}
+}
+
+// Why (#1077, A1-009): the avatar said "Account and theme" and opened the whole navigation. It opens a sheet that
+// holds what the avatar promises: the account menu. The sheet and the desktop user menu are one component, so
+// the two cannot say different things; the burger keeps the navigation. Without JavaScript both buttons stay
+// links to /nav.
+func TestAvatarOpensTheAccountSheetNotTheNavigation(t *testing.T) {
+	d := admin()
+	got := render(t, d)
+	ph := got[strings.Index(got, `<div class="ph">`):]
+	ph = ph[:strings.Index(ph, "</header>")]
+	if !strings.Contains(ph, `data-dialog="nav-drawer" aria-label="Open navigation"`) {
+		t.Errorf("the burger lost the navigation: %s", ph)
+	}
+	if !regexp.MustCompile(`href="/nav" data-dialog="account-sheet" aria-label="Account"`).MatchString(ph) {
+		t.Errorf("the avatar does not open the account sheet: %s", ph)
+	}
+	if strings.Contains(got, "Account and theme") {
+		t.Error("the old avatar name is still there")
+	}
+	sheet := between(got, `<dialog id="account-sheet"`, `</dialog>`)
+	menu := between(got, `<div class="um-menu">`, `</details>`)
+	for _, want := range []string{">Account</a>", `aria-label="Theme"`, ">Sign out</button>"} {
+		if !strings.Contains(sheet, want) {
+			t.Errorf("the account sheet lacks %s", want)
+		}
+	}
+	for _, not := range []string{`aria-label="Main"`, "dr-item", "dr-group"} {
+		if strings.Contains(sheet, not) {
+			t.Errorf("the account sheet carries navigation (%s)", not)
+		}
+	}
+	if !strings.Contains(sheet, menu[:strings.LastIndex(menu, "</div>")]) {
+		t.Error("the account sheet and the user menu are not the same content")
+	}
+}
+
+// Why: how the user signed in decides what the account menu promises; everybody has an account page (who
+// they are, how they sign in, and for a local account the password), everybody can sign out and pick a theme.
+// One entry, one name: "Account & password", "Account" and "Account · name" for the same page made three labels
+// to learn (#1077, A1-009). The account page says what it holds.
 func TestAccountMenuByMethod(t *testing.T) {
 	for _, method := range []string{"local", "oidc", "header"} {
 		d := admin()
 		d.UserMethod = method
 		got := render(t, d)
-		if (method == "local") != strings.Contains(got, "Account &amp; password") {
-			t.Errorf("%s: password page offered = %v", method, method != "local")
+		for _, old := range []string{"Account &amp; password", "Account ·", "Account and theme"} {
+			if strings.Contains(got, old) {
+				t.Errorf("%s: %q is still a name of the account entry", method, old)
+			}
 		}
-		if strings.Count(got, `href="/account"`) != 2 { // user menu and drawer
-			t.Errorf("%s: the account page is not in both menus", method)
+		if strings.Count(got, `href="/account"`) != 3 { // user menu, account sheet, drawer
+			t.Errorf("%s: the account page is not in all three places", method)
 		}
-		if strings.Count(got, ">Sign out</button>") != 2 { // user menu and drawer
-			t.Errorf("%s: Sign out not in both menus", method)
+		if strings.Count(got, ">Account</a>") != 3 {
+			t.Errorf("%s: the account entry is not named Account everywhere", method)
 		}
-		if strings.Count(got, `aria-label="Theme"`) != 2 {
-			t.Errorf("%s: theme switch not in both menus", method)
+		if strings.Count(got, ">Sign out</button>") != 3 { // user menu, account sheet, drawer
+			t.Errorf("%s: Sign out not in every place", method)
+		}
+		if strings.Count(got, `aria-label="Theme"`) != 3 {
+			t.Errorf("%s: theme switch not in every place", method)
 		}
 	}
 }

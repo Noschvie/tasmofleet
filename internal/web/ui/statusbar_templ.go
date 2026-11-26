@@ -1397,7 +1397,7 @@ func sbNarrow(d ShellData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 114, "</span> <span class=\"sb-car\" aria-hidden=\"true\">&#9650;</span></summary><div class=\"sb-sheet\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 114, "</span> <span class=\"sb-tog\">Status<span class=\"sb-car\" aria-hidden=\"true\">&#9650;</span></span></summary><div class=\"sb-sheet\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

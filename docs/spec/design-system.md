@@ -24,7 +24,7 @@ sample data only (D17). If a component is not on the style guide, it is not part
 | What | Where |
 | --- | --- |
 | Tokens | the top of `internal/web/static/app.css`: theme-independent `:root`, then the light block, the no-JS `prefers-color-scheme` block and the explicit dark block |
-| Shell | templ `ui.Shell` (`internal/web/ui/shell.templ`): top bar, sub-navigation, user menu, phone header, drawer, crumbs, live indicator and banners, toast region; one navigation model (`ui/nav.go`: `Groups` lists the pages this role may open, `Trail` the crumbs a page draws) feeds all of them |
+| Shell | templ `ui.Shell` (`internal/web/ui/shell.templ`): skip link, top bar, sub-navigation, user menu, phone header, drawer, account sheet, crumbs, live indicator and banners, toast region; one navigation model (`ui/nav.go`: `Groups` lists the pages this role may open, `Trail` the crumbs a page draws) feeds all of them |
 | Components | `internal/web/ui/components.templ` (props in `components.go`), CSS block "Components (design v2, WP F4)" in `app.css` |
 | Style guide page | `internal/web/styleguide.templ` (`sgSections` lists the sections), route `GET /styleguide` |
 | Style guide screenshots | `docs/design/styleguide/`, written by `make styleguide-docs` |
@@ -428,7 +428,19 @@ A row menu is a `<details>` with the ⋯ button and a 250 px panel (radius 10, `
 
 A destructive action of a row is an entry of its row menu, in danger-fg, not a red link beside the row's own text: a cached firmware file has one, its Delete (#1093); the action of the whole list ("Delete 6 unused") is a default button at the end of the list.
 
-Component: `ui.RowMenu(label, items, up)`, the shell's user menu and drawer. `ui.MenuButton(label, title)` is the ⋯ button alone (the `<summary>`), for a menu whose items are not a plain list of links (the device list's, whose entries post).
+The phone's two header buttons open two different things (#1077). The burger opens the navigation drawer: the brand,
+the pages and a foot with Account, What's new, the theme and Sign out; the foot is sticky at the bottom of the
+dialog (`dialog.drawer .dr-foot`), so it stays in view while the list scrolls, and the drawer's head carries a close
+button (a 44 px icon button, "Close navigation"; `/nav`, the same list as a page, has none: outside a dialog it
+has nothing to close and could not act without JavaScript). The avatar, named Account, opens the account sheet
+(`ui.AccountSheet`, `dialog.sheet` under the header): the content of the desktop user menu, one component
+(`accountMenu`) in both places, so they cannot say different things. The account entry has one name, Account, in the user
+menu, the sheet and the drawer; the page it opens says what it holds. The line under the name is the role (Admin,
+Operator) and nothing about how the person signed in. The first thing in the body is the skip link, "Skip to content"
+(`.skip`): out of sight until it has focus, then fixed over the header; it leads to `<main id="main" tabindex="-1">`,
+which takes the focus without a ring and is no Tab stop of its own (WCAG 2.4.1).
+
+Component: `ui.RowMenu(label, items, up)`, the shell's user menu, drawer and account sheet. `ui.MenuButton(label, title)` is the ⋯ button alone (the `<summary>`), for a menu whose items are not a plain list of links (the device list's, whose entries post).
 
 ![Menus, desktop, light](../design/styleguide/menus-desktop-light.png)
 
@@ -651,7 +663,10 @@ and ends it. A card that is only a fold has the summary as its title.
 
 The status bar (`ui.StatusBar`, #307) is one `--sb-line` row at the bottom of every signed-in page: broker,
 running jobs, backups, the Live pill and the version, each a 32 px item with a tone; on a phone one line that
-opens a sheet. The bulk bar (device list) and the save bar (settings, device
+opens a sheet. The phone line is a `<details>` summary: a dot, the one sentence, and the word "Status" with the caret,
+which names the control (the caret alone is `aria-hidden`); the browser exposes its expanded state, no attribute
+of the server's, because a refresh of the bar swaps the summary's inside while the sheet is open. A fleet with no device
+says "No devices yet" where it would say "All good"; a failure, a down broker or a running job still comes first. The bulk bar (device list) and the save bar (settings, device
 settings) sit one gap above it, the backups selection bar sits in the flow above the list it acts on; all three are surface bars (never inverted, a hairline border), use `--shadow-bar`, carry ordinary buttons and never clip their
 last button at 375 px. The save bar shows the unsaved dot inside the content edge to its left.
 
@@ -827,7 +842,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
 2. S2: the Columns chooser pins left or right (F5, P2).
 3. S3: the policy live check can be paused (N3, N21).
 4. S4: About is full width: the version band, the components as a 2x2 grid, the effective configuration always visible in two tables (#351), and the source line below.
-5. S5: the phone drawer ends with the account, What's new, the Light / Dark / Auto switch and Sign out.
+5. S5: the phone drawer ends with a sticky foot: Account, What's new, the Light / Dark / Auto switch and Sign out; the avatar opens the account sheet, not the drawer (#1077).
 6. S6: the live indicator and the connection banners only on pages that hold the event stream.
 7. S7: the navigation shows each role the pages it may open (#1106); pages enforce their permission. The style guide
    continues below the prototype's screen with the component gallery (the screen itself is the

@@ -84,7 +84,7 @@ templ styleguidePage(v sgView) {
 				<button type="button" class="btn" data-toast="Restart failed on Laundry Ceiling Light: timed out" data-toast-tone="danger">Show failure</button>
 			</div>
 		}
-		@ui.CardOf(ui.CardData{Title: sgTitle("live"), Sub: "Top bar, right of the navigation. Reconnecting and offline also show a banner.", Class: "sg-sec sg-live", ID: "sg-live", LabelledBy: "sg-live-h"}) {
+		@ui.CardOf(ui.CardData{Title: sgTitle("live"), Sub: "Status bar, left. Reconnecting and offline also show a banner.", Class: "sg-sec sg-live", ID: "sg-live", LabelledBy: "sg-live-h"}) {
 			<div class="sg-live-row">
 				@ui.LivePill("ok", "Live")
 				<span>Device state streams in. Last event 1 s ago.</span>

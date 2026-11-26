@@ -138,8 +138,8 @@ func TestFirmwarePageEscapesHostileReleaseNotes(t *testing.T) {
 	rels[0].Notes = payloads
 	e := fwEnv(t, &fakeMgrFW{releases: rels})
 	_, body := e.do(t, "GET", "/firmware", "operator", nil)
-	body = body[strings.Index(body, `<main id="main">`):] // the shell's own logo is an <svg>
-	body = strings.ReplaceAll(body, "<wbr>", "")          // break points in notes text (#510): not part of what is escaped
+	body = body[strings.Index(body, `<main id="main" tabindex="-1">`):] // the shell's own logo is an <svg>
+	body = strings.ReplaceAll(body, "<wbr>", "")                        // break points in notes text (#510): not part of what is escaped
 
 	for _, bad := range []string{
 		"<script>alert", "<img src=x", "<svg", "<iframe", "<b onclick", "onerror=alert(5)>", "onload=alert(6)>",

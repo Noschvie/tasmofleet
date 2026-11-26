@@ -87,11 +87,38 @@ test("on a phone the bar is one line that opens into a sheet", { tag: "@core" },
   await page.goto(app.url + "/devices");
   await expect(page.locator(".sb-wide")).toBeHidden();
   const sum = page.locator(".sb-narrow summary");
-  await expect(sum).toContainText("All good");
+  await expect(sum).toContainText("No devices yet"); // this app has no device: "All good" would claim a fleet that is not there (#1077)
+  await expect(sum).not.toContainText("All good");
   await sum.click();
   await expect(page.locator(".sb-sheet")).toContainText("Version");
   await page.locator(".sb-sheet").getByRole("link", { name: "What’s new" }).click();
   await expect(page).toHaveURL(/\/whats-new$/);
+});
+
+// Why (#1077, A1-014): the phone bar was a dot, a sentence and a caret that screen readers skip: nothing named the
+// control or said it opens. The summary says "Status", and the browser's own expanded state follows the sheet. That state
+// is native (details/summary), not a server-rendered aria-expanded: a bar refresh swaps the summary's inside while the
+// sheet is open, so an attribute written by the server would say "false" for an open sheet.
+test("on a phone the status toggle is named Status and says whether the sheet is open", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 700 });
+  await page.goto(app.url + "/devices");
+  const sum = page.locator(".sb-narrow summary");
+  await expect(sum).toContainText("Status");
+  const cdp = await page.context().newCDPSession(page);
+  const axState = async () => {
+    const { root } = await cdp.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: ".sb-narrow summary" });
+    const { nodes } = await cdp.send("Accessibility.getPartialAXTree", { nodeId, fetchRelatives: false });
+    const n = nodes[0];
+    const prop = (name: string) => n.properties?.find((p) => p.name === name)?.value.value;
+    return { name: String(n.name?.value ?? ""), expanded: prop("expanded") };
+  };
+  const closed = await axState();
+  expect(closed.name).toContain("Status");
+  expect(closed.expanded, "closed sheet").toBe(false);
+  await sum.click();
+  await expect(page.locator(".sb-sheet")).toBeVisible();
+  expect((await axState()).expanded, "open sheet").toBe(true);
 });
 
 // Why: a page without a stream is a snapshot; the bar then makes no claim of being live.

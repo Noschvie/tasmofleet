@@ -92,7 +92,7 @@ func TestReleasePageShowsNotesFilesAndOlderVersions(t *testing.T) {
 	fw.arts = []model.Artifact{{ID: 1, Release: "16.2.0", Filename: "tasmota.bin.gz", Size: 658 * 1024, Source: "github"}}
 	e := relEnv(t, fw)
 	_, body := e.do(t, "GET", "/firmware/releases/16.2.0", "admin", nil)
-	main := strings.ReplaceAll(body[strings.Index(body, `<main id="main">`):], "<wbr>", "") // file names carry soft break points
+	main := strings.ReplaceAll(body[strings.Index(body, `<main id="main" tabindex="-1">`):], "<wbr>", "") // file names carry soft break points
 	for _, want := range []string{"Tasmota 16.2.0", "Latest", `Released <time data-ts="date" datetime="2026-10-06T00:00:00Z">6 Oct 2026</time> · from GitHub releases`, "View on GitHub",
 		`class="unotes-breaking rel-breaking"`, "<code>SetOption65</code>", "Berry thing",
 		"Files this fleet needs", "tasmota.bin.gz", "ESP8266 · 2 devices · 658.0 KiB", "Cached", "Prefetch tasmota32.bin", `name="from" value="release"`,
@@ -116,7 +116,7 @@ func TestReleasePageShowsNotesFilesAndOlderVersions(t *testing.T) {
 func TestReleaseSinceView(t *testing.T) {
 	e := relEnv(t, newFeed(feedReleases()))
 	_, body := e.do(t, "GET", "/firmware/releases/16.2.0?view=since", "operator", nil)
-	main := body[strings.Index(body, `<main id="main">`):]
+	main := body[strings.Index(body, `<main id="main" tabindex="-1">`):]
 	if strings.Contains(main, `id="rel-s-15.0.0"`) {
 		t.Error("the oldest version in the fleet is listed")
 	}
@@ -144,7 +144,7 @@ func TestReleasePageEscapesNotes(t *testing.T) {
 	e := relEnv(t, newFeed(rels))
 	for _, path := range []string{"/firmware/releases/16.2.0", "/firmware/releases/16.2.0?view=since"} {
 		_, body := e.do(t, "GET", path, "operator", nil)
-		main := body[strings.Index(body, `<main id="main">`):]
+		main := body[strings.Index(body, `<main id="main" tabindex="-1">`):]
 		for _, bad := range []string{"<script>alert", "<img src=x", `href="javascript`} {
 			if strings.Contains(main, bad) {
 				t.Errorf("%s: %q reached the page", path, bad)

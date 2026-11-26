@@ -279,6 +279,81 @@ test("the phone drawer opens from the menu button and closes with Escape", async
   await expect(drawer).toBeHidden();
 });
 
+// Why (#1077, A1-007): a keyboard user had to Tab through the brand, four groups, the sub-navigation and the account
+// menu on every page before reaching the content (WCAG 2.4.1). The first Tab stop is a link that says so, and
+// following it puts the focus into <main>, so the next Tab continues in the page, not back in the header.
+test("the first Tab focuses Skip to content and Enter moves focus into main", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/about");
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", { name: "Skip to content" });
+  await expect(skip).toBeFocused();
+  const box = (await skip.boundingBox())!;
+  expect(box.width, "the link is seen once it has focus").toBeGreaterThan(40);
+  expect(box.y, "the link is on screen, over the header").toBeGreaterThanOrEqual(0);
+  await page.keyboard.press("Enter");
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("main");
+  await page.keyboard.press("Tab");
+  expect(
+    await page.evaluate(() => !!document.activeElement?.closest("main")),
+    "the next Tab continues inside the page content",
+  ).toBe(true);
+});
+
+// Why (#1077, A1-008): the phone drawer covers the page; on a phone there is no Escape key and nothing said that a tap
+// on the scrim closes it. It has a close button in its head.
+test("at 375 the drawer has a visible close button that closes it", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(app.url + "/about");
+  await page.getByLabel("Open navigation", { exact: true }).click();
+  const drawer = page.locator("dialog#nav-drawer");
+  await expect(drawer).toBeVisible();
+  const close = drawer.getByRole("button", { name: "Close navigation" });
+  await expect(close).toBeVisible();
+  const box = (await close.boundingBox())!;
+  expect(Math.min(box.width, box.height), "a touch target").toBeGreaterThanOrEqual(44);
+  await close.click();
+  await expect(drawer).toBeHidden();
+});
+
+// Why (#1077, A1-008): Account, Theme and Sign out sat at the end of a long scrolling dialog, below the fold on a
+// short phone. The foot stays at the bottom of the drawer while the list scrolls.
+test("at 375 the drawer's Sign out stays in view with the list scrolled", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: 520 });
+  await page.goto(app.url + "/about");
+  await page.getByLabel("Open navigation", { exact: true }).click();
+  const drawer = page.locator("dialog#nav-drawer");
+  await expect(drawer).toBeVisible();
+  const signOut = drawer.getByRole("button", { name: "Sign out" });
+  await expect(signOut).toBeInViewport({ ratio: 1 });
+  await drawer.evaluate((el) => (el.scrollTop = 0));
+  await expect(signOut).toBeInViewport({ ratio: 1 });
+  await drawer.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await expect(signOut).toBeInViewport({ ratio: 1 });
+});
+
+// Why (#1077, A1-009): the avatar was labelled "Account and theme" and opened the whole navigation, the same as the
+// burger. It opens the account menu's content in a sheet and no navigation; the burger keeps the navigation.
+test("at 375 the avatar opens the account sheet with Account, Theme and Sign out and no navigation link", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(app.url + "/about");
+  await page.getByRole("link", { name: "Account", exact: true }).first().click();
+  const sheet = page.locator("dialog#account-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(page.locator("dialog#nav-drawer")).toBeHidden();
+  await expect(sheet.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+  await expect(sheet.getByRole("group", { name: "Theme" })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(sheet.locator(".um-role")).toHaveText("Admin");
+  await expect(sheet.getByRole("link", { name: "Devices", exact: true })).toHaveCount(0);
+  await expect(sheet.getByRole("navigation")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+});
+
 // Why: D11: the choice applies at once, is stored per user and rendered by the server on the
 // next page (no flash); Auto follows the system again.
 test("the theme choice applies at once and sticks", async ({ page }) => {

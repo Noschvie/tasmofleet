@@ -27,6 +27,9 @@ type StatusBar struct {
 	Now time.Time
 	// Fragment is where the bar re-reads itself on events; empty on a page without a stream.
 	Fragment string
+	// NoDevices says the fleet has no device yet (#1077): the phone line then reads "No devices yet" where it
+	// would say "All good". Worked out on every render, never kept; false when it is not known.
+	NoDevices bool
 }
 
 // StatusBroker is the broker connection: host and port only, never the user or the password.
@@ -106,7 +109,8 @@ func (s StatusBar) dotClass() string {
 	return "sb-dot"
 }
 
-// summary is the phone line's text, and sub the muted rest of it ("All good", "Update 2 of 5 + 1 more").
+// summary is the phone line's text, and sub the muted rest of it ("All good", "Update 2 of 5 + 1 more"). A fleet with
+// no device says so instead of "All good"; a problem or a running job still comes first.
 // A disconnected broker adds "since HH:MM" in the template (a time element).
 func (s StatusBar) summary() (text, sub string) {
 	switch s.level() { //nolint:exhaustive // the other levels are the default
@@ -126,6 +130,9 @@ func (s StatusBar) summary() (text, sub string) {
 			sub = " + " + strconv.Itoa(n) + " more"
 		}
 		return j.Kind + " " + strconv.Itoa(j.Done) + " of " + strconv.Itoa(j.Total), sub
+	}
+	if s.NoDevices {
+		return "No devices yet", ""
 	}
 	return "All good", ""
 }

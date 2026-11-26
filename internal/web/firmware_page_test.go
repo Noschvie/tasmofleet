@@ -572,7 +572,7 @@ func TestUpdateZeroDevicesIsNoLink(t *testing.T) {
 			d.FirmwareSource = "GitHub releases"
 		})
 		_, none := e.do(t, "GET", "/firmware/releases/15.0.0", "admin", nil) // nothing is older than the oldest device
-		blocked(t, none[strings.Index(none, `<main id="main">`):], "Update 0 devices…")
+		blocked(t, none[strings.Index(none, `<main id="main" tabindex="-1">`):], "Update 0 devices…")
 		_, some := e.do(t, "GET", "/firmware/releases/16.2.0", "admin", nil)
 		if !updatesLink.MatchString(some) {
 			t.Error("with devices behind the release, Update is a link")

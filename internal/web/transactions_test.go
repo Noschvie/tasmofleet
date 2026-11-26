@@ -184,7 +184,7 @@ func TestTransactionsListRunningCardAndHistory(t *testing.T) {
 		{ID: 3, BatchID: 5, DeviceID: 2, State: model.JobQueued, TargetRelease: "16.1.0", CreatedAt: now},
 	}
 	_, page := e.do(t, "GET", "/transactions", "operator", nil)
-	body := between(page, `<main id="main">`, "</main>") // the status bar below it names the running transaction too
+	body := between(page, `<main id="main" tabindex="-1">`, "</main>") // the status bar below it names the running transaction too
 	card := strings.Index(body, `class="txn-card"`)
 	tx5, tx4 := strings.LastIndex(body, ">TX-0005<"), strings.Index(body, ">TX-0004<")
 	if card < 0 || tx5 < 0 || tx4 < 0 || tx5 > tx4 || card > tx5 {
@@ -207,7 +207,7 @@ func TestTransactionsRunningCardShowsStart(t *testing.T) {
 	if !strings.Contains(card, "started "+stamp) {
 		t.Errorf("the running card does not say when it started: %s", card)
 	}
-	if n := strings.Count(between(page, `<main id="main">`, "</main>"), `datetime="`+at.UTC().Format(time.RFC3339)+`"`); n != 2 {
+	if n := strings.Count(between(page, `<main id="main" tabindex="-1">`, "</main>"), `datetime="`+at.UTC().Format(time.RFC3339)+`"`); n != 2 {
 		t.Errorf("the card and the history row show %d times the instant, want both", n)
 	}
 }
@@ -368,7 +368,7 @@ func TestTheMakeCompliantCardMarksEachValue(t *testing.T) {
 			{JobID: 2, At: now, From: model.JobVerify, To: model.JobSucceeded, Event: "done", Detail: "applied 1; skipped MqttHost"}},
 	}
 	_, page := e.do(t, "GET", "/transactions/7", "admin", nil)
-	body := between(page, `<main id="main">`, "</main>")
+	body := between(page, `<main id="main" tabindex="-1">`, "</main>")
 	card1 := between(body, `aria-label="kitchen"`, "</section>")
 	card2 := between(body, `aria-label="attic"`, "</section>")
 	if card1 == "" || card2 == "" {
@@ -396,7 +396,7 @@ func TestAMakeCompliantSecretLineSaysSetNotVerified(t *testing.T) {
 	j.jobs = []model.Job{{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindPolicy, Commands: "MqttUser bob\nTelePeriod 300", State: model.JobSucceeded, CreatedBy: "adam", CreatedAt: now}}
 	j.events = map[model.JobID][]model.JobEvent{1: {{JobID: 1, At: now, From: model.JobVerify, To: model.JobSucceeded, Event: "done", Detail: "applied 2"}}}
 	_, page := e.do(t, "GET", "/transactions/7", "admin", nil)
-	card := between(between(page, `<main id="main">`, "</main>"), `aria-label="kitchen"`, "</section>")
+	card := between(between(page, `<main id="main" tabindex="-1">`, "</main>"), `aria-label="kitchen"`, "</section>")
 	if card == "" {
 		t.Fatalf("card not found: %s", page)
 	}
