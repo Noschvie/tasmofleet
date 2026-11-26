@@ -1,8 +1,11 @@
 // Strips that scroll sideways on a phone: the tab rows (nav.utabs) and the filter chips (.dv-chips).
-// Two things, both on the strip itself and never on the page (no inline script: CSP forbids it):
+// Three things, all on the strip itself and never on the page (no inline script: CSP forbids it):
 //  1. Bring the current tab or chip into view on load, so the one that is selected is never cut off
 //     at the edge.
-//  2. Say which side has more: data-more-start / data-more-end on a strip that overflows and is not
+//  2. Centre the tab or chip that has keyboard focus in the strip: the browser's own focus scroll leaves
+//     a control that shows a sliver at the edge where it is, its centre then lies under what follows the strip
+//     (WCAG 2.4.11, the Filters button on the Devices list), and the fade of #1079 cuts its end.
+//  3. Say which side has more: data-more-start / data-more-end on a strip that overflows and is not
 //     at that end. app.css fades that edge (#1079), so a tab that is out of sight can be found. A strip
 //     that does not scroll sideways (the Devices list's chips wrap from 45rem) gets neither attribute.
 //  3. Keep a chip or tab that takes the keyboard focus whole inside the strip and clear of the fade
@@ -117,6 +120,21 @@
         later(function () {
           mark(t);
         });
+    },
+    true,
+  );
+  // Only keyboard focus (:focus-visible) acts, and only the strip's own scroll position changes: no state, no timer.
+  document.addEventListener(
+    "focusin",
+    function (e) {
+      var el = e.target;
+      var strip = el instanceof Element && el.closest(STRIPS);
+      if (!strip || !el.matches(":focus-visible") || !scrolls(strip)) return;
+      var s = strip.getBoundingClientRect();
+      var c = el.getBoundingClientRect();
+      // Centre it like the current one: the browser clamps at both ends, so the control ends clear of the fade
+      // that app.css puts on an end with more (no copy of its width here).
+      strip.scrollLeft += c.left - s.left - (s.width - c.width) / 2;
     },
     true,
   );

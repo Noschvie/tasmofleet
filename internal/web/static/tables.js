@@ -1092,6 +1092,89 @@
     { capture: true, passive: true },
   );
 
+  // Keyboard focus must not end under a pinned column (WCAG 2.4.11, #1275). The pinned cells are position:sticky and
+  // lie over the scroll box, so a cell that has scrolled under them is still inside the box: the browser counts it
+  // as visible and does not bring it out. This scrolls the box sideways just far enough that the focused element
+  // lies between the pinned groups of its row, its focus ring included. A pinned cell is left alone: a sticky cell is measured at the place
+  // it sticks to, so scroll-padding on the box moved the whole table on every Tab onto a pinned cell (#1290).
+  // The edges are read from the live cells (the sticky ones of the row), not from a copy of the plN/prN rule. The
+  // scroll is instant and sets no state; the scroll listener above updates the more-l/more-r edges. Only keyboard
+  // focus (:focus-visible) acts, so a click on a cell that is half in view does not move the table. Below 45rem
+  // no cell is sticky and nothing happens. A header is not sticky vertically (position is only for the columns), so
+  // "sticky" means "pinned" for header cells too.
+  document.addEventListener(
+    "focusin",
+    function (e) {
+      var el = e.target;
+      if (!(el instanceof Element) || !el.matches(":focus-visible")) {
+        return;
+      }
+      var cell = el.closest("td, th");
+      var row = cell && cell.parentElement;
+      var table = row && row.closest("table");
+      var frame = table && table.parentElement;
+      if (!frame || !frame.classList.contains("tablescroll")) {
+        return;
+      }
+      function pinned(c) {
+        return getComputedStyle(c).position === "sticky";
+      }
+      if (pinned(cell)) {
+        return;
+      }
+      var box = frame.getBoundingClientRect();
+      var from = box.left + frame.clientLeft;
+      var to = from + frame.clientWidth;
+      var left = from;
+      var right = to;
+      var seen = false;
+      Array.prototype.forEach.call(row.children, function (c) {
+        if (c === cell) {
+          seen = true;
+          return;
+        }
+        if (!pinned(c)) {
+          return;
+        }
+        var r = c.getBoundingClientRect();
+        if (r.width === 0) {
+          return; // a hidden pinned column
+        }
+        if (seen) {
+          right = Math.min(right, r.left);
+        } else {
+          left = Math.max(left, r.right);
+        }
+      });
+      // The ring (outline width plus offset) must be clear of the pinned cells as well as the box: read live, so a
+      // change of the focus style needs no change here.
+      var cs = getComputedStyle(el);
+      var ring = Math.max(0, parseFloat(cs.outlineWidth) + parseFloat(cs.outlineOffset) || 0);
+      var at = el.getBoundingClientRect();
+      var lo = at.left - ring;
+      var hi = at.right + ring;
+      if (lo >= left && hi <= right) {
+        return;
+      }
+      // Line up the cell itself when it fits between the groups: that keeps its padding and the ring clear, and
+      // the text off the pinned divider. A cell wider than the gap lines up the control and its ring.
+      var cr = cell.getBoundingClientRect();
+      var a = Math.min(cr.left, lo);
+      var b = Math.max(cr.right, hi);
+      if (b - a > right - left) {
+        a = lo;
+        b = hi;
+      }
+      if (a < left) {
+        frame.scrollBy({ left: a - left, behavior: "instant" });
+      } else if (b > right) {
+        // never past the point where its start goes under the left group
+        frame.scrollBy({ left: Math.min(b - right, a - left), behavior: "instant" });
+      }
+    },
+    true,
+  );
+
   // A table that only mirrors this one (data-follows, e.g. the folded older releases) takes
   // its hidden columns and widths, so the two stay lined up while a column is dragged.
   function mirror(table) {

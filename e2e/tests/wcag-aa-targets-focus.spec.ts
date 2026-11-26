@@ -1,11 +1,11 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
+import { openSavedLayoutList, ownerWindow } from "../support/saved-layout";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // WCAG 2.2 AA failures of the layout that #1170 measured: the 24 px target of a sort link (2.5.8, #1272), the full
-// name of a device under the text-spacing override (1.4.12, #1273) and focus that ends under a fixed bar (2.4.11,
-// #1274). Focus under a pinned table column (#1275) is not here: scroll-padding-inline made every Tab onto a pinned
-// cell scroll the table, see the pull request. Each check reads what the page does with the keyboard, so a
+// name of a device under the text-spacing override (1.4.12, #1273) and focus that ends under a fixed bar or a pinned
+// table column (2.4.11, #1274, #1275). Each check reads what the page does with the keyboard, so a
 // stylesheet that stops doing it fails here whatever rule it moved. No timing of a live swap is waited for: the poll
 // interval is an hour, so nothing replaces a row while a walk is under way.
 let app: App;
@@ -131,14 +131,60 @@ async function walk(page: Page, steps: number, back = false): Promise<string[]> 
       // none of these covers it; only a different element on top does
       if (hit && (hit === t || t.contains(hit) || a.contains(hit) || hit.contains(t) || (label && label.contains(hit)))) return { stop: false as const };
       const over = hit ? `${hit.tagName.toLowerCase()}${hit.id ? "#" + hit.id : ""}${hit.className && typeof hit.className === "string" ? "." + hit.className.trim().split(/\s+/).join(".") : ""}` : "nothing";
-      // a table part over a cell of the table (a pinned column) or the scroller's own edge is #1275, not a bar
-      if (t.closest(".tablescroll") && !(hit && hit.closest("header.top, .ph, .sb"))) return { stop: false as const };
       return { stop: false as const, bad: `${desc} is under ${over} at (${Math.round(cx)}, ${Math.round(cy)}), scrollY ${Math.round(scrollY)}` };
     }, FOCUS_TARGET);
     if (found.stop) break;
     if ("bad" in found && found.bad) problems.push(found.bad);
   }
   return problems;
+}
+
+/**
+ * walkTable presses Tab through a table that is scrolled sideways and judges every stop: a focused element that is not
+ * a pinned (sticky) cell must be on top, not under a pinned column, and its focus ring (outline plus offset) must
+ * be clear of the pinned cells too (a ring half under the divider is the defect again, 4 px wide); and a focus that
+ * lands in a pinned cell must not move the table at all. It reports the first stop that breaks either, and how many stops lay in a pinned cell.
+ */
+async function walkTable(page: Page, steps: number): Promise<{ problems: string[]; pinnedStops: number; scrolledStops: number }> {
+  const problems: string[] = [];
+  let pinnedStops = 0;
+  let scrolledStops = 0;
+  let before = await page.evaluate(() => document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft);
+  for (let i = 0; i < steps; i++) {
+    await page.keyboard.press("Tab");
+    const r = await page.evaluate(() => {
+      const a = document.activeElement as HTMLElement | null;
+      const frame = document.querySelector<HTMLElement>("#devtable .tablescroll")!;
+      const cell = a?.closest("td, th") as HTMLElement | null | undefined;
+      if (!a || !cell || !frame.contains(cell)) return { out: true as const, left: frame.scrollLeft };
+      const desc = `${a.tagName.toLowerCase()}${a.className && typeof a.className === "string" ? "." + a.className.trim().split(/\s+/).join(".") : ""} "${(a.textContent ?? "").trim().slice(0, 24)}"`;
+      const pinned = getComputedStyle(cell).position === "sticky";
+      const rect = a.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const hit = rect.width < 2 || rect.height < 2 ? a : document.elementFromPoint(cx, cy);
+      const centreTop = !!hit && (hit === a || a.contains(hit) || hit.contains(a));
+      // the ring too: the outline and its offset grow the rect; no sticky cell of the row may lie over that
+      const cs = getComputedStyle(a);
+      const ring = Math.max(0, parseFloat(cs.outlineWidth) + parseFloat(cs.outlineOffset) || 0);
+      const under = [...(cell.parentElement?.children ?? [])].some((c) => {
+        if (c === cell || getComputedStyle(c).position !== "sticky") return false;
+        const r = c.getBoundingClientRect();
+        return r.width > 0 && rect.left - ring < r.right - 0.5 && rect.right + ring > r.left + 0.5;
+      });
+      return { out: false as const, left: frame.scrollLeft, pinned, top: centreTop && !under, desc, cx: Math.round(cx), cell: cell.className, ring };
+    });
+    if (r.out) break; // the walk starts inside the table: focus has left it
+    if (r.pinned) {
+      pinnedStops++;
+      if (Math.abs(r.left - before) > 0.5) problems.push(`${r.desc} is in a pinned cell and the table moved from ${before} to ${r.left}`);
+    } else {
+      if (!r.top) problems.push(`${r.desc} (${r.cell}) or its ${r.ring}px focus ring is under a pinned column at x ${r.cx}, scrollLeft ${r.left}`);
+    }
+    if (r.left > 1) scrolledStops++;
+    before = r.left;
+  }
+  return { problems, pinnedStops, scrolledStops };
 }
 
 for (const vp of widths) {
@@ -249,4 +295,30 @@ test("the name of a device is shown in full under the text-spacing override (WCA
   expect(box.text, "a long name").toBeGreaterThan(48);
   expect(box.lines, "the spacing makes the name longer than the two lines the clamp showed").toBeGreaterThanOrEqual(3);
   expect(box.scroll, "no part of the name is cut off").toBeLessThanOrEqual(box.client);
+});
+
+// A focused control must not end under a pinned column (WCAG 2.4.11, #1275): the pinned cells lie over the scroll
+// frame, so the browser counts a cell scrolled under them as visible and does not bring it out. The cure must not
+// move the table when focus lands in a pinned cell itself: scroll-padding-inline on the frame did (PR #1290, the
+// table jumped 358 -> 0 on every pinned cell, because the browser measures a sticky cell at its stuck place), so
+// this test also fails a fix that moves the table for a pinned cell. A saved layout wider than the frame is the
+// case: the default layout never scrolls sideways.
+test("keyboard focus in a scrolled table is never under a pinned column and does not move the table at a pinned cell (WCAG 2.4.11, #1275)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await openSavedLayoutList(page, app.url, { width: ownerWindow });
+  const frame = page.locator("#devtable .tablescroll");
+  const max = await frame.evaluate((f: HTMLElement) => f.scrollWidth - f.clientWidth);
+  // halfway: columns lie under both the left and the right pinned group
+  await frame.evaluate((f: HTMLElement, m) => (f.scrollLeft = Math.round(m / 2)), max);
+  expect(await frame.evaluate((f: HTMLElement) => f.scrollLeft), "the table is scrolled sideways").toBeGreaterThan(100);
+  // the pinned columns exist at this width, or the walk would judge nothing
+  const pinned = await page.evaluate(() => [...document.querySelectorAll("#devtable tbody td")].filter((c) => getComputedStyle(c).position === "sticky").length);
+  expect(pinned, "pinned cells in the list").toBeGreaterThan(0);
+  // start at the first control of the header and walk the header and the rows: a header cell's sort link and resize
+  // handle are the controls that lie between the pinned groups
+  await page.locator("#devtable thead").locator("a, button, input, [tabindex]").first().focus();
+  const { problems, pinnedStops, scrolledStops } = await walkTable(page, 120);
+  expect(scrolledStops, "stops of the walk in a table that is scrolled sideways").toBeGreaterThan(5);
+  expect(pinnedStops, "stops of the walk in a pinned cell").toBeGreaterThan(0);
+  expect(problems, "focused controls under a pinned column, or a table moved by a pinned cell").toEqual([]);
 });
