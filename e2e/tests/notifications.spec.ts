@@ -207,7 +207,7 @@ test("webhook: ntfy format sends plain text with a title; the preview follows th
   expect(hook.seen[0].headers["authorization"]).toBe(secret);
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
-  await expect(page.locator("#card-notify-message pre")).toContainText("Title: Update job #41: 11 ok, 1 failed");
+  await expect(page.locator("#card-notify-message pre")).toContainText("Title: Job TX-0041: 11 ok, 1 failed");
   await expect(page.locator("#card-notify-message pre")).not.toContainText(secret);
   await shoot(page, "b-ntfy");
   await format.selectOption("homeassistant"); // leave the saved state as the other tests expect

@@ -105,7 +105,7 @@ func (d ShellData) Groups() []NavGroupData {
 		entry{"backups", "Device backups", "/devices/backups", d.Backups, false},
 	)
 	add("updates",
-		entry{"transactions", "Transactions", "/transactions", d.Transactions, false},
+		entry{"transactions", "Activity", "/transactions", d.Transactions, false},
 		entry{"firmware", "Firmware", "/firmware", d.Firmware, false},
 	)
 	add("system",

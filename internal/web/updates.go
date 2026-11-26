@@ -251,10 +251,10 @@ func (h *handler) updateFormData(r *http.Request, selected []model.DeviceID, mod
 			blocked = h.apiOffBlock(r.Context(), d.ID, transport.ActUpdate) // online, but its HTTP API is off and MQTT cannot update it (#447)
 		}
 		if blocked == "" && busy[d.ID] {
-			blocked = "In a running transaction"
+			blocked = "In a running job"
 		}
 		if b, ok := planned[d.ID]; blocked == "" && ok {
-			blocked = "Planned in " + txID(b)
+			blocked = "Planned in " + b.TxID()
 		}
 		o := updateOption{Device: d, Health: row.Health.State, Blocked: blocked,
 			Update: f.Release != "" && versionOlder(d.Identity.Version, f.Release),
@@ -998,8 +998,8 @@ type batchPage struct {
 	Base   string
 	// summary bar
 	Total, Done, Running, Queued, Failed int
-	RetryOf                              model.BatchID   // this transaction retries that one (0: not a retry)
-	RetriedBy                            []model.BatchID // retries of this transaction, oldest first
+	RetryOf                              model.BatchID   // this job retries that one (0: not a retry)
+	RetriedBy                            []model.BatchID // retries of this job, oldest first
 	Canceled                             int
 	CancelPending                        int    // still running, but a cancel was requested: it stops after the current step
 	By                                   string // who started it
@@ -1156,7 +1156,7 @@ func (h *handler) batchPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// A transaction lives on the Transactions tab, whoever started it (#1000): the trail tells where the page is,
+	// A job lives on the Activity tab, whoever started it (#1000): the trail tells where the page is,
 	// not where the person came from. A "Make compliant" or template run is in that list like any other.
 	v := h.view(r, p.ID, "transactions", nil)
 	v.Live = true
@@ -1173,7 +1173,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 	// devices in the order they were added to the transaction (the store lists the newest first)
 	sort.SliceStable(b.Jobs, func(i, j int) bool { return b.Jobs[i].Job.ID < b.Jobs[j].Job.ID })
 	first := b.Jobs[0].Job
-	p := txnPage{CSRF: h.d.Guard.CSRFToken(r), Base: b.Base, Batch: b.Batch, ID: txID(b.Batch), Title: txTitle(first, b.Total), Policy: first.IsPolicy(), Active: b.Active,
+	p := txnPage{CSRF: h.d.Guard.CSRFToken(r), Base: b.Base, Batch: b.Batch, ID: b.Batch.TxID(), Title: txTitle(first, b.Total), Policy: first.IsPolicy(), Active: b.Active,
 		Total: b.Total, Done: b.Done, Running: b.Running, Queued: b.Queued, Failed: b.Failed, Canceled: b.Canceled, CancelPending: b.CancelPending,
 		RetryOf: b.RetryOf, RetriedBy: b.RetriedBy}
 	p.State, p.StateTone = txResult(b.Done, b.Running, b.Queued, b.Failed, b.Canceled)
@@ -1440,7 +1440,7 @@ type txView struct {
 	StartAt                    time.Time
 	RetryOf                    model.BatchID
 	Update                     bool      // a firmware update (not a command, backup or policy run)
-	Title                      string    // what the transaction does ("Update to Tasmota 14.3.0")
+	Title                      string    // what the job does ("Update to Tasmota 14.3.0")
 	first                      model.Job // the first job seen, for the title
 }
 
@@ -1550,7 +1550,7 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 	filter := store.JobFilter{Limit: 500}
 	p := txListView{Base: httpBase(r), CanStart: h.d.Firmware != nil && h.d.OTA != nil}
 	p.Self = p.Base + "/transactions"
-	if raw := r.URL.Query().Get("device"); raw != "" { // the device page's "All transactions"
+	if raw := r.URL.Query().Get("device"); raw != "" { // the device page's "All activity"
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {
 			h.notFoundDevice(w, r)
@@ -1605,10 +1605,10 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		at := txBeganAt(t, began[t.ID])
 		if t.Running+t.Queued > 0 {
 			// The card says when it started with the instant its history row below shows.
-			p.Running = append(p.Running, ui.TxnData{ID: txID(t.ID), Title: t.Title, State: res, StateTone: tone, Summary: t.RunSummary(),
+			p.Running = append(p.Running, ui.TxnData{ID: t.ID.TxID(), Title: t.Title, State: res, StateTone: tone, Summary: t.RunSummary(),
 				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Started: at, StartedText: ui.StampRelativeText(now, at)})
 		}
-		row := txHistRow{ID: txID(t.ID), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
+		row := txHistRow{ID: t.ID.TxID(), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
 			By: h.pr.Text(t.By), When: ui.StampRelativeText(now, at), At: at.Format(time.RFC3339), Href: href}
 		if !t.StartAt.IsZero() {
 			row.Due = at
@@ -1707,7 +1707,7 @@ func (h *handler) batchRetryForm(w http.ResponseWriter, r *http.Request) {
 		// A command or backup transaction is retried by an admin only, as that admin, and
 		// asks again when it holds a destructive command.
 		if pr, _ := auth.FromContext(r.Context()); pr.Role < model.RoleAdmin {
-			h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an admin can retry a command or backup transaction."))
+			h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an admin can retry a command or backup job."))
 			return
 		}
 		if page.Consequence = retryConsequences(p.Jobs); page.Consequence != "" {
@@ -1720,14 +1720,14 @@ func (h *handler) batchRetryForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if p.Active {
-		page.Error = "This transaction is still running. Retry it when every device has finished."
+		page.Error = "This job is still running. Retry it when every device has finished."
 	} else if len(page.Devices) == 0 {
 		page.Error = "No failed or cancelled device to retry."
 	} else if why := h.retryAPIOff(r.Context(), page.Devices, nil); why != "" {
 		page.Error = "Nothing would be sent. " + why
 	}
-	v := h.view(r, fmt.Sprintf("Retry transaction %d", p.Batch), "transactions", nil)
-	v.Crumbs = []ui.Crumb{{Label: txID(p.Batch), Path: "/transactions/" + bid(p.Batch)}, {Label: "Retry"}}
+	v := h.view(r, "Retry job "+p.Batch.TxID(), "transactions", nil)
+	v.Crumbs = []ui.Crumb{{Label: p.Batch.TxID(), Path: "/transactions/" + bid(p.Batch)}, {Label: "Retry"}}
 	h.show(w, r, http.StatusOK, "transaction_retry", v, retryPageView(h.retryViewOf(v, page)))
 }
 
@@ -1773,7 +1773,7 @@ func adminOnlyKind(k model.JobKind) bool {
 // It runs before anything else of the handler, so no kind-specific branch can skip it.
 func (h *handler) needAdminFor(w http.ResponseWriter, r *http.Request, j model.Job) bool {
 	if pr, _ := auth.FromContext(r.Context()); adminOnlyKind(j.Kind) && pr.Role < model.RoleAdmin {
-		h.message(w, r, http.StatusForbidden, h.view(r, "Not allowed", "transactions", "Only an admin can cancel or retry this transaction."))
+		h.message(w, r, http.StatusForbidden, h.view(r, "Not allowed", "transactions", "Only an admin can cancel or retry this job."))
 		return false
 	}
 	return true
@@ -1795,7 +1795,7 @@ func (h *handler) needAdminForBatch(w http.ResponseWriter, r *http.Request, id m
 // refuseTemplateRetry: a template transaction is never re-run. The devices may have changed since the
 // preview, so the person checks them again on the GPIO templates tab and applies from a fresh preview.
 func (h *handler) refuseTemplateRetry(w http.ResponseWriter, r *http.Request) {
-	h.message(w, r, http.StatusConflict, h.view(r, "Retry not offered", "transactions", "A GPIO template is not re-run: use \"Check again…\" on the transaction to compare the devices and apply from a fresh preview."))
+	h.message(w, r, http.StatusConflict, h.view(r, "Retry not offered", "transactions", "A GPIO template is not re-run: use \"Check again…\" on the job to compare the devices and apply from a fresh preview."))
 }
 
 // retryViewOf is the retry page's data: the sentences per kind and one row per device.
@@ -1807,16 +1807,16 @@ func (h *handler) retryViewOf(v view, page retryPage) retryView {
 	if page.All {
 		rv.Title = "Retry failed devices"
 	}
-	rv.Lead = "A new transaction retries " + rv.Count + "."
+	rv.Lead = "A new job retries " + rv.Count + "."
 	switch {
 	case page.Command:
-		rv.Info = fmt.Sprintf("It sends the same command as transaction #%d again, as you, if the command policy still allows it for your role.", page.Batch)
+		rv.Info = fmt.Sprintf("It sends the same command as job %s again, as you, if the command policy still allows it for your role.", page.Batch.TxID())
 	case page.Backup:
-		rv.Info = fmt.Sprintf("It takes a new backup of each device, as you. A backup changes nothing on the device; a device that is offline now is left out of the retry (transaction #%d).", page.Batch)
+		rv.Info = fmt.Sprintf("It takes a new backup of each device, as you. A backup changes nothing on the device; a device that is offline now is left out of the retry (job %s).", page.Batch.TxID())
 	case page.Policy:
-		rv.Info = fmt.Sprintf("It sends the same commands as transaction #%d again, saves them once per device and reads the values back.", page.Batch)
+		rv.Info = fmt.Sprintf("It sends the same commands as job %s again, saves them once per device and reads the values back.", page.Batch.TxID())
 	default:
-		rv.Info = fmt.Sprintf("It keeps the release and options of transaction #%d. Each device is planned afresh; one already at the target is left out.", page.Batch)
+		rv.Info = fmt.Sprintf("It keeps the release and options of job %s. Each device is planned afresh; one already at the target is left out.", page.Batch.TxID())
 	}
 	for _, d := range page.Devices {
 		rv.Rows = append(rv.Rows, retryRow{
@@ -1860,7 +1860,7 @@ func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if len(jobs) > 0 && (jobs[0].Job.IsCommand() || jobs[0].Job.IsBackup()) {
 		if pr, _ := auth.FromContext(r.Context()); pr.Role < model.RoleAdmin {
-			h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an admin can retry a command or backup transaction."))
+			h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an admin can retry a command or backup job."))
 			return
 		}
 		if retryConsequences(jobs) != "" {
@@ -1876,7 +1876,7 @@ func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 		if picked := h.formIDs(r); j.NeverRan && (len(picked) == 0 || slices.Contains(picked, j.Job.DeviceID)) {
 			// A retry starts at once, which is not what was planned: the person plans it again.
 			h.message(w, r, http.StatusConflict, h.view(r, "Retry not started", "transactions",
-				"Nothing was started. "+j.Device+" never started, and a retry would start it at once. Use \"Plan again…\" on the transaction to choose a new time."))
+				"Nothing was started. "+j.Device+" never started, and a retry would start it at once. Use \"Plan again…\" on the job to choose a new time."))
 			return
 		}
 	}
@@ -1893,9 +1893,9 @@ func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrNotFound):
 		h.notFoundBatch(w, r)
 	case errors.Is(err, ota.ErrNotAllowed):
-		h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an active admin can retry a command transaction."))
+		h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an active admin can retry a command job."))
 	case errors.Is(err, ota.ErrBatchRunning):
-		h.message(w, r, http.StatusConflict, h.view(r, "Retry not started", "transactions", "The transaction still has running jobs."))
+		h.message(w, r, http.StatusConflict, h.view(r, "Retry not started", "transactions", "The job still has running devices."))
 	case errors.Is(err, ota.ErrNotRetryable):
 		h.refuseTemplateRetry(w, r)
 	case errors.Is(err, ota.ErrNothingToRetry):

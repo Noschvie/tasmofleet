@@ -261,11 +261,11 @@ func trailScenes() []trailScene {
 				// rule 2: a transaction lives on the Transactions tab of Updates, however it was started
 				{method: "GET", path: "/devices/1/history", want: "Devices / kitchen", object: "kitchen"},
 				{method: "GET", path: "/transactions", none: true},
-				{method: "GET", path: "/transactions/7", want: "Updates / Transactions / TX-0007"},
-				{method: "GET", path: "/transactions/8", want: "Updates / Transactions / TX-0008"},
-				{method: "GET", path: "/transactions/7/cancel", want: "Updates / Transactions / TX-0007 / Cancel"},
-				{method: "GET", path: "/jobs/1/cancel", want: "Updates / Transactions / TX-0007 / Cancel update"},
-				{method: "GET", path: "/transactions/8/retry", want: "Updates / Transactions / TX-0008 / Retry"},
+				{method: "GET", path: "/transactions/7", want: "Updates / Activity / TX-0007"},
+				{method: "GET", path: "/transactions/8", want: "Updates / Activity / TX-0008"},
+				{method: "GET", path: "/transactions/7/cancel", want: "Updates / Activity / TX-0007 / Cancel"},
+				{method: "GET", path: "/jobs/1/cancel", want: "Updates / Activity / TX-0007 / Cancel update"},
+				{method: "GET", path: "/transactions/8/retry", want: "Updates / Activity / TX-0008 / Retry"},
 				{method: "GET", path: "/firmware", none: true},
 			}
 		}},

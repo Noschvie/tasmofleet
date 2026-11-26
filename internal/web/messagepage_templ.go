@@ -210,7 +210,7 @@ func noticePage(base, title string, m messageData) templ.Component {
 				}
 				ctx = templ.InitializeContext(ctx)
 				if m.LinkLead {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + m.Link}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the job", Kind: "primary", Href: base + m.Link}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -273,7 +273,7 @@ type retryView struct {
 	Error       string
 	Consequence string
 	Token       string
-	Lead        string // the plural line, "A new transaction retries 2 devices."
+	Lead        string // the plural line, "A new job retries 2 devices."
 	Info        string // what the retry does, per kind
 	Count       string // "2 devices"
 	Rows        []retryRow
@@ -302,7 +302,7 @@ func retryPageView(p retryView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if p.Error != "" {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the transaction", Href: p.Base + "/transactions/" + p.Batch}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the job", Href: p.Base + "/transactions/" + p.Batch}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

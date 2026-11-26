@@ -45,7 +45,7 @@ templ dashboardPage(d dashView) {
 				}
 				if d.TxnCard {
 					@ui.CardStack(1) {
-						@ui.ListCard("Transactions", "History", d.Base+"/transactions") {
+						@ui.ListCard("Activity", "History", d.Base+"/transactions") {
 							if d.Plans.N > 0 {
 								@ui.PlanLine(d.Plans)
 							}
@@ -56,7 +56,7 @@ templ dashboardPage(d dashView) {
 								@ui.TxnRow(r)
 							}
 							if len(d.Cards) == 0 && len(d.Rows) == 0 && d.Plans.N == 0 {
-								<p class="dash-none">No transactions yet. Updates you start show up here.</p>
+								<p class="dash-none">No jobs yet. Updates you start show up here.</p>
 							}
 						}
 					}

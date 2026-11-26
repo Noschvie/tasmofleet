@@ -132,7 +132,7 @@ func TestBulkBackupListsEngineRefusals(t *testing.T) {
 	e, fbk, _ := actionEnv(t)
 	fbk.skip = []ota.Refusal{{DeviceID: 1, Reason: "already has active job 4"}}
 	_, body := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "run", "1"))
-	for _, want := range []string{"left out", "kitchen", `<a href="/tf/transactions/21">Transaction #21</a>`} {
+	for _, want := range []string{"left out", "kitchen", `<a href="/tf/transactions/21">Job TX-0021</a>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("lacks %q: %s", want, body)
 		}

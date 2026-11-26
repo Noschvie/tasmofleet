@@ -183,18 +183,18 @@ func (h *handler) batchCancelConfirm(w http.ResponseWriter, r *http.Request) {
 	if p.Planned > 0 && p.Running+p.Queued+p.Done == 0 { // a plan that has not started: nothing runs, nothing changes
 		first := p.Jobs[0].Job
 		h.renderActionConfirm(w, r, "transactions", actionConfirm{
-			Crumbs: []ui.Crumb{{Label: txID(p.Batch), Path: back}},
+			Crumbs: []ui.Crumb{{Label: p.Batch.TxID(), Path: back}},
 			Last:   "Cancel",
 			Action: back + "/cancel", CancelHref: back,
-		}.words(cancelScheduleWords(txID(p.Batch), planCancelText(txTitle(first, p.Planned)+" ("+plural(p.Planned, "device")+")", first.StartAt))))
+		}.words(cancelScheduleWords(p.Batch.TxID(), planCancelText(txTitle(first, p.Planned)+" ("+plural(p.Planned, "device")+")", first.StartAt))))
 		return
 	}
 	// the same words as the page's dialog (txnBody)
 	h.renderActionConfirm(w, r, "transactions", actionConfirm{
-		Crumbs: []ui.Crumb{{Label: txID(p.Batch), Path: back}},
+		Crumbs: []ui.Crumb{{Label: p.Batch.TxID(), Path: back}},
 		Last:   "Cancel",
 		Action: back + "/cancel", CancelHref: back,
-	}.words(cancelRemainingWords(txID(p.Batch), cancelText(p.Queued))))
+	}.words(cancelRemainingWords(p.Batch.TxID(), cancelText(p.Queued))))
 }
 
 func (h *handler) jobCancelConfirm(w http.ResponseWriter, r *http.Request) {
@@ -226,14 +226,14 @@ func (h *handler) jobCancelConfirm(w http.ResponseWriter, r *http.Request) {
 	back := "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)
 	if j.State == model.JobScheduled {
 		h.renderActionConfirm(w, r, "transactions", actionConfirm{
-			Crumbs: []ui.Crumb{{Label: txID(j.BatchID), Path: back}},
+			Crumbs: []ui.Crumb{{Label: j.BatchID.TxID(), Path: back}},
 			Last:   "Cancel update",
 			Action: fmt.Sprintf("/jobs/%d/cancel", j.ID), CancelHref: back,
 		}.words(cancelUpdateWords(name, planCancelText("The update of "+name, j.StartAt), true)))
 		return
 	}
 	h.renderActionConfirm(w, r, "transactions", actionConfirm{
-		Crumbs: []ui.Crumb{{Label: txID(j.BatchID), Path: back}},
+		Crumbs: []ui.Crumb{{Label: j.BatchID.TxID(), Path: back}},
 		Last:   "Cancel update",
 		Action: fmt.Sprintf("/jobs/%d/cancel", j.ID), CancelHref: back,
 	}.words(cancelUpdateWords(name, jobRunningCancelText, false)))

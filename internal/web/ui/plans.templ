@@ -27,7 +27,7 @@ templ planText(p PlanSummary) {
 templ sbPlansWide(s StatusBar) {
 	if s.Plans.N > 0 {
 		if s.Plans.Href != "" {
-			<a class="sb-i sb-stale" href={ templ.SafeURL(s.Plans.Href) } title="Transactions: the updates planned for later">
+			<a class="sb-i sb-stale" href={ templ.SafeURL(s.Plans.Href) } title="Activity: the updates planned for later">
 				@sbPlansWideText(s.Plans)
 			</a>
 		} else {

@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +13,6 @@ import (
 
 // The wording and view helpers of the Updates pages (design v2, WP P4): transaction ids, titles,
 // results, the short state of a device row and the "when" of a history row.
-
-// txID is a transaction's id as the pages show it: "TX-0143" (the prototype's form). The URL keeps
-// the bare number.
-func txID(id model.BatchID) string { return fmt.Sprintf("TX-%04d", id) }
 
 // txTitle names what a transaction does: "Update to Tasmota 14.3.0", "Make compliant · TelePeriod",
 // "Back up 58 devices", "Send Status 5". The command is the redacted text (it may hold a secret).

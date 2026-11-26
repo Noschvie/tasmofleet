@@ -34,3 +34,17 @@ func TestTemplateJobIsNotAnUpdate(t *testing.T) {
 		t.Fatal("the zero kind must stay a firmware update")
 	}
 }
+
+// Why: a job has one name wherever a person meets it (the Activity page, a device page, a flash, the audit log,
+// a notification), so the format lives in one place; the zero padding keeps ids sortable by eye and the id is
+// never the bare number, which a person cannot tell from a count of devices.
+func TestBatchIDTxID(t *testing.T) {
+	for _, c := range []struct {
+		id   BatchID
+		want string
+	}{{143, "TX-0143"}, {7, "TX-0007"}, {41, "TX-0041"}, {12345, "TX-12345"}} {
+		if got := c.id.TxID(); got != c.want {
+			t.Errorf("BatchID(%d).TxID() = %q, want %q", c.id, got, c.want)
+		}
+	}
+}

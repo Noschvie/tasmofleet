@@ -396,7 +396,7 @@ func TestDeviceOverviewActivityIsTheNewest10OfBothKinds(t *testing.T) {
 	if n := strings.Count(body, `class="dev-act-at"`); n != 10 {
 		t.Errorf("activity: %d rows, want the newest 10", n)
 	}
-	if !strings.Contains(body, "Transaction #14") || strings.Contains(body, "change 0") {
+	if !strings.Contains(body, "Job TX-0014") || strings.Contains(body, "change 0") {
 		t.Errorf("not the newest 10 merged newest first:\n%s", body)
 	}
 	if !strings.Contains(body, `href="/tf/devices/1/history">All activity`) {

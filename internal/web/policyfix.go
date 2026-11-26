@@ -306,7 +306,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 			row.Blocked = apiOff // the values are cached ones; the device would be sent commands it refuses (#645)
 		case h.d.Jobs != nil:
 			if act, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{DeviceID: d.ID, States: activeJobStates, Limit: 1}); err == nil && len(act) > 0 {
-				row.Blocked = "Another transaction is running on this device (#" + strconv.FormatInt(int64(act[0].BatchID), 10) + ")."
+				row.Blocked = "Another job is running on this device (" + act[0].BatchID.TxID() + ")."
 			} else if pj, ok, err := h.plannedOn(ctx, d.ID); err == nil && ok {
 				row.Blocked = "Planned: update " + planStartText(pj) + "." // the plan keeps other jobs off the device until it starts (#604)
 			}

@@ -4,7 +4,7 @@ import { pickForUpdate } from "../support/updates";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 import type { Page } from "@playwright/test";
 
-// Planned updates in Transactions (#604): the Scheduled section, the page of a plan, Cancel and "Plan again…".
+// Planned updates in Activity (#604): the Scheduled section, the page of a plan, Cancel and "Plan again…".
 // The plan is made through the update preview, so this also proves that what the person planned is what the list
 // shows. Nothing may start on the device: the plan is for tomorrow night.
 let app: App;
@@ -98,7 +98,7 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   const line = page.locator(".dash-plans");
   await expect(line).toContainText(new RegExp(`1 scheduled\\s*·\\s*next \\w{3}, \\w{3} \\d+ at ${at3}\\s*·\\s*in \\d+`));
   await expect(page.locator("#sb-wide")).toContainText("1 scheduled");
-  await line.getByRole("link", { name: "1 scheduled" }).click(); // leads to the Scheduled section of Transactions (#707)
+  await line.getByRole("link", { name: "1 scheduled" }).click(); // leads to the Scheduled section of Activity (#707)
   await expect(page).toHaveURL(/\/transactions#scheduled$/);
   await expect(page.locator("#scheduled")).toBeVisible();
 

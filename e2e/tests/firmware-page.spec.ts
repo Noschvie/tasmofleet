@@ -158,7 +158,7 @@ test("a file held by a running update cannot be deleted", async ({ page }) => {
   for (let id = 1; id <= 12 && !refused; id++) {
     await page.goto(app.url + `/firmware/artifacts/${id}/delete`);
     const text = await page.locator("main").innerText();
-    if (text.includes(heldFile) && text.includes("needed by transaction")) refused = text;
+    if (text.includes(heldFile) && text.includes("needed by job")) refused = text;
   }
   expect(refused).toContain("cannot be deleted");
   await expect(page.getByRole("button", { name: "Delete file" })).toHaveCount(0);

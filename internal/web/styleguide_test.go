@@ -104,13 +104,13 @@ func TestDashboardEmptyTransactionsCard(t *testing.T) {
 	e, _, j, _ := setupOTA(t)
 	j.jobs = nil
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	for _, want := range []string{`<h2>Transactions</h2>`, "No transactions yet.", `href="/tf/updates/new">New update`} {
+	for _, want := range []string{`<h2>Activity</h2>`, "No jobs yet.", `href="/tf/updates/new">New update`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("admin: missing %q", want)
 		}
 	}
 	_, body = e.do(t, "GET", "/", "operator", nil)
-	if !strings.Contains(body, "No transactions yet.") {
+	if !strings.Contains(body, "No jobs yet.") {
 		t.Error("operator: the empty state is missing")
 	}
 	if strings.Contains(body, `/tf/updates/new`) {

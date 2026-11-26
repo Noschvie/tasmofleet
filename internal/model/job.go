@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -19,6 +20,11 @@ type JobID int64
 
 // BatchID groups the jobs created by one user action ("update these 12 devices").
 type BatchID int64
+
+// TxID is the id a person sees for the batch: "TX-0143". Every page, message and notification names a
+// job this way and in prose "job TX-0143"; the URL, the audit target ("transaction:143") and the stored
+// rows keep the bare number.
+func (b BatchID) TxID() string { return fmt.Sprintf("TX-%04d", int64(b)) }
 
 // JobState is a state of the OTA state machine (package ota). The full
 // transition table is in docs/spec, section "OTA state machine".

@@ -163,7 +163,7 @@ func TestPolicyFixLeavesDevicesWithAnActiveJobOut(t *testing.T) {
 	fix := &fakeFix{}
 	e := fixEnv(t, fix, &activeOn{device: 1})
 	body := previewFor(t, e, url.Values{"all": {"1"}})
-	if !strings.Contains(body, "Another transaction is running on this device (#3)") || !strings.Contains(body, "Run 1 change<") {
+	if !strings.Contains(body, "Another job is running on this device (TX-0003)") || !strings.Contains(body, "Run 1 change<") {
 		t.Fatalf("preview %s", body)
 	}
 	m := digestRe.FindStringSubmatch(body)
@@ -550,7 +550,7 @@ func TestPolicyFixAdvisoryHintIsNotABlock(t *testing.T) {
 
 	// the device is busy: that is the reason shown, not the hint
 	body = previewFor(t, advisoryOnlyEnv(t, &fakeFix{}, &activeOn{device: 1}), url.Values{"only": {"1"}})
-	if m := blocked.FindStringSubmatch(body); m == nil || !strings.Contains(m[1], "Another transaction is running on this device (#3)") || hint.MatchString(body) {
+	if m := blocked.FindStringSubmatch(body); m == nil || !strings.Contains(m[1], "Another job is running on this device (TX-0003)") || hint.MatchString(body) {
 		t.Errorf("a running job is the reason, got %v:\n%s", m, body)
 	}
 

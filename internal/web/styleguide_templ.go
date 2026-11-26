@@ -729,7 +729,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.RadioCards("Sign-in method", "sg-auth", []ui.Option{{Value: "otp", Label: "One-time password", Text: "The user sets their own password at the first sign-in.", Checked: true}, {Value: "set", Label: "Set an initial password", Text: "You pass the password on yourself."}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.RadioCards("Sign-in method", "sg-auth", []ui.Option{{Value: "otp", Label: "Temporary password", Text: "The user sets their own password at the first sign-in.", Checked: true}, {Value: "set", Label: "Set an initial password", Text: "You pass the password on yourself."}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -753,7 +753,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and transaction counters at /metrics.", On: true}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and job counters at /metrics.", On: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -943,7 +943,7 @@ func styleguidePage(v sgView) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = ui.ListCard("Transactions", "History", v.Base+"/styleguide").Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.ListCard("Activity", "History", v.Base+"/styleguide").Render(templ.WithChildren(ctx, templ_7745c5c3_Var23), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

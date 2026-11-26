@@ -203,7 +203,7 @@ func TestFirmwareCachedFiles(t *testing.T) {
 	list := fwSection(t, body, "cache")
 	for _, want := range []string{
 		"2 files · 3.0\u00a0KiB", "Delete 1 unused", `name="id" value="2"`,
-		`href="/tf/transactions/5"`, "Needed by #5",
+		`href="/tf/transactions/5"`, "Needed by TX-0005",
 		"sha256 9f2c…e77c", "ESP32 / tasmota, from ota.tasmota.com; installed on dimmer",
 		`href="/tf/firmware/artifacts/2/delete" data-dialog="dlg-file-2"`,
 	} {

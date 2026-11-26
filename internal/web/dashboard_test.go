@@ -244,7 +244,7 @@ func TestDashboardTransactionsCard(t *testing.T) {
 		}}
 	})
 	_, body := e.do(t, "GET", "/", "operator", nil)
-	card := between(body, `<h2>Transactions</h2>`, `</section>`)
+	card := between(body, `<h2>Activity</h2>`, `</section>`)
 	for _, want := range []string{
 		`<a class="txn-card" href="/tf/transactions/5">`, `TX-0005`, "Update to Tasmota 16.1.0", ">Running<", "1 of 4 done · 1 failed · 1 in progress · 1 waiting",
 		`href="/tf/transactions/4"`, ">Succeeded<",
@@ -262,7 +262,7 @@ func TestDashboardTransactionsCard(t *testing.T) {
 	if strings.Contains(card, `/tf/transactions/1"`) {
 		t.Error("more than three history rows")
 	}
-	if !strings.Contains(between(body, `<h2>Transactions</h2>`, `</div>`), `href="/tf/transactions"`) {
+	if !strings.Contains(between(body, `<h2>Activity</h2>`, `</div>`), `href="/tf/transactions"`) {
 		t.Error("History does not lead to the transactions list")
 	}
 }
@@ -273,7 +273,7 @@ func dashTxnJob(id model.JobID, b model.BatchID, st model.JobState, created time
 }
 
 // txnPart is the dashboard's transactions card.
-func txnPart(body string) string { return between(body, `<h2>Transactions</h2>`, `</section>`) }
+func txnPart(body string) string { return between(body, `<h2>Activity</h2>`, `</section>`) }
 
 // Why (#1199): the expanded card with its progress bar is for a transaction that is still at work. A
 // finished one (here the newest, all Succeeded) is one compact row with its result and the time it

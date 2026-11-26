@@ -389,7 +389,7 @@ func planFixture() []model.Job {
 
 // planLine is the plan line of the Dashboard card, as text.
 func planLine(body string) string {
-	return plain(between(body, `<h2>Transactions</h2>`, `</section>`))
+	return plain(between(body, `<h2>Activity</h2>`, `</section>`))
 }
 
 // Why (#707): someone who never opens Transactions must still see that an update starts tonight. The Dashboard
@@ -410,7 +410,7 @@ func TestDashboardAndStatusBarShowScheduledPlans(t *testing.T) {
 	if !strings.Contains(card, "TX-0013") {
 		t.Errorf("the transaction that began is not a running job on the Dashboard: %s", card)
 	}
-	if !strings.Contains(between(body, `<h2>Transactions</h2>`, `</section>`), `href="/tf/transactions#scheduled"`) {
+	if !strings.Contains(between(body, `<h2>Activity</h2>`, `</section>`), `href="/tf/transactions#scheduled"`) {
 		t.Errorf("the Dashboard line does not link to the Scheduled section")
 	}
 	bar := barOf(body)
@@ -438,7 +438,7 @@ func TestDashboardAndStatusBarShowScheduledPlans(t *testing.T) {
 
 // Why (#707): a plan on the Dashboard that no longer exists is worse than none. Once a plan is cancelled, has
 // started, or was not started, nothing of it is left on the Dashboard or in the bar; and without any plan the
-// card's "No transactions yet" is back, so the card never says both.
+// card's "No jobs yet" is back, so the card never says both.
 func TestPlansLeaveDashboardAndStatusBarWhenCancelledOrStarted(t *testing.T) {
 	notStarted := func(j *model.Job) {
 		j.State, j.NotStarted, j.UpdatedAt = model.JobCancelled, true, sat.Add(2*time.Hour)
@@ -459,7 +459,7 @@ func TestPlansLeaveDashboardAndStatusBarWhenCancelledOrStarted(t *testing.T) {
 			if !strings.Contains(planLine(body), "1 scheduled") || !strings.Contains(plain(barOf(body)), "1 scheduled") {
 				t.Fatalf("the plan is not shown before it changes: %s", planLine(body))
 			}
-			if strings.Contains(planLine(body), "No transactions yet") {
+			if strings.Contains(planLine(body), "No jobs yet") {
 				t.Errorf("the card says there are no transactions while a plan waits: %s", planLine(body))
 			}
 			c.change(&jobs.jobs[0])
@@ -473,7 +473,7 @@ func TestPlansLeaveDashboardAndStatusBarWhenCancelledOrStarted(t *testing.T) {
 		e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
 		jobs.jobs = nil
 		_, body := e.do(t, "GET", "/", "operator", nil)
-		if !strings.Contains(planLine(body), "No transactions yet") || strings.Contains(planLine(body)+plain(barOf(body)), "scheduled") {
+		if !strings.Contains(planLine(body), "No jobs yet") || strings.Contains(planLine(body)+plain(barOf(body)), "scheduled") {
 			t.Errorf("nothing is planned, but: %s / %s", planLine(body), plain(barOf(body)))
 		}
 	})

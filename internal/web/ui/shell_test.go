@@ -99,12 +99,12 @@ func labels(gs []NavGroupData) string {
 // refuse on their own. The groups and pages are the prototype's (design v2 SUB table) without the entries #1106
 // moved to a button (Add devices) or to About (the style guide).
 func TestMenuFollowsRoleAndFeatures(t *testing.T) {
-	if got, want := labels(admin().Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]System[Settings;TasmoFleet backup;Audit log;Users;About;]"; got != want {
+	if got, want := labels(admin().Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Activity;Firmware;]System[Settings;TasmoFleet backup;Audit log;Users;About;]"; got != want {
 		t.Errorf("admin menu\n got %s\nwant %s", got, want)
 	}
 	op := admin()
 	op.IsAdmin, op.RoleName = false, "operator"
-	if got, want := labels(op.Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]"; got != want {
+	if got, want := labels(op.Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Activity;Firmware;]"; got != want {
 		t.Errorf("operator menu\n got %s\nwant %s", got, want)
 	}
 	bare := ShellData{Title: "x", Nav: "dashboard", UserName: "o", UserMethod: "header", RoleName: "admin", IsAdmin: true}
@@ -115,7 +115,7 @@ func TestMenuFollowsRoleAndFeatures(t *testing.T) {
 	// result of a bulk backup can be found again (#881).
 	tx := bare
 	tx.Transactions = true
-	if got, want := labels(tx.Groups()), "Dashboard[Dashboard;]Devices[List;]Updates[Transactions;]System[Audit log;Users;About;]"; got != want {
+	if got, want := labels(tx.Groups()), "Dashboard[Dashboard;]Devices[List;]Updates[Activity;]System[Audit log;Users;About;]"; got != want {
 		t.Errorf("transactions without firmware\n got %s\nwant %s", got, want)
 	}
 	fw := bare
@@ -144,7 +144,7 @@ func TestMenuFollowsRoleAndFeatures(t *testing.T) {
 func TestCurrentPageMarkedEverywhere(t *testing.T) {
 	for nav, want := range map[string][2]string{
 		"policy": {"Devices", "Policy"}, "discovery": {"Devices", "List"}, "snapshots": {"System", "TasmoFleet backup"}, "firmware": {"Updates", "Firmware"},
-		"updates": {"Updates", "Transactions"}, "users": {"System", "Users"}, "system": {"System", "Settings"}, "dashboard": {"Dashboard", "Dashboard"},
+		"updates": {"Updates", "Activity"}, "users": {"System", "Users"}, "system": {"System", "Settings"}, "dashboard": {"Dashboard", "Dashboard"},
 		"backups": {"Devices", "Device backups"}, "styleguide": {"System", "About"},
 	} {
 		d := admin()
@@ -167,7 +167,7 @@ func TestCurrentPageMarkedEverywhere(t *testing.T) {
 }
 
 // Why: the trail says where a page sits (#1000): the group, then the sub-navigation entry the page
-// lights up (the first entry too, so /transactions reads Updates / Transactions and not Updates), then
+// lights up (the first entry too, so /transactions reads Updates / Activity and not Updates), then
 // the page's own steps. A device lights no entry and hangs directly under its group; System has no page
 // of its own, so it is never a link. This is the whole trail (trail); which of them a page draws is
 // TestTrailStartsAtThreeSteps (#1106).
@@ -183,7 +183,7 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 		{"policy", "/policy", "Policy", nil, "Devices>/devices|Policy"},
 		{"discovery", "/devices/new", "Add devices", nil, "Devices>/devices|List>/devices|Add devices"},
 		{"snapshots", "/settings/system/snapshots", "TasmoFleet backup", nil, "System|TasmoFleet backup"},
-		{"transactions", "/transactions", "Transactions", nil, "Updates>/transactions|Transactions"},
+		{"transactions", "/transactions", "Activity", nil, "Updates>/transactions|Activity"},
 		{"firmware", "/firmware", "Firmware", nil, "Updates>/transactions|Firmware"},
 		{"about", "/about", "About", nil, "System|About"},
 		{"users", "/users", "Users", nil, "System|Users"},
@@ -196,7 +196,7 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 		// a page below an entry: the entry is a link, the page's own steps follow
 		{"devices", "/devices/bulk", "Bulk action", []Crumb{{Label: "Bulk action"}}, "Devices>/devices|List>/devices|Bulk action"},
 		{"transactions", "/transactions/7/retry", "Retry", []Crumb{{Label: "TX-0007", Path: "/transactions/7"}, {Label: "Retry"}},
-			"Updates>/transactions|Transactions>/transactions|TX-0007>/transactions/7|Retry"},
+			"Updates>/transactions|Activity>/transactions|TX-0007>/transactions/7|Retry"},
 		{"system", "/settings/system/reset", "Reset", []Crumb{{Label: "Advanced", Path: "/settings/system?tab=advanced"}, {Label: "Reset"}},
 			"System|Settings>/settings/system|Advanced>/settings/system?tab=advanced|Reset"},
 		// a device lights no entry: Devices / the device, whatever tab or subpage it is

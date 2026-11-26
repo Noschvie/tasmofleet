@@ -629,11 +629,11 @@ func (h *handler) notFoundDevice(w http.ResponseWriter, r *http.Request) {
 		ui.Btn{Label: "All devices", Kind: "primary", Href: "/devices"}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
 
-// notFoundBatch answers 404 for a transaction that does not exist and links to the list.
+// notFoundBatch answers 404 for a job that does not exist and links to the list.
 func (h *handler) notFoundBatch(w http.ResponseWriter, r *http.Request) {
-	h.renderNotFound(w, r, "Transaction not found", "This transaction doesn’t exist",
+	h.renderNotFound(w, r, "Job not found", "This job doesn’t exist",
 		"The link may be mistyped.",
-		ui.Btn{Label: "All transactions", Kind: "primary", Href: "/transactions"}, ui.Btn{Label: "Go to dashboard", Href: "/"})
+		ui.Btn{Label: "Open Activity", Kind: "primary", Href: "/transactions"}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
 
 // renderNotFound is the 404 error page (design v2 screen e404); the buttons' paths are below

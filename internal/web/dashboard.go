@@ -405,7 +405,7 @@ func dashTxnCard(base string, now time.Time, t txView) ui.TxnData {
 		}
 	}
 	at := txBeganAt(t, time.Time{})
-	return ui.TxnData{ID: txID(t.ID), Title: dashTxnTitle(t), State: t.Outcome, StateTone: t.Tone, Summary: strings.Join(parts, " · "),
+	return ui.TxnData{ID: t.ID.TxID(), Title: dashTxnTitle(t), State: t.Outcome, StateTone: t.Tone, Summary: strings.Join(parts, " · "),
 		OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total, Href: fmt.Sprintf("%s/transactions/%d", base, t.ID),
 		Started: at, StartedText: ui.StampRelativeText(now, at)}
 }
@@ -435,7 +435,7 @@ func dashResult(t txView) (string, ui.Tone) {
 func dashTxnRow(base string, now time.Time, t txView) ui.TxnRowData {
 	res, tone := dashResult(t)
 	at := txBeganAt(t, time.Time{})
-	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampRelativeText(now, at), WhenAt: at,
+	return ui.TxnRowData{ID: t.ID.TxID(), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampRelativeText(now, at), WhenAt: at,
 		Href: fmt.Sprintf("%s/transactions/%d", base, t.ID)}
 }
 

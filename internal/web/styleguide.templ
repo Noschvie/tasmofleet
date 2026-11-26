@@ -200,14 +200,14 @@ templ styleguidePage(v sgView) {
 		@sgSec("controls") {
 			<div class="sg-cols">
 				<div class="sg-stack">
-					@ui.RadioCards("Sign-in method", "sg-auth", []ui.Option{{Value: "otp", Label: "One-time password", Text: "The user sets their own password at the first sign-in.", Checked: true}, {Value: "set", Label: "Set an initial password", Text: "You pass the password on yourself."}})
+					@ui.RadioCards("Sign-in method", "sg-auth", []ui.Option{{Value: "otp", Label: "Temporary password", Text: "The user sets their own password at the first sign-in.", Checked: true}, {Value: "set", Label: "Set an initial password", Text: "You pass the password on yourself."}})
 				</div>
 				<div class="sg-stack">
 					@ui.Segmented("Severity", "sg-sev", severityOptions(policy.SeverityWarn))
 					@ui.Segmented("Diff layout", "sg-layout", []ui.Option{{Value: "side", Label: "Side by side", Checked: true}, {Value: "uni", Label: "Unified"}})
 					@ui.Check("sg-keep", "Keep me signed in", "", true, false)
 					@ui.Check("sg-names", "Device names in metric labels", "Off: labels use the device ID only.", false, true)
-					@ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and transaction counters at /metrics.", On: true})
+					@ui.Toggle(ui.ToggleData{Name: "sg-metrics", Label: "Expose Prometheus metrics", Text: "Serves device state, power and job counters at /metrics.", On: true})
 					<div class="sg-row">
 						@ui.PowerSwitch(ui.PowerSwitchData{Label: "Power on", On: true})
 						@ui.PowerSwitch(ui.PowerSwitchData{Label: "Power off"})
@@ -237,7 +237,7 @@ templ styleguidePage(v sgView) {
 				@ui.ListCard("Needs attention", "All devices", v.Base+"/styleguide") {
 					@ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF)
 				}
-				@ui.ListCard("Transactions", "History", v.Base+"/styleguide") {
+				@ui.ListCard("Activity", "History", v.Base+"/styleguide") {
 					@ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", StartedText: "Today 17:20", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"})
 					@ui.TxnRow(ui.TxnRowData{ID: "TX-0147", Title: "Tasmota 14.2.0 for 6 devices", Result: "Succeeded", Tone: ui.ToneOK, When: "2 days ago", Href: v.Base + "/styleguide"})
 					@ui.TxnRow(ui.TxnRowData{ID: "TX-0146", Title: "Tasmota 14.2.0 for 3 devices", Result: "1 failed", Tone: ui.ToneDanger, When: "5 days ago", Href: v.Base + "/styleguide"})

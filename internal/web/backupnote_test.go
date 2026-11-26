@@ -224,7 +224,7 @@ func TestActivityShowsTheBackupNote(t *testing.T) {
 	if strings.Contains(body, "failed detail must stay out") {
 		t.Error("a failed job shows its own reason column, not the event detail")
 	}
-	if !strings.Contains(body, "Transaction #2") {
+	if !strings.Contains(body, "Job TX-0002") {
 		t.Error("the failed row disappeared")
 	}
 }

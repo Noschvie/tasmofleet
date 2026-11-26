@@ -252,14 +252,14 @@ func dashboardPage(d dashView) templ.Component {
 								return templ_7745c5c3_Err
 							}
 							if len(d.Cards) == 0 && len(d.Rows) == 0 && d.Plans.N == 0 {
-								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<p class=\"dash-none\">No transactions yet. Updates you start show up here.</p>")
+								templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<p class=\"dash-none\">No jobs yet. Updates you start show up here.</p>")
 								if templ_7745c5c3_Err != nil {
 									return templ_7745c5c3_Err
 								}
 							}
 							return nil
 						})
-						templ_7745c5c3_Err = ui.ListCard("Transactions", "History", d.Base+"/transactions").Render(templ.WithChildren(ctx, templ_7745c5c3_Var9), templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.ListCard("Activity", "History", d.Base+"/transactions").Render(templ.WithChildren(ctx, templ_7745c5c3_Var9), templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

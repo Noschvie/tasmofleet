@@ -524,7 +524,7 @@ func fleetLastNote(v fleetView) string {
 	if !v.Scheduled {
 		return "Choose the backup days under Schedule, next to this card."
 	}
-	return "The last scheduled run, " + v.Plan + ". Manual runs are on the Transactions page."
+	return "The last scheduled run, " + v.Plan + ". Manual runs are on the Activity page."
 }
 
 // fleetMissed says that the newest scheduled time was skipped because TasmoFleet was down (#601).

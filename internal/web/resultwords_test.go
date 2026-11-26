@@ -101,7 +101,7 @@ func TestResultBadgesUseOneWordPerState(t *testing.T) {
 	}
 
 	_, dash := e.do(t, "GET", "/", "operator", nil)
-	requireResultWords(t, "dashboard", between(dash, `<h2>Transactions</h2>`, `</section>`))
+	requireResultWords(t, "dashboard", between(dash, `<h2>Activity</h2>`, `</section>`))
 
 	_, dev := e.do(t, "GET", "/devices/1", "operator", nil)
 	requireResultWords(t, "device activity", between(dev, `<ul class="dev-act">`, `</ul>`))

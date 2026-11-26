@@ -761,7 +761,7 @@ func deviceOverviewPage(p deviceOverview) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if u := p.Updating; u != nil {
-			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the transaction", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the job", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1692,7 +1692,7 @@ func devActBox(a devActivity, attrs templ.Attributes) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 110, "<p class=\"devcard-note\">No state changes or transactions yet. Online/offline changes, updates and commands appear here, newest first.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 110, "<p class=\"devcard-note\">No state changes or jobs yet. Online/offline changes, updates and commands appear here, newest first.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1853,14 +1853,14 @@ func devActList(rows []devActRow, base string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 124, "\">Transaction #")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 124, "\">Job ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var73 string
-				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.FormatInt(int64(j.BatchID), 10))
+				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(j.BatchID.TxID())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devicehead.templ`, Line: 394, Col: 153}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devicehead.templ`, Line: 394, Col: 121}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 				if templ_7745c5c3_Err != nil {
@@ -1998,7 +1998,7 @@ func deviceHistoryPage(p historyView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "<p class=\"devcard-note\">No state changes or transactions yet. Online/offline changes, updates and commands appear here, newest first.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 137, "<p class=\"devcard-note\">No state changes or jobs yet. Online/offline changes, updates and commands appear here, newest first.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

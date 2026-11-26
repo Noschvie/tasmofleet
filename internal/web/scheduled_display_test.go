@@ -279,11 +279,11 @@ func TestAuditSummaryOfTheSchedulerStartAndTheCancel(t *testing.T) {
 		label, short string
 	}{
 		{ev("transaction.scheduled_start", `{"device":"plug-1","planned_start":"2026-11-14T08:49:00Z","late_seconds":240}`), "Scheduled start", "plug-1 · planned Sat, Nov 14 at 08:49 · 4 min late"},
-		{ev("transaction.cancel", `{"devices":2,"waiting":2,"running":0,"planned":2,"planned_start":"2026-11-14T08:49:00Z"}`), "Cancel transaction", "2 devices · planned Sat, Nov 14 at 08:49"},
-		{ev("transaction.cancel", `{"devices":1,"waiting":0,"running":1}`), "Cancel transaction", "1 device · 1 running, stops after its step"},
+		{ev("transaction.cancel", `{"devices":2,"waiting":2,"running":0,"planned":2,"planned_start":"2026-11-14T08:49:00Z"}`), "Cancel job", "2 devices · planned Sat, Nov 14 at 08:49"},
+		{ev("transaction.cancel", `{"devices":1,"waiting":0,"running":1}`), "Cancel job", "1 device · 1 running, stops after its step"},
 		// One job of a transaction names its device, so the entry does not read as the whole transaction stopped.
-		{ev("transaction.cancel", `{"devices":1,"waiting":1,"running":0,"job":7,"device_id":3,"device":"plug-1"}`), "Cancel transaction", "1 device of the transaction: plug-1"},
-		{ev("transaction.cancel", `{"devices":1,"waiting":1,"running":0,"job":7,"device_id":3}`), "Cancel transaction", "1 device of the transaction: #3"},
+		{ev("transaction.cancel", `{"devices":1,"waiting":1,"running":0,"job":7,"device_id":3,"device":"plug-1"}`), "Cancel job", "1 device of the job: plug-1"},
+		{ev("transaction.cancel", `{"devices":1,"waiting":1,"running":0,"job":7,"device_id":3}`), "Cancel job", "1 device of the job: #3"},
 	} {
 		if got := auditLabel(c.e.Action); got != c.label {
 			t.Errorf("%s label %q, want %q", c.e.Action, got, c.label)

@@ -29,23 +29,23 @@ templ transactionsPage(p txListView) {
 
 func txListTitle(p txListView) string {
 	if p.Device != "" {
-		return "Transactions of " + p.Device
+		return "Activity of " + p.Device
 	}
-	return "Transactions"
+	return "Activity"
 }
 
 func txListSub(p txListView) string {
 	if p.Device != "" {
-		return "Every transaction this device took part in; the result is the device's own"
+		return "Every job this device took part in; the result is the device's own"
 	}
-	return "Every bulk change runs as a transaction with a log per device"
+	return "Updates and other changes sent to devices, with a log for each device."
 }
 
 templ txList(p txListView) {
 	<div id="txlist" class="upd">
 		if len(p.History) == 0 && len(p.Scheduled) == 0 {
 			@ui.Card("", "") {
-				@ui.Empty("No transactions yet", "Updates you start show up here.") {
+				@ui.Empty("No jobs yet", "Updates you start show up here.") {
 					if p.CanStart {
 						@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: p.Base + "/updates/new"})
 					}
@@ -91,7 +91,7 @@ templ txList(p txListView) {
 				<div class="ulist-head"><h2 id="hist-h">History</h2></div>
 				@ui.Table(ui.TableData{
 					Class:   "upd-htab",
-					Caption: "Transaction history",
+					Caption: "Job history",
 					Cols: []ui.TableCol{
 						{Label: "ID", Col: "c-id"}, {Label: "What", Col: "c-what"}, {Label: "Devices", Col: "c-n"},
 						{Label: "Result", Col: "c-res"}, {Label: "Started by", Col: "c-who"},
@@ -164,7 +164,7 @@ templ txnBody(p txnPage) {
 			if p.RetryOf != 0 || len(p.RetriedBy) > 0 {
 				<p class="pghead-sub upd-links">
 					if p.RetryOf != 0 {
-						Retry of <a href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.RetryOf)) }>{ txID(p.RetryOf) }</a>
+						Retry of <a href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.RetryOf)) }>{ p.RetryOf.TxID() }</a>
 					}
 					if len(p.RetriedBy) > 0 {
 						Retried in
@@ -172,7 +172,7 @@ templ txnBody(p txnPage) {
 							if i > 0 {
 								,
 							}
-							<a href={ templ.SafeURL(p.Base + "/transactions/" + bid(b)) }>{ txID(b) }</a>
+							<a href={ templ.SafeURL(p.Base + "/transactions/" + bid(b)) }>{ b.TxID() }</a>
 						}
 					}
 				</p>
@@ -777,7 +777,7 @@ templ whenCard(w whenState) {
 		<fieldset class="rcards">
 			<legend class="sr-only">When does the update start?</legend>
 			<label class="rcard"><input type="radio" name="when" id="when-now" value="now" form="start" checked?={ !w.At }/><span class="rcard-body"><b>Start now</b><span>The update starts as soon as you press Start update.</span></span></label>
-			<label class="rcard"><input type="radio" name="when" id="when-at" value="at" form="start" checked?={ w.At }/><span class="rcard-body"><b>Start at a chosen time</b><span>Plan this update for later, for example overnight. It is listed in Transactions until it starts, and you can cancel it there.</span></span></label>
+			<label class="rcard"><input type="radio" name="when" id="when-at" value="at" form="start" checked?={ w.At }/><span class="rcard-body"><b>Start at a chosen time</b><span>Plan this update for later, for example overnight. It is listed in Activity until it starts, and you can cancel it there.</span></span></label>
 		</fieldset>
 		<div class="upd-when-at">
 			<fieldset class="upd-picks">

@@ -205,7 +205,7 @@ func TestFirmwareDeleteRefusedWhileInUse(t *testing.T) {
 		inUse: map[model.ArtifactID][]model.JobID{5: {12}}}
 	e := fwEnv(t, fw)
 	// The confirm page already says so and offers no delete button.
-	if _, body := e.do(t, "GET", "/firmware/artifacts/5/delete", "admin", nil); !strings.Contains(body, "needed by transaction #9") || strings.Contains(body, "Delete file") {
+	if _, body := e.do(t, "GET", "/firmware/artifacts/5/delete", "admin", nil); !strings.Contains(body, "needed by job TX-0009") || strings.Contains(body, "Delete file") {
 		t.Errorf("confirm page for a file in use:\n%s", body)
 	}
 	// A stale form (job started after the page was rendered) is refused too.
@@ -217,7 +217,7 @@ func TestFirmwareDeleteRefusedWhileInUse(t *testing.T) {
 	fw.inUse = map[model.ArtifactID][]model.JobID{5: {12}}
 	fw.mu.Unlock()
 	r, body := e.do(t, "POST", "/firmware/artifacts/5/delete", "admin", url.Values{"confirm": {"yes"}})
-	if r.StatusCode != 409 || !strings.Contains(body, "needed by transaction #9") || len(fw.deleted) != 0 || len(fw.arts) != 1 {
+	if r.StatusCode != 409 || !strings.Contains(body, "needed by job TX-0009") || len(fw.deleted) != 0 || len(fw.arts) != 1 {
 		t.Fatalf("status %d deleted %v\n%s", r.StatusCode, fw.deleted, body)
 	}
 	if ev := e.aud.events[len(e.aud.events)-1]; ev.Action != "firmware.delete" || !strings.HasPrefix(ev.Result, "refused: ") {
@@ -243,7 +243,7 @@ func TestFirmwareDeleteSelected(t *testing.T) {
 	}
 	// Step one: the confirmation lists the selectable files and names what is left out.
 	r, page := e.do(t, "POST", "/firmware/delete-selected", "admin", url.Values{"id": {"1", "2", "3"}})
-	if r.StatusCode != 200 || !strings.Contains(page, "These 2 cached files (500\u00a0B)") || !strings.Contains(page, "needed by transaction #2") {
+	if r.StatusCode != 200 || !strings.Contains(page, "These 2 cached files (500\u00a0B)") || !strings.Contains(page, "needed by job TX-0002") {
 		t.Errorf("confirm page:\n%s", page)
 	}
 	if !strings.Contains(page, `name="id" value="2"`) || !strings.Contains(page, `name="id" value="3"`) || strings.Contains(page, `name="id" value="1"`) || len(fw.deleted) != 0 {

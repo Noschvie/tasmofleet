@@ -102,7 +102,7 @@ func fwConfirmContent(v view, c fwConfirm) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, ") are not needed by any transaction. A later update downloads what it needs again.</p><div class=\"udlg-changes\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, ") are not needed by any job. A later update downloads what it needs again.</p><div class=\"udlg-changes\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

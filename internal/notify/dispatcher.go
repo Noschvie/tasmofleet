@@ -19,7 +19,7 @@ type Attempt struct {
 	At      time.Time // zero: it did not happen yet
 	OK      bool
 	Detail  string
-	Context string // what was sent, e.g. "update job #41 (partial)"
+	Context string // what was sent, e.g. "job TX-0041 (partial)"
 }
 
 // Status is what the settings page shows per channel. It lives in memory: after a restart it is

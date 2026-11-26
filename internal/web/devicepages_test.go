@@ -79,7 +79,7 @@ func TestNeverAnsweredDeviceDisablesBackupAndExplains(t *testing.T) {
 	for _, want := range []string{
 		"This device has not answered yet",
 		`<h2 id="dc-act">Activity</h2>`,
-		"No state changes or transactions yet.",
+		"No state changes or jobs yet.",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q:\n%s", want, body)

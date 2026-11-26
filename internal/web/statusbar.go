@@ -114,7 +114,7 @@ func (h *handler) statusJobs(ctx context.Context, base string) ([]ui.StatusJob, 
 			j.Detail = statusCommand(t.first.Commands)
 		}
 		if h.d.OTA != nil {
-			j.ID, j.Href = txID(b), base+"/transactions/"+bid(b)
+			j.ID, j.Href = b.TxID(), base+"/transactions/"+bid(b)
 		}
 		out = append(out, j)
 	}

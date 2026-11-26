@@ -67,7 +67,7 @@ func TestOneItemGroupHasNoSubNavRow(t *testing.T) {
 // and "Backups" next to "Snapshots" made people look in two groups for one word, so the pages are named by what
 // they hold.
 func TestMenuHasOneEntryPerPageNamedByItsObject(t *testing.T) {
-	want := "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]System[Settings;TasmoFleet backup;Audit log;Users;About;]"
+	want := "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Activity;Firmware;]System[Settings;TasmoFleet backup;Audit log;Users;About;]"
 	if got := labels(admin().Groups()); got != want {
 		t.Errorf("admin menu\n got %s\nwant %s", got, want)
 	}
@@ -84,7 +84,7 @@ func TestMenuHasOneEntryPerPageNamedByItsObject(t *testing.T) {
 // to a refusal, and the System group, all of whose pages are admin-only, led them to the style guide. The pages
 // still refuse on their own (403); the menu only stops offering them, and a group left empty is not shown.
 func TestOperatorSeesOnlyPagesTheyMayOpen(t *testing.T) {
-	if got, want := labels(operator().Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Transactions;Firmware;]"; got != want {
+	if got, want := labels(operator().Groups()), "Dashboard[Dashboard;]Devices[List;Policy;Device backups;]Updates[Activity;Firmware;]"; got != want {
 		t.Errorf("operator menu\n got %s\nwant %s", got, want)
 	}
 	bare := ShellData{Title: "x", Nav: "dashboard", UserName: "o", UserMethod: "header", RoleName: "operator"}
@@ -142,7 +142,7 @@ func TestTrailStartsAtThreeSteps(t *testing.T) {
 		{"devices", "/devices", "Devices", nil, ""},
 		{"policy", "/policy", "Policy", nil, ""},
 		{"backups", "/devices/backups", "Device backups", nil, ""},
-		{"transactions", "/transactions", "Transactions", nil, ""},
+		{"transactions", "/transactions", "Activity", nil, ""},
 		{"about", "/about", "About", nil, ""},
 		{"account", "/account", "Account", nil, ""},
 		{"", "/nowhere", "Not found", nil, ""},

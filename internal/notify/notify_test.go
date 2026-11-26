@@ -82,7 +82,7 @@ func TestEmitSendsOnlySelectedEventsToEnabledChannels(t *testing.T) {
 	if hits.Load() != 1 {
 		t.Fatalf("webhook got %d requests, want 1 (only the partial transaction)", hits.Load())
 	}
-	if st := d.Status(Webhook); !st.Delivery.OK || st.Delivery.Context != "update job #2 (partial)" {
+	if st := d.Status(Webhook); !st.Delivery.OK || st.Delivery.Context != "job TX-0002 (partial)" {
 		t.Errorf("status = %+v, want the partial update recorded as delivered", st.Delivery)
 	}
 	if st := d.Status(Email); !st.Delivery.At.IsZero() {
@@ -109,7 +109,7 @@ func TestWebhookBodyIsTheSameJSONForGenericAndHomeAssistant(t *testing.T) {
 		d.Emit(UpdateFinished(c, 41, 11, 1, 0, "16.1.0", t0))
 		d.Wait()
 		srv.Close()
-		want := map[string]string{"event": "update.finished", "result": "partial", "title": "Update job #41: 11 ok, 1 failed",
+		want := map[string]string{"event": "update.finished", "result": "partial", "title": "Job TX-0041: 11 ok, 1 failed",
 			"text": "12 devices to 16.1.0; 1 failed", "url": "http://tasmofleet.local/transactions/41", "time": "2026-10-31T03:12:07Z"}
 		for k, v := range want {
 			if got[k] != v {
@@ -451,5 +451,22 @@ func TestUpdateNotStartedFollowsTheUpdateSettingAndIsAProblem(t *testing.T) {
 	}
 	if one := UpdateNotStarted(c, 9, 1, "", start, start); !strings.HasPrefix(one.Text, "TX-0009 (Update, 1 device) was planned") {
 		t.Errorf("without one target release: %q", one.Text)
+	}
+}
+
+// Why (#1107, A6-025): a message names the job the way the Activity page does ("TX-0041"); "Update job #41" matched
+// nothing a person could look up, and a webhook filter or a message in the phone must show the same id as the page.
+func TestUpdateEventsNameTheJobLikeTheActivityPage(t *testing.T) {
+	at := time.Date(2026, 10, 31, 3, 12, 7, 0, time.UTC)
+	fin := UpdateFinished(baseConfig(), 41, 11, 1, 0, "16.1.0", at)
+	if fin.Title != "Job TX-0041: 11 ok, 1 failed" || fin.Context != "job TX-0041 (partial)" {
+		t.Errorf("finished: title %q, context %q", fin.Title, fin.Context)
+	}
+	not := UpdateNotStarted(baseConfig(), 41, 2, "16.1.0", at, at)
+	if !strings.Contains(not.Text, "TX-0041 (Update to Tasmota 16.1.0, 2 devices)") || not.Context != "job TX-0041 (not_started)" {
+		t.Errorf("not started: text %q, context %q", not.Text, not.Context)
+	}
+	if fin.Path != "/transactions/41" {
+		t.Errorf("the link keeps the bare number, got %q", fin.Path)
 	}
 }

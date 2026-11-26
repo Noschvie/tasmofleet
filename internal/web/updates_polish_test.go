@@ -195,7 +195,7 @@ func TestRetryWithNothingToRetryLinksBackToTheTransaction(t *testing.T) {
 	if !strings.Contains(body, "No failed or cancelled device to retry.") {
 		t.Fatalf("no empty state: %s", body)
 	}
-	if !strings.Contains(body, `href="/tf/transactions/7"`) || !strings.Contains(body, "Back to the transaction") {
+	if !strings.Contains(body, `href="/tf/transactions/7"`) || !strings.Contains(body, "Back to the job") {
 		t.Errorf("the empty retry page offers no way back to the transaction: %s", body)
 	}
 	if !strings.Contains(body, "TX-0007") || strings.Contains(body, ">#7<") {

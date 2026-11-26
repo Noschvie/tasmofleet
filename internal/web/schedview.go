@@ -289,7 +289,7 @@ func (h *handler) scheduledRows(r *http.Request, device model.DeviceID, base str
 		shown[t.ID] = true
 		href := base + "/transactions/" + bid(t.ID)
 		title := t.Title
-		rows = append(rows, txSchedRow{ID: txID(t.ID), Title: title, Devices: plural(t.Total, "device"), By: h.pr.Text(t.By),
+		rows = append(rows, txSchedRow{ID: t.ID.TxID(), Title: title, Devices: plural(t.Total, "device"), By: h.pr.Text(t.By),
 			In: planIn(now, t.StartAt), Href: href, CancelHref: href + "/cancel", Start: t.StartAt,
 			CancelText: planCancelText(title, t.StartAt)})
 	}
@@ -310,7 +310,7 @@ func planCancelText(what string, start time.Time) string {
 
 // planStartText names a plan and its start, for the pages that refuse something because of it:
 // "TX-0010 starts Sat, Nov 7 at 03:00".
-func planStartText(j model.Job) string { return txID(j.BatchID) + " starts " + plannedAt(j.StartAt) }
+func planStartText(j model.Job) string { return j.BatchID.TxID() + " starts " + plannedAt(j.StartAt) }
 
 // plannedOn is the plan that holds a device, if any (own query: the shared activeJobStates stay without
 // scheduled jobs).

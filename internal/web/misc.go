@@ -147,7 +147,7 @@ func (p auditPage) Filtered() bool {
 // auditRow is an audit event with its target as a person reads it.
 type auditRow struct {
 	model.AuditEvent
-	TargetText string // "kitchen lamp", "transaction #3"; the raw target when unknown
+	TargetText string // "kitchen lamp", "job TX-0003"; the raw target when unknown
 	TargetHref string // empty when there is nothing to open
 	Label      string // readable action name
 	Status     string // ok, failed or refused: the whole Result column
@@ -171,7 +171,7 @@ func auditTarget(target string, names map[model.DeviceID]string, base string) (t
 		}
 		return "removed device " + id, ""
 	case "transaction", "batch":
-		return "transaction #" + id, base + "/transactions/" + id
+		return "job " + model.BatchID(n).TxID(), base + "/transactions/" + id
 	}
 	return auditTargetName(target), ""
 }

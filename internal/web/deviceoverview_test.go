@@ -744,7 +744,7 @@ func TestActivityRowKeepsTheBadgeInItsOwnElementAfterTheText(t *testing.T) {
 			t.Errorf("no badge in the state element:\n%s", row)
 		}
 	}
-	if !strings.Contains(rows[0], `>Transaction #141</a>`) {
+	if !strings.Contains(rows[0], `>Job TX-0141</a>`) {
 		t.Errorf("the transaction link is not in the text span:\n%s", rows[0])
 	}
 }

@@ -602,7 +602,7 @@ templ fwCache(v view, p firmwarePage) {
 							<input type="hidden" name="id" value={ strconv.FormatInt(int64(a.ID), 10) }/>
 						}
 					}
-					@ui.Button(ui.Btn{Label: "Delete " + strconv.Itoa(p.UnusedCount) + " unused", Type: "submit", Attrs: templ.Attributes{"title": plural(p.UnusedCount, "file") + " not needed by any transaction (" + humanBytes(p.UnusedSize) + ")"}})
+					@ui.Button(ui.Btn{Label: "Delete " + strconv.Itoa(p.UnusedCount) + " unused", Type: "submit", Attrs: templ.Attributes{"title": plural(p.UnusedCount, "file") + " not needed by any job (" + humanBytes(p.UnusedSize) + ")"}})
 				</form>
 			</div>
 		}
@@ -623,7 +623,7 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView, up bool) {
 			if a.InUse {
 				if len(a.Batches) > 0 {
 					for _, b := range a.Batches {
-						<a class="fw-needed" href={ templ.SafeURL(v.Base + "/transactions/" + strconv.FormatInt(int64(b), 10)) } title={ "Needed by " + a.NeededText() + "; it cannot be deleted until the transaction has ended" }>Needed by #{ strconv.FormatInt(int64(b), 10) }</a>
+						<a class="fw-needed" href={ templ.SafeURL(v.Base + "/transactions/" + strconv.FormatInt(int64(b), 10)) } title={ "Needed by " + a.NeededText() + "; it cannot be deleted until the job has ended" }>Needed by { b.TxID() }</a>
 					}
 				} else {
 					<span class="fw-needed" title={ "Needed by " + a.NeededText() }>Needed</span>

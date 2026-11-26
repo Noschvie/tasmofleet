@@ -43,7 +43,7 @@ func TestDeviceInARunningTransactionIsNotSelectable(t *testing.T) {
 		{ID: 2, BatchID: 6, DeviceID: 3, State: model.JobSucceeded, CreatedAt: time.Now()},
 	}
 	_, body := e.do(t, "GET", "/updates/new", "operator", nil)
-	if !strings.Contains(body, `aria-label="Select kitchen" disabled`) || !strings.Contains(body, "In a running transaction") {
+	if !strings.Contains(body, `aria-label="Select kitchen" disabled`) || !strings.Contains(body, "In a running job") {
 		t.Errorf("the device that is being updated is offered: %s", body)
 	}
 	if !strings.Contains(body, `aria-label="Select stuck" checked`) {
@@ -213,9 +213,6 @@ func TestTransactionsRunningCardShowsStart(t *testing.T) {
 }
 
 func TestTxnWording(t *testing.T) {
-	if got := txID(143); got != "TX-0143" {
-		t.Errorf("txID = %q", got)
-	}
 	for _, c := range []struct {
 		done, run, q, fail, canc int
 		want                     string
@@ -428,14 +425,14 @@ func TestAPlainTextDoneDetailStillShowsItsNote(t *testing.T) {
 
 // Why (#992): the list holds every bulk transaction (backups, commands, Make compliant, updates), so
 // its heading must not say "Update transactions". The page filtered to one device keeps its own title.
-func TestTransactionsPageIsTitledTransactionsNotUpdateTransactions(t *testing.T) {
+func TestActivityPageIsTitledActivityNotUpdateTransactions(t *testing.T) {
 	e, _, _, _ := setupOTA(t)
 	_, body := e.do(t, "GET", "/transactions", "operator", nil)
-	if !strings.Contains(body, "<h1>Transactions</h1>") || strings.Contains(body, "Update transactions") {
-		t.Errorf("the list heading is not exactly Transactions: %s", between(body, "<h1>", "</h1>"))
+	if !strings.Contains(body, "<h1>Activity</h1>") || strings.Contains(body, "Update transactions") {
+		t.Errorf("the list heading is not exactly Activity: %s", between(body, "<h1>", "</h1>"))
 	}
 	_, body = e.do(t, "GET", "/transactions?device=1", "operator", nil)
-	if !strings.Contains(body, "<h1>Transactions of ") {
+	if !strings.Contains(body, "<h1>Activity of ") {
 		t.Errorf("the device-filtered list lost its title: %s", between(body, "<h1>", "</h1>"))
 	}
 }
@@ -472,7 +469,7 @@ func TestTransactionsHistoryIsATableWithTheResultInItsOwnColumn(t *testing.T) {
 	if table == "" {
 		t.Fatalf("the History is no table: %s", plain(body))
 	}
-	if !strings.Contains(table, `<caption class="sr-only">Transaction history</caption>`) {
+	if !strings.Contains(table, `<caption class="sr-only">Job history</caption>`) {
 		t.Errorf("the table has no name for a screen reader (the heading above it is not its caption): %s", table)
 	}
 	for _, h := range []string{"ID", "What", "Devices", "Result", "Started by"} {

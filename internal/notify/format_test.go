@@ -61,7 +61,7 @@ func TestNtfyPostsPlainTextWithTitleClickAndPriority(t *testing.T) {
 	if !strings.HasPrefix(s.ctype, "text/plain") {
 		t.Errorf("content type = %q, want text/plain", s.ctype)
 	}
-	if s.titleRaw != "Update job #41: 11 ok, 1 failed" {
+	if s.titleRaw != "Job TX-0041: 11 ok, 1 failed" {
 		t.Errorf("Title = %q", s.titleRaw)
 	}
 	if s.click != "http://tasmofleet.local/transactions/41" {
@@ -214,7 +214,7 @@ func TestWebhookPreviewFollowsFormat(t *testing.T) {
 	cases := map[string][]string{
 		config.NotifyFormatJSON:          {"POST <webhook URL>", "Content-Type: application/json", `"event": "update.finished"`},
 		config.NotifyFormatHomeAssistant: {"POST <webhook URL>", "Content-Type: application/json", `"title"`},
-		config.NotifyFormatNtfy:          {"POST <webhook URL>", "Title: Update job #41: 11 ok, 1 failed", "X-Priority: 4", "Click: http://tasmofleet.local/transactions/41", "12 devices to 16.1.0; 1 failed"},
+		config.NotifyFormatNtfy:          {"POST <webhook URL>", "Title: Job TX-0041: 11 ok, 1 failed", "X-Priority: 4", "Click: http://tasmofleet.local/transactions/41", "12 devices to 16.1.0; 1 failed"},
 		config.NotifyFormatGotify:        {"POST <webhook URL>", "Content-Type: application/json", `"priority": 8`, `"client::notification"`},
 	}
 	for f, wants := range cases {

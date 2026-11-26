@@ -2437,7 +2437,7 @@ func gtExcluded(p gtPreview) templ.Component {
 	})
 }
 
-// gpioStartedPage answers Apply when the engine left devices out; otherwise the answer is the transaction page.
+// gpioStartedPage answers Apply when the engine left devices out; otherwise the answer is the job page.
 func gpioStartedPage(base string, s fixStarted) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -2471,7 +2471,7 @@ func gpioStartedPage(base string, s fixStarted) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the job", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2481,7 +2481,7 @@ func gpioStartedPage(base string, s fixStarted) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.PageHeader("Apply GPIO template", "Transaction "+txID(s.Batch)+" was started.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var126), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.PageHeader("Apply GPIO template", "Job "+s.Batch.TxID()+" was started.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var126), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

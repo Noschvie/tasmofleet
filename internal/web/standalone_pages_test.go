@@ -71,7 +71,7 @@ func TestNotFoundAndSwitchedOffPagesLeadOn(t *testing.T) {
 	}
 	e, _, _, _ = setupOTA(t)
 	_, body = e.do(t, "GET", "/transactions/999", "admin", nil)
-	if !strings.Contains(body, "Transaction not found") || !strings.Contains(body, `href="/tf/transactions"`) {
+	if !strings.Contains(body, "Job not found") || !strings.Contains(body, `href="/tf/transactions"`) {
 		t.Errorf("transaction 404 is a dead end: %s", body)
 	}
 }

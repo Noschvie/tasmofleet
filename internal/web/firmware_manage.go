@@ -72,7 +72,7 @@ type fwConfirm struct {
 	Selected bool // delete the selected files instead of one
 	Artifact artifactView
 	List     []artifactView // selected: what would go
-	Left     []artifactView // selected but left out: needed by a transaction, or an upload
+	Left     []artifactView // selected but left out: needed by a job, or an upload
 	Size     int64
 	Error    string
 }
@@ -125,9 +125,9 @@ func (h *handler) firmwareDeleteConfirm(w http.ResponseWriter, r *http.Request) 
 	h.renderFirmwareConfirm(w, r, http.StatusOK, c)
 }
 
-// inUseText says which transactions need the file (the jobs when the batch is not known).
+// inUseText says which jobs need the file ("a running update" when the batch is not known).
 func (h *handler) inUseText(ctx context.Context, jobs []model.JobID) string {
-	return "This file is needed by " + neededText(h.batchesOf(ctx, jobs), jobs) + " and cannot be deleted until it has ended or been cancelled."
+	return "This file is needed by " + neededText(h.batchesOf(ctx, jobs)) + " and cannot be deleted until it has ended or been cancelled."
 }
 
 func (h *handler) firmwareDelete(w http.ResponseWriter, r *http.Request) {

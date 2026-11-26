@@ -2453,7 +2453,7 @@ func fixPreviewPage(base, csrf string, p fixPage) templ.Component {
 }
 
 // fixStartedPage answers Make compliant when the server left devices out; otherwise the answer
-// is the transaction page.
+// is the job page.
 func fixStartedPage(base string, s fixStarted) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -2487,7 +2487,7 @@ func fixStartedPage(base string, s fixStarted) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Open the job", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2497,7 +2497,7 @@ func fixStartedPage(base string, s fixStarted) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.PageHeader("Make compliant", "Transaction #"+vstr(int64(s.Batch))+" was started.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var107), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.PageHeader("Make compliant", "Job "+s.Batch.TxID()+" was started.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var107), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

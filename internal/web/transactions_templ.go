@@ -100,16 +100,16 @@ func transactionsPage(p txListView) templ.Component {
 
 func txListTitle(p txListView) string {
 	if p.Device != "" {
-		return "Transactions of " + p.Device
+		return "Activity of " + p.Device
 	}
-	return "Transactions"
+	return "Activity"
 }
 
 func txListSub(p txListView) string {
 	if p.Device != "" {
-		return "Every transaction this device took part in; the result is the device's own"
+		return "Every job this device took part in; the result is the device's own"
 	}
-	return "Every bulk change runs as a transaction with a log per device"
+	return "Updates and other changes sent to devices, with a log for each device."
 }
 
 func txList(p txListView) templ.Component {
@@ -166,7 +166,7 @@ func txList(p txListView) templ.Component {
 					}
 					return nil
 				})
-				templ_7745c5c3_Err = ui.Empty("No transactions yet", "Updates you start show up here.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var6), templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Empty("No jobs yet", "Updates you start show up here.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var6), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -683,7 +683,7 @@ func txList(p txListView) templ.Component {
 				})
 				templ_7745c5c3_Err = ui.Table(ui.TableData{
 					Class:   "upd-htab",
-					Caption: "Transaction history",
+					Caption: "Job history",
 					Cols: []ui.TableCol{
 						{Label: "ID", Col: "c-id"}, {Label: "What", Col: "c-what"}, {Label: "Devices", Col: "c-n"},
 						{Label: "Result", Col: "c-res"}, {Label: "Started by", Col: "c-who"},
@@ -1022,9 +1022,9 @@ func txnBody(p txnPage) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var49 string
-				templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(txID(p.RetryOf))
+				templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(p.RetryOf.TxID())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 167, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 167, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 				if templ_7745c5c3_Err != nil {
@@ -1065,9 +1065,9 @@ func txnBody(p txnPage) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var51 string
-					templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(txID(b))
+					templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(b.TxID())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 175, Col: 78}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/transactions.templ`, Line: 175, Col: 79}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 					if templ_7745c5c3_Err != nil {
@@ -5357,7 +5357,7 @@ func whenCard(w whenState) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "><span class=\"rcard-body\"><b>Start at a chosen time</b><span>Plan this update for later, for example overnight. It is listed in Transactions until it starts, and you can cancel it there.</span></span></label></fieldset><div class=\"upd-when-at\"><fieldset class=\"upd-picks\"><legend>Quick picks</legend> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 473, "><span class=\"rcard-body\"><b>Start at a chosen time</b><span>Plan this update for later, for example overnight. It is listed in Activity until it starts, and you can cancel it there.</span></span></label></fieldset><div class=\"upd-when-at\"><fieldset class=\"upd-picks\"><legend>Quick picks</legend> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

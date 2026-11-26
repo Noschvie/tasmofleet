@@ -19,7 +19,7 @@ templ fwConfirmContent(v view, c fwConfirm) {
 		@ui.CardOf(ui.CardData{Class: "confirm-card", LabelledBy: "confirm-h"}) {
 			if len(c.List) > 0 {
 				<h2 id="confirm-h">Delete { plural(len(c.List), "file") }</h2>
-				<p class="udlg-body">These { plural(len(c.List), "cached file") } ({ sizeNoWrap(c.Size) }) are not needed by any transaction. A later update downloads what it needs again.</p>
+				<p class="udlg-body">These { plural(len(c.List), "cached file") } ({ sizeNoWrap(c.Size) }) are not needed by any job. A later update downloads what it needs again.</p>
 				<div class="udlg-changes">
 					for _, a := range c.List {
 						<div><span>{ a.Release } · { a.Filename }</span><span class="mono">{ sizeNoWrap(a.Size) }</span></div>

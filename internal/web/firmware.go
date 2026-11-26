@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -201,7 +200,7 @@ type artifactView struct {
 	model.Artifact
 	InUse   bool
 	Jobs    []model.JobID
-	Batches []model.BatchID // the pending or running transactions that need the file
+	Batches []model.BatchID // the pending or running jobs that need the file
 	Devices []deviceRef     // devices that would use it for its release ("Installed on")
 	// Selectable: "Delete unused" takes it. Needed files and uploads (deleted one
 	// by one, they cannot be downloaded again) are not.
@@ -213,28 +212,21 @@ type artifactView struct {
 	Upload *customView
 }
 
-// NeededText is "transaction #3, #5" for the "Needed by" column and the
+// NeededText is "job TX-0003" or "jobs TX-0003, TX-0005" for the "Needed by" column and the
 // tooltip of a disabled checkbox.
-func (a artifactView) NeededText() string { return neededText(a.Batches, a.Jobs) }
+func (a artifactView) NeededText() string { return neededText(a.Batches) }
 
-// neededText names the transactions that need a file; when only the jobs are
-// known it names them, when nothing is known it says "a running update".
-func neededText(batches []model.BatchID, jobs []model.JobID) string {
-	var ids []string
-	noun := "transaction"
-	switch {
-	case len(batches) > 0:
-		for _, id := range batches {
-			ids = append(ids, "#"+strconv.FormatInt(int64(id), 10))
-		}
-	case len(jobs) > 0:
-		noun = "update job"
-		for _, id := range jobs {
-			ids = append(ids, strconv.FormatInt(int64(id), 10))
-		}
-	default:
+// neededText names the jobs that need a file. When the job is not known (only a per-device row id,
+// which no page shows) it says "a running update".
+func neededText(batches []model.BatchID) string {
+	if len(batches) == 0 {
 		return "a running update"
 	}
+	ids := make([]string, len(batches))
+	for i, id := range batches {
+		ids[i] = id.TxID()
+	}
+	noun := "job"
 	if len(ids) > 1 {
 		noun += "s"
 	}

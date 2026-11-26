@@ -196,7 +196,7 @@ func TestNotificationStatusLineWordsDeliveryTestAndNothing(t *testing.T) {
 	}{
 		{"not set up", false, notify.Status{}, "Not configured"},
 		{"nothing yet", true, notify.Status{}, "Nothing sent yet"},
-		{"delivery failed", true, notify.Status{Delivery: notify.Attempt{At: at, Detail: "HTTP 404", Context: "update job #41 (partial)"}}, "Last delivery failed"},
+		{"delivery failed", true, notify.Status{Delivery: notify.Attempt{At: at, Detail: "HTTP 404", Context: "job TX-0041 (partial)"}}, "Last delivery failed"},
 		{"delivery ok", true, notify.Status{Delivery: notify.Attempt{At: at, OK: true, Detail: "HTTP 200"}}, "Last delivery OK"},
 		{"only a test", true, notify.Status{Test: notify.Attempt{At: at, OK: true, Detail: "HTTP 200"}}, "Last test OK"},
 	}
@@ -317,7 +317,7 @@ func TestNotificationFormatIsASelectAndThePreviewFollowsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, page = e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
-	if !strings.Contains(page, "Title: Update job #41") || strings.Contains(page, `"event": "update.finished"`) {
+	if !strings.Contains(page, "Title: Job TX-0041") || strings.Contains(page, `"event": "update.finished"`) {
 		t.Errorf("preview does not follow the saved ntfy format:\n%s", page)
 	}
 }
@@ -338,7 +338,7 @@ func TestMessagePreviewCaptionNamesTheRequestAndTheLinkFollowsPublicURL(t *testi
 		if strings.Contains(page, "Webhook body.") || !strings.Contains(page, "The whole webhook request") || !strings.Contains(page, "with the link when TASMOFLEET_PUBLIC_URL is set") {
 			t.Errorf("PUBLIC_URL=%q: caption does not name the whole request and the conditional link", tc.public)
 		}
-		if !strings.Contains(page, "Title: Update job #41") {
+		if !strings.Contains(page, "Title: Job TX-0041") {
 			t.Fatalf("PUBLIC_URL=%q: no ntfy preview on the page", tc.public)
 		}
 		if tc.click == "" && strings.Contains(page, "Click:") {

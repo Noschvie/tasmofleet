@@ -448,7 +448,7 @@ var sysCopies = map[string]sysCopy{
 	"NOTIFY_SMTP_TO":   {Help: "Several addresses separated by commas.", Width: "half", Dep: "NOTIFY_SMTP"},
 
 	"LOG_LEVEL":       {Help: "Applies at once. Debug is verbose.", Width: "full"},
-	"AUDIT_RETENTION": {Help: "At least 24h. 720h = 30 days.", Width: "xs", Info: "How long audit events and finished update transactions (with their logs) are kept. A running transaction is never removed. 8760h is 365 days."},
+	"AUDIT_RETENTION": {Help: "At least 24h. 720h = 30 days.", Width: "xs", Info: "How long audit events and finished jobs (with their logs) are kept. A running job is never removed. 8760h is 365 days."},
 
 	"METRICS_ENABLED":       {Label: "Serve /metrics", Help: "Off: /metrics answers 404.", Width: "full"},
 	"METRICS_TOKEN":         {Help: "Write-only. Empty: local scraper only.", Width: "half", Dep: "METRICS_ENABLED", Info: "Bearer token a remote Prometheus sends (Authorization: Bearer ...). Empty: only a scraper on this host, not behind a proxy, is served. Applies at once."},

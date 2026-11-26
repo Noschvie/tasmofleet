@@ -85,12 +85,12 @@ func (h *handler) bulkBackup(w http.ResponseWriter, r *http.Request) {
 	case len(skipped) == 0:
 		redirect(w, r, resultURL(batch, h.formIDs(r)))
 	default:
-		// The transaction holds only the devices that were started, so the refused
+		// The job holds only the devices that were started, so the refused
 		// ones are listed here, on the one page that knows their reason.
 		no := strconv.FormatInt(int64(batch), 10)
 		h.message(w, r, http.StatusOK, h.view(r, "Backup started", "devices", messageData{
 			Text: "was started. These devices were left out and not backed up:", Left: h.leftOut(r, skipped),
-			LinkText: "Transaction #" + no, Link: "/transactions/" + no, LinkLead: true,
+			LinkText: "Job " + batch.TxID(), Link: "/transactions/" + no, LinkLead: true,
 		}))
 	}
 }

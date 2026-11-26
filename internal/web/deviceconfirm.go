@@ -69,7 +69,7 @@ func (h *handler) deviceHeld(ctx context.Context, id model.DeviceID) (*deviceHol
 			if j.IsUpdate() {
 				text = holdUpdateText
 			}
-			return &deviceHold{Text: text, LinkText: "Open transaction #" + no, Href: "/transactions/" + no}, nil
+			return &deviceHold{Text: text, LinkText: "Open job " + j.BatchID.TxID(), Href: "/transactions/" + no}, nil
 		}
 	}
 	// A plan holds the device too: the store refuses the delete on its scheduled row, after "Delete the backups too"
@@ -78,7 +78,7 @@ func (h *handler) deviceHeld(ctx context.Context, id model.DeviceID) (*deviceHol
 		return nil, err
 	} else if ok {
 		no := strconv.FormatInt(int64(j.BatchID), 10)
-		return &deviceHold{Text: "An update is planned for this device (" + planStartText(j) + "). Cancel the plan, then delete the device.", LinkText: "Open transaction #" + no, Href: "/transactions/" + no}, nil
+		return &deviceHold{Text: "An update is planned for this device (" + planStartText(j) + "). Cancel the plan, then delete the device.", LinkText: "Open job " + j.BatchID.TxID(), Href: "/transactions/" + no}, nil
 	}
 	if h.d.Restore != nil {
 		list, err := h.d.Restore.List(ctx, id, 5)

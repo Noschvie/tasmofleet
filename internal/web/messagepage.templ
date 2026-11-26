@@ -27,7 +27,7 @@ templ noticePage(base, title string, m messageData) {
 		}
 		@ui.ButtonRow() {
 			if m.LinkLead {
-				@ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + m.Link})
+				@ui.Button(ui.Btn{Label: "Open the job", Kind: "primary", Href: base + m.Link})
 				@ui.Button(ui.Btn{Label: "Go to the dashboard", Href: base + "/"})
 			} else if m.LinkPrimary {
 				@ui.Button(ui.Btn{Label: m.LinkText, Kind: "primary", Href: base + m.Link})
@@ -60,7 +60,7 @@ type retryView struct {
 	Error       string
 	Consequence string
 	Token       string
-	Lead        string // the plural line, "A new transaction retries 2 devices."
+	Lead        string // the plural line, "A new job retries 2 devices."
 	Info        string // what the retry does, per kind
 	Count       string // "2 devices"
 	Rows        []retryRow
@@ -70,7 +70,7 @@ type retryView struct {
 templ retryPageView(p retryView) {
 	@ui.PageHeader(p.Title, "")
 	if p.Error != "" {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the transaction", Href: p.Base + "/transactions/" + p.Batch}})
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the job", Href: p.Base + "/transactions/" + p.Batch}})
 	} else {
 		@ui.CardOf(ui.CardData{Title: "Retry", Class: "confirm-card", LabelledBy: "retry-h"}) {
 			<form method="post" action={ templ.SafeURL(p.Base + "/transactions/" + p.Batch + "/retry") } class="stack wide">

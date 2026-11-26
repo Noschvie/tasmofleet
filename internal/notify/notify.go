@@ -1,5 +1,5 @@
 // Package notify tells a person about things that happen without them watching: an update
-// transaction that finished, a scheduled device backup run with failures, a failed database
+// job that finished, a scheduled device backup run with failures, a failed database
 // snapshot (#249). Two channels exist, a webhook and SMTP e-mail. The webhook has four formats:
 // generic JSON and Home Assistant (the same JSON body), ntfy (plain text body, Title, Click and
 // X-Priority headers) and Gotify (JSON for POST /message). Both channels are off until switched on on the Settings
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
@@ -63,7 +64,7 @@ type Event struct {
 	URL     string // absolute link to the page that shows more; empty without PUBLIC_URL
 	Path    string // the same page as a path below the base path; the browser notification opens it
 	Time    time.Time
-	Context string // short words for the status line, e.g. "update job #41 (partial)"
+	Context string // short words for the status line, e.g. "job TX-0041 (partial)"
 }
 
 // Selected reports whether the settings ask for this event. The test event is always sent, to
@@ -122,7 +123,7 @@ func UpdateResult(ok, failed int) string {
 	return ResultOK
 }
 
-// UpdateFinished is the event of a finished update transaction. target is the firmware release
+// UpdateFinished is the event of a finished update job. target is the firmware release
 // the devices were sent to (empty if the jobs differ).
 func UpdateFinished(c config.Config, batch int64, ok, failed, cancelled int, target string, at time.Time) Event {
 	res := UpdateResult(ok, failed)
@@ -143,12 +144,12 @@ func UpdateFinished(c config.Config, batch int64, ok, failed, cancelled int, tar
 		text += fmt.Sprintf("; %d failed", failed)
 	}
 	return Event{Name: EventUpdateFinished, Result: res,
-		Title: fmt.Sprintf("Update job #%d: %s", batch, strings.Join(parts, ", ")), Text: text,
+		Title: fmt.Sprintf("Job %s: %s", model.BatchID(batch).TxID(), strings.Join(parts, ", ")), Text: text,
 		URL: Link(c, fmt.Sprintf("/transactions/%d", batch)), Path: fmt.Sprintf("/transactions/%d", batch), Time: at,
-		Context: fmt.Sprintf("update job #%d (%s)", batch, res)}
+		Context: fmt.Sprintf("job %s (%s)", model.BatchID(batch).TxID(), res)}
 }
 
-// UpdateNotStarted is the event of a scheduled update transaction that was not started: TasmoFleet was down
+// UpdateNotStarted is the event of a scheduled update job that was not started: TasmoFleet was down
 // at start and not back within the late-start window (#603). It is sent once TasmoFleet is back (at), so it
 // carries that time. target is the release (empty if the jobs differ); devices is the number of jobs not
 // started. The start reads on the server's clock (TZ), whatever zone the time comes in (the store gives UTC).
@@ -158,11 +159,11 @@ func UpdateNotStarted(c config.Config, batch int64, devices int, target string, 
 		what = "Update to Tasmota " + target
 	}
 	return Event{Name: EventUpdateNotStarted, Result: ResultNotStarted, Title: "Scheduled update not started",
-		Text: fmt.Sprintf("TX-%04d (%s, %s) was planned for %s. TasmoFleet was down and was not back within %d minutes, "+
+		Text: fmt.Sprintf("%s (%s, %s) was planned for %s. TasmoFleet was down and was not back within %d minutes, "+
 			"so the update was not started and no device was changed. Plan it again to run it.",
-			batch, what, plural(devices, "device"), start.Local().Format("Mon, Jan 2 at 15:04"), int(MissedGrace/time.Minute)),
+			model.BatchID(batch).TxID(), what, plural(devices, "device"), start.Local().Format("Mon, Jan 2 at 15:04"), int(MissedGrace/time.Minute)),
 		URL: Link(c, fmt.Sprintf("/transactions/%d", batch)), Path: fmt.Sprintf("/transactions/%d", batch), Time: at,
-		Context: fmt.Sprintf("update job #%d (%s)", batch, ResultNotStarted)}
+		Context: fmt.Sprintf("job %s (%s)", model.BatchID(batch).TxID(), ResultNotStarted)}
 }
 
 // maxNamed is how many devices a message lists before it says "and N more".

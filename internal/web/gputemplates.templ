@@ -354,11 +354,11 @@ templ gtExcluded(p gtPreview) {
 	}
 }
 
-// gpioStartedPage answers Apply when the engine left devices out; otherwise the answer is the transaction page.
+// gpioStartedPage answers Apply when the engine left devices out; otherwise the answer is the job page.
 templ gpioStartedPage(base string, s fixStarted) {
 	<div class="pol-page">
-		@ui.PageHeader("Apply GPIO template", "Transaction "+txID(s.Batch)+" was started.") {
-			@ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))})
+		@ui.PageHeader("Apply GPIO template", "Job "+s.Batch.TxID()+" was started.") {
+			@ui.Button(ui.Btn{Label: "Open the job", Kind: "primary", Href: base + "/transactions/" + vstr(int64(s.Batch))})
 			@ui.Button(ui.Btn{Label: "Back to GPIO templates", Href: base + policyTemplatesPath})
 		}
 		@ui.Card("Left out", "These devices were not included.") {

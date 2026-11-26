@@ -2493,7 +2493,7 @@ func fwCache(v view, p firmwarePage) templ.Component {
 					}
 				}
 			}
-			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Delete " + strconv.Itoa(p.UnusedCount) + " unused", Type: "submit", Attrs: templ.Attributes{"title": plural(p.UnusedCount, "file") + " not needed by any transaction (" + humanBytes(p.UnusedSize) + ")"}}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Delete " + strconv.Itoa(p.UnusedCount) + " unused", Type: "submit", Attrs: templ.Attributes{"title": plural(p.UnusedCount, "file") + " not needed by any job (" + humanBytes(p.UnusedSize) + ")"}}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2586,22 +2586,22 @@ func fwCacheRow(v view, p firmwarePage, a artifactView, up bool) templ.Component
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var101 string
-					templ_7745c5c3_Var101, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Needed by " + a.NeededText() + "; it cannot be deleted until the transaction has ended").Resolve(ctx)
+					templ_7745c5c3_Var101, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Needed by " + a.NeededText() + "; it cannot be deleted until the job has ended").Resolve(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware.templ`, Line: 626, Col: 207}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware.templ`, Line: 626, Col: 199}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var101)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "\">Needed by #")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "\">Needed by ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var102 string
-					templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.FormatInt(int64(b), 10))
+					templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(b.TxID())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware.templ`, Line: 626, Col: 254}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/firmware.templ`, Line: 626, Col: 222}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 					if templ_7745c5c3_Err != nil {

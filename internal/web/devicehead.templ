@@ -167,7 +167,7 @@ templ restartDialog(t deviceTabs, oob bool) {
 templ deviceOverviewPage(p deviceOverview) {
 	@deviceHeader(p.Tabs)
 	if u := p.Updating; u != nil {
-		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the transaction", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}})
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the job", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}})
 	}
 	@liveRegion(p.Live)
 	@ui.CardStacks(2) {
@@ -368,7 +368,7 @@ templ devActBox(a devActivity, attrs templ.Attributes) {
 		if len(a.Rows) > 0 {
 			@devActList(a.Rows, a.Base)
 		} else {
-			<p class="devcard-note">No state changes or transactions yet. Online/offline changes, updates and commands appear here, newest first.</p>
+			<p class="devcard-note">No state changes or jobs yet. Online/offline changes, updates and commands appear here, newest first.</p>
 		}
 	</section>
 }
@@ -391,7 +391,7 @@ templ devActList(rows []devActRow, base string) {
 					</span>
 				} else if j := r.Job; j != nil {
 					<span class="dev-act-what">
-						<a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Transaction #{ strconv.FormatInt(int64(j.BatchID), 10) }</a>
+						<a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Job { j.BatchID.TxID() }</a>
 						<span class="dev-act-more">
 							if r.Note != "" {
 								{ r.Note }
@@ -424,7 +424,7 @@ templ deviceHistoryPage(p historyView) {
 		if len(p.Rows) > 0 {
 			@devActList(p.Rows, p.Base)
 		} else {
-			<p class="devcard-note">No state changes or transactions yet. Online/offline changes, updates and commands appear here, newest first.</p>
+			<p class="devcard-note">No state changes or jobs yet. Online/offline changes, updates and commands appear here, newest first.</p>
 		}
 		@ui.Pager(p.Pager)
 	</section>

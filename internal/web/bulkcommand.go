@@ -214,7 +214,7 @@ func (h *handler) bulkCommandRun(w http.ResponseWriter, r *http.Request) {
 		redirect(w, r, u)
 	default:
 		h.message(w, r, http.StatusOK, h.view(r, "Command started", "devices",
-			"Transaction #"+strconv.FormatInt(int64(batch), 10)+" was started. Left out: "+h.refusalText(r, skipped)))
+			"Job "+batch.TxID()+" was started. Left out: "+h.refusalText(r, skipped)))
 	}
 }
 

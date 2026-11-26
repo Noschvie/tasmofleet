@@ -24,9 +24,9 @@ func TestNoticePageNamesDevicesLeftOutAndLeadsOn(t *testing.T) {
 			t.Errorf("missing %q in %s", want, body)
 		}
 	}
-	body = render(messageData{Text: "was started.", LinkLead: true, Link: "/transactions/7", LinkText: "Transaction #7"})
-	if !strings.Contains(body, `<a href="/tf/transactions/7">Transaction #7</a> was started.`) ||
-		!strings.Contains(body, `<a class="btn btn-primary" href="/tf/transactions/7">Open the transaction</a><a class="btn" href="/tf/">Go to the dashboard</a>`) {
+	body = render(messageData{Text: "was started.", LinkLead: true, Link: "/transactions/7", LinkText: "Job TX-0007"})
+	if !strings.Contains(body, `<a href="/tf/transactions/7">Job TX-0007</a> was started.`) ||
+		!strings.Contains(body, `<a class="btn btn-primary" href="/tf/transactions/7">Open the job</a><a class="btn" href="/tf/">Go to the dashboard</a>`) {
 		t.Errorf("a started transaction is not the primary way on: %s", body)
 	}
 }

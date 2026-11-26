@@ -45,8 +45,8 @@ var auditLabels = map[string]string{
 	"firmware.delete": "Delete firmware file", "firmware.prune": "Prune firmware cache", "firmware.prefetch": "Download firmware",
 	"firmware.custom.upload": "Upload firmware", "firmware.custom.use": "Use uploaded firmware",
 	"backup.bulk.start": "Start backups", "command.bulk.start": "Start command run",
-	"import.tasmoadmin": "TasmoAdmin import", "transaction.retry": "Retry transaction", "transaction.start": "Start update",
-	"transaction.scheduled_start": "Scheduled start", "transaction.cancel": "Cancel transaction",
+	"import.tasmoadmin": "TasmoAdmin import", "transaction.retry": "Retry job", "transaction.start": "Start update",
+	"transaction.scheduled_start": "Scheduled start", "transaction.cancel": "Cancel job",
 }
 
 // auditLabel is the readable name of an action; an unknown key becomes
@@ -118,6 +118,15 @@ func dStr(m map[string]any, k string) string {
 		return strconv.FormatBool(v)
 	}
 	return ""
+}
+
+// dTx is the job id ("TX-0143") of a batch number stored in the detail; empty when the key is missing.
+func dTx(m map[string]any, k string) string {
+	n, ok := m[k].(float64)
+	if !ok {
+		return ""
+	}
+	return model.BatchID(n).TxID()
 }
 
 func dInt(m map[string]any, k string) (int, bool) {
@@ -327,7 +336,7 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 		return out, true
 	case "transaction.retry":
 		n, _ := dList(d, "devices")
-		return join(count(n, "device", "devices"), "as #"+dStr(d, "batch")), true
+		return join(count(n, "device", "devices"), "as "+dTx(d, "batch")), true
 	case "policy.fix.start":
 		n, _ := dList(d, "devices")
 		s, _ := dInt(d, "skipped")
@@ -377,7 +386,7 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 		if len(differs) > 0 {
 			drift = "differs: " + strings.Join(differs, ", ")
 		}
-		return join(strings.Join(cmds, "; "), drift, "#"+dStr(d, "transaction")), true
+		return join(strings.Join(cmds, "; "), drift, dTx(d, "transaction")), true
 	case "transaction.start":
 		n, _ := dInt(d, "devices")
 		return join(count(n, "device", "devices"), dStr(d, "release")), true
@@ -398,7 +407,7 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 			if dev == "" {
 				dev = "#" + dStr(d, "device_id")
 			}
-			out = join("1 device of the transaction: "+dev, plannedSummary(d))
+			out = join("1 device of the job: "+dev, plannedSummary(d))
 		}
 		if running > 0 {
 			out = join(out, fmt.Sprintf("%d running, stops after its step", running))

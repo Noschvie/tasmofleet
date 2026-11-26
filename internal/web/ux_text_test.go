@@ -25,8 +25,8 @@ func TestAuditTargetReadsAsAName(t *testing.T) {
 	for _, c := range []struct{ in, text, href string }{
 		{"device:12", "kitchen lamp", "/tf/devices/12"},
 		{"device:99", "removed device 99", ""},
-		{"batch:3", "transaction #3", "/tf/transactions/3"},
-		{"transaction:3", "transaction #3", "/tf/transactions/3"},
+		{"batch:3", "job TX-0003", "/tf/transactions/3"},
+		{"transaction:3", "job TX-0003", "/tf/transactions/3"},
 		{"policy:rules", "Policy rules", ""},
 		{"backup:7", "Backup #7", ""},
 		{"fleet", "All devices", ""},
