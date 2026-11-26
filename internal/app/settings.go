@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 	"strconv"
@@ -31,16 +32,14 @@ func (a *runtime) setupSettings() error {
 	// stored address is remembered (#662); the policy poller below asks the same question of its reads. Both read
 	// through the router (svc.Client), so the MAC is asked that way too (VerifyRead, not VerifyAddress's HTTP).
 	a.settings = settings.New(settings.Options{Devices: a.svc.Store, Client: a.svc.Client, Audit: a.svc.Audit, Stop: a.bgContext, Verify: a.svc.Prober.VerifyRead})
-	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit, skip: a.apiOffRead, verify: a.svc.Prober.VerifyRead}
+	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit, skip: a.apiOffRead, verify: a.svc.Prober.VerifyRead, log: a.log}
 	a.policyLive = rep
 	a.rules = newRulesService(a.svc, rep.Preview, rep.setRules)
-	rules, err := a.rules.Active(a.bgContext)
-	if err != nil {
-		// Rules that were valid when saved can only fail here after a code change (or came from
-		// an older, laxer import); those are left out and named here, the valid ones still apply.
-		a.log.Error("stored policy rules partly ignored", "err", err)
-	}
-	rep.setRules(rules)
+	// The stored rules are the source of truth (#1309): the report loads them now and again before every
+	// check, so a version another process stored (tasmofleet settings import) reaches the running server.
+	rep.load = func(ctx context.Context) (ruleSet, error) { return storedRuleSet(ctx, a.rules) }
+	rep.reloadRules(a.bgContext)
+	var err error
 	a.importLegacyPolicy()
 	a.policy = rep
 	a.fixer = &policy.Fixer{Client: a.svc.Client, Reader: a.settings, Stop: a.bgContext}
@@ -99,8 +98,11 @@ type keyReader interface {
 // Make compliant verify, a read that failed half way) neither holds a check back nor pushes it back (#989).
 // Requests over the limit get the cached values and a notice, never a refusal.
 type policyReporter struct {
-	rmu     sync.RWMutex // guards rules, which the policy editor replaces live
+	rmu     sync.RWMutex // guards rules and loaded, which the policy editor and reloadRules replace live
 	rules   []policy.Rule
+	load    func(context.Context) (ruleSet, error) // the stored rules (nil: the rules are only the ones set here)
+	loaded  *int64                                 // the stored version rules came from through load; nil: none yet
+	log     *slog.Logger                           // optional
 	devices deviceLister
 	backups backup.Service
 	reader  keyReader
@@ -144,6 +146,79 @@ func (p *policyReporter) setRules(rules []policy.Rule) {
 	p.rmu.Lock()
 	p.rules = rules
 	p.rmu.Unlock()
+}
+
+// ruleSet is the managed rules as the report judges them: the valid rules of the newest stored version.
+type ruleSet struct {
+	version int64
+	rules   []policy.Rule
+	ignored error // rules left out because they no longer validate; the valid ones still apply
+}
+
+// storedRuleSet reads the newest stored version. Rules that were valid when saved can only fail here after a
+// code change (or came from an older, laxer import): they are left out and named in ignored, the valid ones
+// still apply, so one bad rule never makes the whole fleet look compliant. A store error is an error, not an
+// empty set. (Not Rules.Active: it reports a store error and a version without a valid rule the same way.)
+func storedRuleSet(ctx context.Context, r *sysconfig.Rules) (ruleSet, error) {
+	st, err := r.State(ctx)
+	if err != nil {
+		return ruleSet{}, err
+	}
+	set := ruleSet{version: st.VersionID}
+	if len(st.Specs) == 0 {
+		return set, nil
+	}
+	rules, _, bad := r.ValidRules(st.Specs)
+	set.rules = rules
+	if len(bad) > 0 {
+		msgs := make([]string, len(bad))
+		for i, b := range bad {
+			msgs[i] = b.Error()
+		}
+		set.ignored = errors.New("stored rules left out: " + strings.Join(msgs, "; "))
+	}
+	return set, nil
+}
+
+// reloadRules makes the report judge the newest stored version. The policy editor pushes its saves through
+// setRules at once, but another process (tasmofleet settings import runs in the CLI, which has no way to reach
+// the server) stores a version the running server would otherwise never see: Run now then read the devices and
+// judged the cooldown with the old rules, and the page, which lists the stored ones, showed rules that had no
+// outcome (#1309). It runs before every report and every poller tick; a version it already holds costs one
+// history read and one validation of its rules. On a store error the rules in use stay: an error must not empty the rule set.
+// A save made through the editor while a reload is reading can be overwritten here with the older version once;
+// the next call sees the newer version and replaces it again.
+func (p *policyReporter) reloadRules(ctx context.Context) {
+	if p.load == nil {
+		return
+	}
+	set, err := p.load(ctx)
+	p.rmu.Lock()
+	defer p.rmu.Unlock()
+	if err != nil {
+		switch {
+		case ctx.Err() != nil:
+		case p.loaded == nil: // nothing was ever loaded: no rule applies until the store answers
+			p.logger().Error("policy rules not loaded, none apply until the store answers", "err", err)
+		default:
+			p.logger().Warn("policy rules not reloaded, the last loaded ones stay in use", "err", err)
+		}
+		return
+	}
+	if p.loaded != nil && *p.loaded == set.version {
+		return
+	}
+	p.rules, p.loaded = set.rules, &set.version
+	if set.ignored != nil {
+		p.logger().Error("stored policy rules partly ignored", "version", set.version, "err", set.ignored)
+	}
+}
+
+func (p *policyReporter) logger() *slog.Logger {
+	if p.log != nil {
+		return p.log
+	}
+	return slog.Default()
 }
 
 // ruleCommands lists the distinct commands of the enabled rules that can be
@@ -229,6 +304,7 @@ func (p *policyReporter) Report(ctx context.Context, actor string, live bool) (w
 	if err != nil {
 		return web.PolicyReport{}, err
 	}
+	p.reloadRules(ctx) // refresh and evaluate below judge the version the page lists
 	throttled := false
 	var held map[model.DeviceID]time.Time
 	if live {

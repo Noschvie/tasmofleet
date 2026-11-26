@@ -156,7 +156,7 @@ Not prefixed with `TASMOFLEET_`: `TZ`, see [Time zone](#time-zone).
 ]
 ```
 
-Files written before 0.46.1 keep working: `severity` (`warn` is Required, `info` is Advisory) and `want` are read as `level` and `expected`. A rule that gives both spellings with different values (`"level": "advisory"` and `"severity": "warn"`) is refused, naming the rule, rather than taking one of them. Rules saved in TasmoFleet keep their stored form; only the file changed. A file exported by 0.46.1 or later cannot be imported by 0.46.0 or older, which only know `severity` and `want`.
+Rules stored by `tasmofleet settings import` while the server runs apply at its next check (the next Run now, page view or background read), without a restart. Files written before 0.46.1 keep working: `severity` (`warn` is Required, `info` is Advisory) and `want` are read as `level` and `expected`. A rule that gives both spellings with different values (`"level": "advisory"` and `"severity": "warn"`) is refused, naming the rule, rather than taking one of them. Rules saved in TasmoFleet keep their stored form; only the file changed. A file exported by 0.46.1 or later cannot be imported by 0.46.0 or older, which only know `severity` and `want`.
 
 ## How TLS is chosen
 

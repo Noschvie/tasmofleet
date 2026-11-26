@@ -145,6 +145,7 @@ func (p *policyPoller) rnd() float64 {
 
 // once reads every device that is due.
 func (p *policyPoller) once(ctx context.Context) {
+	p.rep.reloadRules(ctx) // also while paused: the MQTT updates keep only the settings the rules name
 	interval := p.interval()
 	if interval <= 0 || (p.paused != nil && p.paused()) {
 		return
