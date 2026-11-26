@@ -4,6 +4,23 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.49.1 "South Stack" (2026-11-26)
+
+### Added
+
+- The device page opens the device's own web page: the Address row of the Connection card has an "Open web UI" link that opens it in a new tab, the same address the Devices list links to (never with the device's login in it), with a line saying it opens only where the address is reachable, such as your home network or a VPN. While a device is offline the address reads "(last known)", and the link stays, because its page may still answer (#1204, thanks @Noschvie)
+
+### Changed
+
+- **Add devices says where to start, and a discovered device has one Add that opens it.** Add devices: one line under the title says where to start, the manual box is "Add by address", and the TasmoAdmin import is folded once the fleet has devices. A discovered row has Ignore and Add only (the "Add…" twin is gone); Add opens the added device, and a device that answers with 401 is no longer added without its password: Add opens the address form filled from it with "This device needs its web password." ("Add N selected" adds the others and links each such device to its form; several added leave a banner with a link to the device list). The ignored help shows only with Show ignored, the doubled "discovery is off" text is one sentence, and the lookup is "Find a device by address" (#1110)
+- **The device overview says each fact once and in plain words.** Device overview: each fact stands in one place. Stability keeps the restart numbers ("None in the last 24 hours, once in the last 7 days"), "Last restart" is the Uptime tile's, and the 24 hour signal and the Wi-Fi drops ("None since the last restart") moved to the Wi-Fi card, which is titled by its medium (Wi-Fi or Ethernet). The card with the paths is called Connection and starts with the address and IP address. What the device reports about its firmware sits in a closed "Firmware details" fold under plain labels (Build date, CPU speed, Settings memory used 445 of 699), the Tasmota names beside them. A fact that was not read is a dash, a Wi-Fi channel nobody reported is no row, relays show only their names, a device without sensors has no Sensors card and one without an energy meter no "no energy meter". On a phone a long Identity value (hostname, topic, OTA URL) sits below its label, and a date in Recent restarts stays on one line (#1112)
+- The Devices list in plain words: the "MQTT · HTTP" column is "Reachable via" and names the channels that carry a device now ("MQTT", "Web", "MQTT, Web") instead of check marks, the search field shows an example ("Name, address or MAC"), Offline and Unknown are two chips that match the dashboard tiles (the tiles open them; the old "Offline / unknown" chip is gone, and a device whose version was only read over MQTT and that never answered is Unknown everywhere), and "Back up now" within the cooldown shows one warn banner, "Too many requests. Try again in a few seconds.", instead of a red toast with timing words (#1132). The row menu has "Open web UI", which opens the device's own page in a new tab (#1204, thanks @Noschvie)
+- On a phone the Devices list gets to the devices faster: the filter chips are one strip that scrolls sideways (the edge that has more fades), Chip, Tag and Sort are folded into one "Filters" button that counts the Chip and Tag filters that are on, and "Select all" is a button of the bulk bar instead of a row above the cards, so the first device starts above 400 px on a 60-device fleet instead of 550 px. The Columns menu of every table opens on one checkbox per column; Pin left, Pin right, the arrows and dragging are in a closed "Customize order" fold inside it. Saved layouts and filter addresses are unchanged (part of #1133)
+
+### Fixed
+
+- The Devices list no longer cuts what it shows: the Address column is wide enough for a 15-character address or a 5-digit port with its link icon (#906), and in a saved layout a column that is too narrow for its own content (Last restart cut the end of its date) takes the room it lacks from columns that have more than they need, while the table keeps its width and a column you resize keeps the width you give it while you work on the page (#912). The tooltip of the OTA URL no longer covers the row above; that was fixed with the tooltip placement of #1073, and a test now guards it (#908)
+
 ## 0.49.0 "South Stack" (2026-11-26)
 
 ### Upgrade notes
