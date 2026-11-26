@@ -60,6 +60,10 @@ async function main() {
     const form = page.locator('form[action$="/login/local"]');
     if ((await form.count()) === 0)
       throw new StepError(`sign-in: ${opts.url}/login has no local sign-in form (an instance with single sign-on or a forward-auth proxy only, or local sign-in switched off); reach the instance directly or enable the local sign-in`);
+    // With single sign-on on, the local form sits in a closed "Sign in with a local account" fold (#1111);
+    // open it first, or the fill below waits for a hidden field and times out.
+    const fold = page.locator("details.auth-local");
+    if ((await fold.count()) > 0 && !(await fold.evaluate((d) => d.open))) await fold.locator("summary").click();
     await form.locator('input[name="username"]').fill(opts.user);
     await form.locator('input[name="password"]').fill(password);
     const [answer] = await Promise.all([page.waitForNavigation(), form.getByRole("button", { name: "Sign in" }).click()]);

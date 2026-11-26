@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test, expect } from "../support/fixtures";
-import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
+import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // The release smoke check's screenshot script (#822, e2e/smoke-shots.mjs) against a real instance. Why it
 // matters: the smoke check exists because pages that answered 200 were broken (0.36.0); a script that takes
@@ -132,4 +132,54 @@ test("an output directory inside the repository and a password argument are refu
   expect(inside.err).toContain("inside the repository");
   const arg = run(["--user", "smoke", "--password", "x"], { env: password });
   expect(arg.code).toBe(2);
+});
+
+// Why: with single sign-on configured the local sign-in form sits in a closed fold since #1111 ("Sign in with
+// a local account"), so the script's fill of the username waited for a hidden field and timed out. The
+// release smoke check (docs/dev/releasing.md) is run against instances with single sign-on, so it must still
+// sign in through the local account and produce the screenshots.
+test("an instance with single sign-on and the local form in its fold is shot as well", async ({ page }) => {
+  test.setTimeout(180_000);
+  const port = await freePort();
+  const publicURL = `http://127.0.0.1:${port}`;
+  const ssoEnv = await startDevenv(["-oidc-redirect", `${publicURL}/oidc/callback`]);
+  const sso = await startApp({
+    port,
+    env: {
+      TASMOFLEET_AUTH_MODE: "oidc",
+      TASMOFLEET_PUBLIC_URL: publicURL,
+      TASMOFLEET_ALLOW_INSECURE_HTTP: "true",
+      TASMOFLEET_OIDC_ISSUER: ssoEnv.vars.DEVENV_OIDC_ISSUER,
+      TASMOFLEET_OIDC_CLIENT_ID: ssoEnv.vars.DEVENV_OIDC_CLIENT_ID,
+      TASMOFLEET_OIDC_CLIENT_SECRET: ssoEnv.vars.DEVENV_OIDC_CLIENT_SECRET,
+      TASMOFLEET_ADMIN_GROUPS: "Tasmofleet Admins",
+      TASMOFLEET_MQTT_URL: ssoEnv.vars.TASMOFLEET_MQTT_URL,
+      TASMOFLEET_POLL_INTERVAL: "5s",
+    },
+  });
+  try {
+    const dev = Object.keys(ssoEnv.devices).sort()[0];
+    sso.cli(["import", "tasmoadmin", writeTasmoAdminDir({ [dev]: ssoEnv.devices[dev] })]);
+    sso.cli(["user", "passwd", "--create", "--role", "admin", "smoke"], password + "\n");
+    await page.goto(sso.url + "/login");
+    await expect(page.getByRole("link", { name: "Sign in with single sign-on" })).toBeVisible();
+    await expect(page.getByLabel("Username")).toBeHidden(); // the fold is closed, as the bug needs
+    // the simulator must count as online, or the script's online filter finds no device
+    await page.getByText("Sign in with a local account").click();
+    await page.getByLabel("Username").fill("smoke");
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(async () => {
+      await page.goto(sso.url + "/devices?health=online");
+      await expect(page.getByRole("link", { name: dev })).toBeVisible();
+    }).toPass({ timeout: 60_000 });
+
+    const out = join(outRoot, "sso");
+    const r = spawnSync("node", [script, "--url", sso.url, "--user", "smoke", "--out", out], { env: { ...process.env, TASMOFLEET_SMOKE_PASSWORD: password }, encoding: "utf8", timeout: 90_000 });
+    expect(r.status, r.stderr).toBe(0);
+    expect(await lastShotsOf(out)).toHaveLength(5);
+  } finally {
+    await sso.stop();
+    await ssoEnv.stop();
+  }
 });
