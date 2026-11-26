@@ -1525,7 +1525,7 @@ Submit.
   that fell by more than 30 s between two readings followed by one `Status 1` read through the router, MQTT first
   (#839; never Status 0; three tries, then given up), and once per device the last restart from `Status 1` when
   none is stored. It also stores one Wi-Fi sample per device and clock hour. The verdict (Stable,
-  Boot loop: 3 restarts in 1 h or 6 in 24 h, Weak Wi-Fi: average below -75 dBm over 24 h or 10
+  Boot loop: 3 counted restarts in 1 h or 6 in 24 h, Weak Wi-Fi: average below -75 dBm over 24 h or 10
   reconnects since boot) is the pure package `internal/stability`. Every live INFO3 is one restart (it comes
   once per boot; Tasmota raises BootCount only after 10 s of uptime, so a fast loop repeats it and BootCount
   is no key); BootCount steps only add the restarts TasmoFleet missed, when both neighbouring rows are inside
@@ -1533,8 +1533,17 @@ Submit.
   while an update, restore or command job of the device runs (or ended within 3 minutes), or within 3
   minutes of a command that restarts it (`cmdpolicy.RestartsDevice`: the Restart button, bulk and console
   Restart 1/99, Upgrade, Reset) is stored as
-  expected and does not count towards a boot loop, but is still the "last restart". A light behind a wall
-  switch that is flicked reports "Power on" and can show as a boot loop of power-ons.
+  expected and does not count towards a boot loop, but is still the "last restart". A restart done on
+  purpose outside TasmoFleet (plugged in, settings sent over HTTP, a template change) does not count either
+  when the stored rows prove a healthy run before it (#1308): its reason is a known one that is no fault (a
+  crash, watchdog, brown-out or glitch, an empty or unknown reason always counts) and the run was at least
+  `stability.HealthyRun` (2 minutes), shown by its `UptimeBefore` or by the gap to the row before it when
+  BootCount stepped by 1. A first row, an unknown, falling or frozen BootCount, a step that hides restarts or
+  a shorter run leave it counted, so crash loops, brown-out and
+  power cycling, and the Wi-Fi config reboot cycle (seen as a BootCount step) stay flagged. The Restarts counts
+  of the card leave such restarts out like expected ones, so badge, colour and phrase follow one count. The
+  reason alone never clears one: an ESP32 panic reads "Software reset CPU". A light behind a wall switch that
+  is flicked reports "Power on"; with runs of 2 minutes or more between the flicks it is no boot loop.
 - Only transitions are persisted (`health_events`), plus `devices.health_state/last_seen_at`
   for a correct picture right after a restart. A device's first observation after the app
   started (state "unknown" to anything) is a baseline, not a change: `devices.health_state` is

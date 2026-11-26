@@ -18,6 +18,9 @@ const (
 	BootLoopPerDay  = 6   // restarts in 24 h that make a boot loop
 	WeakDBm         = -75 // an average signal below this is weak
 	WeakReconnects  = 10  // Wi-Fi reconnects since boot that make the link weak
+	// HealthyRun is the run before a restart that shows the device was not in trouble: a restart that
+	// follows a run this long, with a reason that is no fault, is somebody changing something (#1308).
+	HealthyRun = 2 * time.Minute
 )
 
 // Level is the verdict shown as a badge.
@@ -60,6 +63,8 @@ type Result struct {
 	// Loop and Weak say which problems apply; Level shows the worse one (a boot loop).
 	Loop, Weak bool
 	// Restarts counted from the BootCount deltas, so restarts TasmoFleet did not see are included.
+	// Restarts of a healthy run that were no fault (deliberate, #1308) and expected ones are left
+	// out, so the counts are the ones the boot loop verdict uses, not every stored restart.
 	Restarts1h, Restarts24h, Restarts7d int
 	LongestUptime                       time.Duration // the longest run in the last 24 h, the current one included
 	Last                                *model.DeviceBoot
@@ -155,7 +160,8 @@ func Assess(in Input) Result {
 // BootCount steps to the row before it, when that row is inside the window too: those were restarts
 // TasmoFleet did not see, and both ends being inside the window proves they happened inside it. A row
 // TasmoFleet caused itself (an update and its retry) is not counted, but the restarts missed before
-// it are. Boots must be sorted oldest first.
+// it are. A row that follows a proven healthy run after a reason that is no fault (deliberate) is
+// not counted either (#1308). Boots must be sorted oldest first.
 func restartsSince(boots []model.DeviceBoot, from time.Time) int {
 	n := 0
 	for i, b := range boots {
@@ -166,12 +172,42 @@ func restartsSince(boots []model.DeviceBoot, from time.Time) int {
 		if i > 0 && !boots[i-1].At.Before(from) && b.BootCount > 0 && boots[i-1].BootCount > 0 && b.BootCount > boots[i-1].BootCount {
 			w = b.BootCount - boots[i-1].BootCount
 		}
-		if b.Expected {
+		if b.Expected || deliberate(boots, i) {
 			w--
 		}
 		n += w
 	}
 	return n
+}
+
+// deliberate says whether the stored rows prove that restart i ended a healthy run and was no fault.
+// Both must hold: a known reason that points at no fault (a crash, watchdog, brown-out or glitch always
+// counts, and so does an empty or unknown text), and a run of at least HealthyRun before it. A reason alone proves nothing: an ESP32 panic
+// reads like a command ("Software reset CPU"), and Tasmota's own Wi-Fi restarts read "Software/System
+// restart". Nothing else clears a restart: no earlier row, an unknown BootCount, a BootCount that
+// dropped, a step that hides restarts we did not see, or a short gap all leave it counted.
+func deliberate(boots []model.DeviceBoot, i int) bool {
+	b := boots[i]
+	if rs := Classify(b.Reason); rs.Attention || !rs.Known {
+		return false
+	}
+	if b.UptimeBefore >= HealthyRun {
+		return true
+	}
+	// Else the gap to the row before it. A step of exactly 1 means one run reached Tasmota's 10 s
+	// increment and no restart went unseen between the two rows. The gap overstates the run by the
+	// time the device needed to reach Wi-Fi and MQTT (the row is written on connect), which HealthyRun
+	// stays well above. A step of 0 proves no run: a frozen BootCount is what a supply that keeps
+	// cycling looks like ("Power On" is all an ESP8266 says for a brown-out), so a gap alone never
+	// clears it.
+	if i == 0 {
+		return false
+	}
+	p := boots[i-1]
+	if b.BootCount <= 0 || p.BootCount <= 0 || b.BootCount-p.BootCount != 1 {
+		return false
+	}
+	return b.At.Sub(p.At) >= HealthyRun
 }
 
 // Reason is Tasmota's RestartReason in plain words.

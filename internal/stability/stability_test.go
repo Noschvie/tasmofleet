@@ -217,11 +217,12 @@ func TestFastBootLoopWithAFrozenBootCountIsStillALoop(t *testing.T) {
 
 // Why: an update restarts the device twice (through the minimal image) and a retry again; three
 // restarts in an hour that TasmoFleet caused itself are no boot loop. The thresholds stay as they are:
-// the same three restarts without that cause are one.
+// the same three restarts without that cause are one. They are 40 s apart here: it is Expected that
+// clears them, not a healthy run in between (that is #1308's rule, tested below).
 func TestRestartsTasmoFleetCausedDoNotCountTowardsABootLoop(t *testing.T) {
 	var caused, own []model.DeviceBoot
 	for i := 1; i <= 3; i++ {
-		b := boot(time.Duration(i)*8*time.Minute, 40-i, "Software/System restart")
+		b := boot(time.Duration(i)*40*time.Second, 40-i, "Software/System restart")
 		own = append(own, b)
 		b.Expected = true
 		caused = append(caused, b)
@@ -238,5 +239,88 @@ func TestRestartsTasmoFleetCausedDoNotCountTowardsABootLoop(t *testing.T) {
 	m[1].Expected = true
 	if r := Assess(Input{Now: now, Boots: m}); r.Restarts1h != 1+3 {
 		t.Fatalf("restarts %d, want the first row plus 3 missed ones", r.Restarts1h)
+	}
+}
+
+// row is a stored restart: ago, BootCount, reason and the uptime the device reported before it.
+func row(ago time.Duration, count int, reason string, uptimeBefore time.Duration) model.DeviceBoot {
+	b := boot(ago, count, reason)
+	b.UptimeBefore = uptimeBefore
+	return b
+}
+
+// Why (#1308): a device that is set up (plugged in, MQTT settings sent over HTTP, a template changed)
+// restarts three times within an hour and runs normally between them. That is no boot loop: the
+// warning on a new device is a false alarm that teaches people to ignore it. The shapes are the ones
+// seen on 2026-11-26 on four seasonal plugs. Literal durations are used so the test pins the rule,
+// not the constant.
+func TestDeliberateRestartsWithHealthyRunsAreNoBootLoop(t *testing.T) {
+	const sw = "Software/System restart"
+	min := time.Minute
+	cases := map[string][]model.DeviceBoot{
+		// Added (first row), two restarts of TasmoFleet's own, then two restarts after short-ish runs.
+		"balcony": {
+			row(14*min, 3, "Power On", 0),
+			func() model.DeviceBoot { b := row(10*min, 4, sw, 9*time.Second); b.Expected = true; return b }(),
+			func() model.DeviceBoot { b := row(9*min, 5, sw, 9*time.Second); b.Expected = true; return b }(),
+			row(6*min, 6, sw, 9*time.Second),
+			row(4*min+10*time.Second, 7, sw, 114*time.Second),
+		},
+		"kitchen": {row(40*min, 3, "Power On", 0), row(39*min-50*time.Second, 4, sw, 5*time.Second), row(10*min, 5, sw, 5*time.Second)},
+		"office":  {row(30*min, 3, "Power On", 0), row(18*min, 4, sw, 5*time.Second), row(17*min+21*time.Second, 5, sw, 5*time.Second)},
+	}
+	for name, boots := range cases {
+		r := Assess(Input{Now: now, Boots: boots})
+		if r.Loop || r.Level != Stable || r.Restarts1h != 2 {
+			t.Errorf("%s: loop %v level %s restarts in 1 h %d, want stable and 2 (the add and the one after a short run)", name, r.Loop, r.Level, r.Restarts1h)
+		}
+		if r.Last == nil {
+			t.Errorf("%s: the last restart must still show", name)
+		}
+	}
+}
+
+// Why (#1308): a reason alone cannot clear a restart (an ESP32 panic reads "Software reset CPU", the
+// Wi-Fi restarts of Tasmota read "Software/System restart"), and a run alone cannot either (a crash
+// after a long run is still a crash). Only a reason that is no fault together with a proven healthy
+// run does. The guard rows pin the safe side: real loops stay flagged.
+func TestABootLoopNeedsAFaultOrShortRuns(t *testing.T) {
+	const sw = "Software/System restart"
+	min := time.Minute
+	cases := []struct {
+		name     string
+		boots    []model.DeviceBoot
+		loop     bool
+		restarts int // in the last hour
+	}{
+		{"restarts 10 min apart after a healthy run each", []model.DeviceBoot{row(30*min, 10, sw, 0), row(20*min, 11, sw, 0), row(10*min, 12, sw, 0)}, false, 1},
+		{"wall switch flicked, power-ons 20 min apart", []model.DeviceBoot{row(50*min, 10, "Power On", 0), row(30*min, 11, "Power On", 0), row(10*min, 12, "Power On", 0)}, false, 1},
+		{"uptime before says 3 h, even with no row before", []model.DeviceBoot{row(30*min, 10, sw, 3*time.Hour), row(20*min, 11, sw, 3*time.Hour), row(10*min, 12, sw, 3*time.Hour)}, false, 0},
+		{"uptime before says 3 h but BootCount steps hide restarts", []model.DeviceBoot{row(30*min, 10, sw, 3*time.Hour), row(20*min, 14, sw, 3*time.Hour)}, true, 3},
+		{"crash every 20 min is a fault whatever the run", []model.DeviceBoot{row(50*min, 10, "Exception", 15*min), row(30*min, 11, "Exception", 15*min), row(10*min, 12, "Exception", 15*min)}, true, 3},
+		{"ESP32 software reset 40 s apart", []model.DeviceBoot{row(2*min, 10, "Software reset CPU", 0), row(80*time.Second, 11, "Software reset CPU", 0), row(40*time.Second, 12, "Software reset CPU", 0)}, true, 3},
+		{"power-on cycling 30 s apart", []model.DeviceBoot{row(90*time.Second, 10, "Power On", 0), row(60*time.Second, 11, "Power On", 0), row(30*time.Second, 12, "Power On", 0)}, true, 3},
+		{"brown-out 10 min apart", []model.DeviceBoot{row(30*min, 10, "Brownout reset", 5*min), row(20*min, 11, "Brownout reset", 5*min), row(10*min, 12, "Brownout reset", 5*min)}, true, 3},
+		{"unknown BootCount proves no run", []model.DeviceBoot{row(30*min, 0, sw, 0), row(20*min, 0, sw, 0), row(10*min, 0, sw, 0)}, true, 3},
+		// Unknown or empty reasons are not "no fault": a text the mapping does not know (ESP32-C3/S3
+		// eFuse or USB resets) may be a fault, so the safe side keeps counting.
+		{"empty reason 10 min apart", []model.DeviceBoot{row(30*min, 10, "", 0), row(20*min, 11, "", 0), row(10*min, 12, "", 0)}, true, 3},
+		{"unknown reason 10 min apart", []model.DeviceBoot{row(30*min, 10, "Reset by SLC module, reset digital core", 0), row(20*min, 11, "Reset by SLC module, reset digital core", 0), row(10*min, 12, "Reset by SLC module, reset digital core", 0)}, true, 3},
+		// A frozen BootCount means no run reached the 10 s increment: on ESP8266 a supply that keeps
+		// cycling reads "Power On", so rows 5 min apart with the count stuck are no healthy runs.
+		{"power-on with a frozen BootCount 5 min apart", []model.DeviceBoot{row(20*min, 10, "Power On", 0), row(15*min, 10, "Power On", 0), row(10*min, 10, "Power On", 0), row(5*min, 10, "Power On", 0)}, true, 4},
+		// The Wi-Fi config cycle reboots every 180 s off the network: TasmoFleet sees only the BootCount
+		// step when the device returns. Six restarts in between are not a healthy run.
+		{"WifiConfig cycle seen as a BootCount step", []model.DeviceBoot{row(55*min, 30, sw, 0), row(5*min, 36, sw, 0)}, true, 1 + 6},
+		// Accepted: a panic reads like a command on ESP32, so one that comes after runs of 2 min or more
+		// is not told from a deliberate restart by these rows. Flagged by the reason when it reads as
+		// one (Exception, watchdog, brown-out), not by this text.
+		{"ESP32 software reset every 7 min (accepted)", []model.DeviceBoot{row(56*min, 10, "Software reset CPU", 0), row(49*min, 11, "Software reset CPU", 0), row(42*min, 12, "Software reset CPU", 0), row(35*min, 13, "Software reset CPU", 0)}, false, 1},
+	}
+	for _, c := range cases {
+		r := Assess(Input{Now: now, Boots: c.boots})
+		if r.Loop != c.loop || r.Restarts1h != c.restarts {
+			t.Errorf("%s: loop %v restarts in 1 h %d, want %v and %d", c.name, r.Loop, r.Restarts1h, c.loop, c.restarts)
+		}
 	}
 }

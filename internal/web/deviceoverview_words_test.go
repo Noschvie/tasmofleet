@@ -19,8 +19,8 @@ import (
 // attributes gone) and pin where each fact lives now.
 
 // healthyWifiDevice is device 1 as a person sees a fine one: online, a good signal sampled for hours, one restart
-// a day ago, its network facts read except the Wi-Fi channel (Tasmota does not report it on every build), and a
-// Status 2 read. Its address differs from its IP, so the page has an "IP address" row.
+// a day ago (the first row stored: no run before it is proven, so it counts, #1308), its network facts read except
+// the Wi-Fi channel (Tasmota does not report it on every build), and a Status 2 read. Its address differs from its IP, so the page has an "IP address" row.
 func healthyWifiDevice(t *testing.T) *env {
 	t.Helper()
 	now := time.Now()
@@ -29,7 +29,7 @@ func healthyWifiDevice(t *testing.T) *env {
 		samples = append(samples, model.WifiSample{DeviceID: 1, At: now.Add(-time.Duration(i) * time.Hour), DBm: -50 - i})
 	}
 	st := fakeStab{
-		boots:   map[model.DeviceID][]model.DeviceBoot{1: {{DeviceID: 1, At: now.Add(-26 * time.Hour), BootCount: 4, Reason: "Software/System restart", UptimeBefore: 3 * time.Hour}}},
+		boots:   map[model.DeviceID][]model.DeviceBoot{1: {{DeviceID: 1, At: now.Add(-26 * time.Hour), BootCount: 4, Reason: "Software/System restart"}}},
 		samples: map[model.DeviceID][]model.WifiSample{1: samples},
 	}
 	e := setupWith(t, func(d *Deps) { d.Stability = st })
