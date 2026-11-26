@@ -5,10 +5,10 @@ go 1.27
 require (
 	github.com/a-h/templ v0.3.1118
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/eclipse/paho.mqtt.golang v1.5.2
 	github.com/mochi-mqtt/server/v2 v2.7.9
 	golang.org/x/oauth2 v0.38.0
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
