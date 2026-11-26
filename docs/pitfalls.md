@@ -411,6 +411,19 @@ means nothing stops you: you have to know it. The full working rules are in
   `document.querySelector` and `document.querySelectorAll` call during the `htmx:afterSwap` and
   `htmx:afterSettle` of a live cell (expected 0), and that a list reload still runs `syncAll`.
 
+### An htmx end event on a control a live swap has replaced (#634, #1074)
+
+- **Happened:** a click on a list switch whose request failed showed no "was not sent" toast: a health
+  swap had redrawn the switch's cell while the request was in flight (the first live event after a page load
+  always swaps), and htmx fires `htmx:sendError` and `htmx:timeout` on the element that sent the request, so a
+  removed button never brings them to `document`. The nightly failed on it in `devicecmd.spec.ts`.
+- **Rule:** a message that must reach the person when a request fails hangs on the request's own xhr
+  (`htmx:beforeSend`, then `xhr.addEventListener("error" | "timeout" | "loadend", ...)`), never on a
+  document listener for an htmx end event. `form.js` (the not-sent toast) and `tables.js` (`loadend`) do so.
+  `htmx:afterRequest` on the error path has the same blind spot: a control that a swap removed is never
+  cleared there.
+- **Enforced:** `e2e/tests/devicecmd.spec.ts` redraws the switch's cell inside the request and expects the toast.
+
 ## Releases
 
 ### The migration guard covered two files (#595)

@@ -202,3 +202,32 @@ test("a switch that cannot be sent says which device and relay it is", async ({ 
   });
   await expect(toast.filter({ hasText: "workshop-ceiling-spotlight-cont… relay 1 was not sent: no connection" })).toHaveCount(1);
 });
+
+// Why: a person who toggles a relay must learn that the command never left the browser, also when a live health
+// update redraws the switch's cell while the click is in flight. htmx reports the failed request on the element
+// that sent it; that element is gone after the redraw, so without a listener on the request itself the switch
+// silently stays as it was (the nightly failed on this race, #634/#1074). The route handler redraws the cell
+// first, the way a live swap does, and aborts after it: no wait on live timing.
+test("a switch redrawn by a live update while its click fails still says it was not sent", async ({ page }) => {
+  await page.setExtraHTTPHeaders(operator);
+  await page.goto(app.url + "/devices");
+  const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
+  const toggle = row.getByRole("switch", { name: /relay 1$/ });
+  await expect(toggle).toBeVisible({ timeout: 30_000 });
+  await page.route(/\/power\/\d+$/, async (route) => {
+    const gone = await toggle.evaluate((btn) => {
+      const cell = btn.closest(".pcell");
+      if (!cell) return false;
+      // the redraw a live swap does: the cell's content is replaced, the old button leaves the page
+      (window as any).htmx.swap(cell, cell.innerHTML, { swapStyle: "innerHTML" });
+      return !btn.isConnected;
+    });
+    expect(gone).toBe(true);
+    await route.abort("failed");
+  });
+  await toggle.click();
+  const toast = page.locator("#toasts .toast.tone-danger").filter({ hasText: "relay 1 was not sent: no connection" });
+  await expect(toast).toHaveCount(1);
+  await expect(toast).toContainText("plug-4m-http relay 1");
+  await expect(row.getByRole("switch", { name: /relay 1$/ })).toBeEnabled();
+});

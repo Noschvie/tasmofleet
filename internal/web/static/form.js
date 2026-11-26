@@ -400,7 +400,7 @@
 // away when its request ends. A control a person changes (a file, a field, a form with a live
 // preview: htmx events change and input) says aria-busy and draws a ring (app.css), nothing more:
 // it is never disabled and a newer request is never dropped, so the newest value is always sent.
-// A request that never got an answer (htmx:sendError, htmx:timeout) says so in a toast naming the
+// A request that never got an answer (the xhr's error and timeout events) says so in a toast naming the
 // control (#634). A link to a page whose handler reads a device before it answers says aria-busy
 // until the page replaces this one. Without this file everything works the same, minus the busy look.
 (function () {
@@ -627,12 +627,23 @@
     }
     failures.set(el, window.tfToast(nameOf(el) + " " + what, "danger"));
   }
-  document.addEventListener("htmx:sendError", function (e) {
-    failed(e, "was not sent: no connection.");
-  });
-  // htmx has no timeout of its own (shell.templ htmxConfig); this is for one that is set
-  document.addEventListener("htmx:timeout", function (e) {
-    failed(e, "timed out.");
+  // The toast hangs on the request's own xhr, not on htmx:sendError / htmx:timeout at document: htmx
+  // fires those on the element that sent the request, and a live swap that redraws a list switch
+  // while its click is in flight has removed that element, so the event never reached document and
+  // the person was told nothing. The xhr fires them whether or not the element is still there. An
+  // aborted request fires neither, as before. htmx has no timeout of its own (shell.templ
+  // htmxConfig); the timeout is for one that is set.
+  document.addEventListener("htmx:beforeSend", function (e) {
+    var xhr = e.detail && e.detail.xhr;
+    if (!xhr || !trigger(e)) {
+      return;
+    }
+    xhr.addEventListener("error", function () {
+      failed(e, "was not sent: no connection.");
+    });
+    xhr.addEventListener("timeout", function () {
+      failed(e, "timed out.");
+    });
   });
 
   // Pages whose handler reads a device before it answers (#634): the restore confirmation, the
