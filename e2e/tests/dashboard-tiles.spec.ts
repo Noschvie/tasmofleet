@@ -31,7 +31,7 @@ test.beforeAll(async () => {
         env.vars.DEVENV_UPSTREAM_GITHUB_URL,
       TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
       TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
-      // a policy makes the "Policy deviations" tile (and the Not compliant chip) appear
+      // a policy makes the "Differs from policy" tile (and its chip) appear
       TASMOFLEET_POLICY_RULES: JSON.stringify([
         { command: "PowerOnState", want: "2", note: "e2e target" },
       ]),
@@ -50,8 +50,8 @@ const tiles = [
   "Online",
   "Offline",
   "Unknown",
-  "Firmware behind",
-  "Policy deviations",
+  "Update available",
+  "Differs from policy",
 ];
 
 for (const tile of tiles) {

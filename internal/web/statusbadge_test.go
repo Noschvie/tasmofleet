@@ -35,7 +35,7 @@ func TestConnectionStatusIsOneBadge(t *testing.T) {
 	}
 	_, list := e.do(t, "GET", "/devices", "admin", nil)
 	_, dash := e.do(t, "GET", "/", "admin", nil)
-	attention := between(dash, `<h2>Needs attention</h2>`, `</section>`)
+	attention := between(dash, `<h2>Needs attention`, `</section>`)
 	for _, c := range cases {
 		want := `<span class="` + c.class + `" data-state="` + c.state + `"`
 		if n := strings.Count(list, want); n < 2 { // the table row and the phone card
@@ -74,7 +74,7 @@ func TestConnectionStatusIsOneBadge(t *testing.T) {
 func TestAttentionItemsThatAreNoStatusKeepTheDot(t *testing.T) {
 	e, _ := dashFleet(t, nil)
 	_, dash := e.do(t, "GET", "/", "admin", nil)
-	attention := between(dash, `<h2>Needs attention</h2>`, `</section>`)
+	attention := between(dash, `<h2>Needs attention`, `</section>`)
 	i := strings.Index(attention, "TelePeriod 60")
 	if i < 0 {
 		t.Fatalf("no deviation item in %s", attention)

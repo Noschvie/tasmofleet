@@ -126,7 +126,7 @@ func TestDeviceListToolbarOffersCountedFilters(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices?q=a&tag=kitchen", "operator", nil)
 	body = squash(body)
 	for _, want := range []string{
-		`>All</span><span class="chip-n">`, `>Offline / unknown</span><span class="chip-n">`, `>Outdated</span><span class="chip-n">`, `>Not compliant</span><span class="chip-n">`,
+		`>All</span><span class="chip-n">`, `>Offline / unknown</span><span class="chip-n">`, `>Update available</span><span class="chip-n">`, `>Differs from policy</span><span class="chip-n">`,
 		`<option value="esp32">ESP32 · 1</option>`, `<option value="esp8266">ESP8266 · 1</option>`,
 		`<option value="kitchen" selected>kitchen · 1</option>`,
 		// the search field is short (the toolbar must fit one row at 1280px, #428), so the placeholder is
@@ -282,7 +282,7 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 }
 
 // Why: Online used to exist only while ?health=online was active (#102), so after switching to
-// All the filter could not be picked again, unlike Offline / unknown, Outdated and Not compliant.
+// All the filter could not be picked again, unlike Offline / unknown, Update available and Differs from policy.
 // It is a fixed chip: always there with its count, marked only while it filters, and clicking it
 // while active drops the filter again.
 func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
@@ -310,7 +310,7 @@ func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 }
 
 // Why: Online is the healthy state and reads together with All; the problem chips (Offline /
-// unknown, Outdated, Not compliant) follow it (maintainer's request with #116).
+// unknown, Update available, Differs from policy) follow it (maintainer's request with #116).
 func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
@@ -320,8 +320,8 @@ func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
 	if all < 0 || online < 0 || down < 0 || all >= online || online >= down {
 		t.Errorf("want the order All, Online, Offline / unknown (positions %d, %d, %d): %s", all, online, down, chips)
 	}
-	if o, out, nc := online, pos("Outdated"), pos("Not compliant"); o >= out || out >= nc {
-		t.Errorf("want Online before Outdated before Not compliant: %s", chips)
+	if o, out, nc := online, pos("Update available"), pos("Differs from policy"); o >= out || out >= nc {
+		t.Errorf("want Online before Update available before Differs from policy: %s", chips)
 	}
 }
 

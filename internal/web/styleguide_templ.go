@@ -643,7 +643,7 @@ func styleguidePage(v sgView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = ui.AttentionList(nil, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, v.CSRF).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.AttentionList(ui.AttentionData{CSRF: v.CSRF, Groups: []ui.AttGroup{{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}}}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -811,7 +811,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.StatTile(ui.StatTileData{Tone: ui.ToneAccent, Label: "Can update", Value: "19", Hint: "to 14.3.0", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.StatTile(ui.StatTileData{Tone: ui.ToneAccent, Label: "Update available", Value: "19", Hint: "to 14.3.0", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -895,7 +895,16 @@ func styleguidePage(v sgView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.AttentionList(ui.AttentionData{
+					CSRF:  v.CSRF,
+					Note:  "Each device once, for its worst reason. Firmware and backups are on the tiles.",
+					Props: []ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}},
+					Groups: []ui.AttGroup{
+						{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, More: ui.AttMore{Text: "Show all 4", Href: v.Base + "/styleguide", Label: "Show all 4: Offline"}},
+						{Title: "Boot loop", Items: []ui.AttItem{{Tone: ui.ToneDanger, Name: "Pump Controller", Text: "Boot loop: restarted 5 times in the last hour", Href: v.Base + "/styleguide"}}, More: ui.AttMore{Text: "2 more"}},
+						{Title: "Differs from policy", Items: []ui.AttItem{{Tone: ui.ToneWarn, Name: "Hallway Light", Text: "TelePeriod 60 → 300", Href: v.Base + "/styleguide"}}},
+					},
+				}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1089,11 +1098,11 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Outdated", Count: "19", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Update available", Count: "19", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Not compliant", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Differs from policy", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

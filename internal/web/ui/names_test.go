@@ -40,7 +40,7 @@ func TestRowMenuIsAPlainDisclosure(t *testing.T) {
 // Why (#1074): five proposal rows with two buttons each, named "Add", "Ignore", "Apply": the buttons say what
 // they do to which device, and still start with the visible word (label in name).
 func TestAttentionProposalButtonsNameTheirDevice(t *testing.T) {
-	got := comp(t, AttentionList([]AttProposal{{Name: "Attic Plug", Text: "New device", Primary: "Add", Secondary: "Ignore", PrimaryAction: "/a", SecondaryAction: "/b"}}, nil, "tok"))
+	got := comp(t, AttentionList(AttentionData{CSRF: "tok", Props: []AttProposal{{Name: "Attic Plug", Text: "New device", Primary: "Add", Secondary: "Ignore", PrimaryAction: "/a", SecondaryAction: "/b"}}}))
 	for _, want := range []string{`aria-label="Add Attic Plug"`, `aria-label="Ignore Attic Plug"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in %s", want, got)

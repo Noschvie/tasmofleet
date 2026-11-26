@@ -5341,6 +5341,19 @@ button.btn[aria-disabled="true"]:focus-visible {
   .stat-grid > .stat-tile:last-child:nth-child(odd) {
     grid-column: 1 / -1;
   }
+  /* A compact tile (#1109): label and value share the first line, the hint is the second. Seven tiles used to make
+     four rows of 100 px and pushed "Needs attention" below 640 px at 375 (dashboard-attention.spec.ts holds it
+     above). The info tiles of the device overview keep their own layout. */
+  .stat-grid > .stat-tile {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-4) var(--sp-8);
+    padding: var(--sp-10) var(--sp-12);
+  }
+  .stat-grid > .stat-tile .stat-hint {
+    grid-column: 1 / -1;
+  }
 }
 /* Where the dashboard's tiles do not fit one row, two balanced rows instead of a lone last tile
    (#438): seven (admins) as 4 + 3 below 75rem, six (operators) as 3 + 3 below 65rem. The bounds
@@ -5445,6 +5458,38 @@ a.att-row:hover {
 .att-item .dv-st {
   flex: none;
   align-self: flex-start;
+}
+/* "Needs attention" is grouped by reason (#1109): a small heading per group, the rows, and under a capped group what it
+   leaves out; the note under the card heading says what the list holds. */
+.att-note {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-14);
+  font-size: var(--fs-meta);
+  color: var(--color-text-2);
+  border-bottom: var(--hair-w) solid var(--color-border);
+}
+.att-gh {
+  margin: 0;
+  padding: var(--sp-6) var(--sp-14);
+  font: 600 var(--fs-small) var(--font-sans);
+  color: var(--color-text-2);
+  background: var(--color-surface-2);
+  border-bottom: var(--hair-w) solid var(--color-border);
+}
+.att-more {
+  display: block;
+  margin: 0;
+  padding: var(--sp-10) var(--sp-14);
+  font-size: var(--fs-meta);
+  color: var(--color-text-2);
+  border-bottom: var(--hair-w) solid var(--color-border);
+}
+a.att-more {
+  color: var(--color-accent-fg);
+  min-height: var(--ctl-sm);
+}
+a.att-more:hover {
+  background: var(--color-surface-2);
 }
 .att-text {
   flex: 1 1 180px;

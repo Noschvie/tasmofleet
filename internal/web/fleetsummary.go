@@ -2,7 +2,9 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/discovery"
@@ -21,6 +23,31 @@ const (
 	chipNonCompliant = "noncompliant" // at least one policy deviation
 	chipNoBackup     = "nobackup"     // no backup run yet (#381; the Devices, Backups tile)
 )
+
+// The words of one fact, the same on the dashboard's tile, the list's chip and the dashboard's group (#1109): one name,
+// not "Firmware behind" on one page and "Outdated" on the next.
+const (
+	wordUpdateAvailable   = "Update available"
+	wordDiffersFromPolicy = "Differs from policy"
+	wordNotCheckedYet     = "Not checked yet"
+)
+
+// notChecked is "6 not checked yet": how many devices have a rule value that is not read yet.
+func notChecked(n int) string { return strconv.Itoa(n) + " " + strings.ToLower(wordNotCheckedYet) }
+
+// policyHint is the hint of the policy tile when something was read: "3 devices differ from 2 rules; 6 not checked
+// yet". With no deviation it says so, and the part about the rules that were not read stays, because a 0 beside
+// unread values is only a lower bound.
+func policyHint(s fleetSummary) string {
+	hint := "No device differs from a rule"
+	if s.Deviating > 0 {
+		hint = fmt.Sprintf("%d %s %s from %d %s", s.Deviating, noun(s.Deviating, "device", "devices"), noun(s.Deviating, "differs", "differ"), s.DeviatingRules, noun(s.DeviatingRules, "rule", "rules"))
+	}
+	if s.PolicyUnchecked > 0 { // partly read: the known count is a lower bound
+		hint += "; " + notChecked(s.PolicyUnchecked)
+	}
+	return hint
+}
 
 // chipCount is one filter chip with the number of devices it would show.
 type chipCount struct {
@@ -186,8 +213,8 @@ func chipMatch(chip string, r deviceRow) bool {
 var deviceChips = []chipCount{
 	{Key: "", Label: "All"},
 	{Key: chipDown, Label: "Offline / unknown"},
-	{Key: chipOutdated, Label: "Outdated"},
-	{Key: chipNonCompliant, Label: "Not compliant"},
+	{Key: chipOutdated, Label: wordUpdateAvailable},
+	{Key: chipNonCompliant, Label: wordDiffersFromPolicy},
 	{Key: chipNoBackup, Label: "No backup"},
 }
 

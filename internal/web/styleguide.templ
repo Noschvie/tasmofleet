@@ -183,7 +183,7 @@ templ styleguidePage(v sgView) {
 					@ui.KV([]ui.KVRow{{Key: "Address", Value: "192.168.20.12", Mono: true}, {Key: "MAC", Value: "02:00:5E:9B:3E:01", Mono: true}, {Key: "Firmware", Value: "Tasmota 14.2.0", Mono: true}, {Key: "Module", Value: "Sonoff Basic (1)"}})
 				}
 				@ui.ListCard("Needs attention", "All devices", v.Base+"/styleguide") {
-					@ui.AttentionList(nil, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, v.CSRF)
+					@ui.AttentionList(ui.AttentionData{CSRF: v.CSRF, Groups: []ui.AttGroup{{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}}}})
 				}
 			</div>
 		}
@@ -221,7 +221,7 @@ templ styleguidePage(v sgView) {
 				@ui.StatTile(ui.StatTileData{Tone: ui.ToneOK, Label: "Online", Value: "54", Hint: "of 60 devices", Href: v.Base + "/styleguide"})
 				@ui.StatTile(ui.StatTileData{Tone: ui.ToneDanger, Label: "Offline", Value: "4", Hint: "since the last poll", Href: v.Base + "/styleguide"})
 				@ui.StatTile(ui.StatTileData{Tone: ui.ToneNeutral, Label: "Unknown", Value: "2", Hint: "not reached yet", Href: v.Base + "/styleguide"})
-				@ui.StatTile(ui.StatTileData{Tone: ui.ToneAccent, Label: "Can update", Value: "19", Hint: "to 14.3.0", Href: v.Base + "/styleguide"})
+				@ui.StatTile(ui.StatTileData{Tone: ui.ToneAccent, Label: "Update available", Value: "19", Hint: "to 14.3.0", Href: v.Base + "/styleguide"})
 			</div>
 			@ui.HealthBar(54, 4, 2)
 			<div class="itiles">
@@ -235,7 +235,16 @@ templ styleguidePage(v sgView) {
 		@sgSec("lists") {
 			<div class="sg-cols">
 				@ui.ListCard("Needs attention", "All devices", v.Base+"/styleguide") {
-					@ui.AttentionList([]ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}}, []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}, {Tone: ui.ToneWarn, Name: "Hallway Light", Text: "Not compliant: TelePeriod 300, rule wants 60", Href: v.Base + "/styleguide"}}, v.CSRF)
+					@ui.AttentionList(ui.AttentionData{
+						CSRF: v.CSRF,
+						Note: "Each device once, for its worst reason. Firmware and backups are on the tiles.",
+						Props: []ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}},
+						Groups: []ui.AttGroup{
+							{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, More: ui.AttMore{Text: "Show all 4", Href: v.Base + "/styleguide", Label: "Show all 4: Offline"}},
+							{Title: "Boot loop", Items: []ui.AttItem{{Tone: ui.ToneDanger, Name: "Pump Controller", Text: "Boot loop: restarted 5 times in the last hour", Href: v.Base + "/styleguide"}}, More: ui.AttMore{Text: "2 more"}},
+							{Title: "Differs from policy", Items: []ui.AttItem{{Tone: ui.ToneWarn, Name: "Hallway Light", Text: "TelePeriod 60 → 300", Href: v.Base + "/styleguide"}}},
+						},
+					})
 				}
 				@ui.ListCard("Activity", "History", v.Base+"/styleguide") {
 					@ui.TxnCard(ui.TxnData{ID: "TX-0148", Title: "Tasmota 14.3.0 for 19 devices", State: "Running", StateTone: ui.ToneAccent, Summary: "11 done · 1 failed · 3 running · 4 waiting", StartedText: "Today 17:20", OK: 11, Failed: 1, Active: 3, Total: 19, Href: v.Base + "/styleguide"})
@@ -275,8 +284,8 @@ templ styleguidePage(v sgView) {
 				@ui.Chip(ui.ChipData{Label: "All", Count: "60", Href: v.Base + "/styleguide", Current: true})
 				@ui.Chip(ui.ChipData{Label: "Online", Count: "54", Href: v.Base + "/styleguide"})
 				@ui.Chip(ui.ChipData{Label: "Offline / unknown", Count: "6", Href: v.Base + "/styleguide"})
-				@ui.Chip(ui.ChipData{Label: "Outdated", Count: "19", Href: v.Base + "/styleguide"})
-				@ui.Chip(ui.ChipData{Label: "Not compliant", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Update available", Count: "19", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Differs from policy", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"})
 			</div>
 			<p class="sg-label">Choices around an input: they work without JavaScript</p>
 			<div class="sg-row">

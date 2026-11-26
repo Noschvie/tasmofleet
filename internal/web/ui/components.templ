@@ -826,40 +826,65 @@ templ ComplianceBar(match, deviate, unknown int) {
 	</svg>
 }
 
-// AttentionList is the "Needs attention" list: proposals with two inline actions first, then
-// devices with their reason.
-templ AttentionList(props []AttProposal, items []AttItem, csrf string) {
-	for _, p := range props {
+// AttentionList is the "Needs attention" list: the note on what it holds, the proposals with two inline actions, then
+// one group per reason with its devices, worst first. A group is capped by the caller; its More says how many it leaves
+// out and where to see them.
+templ AttentionList(a AttentionData) {
+	if a.Note != "" {
+		<p class="att-note">{ a.Note }</p>
+	}
+	for _, p := range a.Props {
 		<div class="att-row att-prop">
 			<span class="sdot-dot t-accent" aria-hidden="true"></span>
 			<span class="att-text"><span class="att-name">{ p.Name }</span><span class="att-why">{ p.Text }</span></span>
 			<span class="att-acts">
 				<form method="post" action={ templ.SafeURL(p.SecondaryAction) }>
-					@attHidden(csrf, p.Version)
+					@attHidden(a.CSRF, p.Version)
 					<button type="submit" class="btn btn-sm" aria-label={ p.Secondary + " " + p.Name }>{ p.Secondary }</button>
 				</form>
 				<form method="post" action={ templ.SafeURL(p.PrimaryAction) }>
-					@attHidden(csrf, p.Version)
+					@attHidden(a.CSRF, p.Version)
 					<button type="submit" class="btn btn-sm btn-primary" aria-label={ p.Primary + " " + p.Name }>{ p.Primary }</button>
 				</form>
 			</span>
 		</div>
 	}
-	for _, it := range items {
-		<a class="att-row att-item" href={ templ.SafeURL(it.Href) }>
-			if it.Status == nil {
-				<span class={ "sdot-dot", it.Tone.class() } aria-hidden="true"></span>
+	@attMore(a.PropsMore)
+	for _, g := range a.Groups {
+		<div class="att-group">
+			<h3 class="att-gh">{ g.Title }</h3>
+			for _, it := range g.Items {
+				@attItem(it)
 			}
-			if it.Text != "" {
-				<span class="att-text"><span class="att-name">{ it.Name }</span><span class="att-why">{ it.Text }</span></span>
-			} else {
-				<span class="att-text"><span class="att-name">{ it.Name }</span></span>
-			}
-			if it.Status != nil {
-				@StatusBadge(*it.Status)
-			}
-			<span class="att-go" aria-hidden="true">›</span>
-		</a>
+			@attMore(g.More)
+		</div>
+	}
+}
+
+// attItem is one entry of a group: a link to the device (or the guide) with the reason.
+templ attItem(it AttItem) {
+	<a class="att-row att-item" href={ templ.SafeURL(it.Href) }>
+		if it.Status == nil {
+			<span class={ "sdot-dot", it.Tone.class() } aria-hidden="true"></span>
+		}
+		if it.Text != "" {
+			<span class="att-text"><span class="att-name">{ it.Name }</span><span class="att-why">{ it.Text }</span></span>
+		} else {
+			<span class="att-text"><span class="att-name">{ it.Name }</span></span>
+		}
+		if it.Status != nil {
+			@StatusBadge(*it.Status)
+		}
+		<span class="att-go" aria-hidden="true">›</span>
+	</a>
+}
+
+// attMore is the line under a capped list: a link to the list that holds the rest, or plain text.
+templ attMore(m AttMore) {
+	if m.Text != "" && m.Href != "" {
+		<a class="att-more" href={ templ.SafeURL(m.Href) } aria-label={ m.Label }>{ m.Text }</a>
+	} else if m.Text != "" {
+		<p class="att-more">{ m.Text }</p>
 	}
 }
 

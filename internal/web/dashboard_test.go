@@ -91,7 +91,7 @@ func TestDashboardTilesLinkToTheirFilters(t *testing.T) {
 		`href="/tf/devices?health=online"`, `>Online</span><span class="stat-value">2</span><span class="stat-hint">of 6 devices</span>`,
 		`href="/tf/devices?chip=down"`, `>Offline</span><span class="stat-value">1</span><span class="stat-hint">not reachable</span>`,
 		`>Unknown</span><span class="stat-value">2</span><span class="stat-hint">never answered</span>`,
-		`>Policy deviations</span><span class="stat-value">1</span><span class="stat-hint">device, 1 rule</span>`,
+		`>Differs from policy</span><span class="stat-value">1</span><span class="stat-hint">1 device differs from 1 rule</span>`,
 		`href="/tf/devices?chip=noncompliant"`,
 		`href="/tf/devices/new#card-discovered"`, `>New devices found</span><span class="stat-value">1</span><span class="stat-hint">+ 1 address changed</span>`,
 	} {
@@ -99,8 +99,8 @@ func TestDashboardTilesLinkToTheirFilters(t *testing.T) {
 			t.Errorf("tiles: missing %q in %s", want, tiles)
 		}
 	}
-	// No release list is cached: "Firmware behind" must not claim 0 outdated devices.
-	if !strings.Contains(tiles, `>Firmware behind</span><span class="stat-value">–</span>`) {
+	// No release list is cached: "Update available" must not claim 0 outdated devices.
+	if !strings.Contains(tiles, `>Update available</span><span class="stat-value">–</span>`) {
 		t.Errorf("firmware tile without a feed: %s", tiles)
 	}
 	if !strings.Contains(body, `aria-label="2 online, 1 offline, 2 unknown"`) {
@@ -123,7 +123,7 @@ func TestDashboardTilesLinkToTheirFilters(t *testing.T) {
 func TestDashboardNeedsAttention(t *testing.T) {
 	e, disc := dashFleet(t, nil)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	att := between(body, `<h2>Needs attention`, `</section>`)
 	order := []string{
 		"Shed Light", "New device · 10.0.0.88 · Network scan", "/tf/discovery/proposals/30/dismiss", ">Ignore<", "/tf/discovery/proposals/30/accept", ">Add<",
 		"kitchen", "Address changed · 10.0.0.1 → 10.0.0.11", ">Ignore<", "/tf/discovery/proposals/31/accept", ">Apply<",
@@ -157,8 +157,9 @@ func TestDashboardNeedsAttention(t *testing.T) {
 	}
 }
 
-// Why (prototype slice(0, 8)): the list is a glance, not the device list; a fleet with many
-// offline devices must not push the transactions off the page.
+// Why (#1247): the list is a glance, not the device list, and it must say what it leaves out: with 20 offline
+// devices the card lists five of them, says "Show all 20" and leads to the list that holds exactly those 20, and the
+// heading counts the 20, so nobody takes five rows for the whole fleet.
 func TestDashboardNeedsAttentionIsCapped(t *testing.T) {
 	e := setup(t)
 	for i := model.DeviceID(10); i < 30; i++ {
@@ -166,8 +167,172 @@ func TestDashboardNeedsAttentionIsCapped(t *testing.T) {
 		e.health[i] = model.Health{DeviceID: i, State: model.HealthOffline, LastSeen: time.Now()}
 	}
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	if n := strings.Count(body, `class="att-row att-item"`); n != dashAttentionMax {
-		t.Errorf("%d devices listed, want %d", n, dashAttentionMax)
+	// the 20 dead ones and attic, which has not answered yet
+	if !strings.Contains(body, "<h2>Needs attention (21)</h2>") {
+		t.Errorf("the heading does not count the 21 devices: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	off := between(body, `>Offline</h3>`, `<h3`)
+	if n := strings.Count(off, `class="att-row att-item"`); n != attGroupRows {
+		t.Errorf("%d offline devices listed, want %d", n, attGroupRows)
+	}
+	if !strings.Contains(off, `<a class="att-more" href="/tf/devices?health=offline" aria-label="Show all 20: Offline">Show all 20</a>`) {
+		t.Errorf("no link to the 20 offline devices: %s", off)
+	}
+}
+
+// Why (#1109, #1247): "Needs attention" is grouped by reason in today's severity order and each group is capped on its
+// own. Before, one cap of eight over a flat list let seven offline devices push the deviations off the card without a
+// word. Now a group says how many devices it holds, the card heading counts every entry once, and the broker ACL notice
+// follows the Offline group and is not capped, so a long offline list cannot hide it.
+func TestNeedsAttentionGroupsByReason(t *testing.T) {
+	e := groupsFleet(t, 6, 2)
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	// 6 offline + 2 deviating devices + the broker item; offline device 10 also deviates and is listed once
+	if !strings.Contains(body, "<h2>Needs attention (9)</h2>") {
+		t.Fatalf("heading: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	att := attRegion(body)
+	if !strings.Contains(att, "Each device once, for its worst reason. Firmware and backups are on the tiles.") {
+		t.Errorf("no note on the criteria: %s", att)
+	}
+	order := []string{`>Offline</h3>`, `>Show all 6<`, `>Broker</h3>`, `>MQTT broker<`, `>Differs from policy</h3>`, `>Show all 3<`}
+	rest := att
+	for _, want := range order {
+		i := strings.Index(rest, want)
+		if i < 0 {
+			t.Fatalf("%q missing or out of order in %s", want, att)
+		}
+		rest = rest[i+len(want):]
+	}
+	off := between(att, `>Offline</h3>`, `>Broker</h3>`)
+	if n := strings.Count(off, `class="att-row att-item"`); n != attGroupRows {
+		t.Errorf("the Offline group shows %d rows, want the cap of %d", n, attGroupRows)
+	}
+	if !strings.Contains(off, `href="/tf/devices?health=offline"`) {
+		t.Errorf("Show all 6 does not lead to the offline list: %s", off)
+	}
+	// the policy group holds the two online devices; the offline one that deviates too is in Offline only, so the
+	// group shows 2 rows while its list holds 3: the link says 3, as the list will
+	pol := between(att, `>Differs from policy</h3>`, `</section>`)
+	if n := strings.Count(pol, `class="att-row att-item"`); n != 2 {
+		t.Errorf("the policy group shows %d rows, want the 2 online devices: %s", n, pol)
+	}
+	if strings.Contains(pol, "off-1") || !strings.Contains(pol, `href="/tf/devices?chip=noncompliant"`) {
+		t.Errorf("the policy group lists the offline device again, or does not lead to the filtered list: %s", pol)
+	}
+	// each device once
+	for _, name := range []string{">off-1<", ">dev-20<"} {
+		if n := strings.Count(att, name); n > 1 {
+			t.Errorf("%s is listed %d times", name, n)
+		}
+	}
+	// the list the links lead to holds what they say
+	_, list := e.do(t, "GET", "/devices?chip=noncompliant", "admin", nil)
+	if n := strings.Count(list, `<tr data-id="`); n != 3 {
+		t.Errorf("the noncompliant list holds %d devices, the link says 3", n)
+	}
+}
+
+// Why (#1109): a group holds at most five rows, and a group below the cap says nothing it does not have to: with 5
+// offline devices there is no "Show all", the card is the whole list.
+func TestNeedsAttentionGroupBelowTheCapHasNoShowAll(t *testing.T) {
+	e := groupsFleet(t, 5, 0)
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	if !strings.Contains(body, "<h2>Needs attention (6)</h2>") || !strings.Contains(body, ">Offline</h3>") {
+		t.Errorf("the 5 offline devices and the broker item are one group and one entry: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	att := attRegion(body)
+	if strings.Contains(att, "Show all") || strings.Contains(att, " more<") {
+		t.Errorf("a group that shows every device offers more: %s", att)
+	}
+	if n := strings.Count(att, `class="att-row att-item"`); n != 5+1 {
+		t.Errorf("%d rows, want 5 devices and the broker item", n)
+	}
+}
+
+// Why (#1109): a boot loop has no filter on the device list, so a link would lead to a list that does not show what
+// the card says. The group says "N more" as plain text instead.
+func TestNeedsAttentionGroupWithoutAFilterSaysNMore(t *testing.T) {
+	boots := map[model.DeviceID][]model.DeviceBoot{}
+	e := setupWith(t, func(d *Deps) { d.Stability = fakeStab{boots: boots} })
+	for i := model.DeviceID(20); i < 26; i++ {
+		e.inv.devs[i] = model.Device{ID: i, Name: "loop-" + itoa(int(i)), Address: "10.0.4." + itoa(int(i)), Identity: model.Identity{DetectedAt: time.Now()}}
+		e.health[i] = model.Health{DeviceID: i, State: model.HealthOnline, LastSeen: time.Now(), SignalDBm: -50, RSSI: 90, LinkCount: 1, UptimeSec: 300}
+		boots[i] = loopBoots(i, 5)
+	}
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	loop := between(attRegion(body), `>Boot loop</h3>`, `</section>`)
+	if n := strings.Count(loop, `class="att-row att-item"`); n != attGroupRows {
+		t.Errorf("%d boot loop rows, want %d", n, attGroupRows)
+	}
+	if !strings.Contains(loop, `<p class="att-more">1 more</p>`) || strings.Contains(loop, "Show all") {
+		t.Errorf("the sixth boot loop is not counted as plain text: %s", loop)
+	}
+}
+
+// Why (#1109): the proposals stay above the devices (an admin acts on them first), count in the heading like every
+// other entry, and show at most five; the rest is one click away on the page that lists them.
+func TestNeedsAttentionProposalsAreCountedAndCapped(t *testing.T) {
+	disc := &fakeDiscovery{}
+	for i := 1; i <= 7; i++ {
+		disc.props = append(disc.props, discovery.Proposal{ID: int64(40 + i), Kind: discovery.KindNew, Via: discovery.ViaScan, Version: "v", Device: model.Device{Name: "new-" + itoa(i), Address: "10.0.5." + itoa(i)}})
+	}
+	e := setupWith(t, func(d *Deps) { d.Discovery = disc })
+	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	if !strings.Contains(body, "<h2>Needs attention (7)</h2>") {
+		t.Errorf("the heading does not count the 7 proposals: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	att := attRegion(body)
+	if n := strings.Count(att, `class="att-row att-prop"`); n != dashProposalsMax {
+		t.Errorf("%d proposals listed, want %d", n, dashProposalsMax)
+	}
+	if !strings.Contains(att, `<a class="att-more" href="/tf/devices/new#card-discovered" aria-label="Show all 7: New devices">Show all 7</a>`) {
+		t.Errorf("the 7 proposals have no link to the page that lists them: %s", att)
+	}
+}
+
+// Why (#1109, #1247): the same fact has one name on the tile and the chip, and the tile hint is a sentence, not a clause
+// fragment. 3 devices off 2 rules with 6 values not read says exactly that.
+func TestDashboardTileAndChipWordsAreOneVocabulary(t *testing.T) {
+	findings := []policy.Finding{
+		{DeviceID: 1, Rule: policy.Rule{Command: "TelePeriod", Want: "300"}, Have: "60"},
+		{DeviceID: 2, Rule: policy.Rule{Command: "TelePeriod", Want: "300"}, Have: "60"},
+		{DeviceID: 3, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Have: "0"},
+		{DeviceID: 4, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+		{DeviceID: 5, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+		{DeviceID: 6, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+		{DeviceID: 7, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+		{DeviceID: 8, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+		{DeviceID: 9, Rule: policy.Rule{Command: "SetOption1", Want: "1"}, Unknown: true},
+	}
+	e := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: PolicyReport{Findings: findings}} })
+	for i := model.DeviceID(3); i <= 9; i++ {
+		e.inv.devs[i] = model.Device{ID: i, Name: "d" + itoa(int(i)), Address: "10.0.6." + itoa(int(i)), Identity: model.Identity{DetectedAt: time.Now()}}
+		e.health[i] = model.Health{DeviceID: i, State: model.HealthOnline, LastSeen: time.Now()}
+	}
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	tiles := strings.ReplaceAll(between(body, `<div class="stat-grid">`, `<svg class="health-bar"`), "</span> <span", "</span><span")
+	want := `>Differs from policy</span><span class="stat-value">3</span><span class="stat-hint">3 devices differ from 2 rules; 6 not checked yet</span>`
+	if !strings.Contains(tiles, want) {
+		t.Errorf("policy tile: missing %q in %s", want, tiles)
+	}
+	for _, old := range []string{"Firmware behind", "Policy deviations", "Outdated", "Not compliant"} {
+		if strings.Contains(body, old) {
+			t.Errorf("the dashboard still says %q", old)
+		}
+	}
+	_, list := e.do(t, "GET", "/devices", "admin", nil)
+	for _, w := range []string{`<span class="chip-l">Update available</span>`, `<span class="chip-l">Differs from policy</span>`} {
+		if !strings.Contains(list, w) {
+			t.Errorf("the device list's chips lack %s", w)
+		}
+	}
+	// one device, one rule: the singular forms
+	one := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: PolicyReport{Findings: findings[:1]}} })
+	_, body = one.do(t, "GET", "/", "admin", nil)
+	if !strings.Contains(squash(body), `<span class="stat-hint">1 device differs from 1 rule</span>`) {
+		t.Errorf("singular hint: %s", between(body, `<div class="stat-grid">`, `<svg class="health-bar"`))
 	}
 }
 
@@ -180,7 +345,7 @@ func TestDashboardListsTheBrokerACLOnce(t *testing.T) {
 	const item = `<a class="att-row att-item" href="https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"><span class="sdot-dot t-warn" aria-hidden="true"></span> <span class="att-text"><span class="att-name">MQTT broker</span><span class="att-why">No ACL · any client on it can read device passwords and backups</span>`
 	att := func(e *env) string {
 		_, body := e.do(t, "GET", "/", "operator", nil)
-		return between(body, `<h2>Needs attention</h2>`, `</section>`)
+		return between(body, `<h2>Needs attention`, `</section>`)
 	}
 	svc := aclBrokerService(t)
 	e := setupWith(t, func(d *Deps) { d.SysConfig = svc })
@@ -196,14 +361,14 @@ func TestDashboardListsTheBrokerACLOnce(t *testing.T) {
 		t.Errorf("the broker ACL item is not between the offline device (%d) and the next reason (%d): %d", off, unk, acl)
 	}
 
-	// a full list of offline devices keeps it: eight device rows and the item
+	// a full list of offline devices keeps it: a full group of device rows and the item
 	for i := model.DeviceID(10); i < 30; i++ {
 		e.inv.devs[i] = model.Device{ID: i, Name: "dead", Address: "10.0.1.1", Identity: model.Identity{DetectedAt: time.Now()}}
 		e.health[i] = model.Health{DeviceID: i, State: model.HealthOffline, LastSeen: time.Now()}
 	}
 	got = att(e)
-	if n, rows := strings.Count(got, item), strings.Count(got, `class="att-row att-item"`); n != 1 || rows != dashAttentionMax+1 {
-		t.Errorf("with many offline devices: the item %d times in %d rows, want once in %d", n, rows, dashAttentionMax+1)
+	if n, rows := strings.Count(got, item), strings.Count(got, `class="att-row att-item"`); n != 1 || rows != 5+1+1 { // the group, attic (not answered yet) and the item
+		t.Errorf("with many offline devices: the item %d times in %d rows, want once in %d", n, rows, 5+1+1)
 	}
 
 	// the only entry: every device answers
@@ -372,9 +537,12 @@ func TestDashboardTransactionTurnsIntoRowWhenItEnds(t *testing.T) {
 	}
 }
 
-// Why (design v2, P1, dashboard-empty): a fleet without devices shows only the empty state with
-// the three ways to add devices (admins), not six zero tiles and empty lists.
-func TestDashboardEmptyFleet(t *testing.T) {
+// Why (#1109): a person with no devices needs exactly one next step. Before, the header offered "New update" (primary)
+// next to the empty card's "Scan network" (primary) and two more buttons, and none of them could do anything for an
+// empty fleet but the first. The empty card has one primary, Add devices, which leads to the page that carries the
+// ways to add (scan, by hand, import); the header has no button and no update. An operator may not add devices: the card
+// says who does, and offers no button that would only be refused.
+func TestEmptyDashboardOffersOneFirstAction(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
 		d.Discovery = &fakeDiscovery{}
 		d.Import = importer.New(importer.Options{Inventory: &recInv{}})
@@ -382,27 +550,42 @@ func TestDashboardEmptyFleet(t *testing.T) {
 	delete(e.inv.devs, 1)
 	delete(e.inv.devs, 2)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	if !strings.Contains(body, `<p class="pghead-sub">0 devices`) || !strings.Contains(body, "<h2>No devices yet</h2>") {
+	dash := between(body, `<div id="dash"`, `</main>`)
+	if !strings.Contains(body, `<p class="pghead-sub">0 devices`) || !strings.Contains(dash, "<h2>No devices yet</h2>") {
 		t.Fatalf("empty dashboard: %s", body)
 	}
-	for _, want := range []string{`href="/tf/devices/new#card-scan">Scan network`, `href="/tf/devices/new">Add manually`, `href="/tf/devices/new#card-import">Import from TasmoAdmin`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("empty state: missing %q", want)
+	if n := strings.Count(dash, "btn-primary"); n != 1 {
+		t.Errorf("the empty dashboard has %d primary buttons, want 1: %s", n, dash)
+	}
+	if !strings.Contains(dash, `href="/tf/devices/new">Add devices</a>`) || !strings.Contains(dash, "btn-primary") {
+		t.Errorf("the one primary is not Add devices: %s", dash)
+	}
+	if n := strings.Count(dash, `<a class="btn`) + strings.Count(dash, "<button"); n != 1 {
+		t.Errorf("the empty dashboard has %d buttons, want the one: %s", n, dash)
+	}
+	for _, gone := range []string{"New update", "Scan network", "Add manually", "Import from TasmoAdmin", "stat-grid", "Needs attention"} {
+		if strings.Contains(dash, gone) {
+			t.Errorf("the empty dashboard still draws %q", gone)
 		}
 	}
-	// Updates are off in this setup: the button stays (prototype) and its page says why.
-	if !strings.Contains(body, `href="/tf/updates/new">New update`) {
-		t.Error("admin: New update is missing")
+	// the three ways are on the page the button leads to
+	if _, page := e.do(t, "GET", "/devices/new", "admin", nil); !strings.Contains(page, `id="card-scan"`) || !strings.Contains(page, "Import from TasmoAdmin") {
+		t.Error("the Add devices page does not carry the ways to add the first devices")
 	}
+	// the page that New update leads to is still there for a fleet that has devices
 	if _, page := e.do(t, "GET", "/updates/new", "admin", nil); !strings.Contains(page, "Updates are switched off") {
 		t.Error("New update with updates off does not explain why")
 	}
-	if strings.Contains(body, "stat-grid") || strings.Contains(body, "Needs attention") {
-		t.Error("the empty state still draws tiles or lists")
-	}
+
 	_, body = e.do(t, "GET", "/", "operator", nil)
-	if strings.Contains(body, "Scan network") || strings.Contains(body, "Add manually") {
-		t.Error("operator is offered admin actions in the empty state")
+	dash = between(body, `<div id="dash"`, `</main>`)
+	for _, want := range []string{"<h2>No devices yet</h2>", "An admin adds them."} {
+		if !strings.Contains(dash, want) {
+			t.Errorf("operator: missing %q in %s", want, dash)
+		}
+	}
+	if strings.Contains(dash, `<a class="btn`) || strings.Contains(dash, "<button") || strings.Contains(dash, "Add your Tasmota devices") {
+		t.Errorf("an operator is offered a button or an instruction he cannot follow: %s", dash)
 	}
 }
 
@@ -477,7 +660,7 @@ func TestSSEStateEventOnlyOnChange(t *testing.T) {
 // Why: live policy values are kept in memory only. After a restart, until the first background
 // read (spread over up to 10 minutes, never while the live check is paused) and without a decoded
 // backup, every value is unknown; the tile must then say so instead of claiming 0 deviations,
-// like "Firmware behind" without a release list. One value known (here a compliant one) makes 0 real.
+// like "Update available" without a release list. One value known (here a compliant one) makes 0 real.
 func TestDashboardPolicyTileUnknownBeforeFirstRead(t *testing.T) {
 	unread := []policy.Finding{
 		{DeviceID: 1, Rule: policy.Rule{Command: "TelePeriod", Want: "300"}, Unknown: true},
@@ -488,9 +671,9 @@ func TestDashboardPolicyTileUnknownBeforeFirstRead(t *testing.T) {
 		prov map[model.DeviceID]map[string]ValueSource
 		want string
 	}{
-		{"nothing read", nil, `>Policy deviations</span><span class="stat-value">–</span><span class="stat-hint">not checked yet</span>`},
+		{"nothing read", nil, `>Differs from policy</span><span class="stat-value">–</span><span class="stat-hint">Not checked yet</span>`},
 		{"one value read", map[model.DeviceID]map[string]ValueSource{6: {"teleperiod": {Kind: "live", At: time.Now()}}},
-			`>Policy deviations</span><span class="stat-value">0</span><span class="stat-hint">devices, 0 rules, 2 not checked yet</span>`},
+			`>Differs from policy</span><span class="stat-value">0</span><span class="stat-hint">No device differs from a rule; 2 not checked yet</span>`},
 	} {
 		e, _ := dashFleet(t, func(d *Deps) { d.Policy = &fakePolicy{rep: PolicyReport{Findings: unread, Provenance: c.prov}} })
 		_, body := e.do(t, "GET", "/", "admin", nil)
@@ -501,7 +684,7 @@ func TestDashboardPolicyTileUnknownBeforeFirstRead(t *testing.T) {
 	}
 }
 
-// Why: the device list's "Not compliant" chip must follow the tile's rule: "–" while nothing was
+// Why: the device list's "Differs from policy" chip must follow the tile's rule: "–" while nothing was
 // read, and the known count with "n not checked yet" beside it (the tooltip, the tile's hint
 // wording) while only part of the fleet was, so a 0 never stands alone as a claim of compliance
 // nobody checked. "0+" read oddly (v0.11.1 feedback 4): the count stays a plain
@@ -516,9 +699,9 @@ func TestDeviceListNotCompliantChipUnknownOrPartial(t *testing.T) {
 		prov map[model.DeviceID]map[string]ValueSource
 		want string
 	}{
-		{"nothing read", nil, `title="2 not checked yet"><span class="chip-l">Not compliant</span><span class="chip-n">–</span>`},
+		{"nothing read", nil, `title="2 not checked yet"><span class="chip-l">Differs from policy</span><span class="chip-n">–</span>`},
 		{"partly read", map[model.DeviceID]map[string]ValueSource{6: {"teleperiod": {Kind: "live", At: time.Now()}}},
-			`title="2 not checked yet"><span class="chip-l">Not compliant</span><span class="chip-n">0</span>`},
+			`title="2 not checked yet"><span class="chip-l">Differs from policy</span><span class="chip-n">0</span>`},
 	} {
 		e, _ := dashFleet(t, func(d *Deps) { d.Policy = &fakePolicy{rep: PolicyReport{Findings: unread, Provenance: c.prov}} })
 		_, body := e.do(t, "GET", "/devices", "admin", nil)
@@ -537,9 +720,9 @@ func TestOfflineProposalLeavesNeedsAttention(t *testing.T) {
 		{ID: 40, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v40", LWT: "Offline", Device: model.Device{Name: "Gone Lamp", Address: "10.0.0.40"}},
 		{ID: 41, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v41", LWT: "Online", Device: model.Device{Name: "Live Lamp", Address: "10.0.0.41"}},
 	}
-	got := dashProposals("", props, nil)
-	if len(got) != 1 || got[0].Name != "Live Lamp" {
-		t.Fatalf("dashboard proposals = %+v, want only the online one", got)
+	got, n := dashProposals("", props, nil)
+	if len(got) != 1 || n != 1 || got[0].Name != "Live Lamp" {
+		t.Fatalf("dashboard proposals = %+v (of %d), want only the online one", got, n)
 	}
 }
 
@@ -671,4 +854,41 @@ func TestDashboardNoBackupTileLinksToTheBackupsPage(t *testing.T) {
 	if hint != "never backed up" || !strings.Contains(tone, "accent") {
 		t.Errorf("no run yet: tone %q hint %q", tone, hint)
 	}
+}
+
+// attGroupRows is how many rows one group of Needs attention shows (the issue says five, so a change of the cap is a decision, not a refactor).
+const attGroupRows = 5
+
+// attRegion is the "Needs attention" card of the dashboard.
+func attRegion(body string) string { return between(body, `<h2>Needs attention`, `</section>`) }
+
+// groupsFleet is a fleet of offline devices (off-1 ...; the first of them also differs from the policy) and of online
+// devices that differ from it (dev-20 ...), with the broker's ACL warning on. The two seeded devices are gone.
+func groupsFleet(t *testing.T, offline, deviating int) *env {
+	t.Helper()
+	var findings []policy.Finding
+	if offline > 0 {
+		findings = append(findings, policy.Finding{DeviceID: 10, Rule: policy.Rule{Command: "TelePeriod", Want: "300"}, Have: "60"})
+	}
+	for i := 0; i < deviating; i++ {
+		findings = append(findings, policy.Finding{DeviceID: model.DeviceID(20 + i), Rule: policy.Rule{Command: "TelePeriod", Want: "300"}, Have: "60"})
+	}
+	e := setupWith(t, func(d *Deps) {
+		d.SysConfig = aclBrokerService(t)
+		d.Policy = &fakePolicy{rep: PolicyReport{Findings: findings}}
+	})
+	delete(e.inv.devs, 1)
+	delete(e.inv.devs, 2)
+	seen := time.Now().Add(-3 * time.Hour)
+	for i := 0; i < offline; i++ {
+		id := model.DeviceID(10 + i)
+		e.inv.devs[id] = model.Device{ID: id, Name: "off-" + itoa(i+1), Address: "10.0.7." + itoa(int(id)), Identity: model.Identity{DetectedAt: seen}}
+		e.health[id] = model.Health{DeviceID: id, State: model.HealthOffline, LastSeen: seen}
+	}
+	for i := 0; i < deviating; i++ {
+		id := model.DeviceID(20 + i)
+		e.inv.devs[id] = model.Device{ID: id, Name: "dev-" + itoa(int(id)), Address: "10.0.8." + itoa(int(id)), Identity: model.Identity{DetectedAt: seen}}
+		e.health[id] = model.Health{DeviceID: id, State: model.HealthOnline, LastSeen: time.Now()}
+	}
+	return e
 }

@@ -8,24 +8,25 @@ import "github.com/hellwand/tasmofleet/internal/web/ui"
 templ dashboardPage(d dashView) {
 	<div id="dash" hx-get={ d.Base + "/" } hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">
 		@ui.PageHeaderLive("Fleet overview", d.Sub) {
-			if d.AddHref != "" {
-				@ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref})
-			}
-			if d.NewUpdate != "" {
-				@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: d.NewUpdate})
+			// No button while the fleet is empty (#1109): the empty card has the one first action, and New update has
+			// nothing to update.
+			if !d.Empty {
+				if d.AddHref != "" {
+					@ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref})
+				}
+				if d.NewUpdate != "" {
+					@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: d.NewUpdate})
+				}
 			}
 		}
 		if d.Empty {
-			@ui.Empty("No devices yet", "Add your Tasmota devices to see their health here. Most home setups start with a network scan.") {
-				if d.ScanHref != "" {
-					@ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: d.ScanHref})
+			if d.AddHref != "" {
+				@ui.Empty("No devices yet", "Add your Tasmota devices to see their health here.") {
+					@ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: d.AddHref})
 				}
-				if d.ManualHref != "" {
-					@ui.Button(ui.Btn{Label: "Add manually", Href: d.ManualHref})
-				}
-				if d.ImpHref != "" {
-					@ui.Button(ui.Btn{Label: "Import from TasmoAdmin", Href: d.ImpHref})
-				}
+			} else {
+				// an operator may not add devices: no button that would only be refused, the words say who does
+				@ui.Empty("No devices yet", "An admin adds them.")
 			}
 		} else {
 			<div class="stat-grid">
@@ -36,9 +37,9 @@ templ dashboardPage(d dashView) {
 			@ui.HealthBar(d.OK, d.Off, d.Unk)
 			@ui.CardStacks(dashStacks(d)) {
 				@ui.CardStack(1) {
-					@ui.ListCard("Needs attention", "All devices", d.Base+"/devices") {
-						@ui.AttentionList(d.Props, d.Items, d.CSRF)
-						if len(d.Props) == 0 && len(d.Items) == 0 {
+					@ui.ListCard(d.AttTitle, "All devices", d.Base+"/devices") {
+						@ui.AttentionList(d.Att)
+						if len(d.Att.Props) == 0 && len(d.Att.Groups) == 0 {
 							<p class="dash-none">Nothing needs attention: every device answers and follows the policy.</p>
 						}
 					}

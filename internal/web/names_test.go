@@ -202,7 +202,7 @@ func menuTriggerOf(t *testing.T, body, who string) string {
 func TestAttentionButtonsNameTheirDevice(t *testing.T) {
 	e, _ := dashFleet(t, nil)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	att := between(body, `<h2>Needs attention`, `</section>`)
 	for _, want := range []string{`aria-label="Add Shed Light"`, `aria-label="Ignore Shed Light"`, `aria-label="Apply kitchen"`, `aria-label="Ignore kitchen"`} {
 		if !strings.Contains(att, want) {
 			t.Errorf("needs attention lacks %s in %s", want, att)

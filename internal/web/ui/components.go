@@ -618,6 +618,31 @@ type AttProposal struct {
 	Version                        string
 }
 
+// AttMore says what a capped list of "Needs attention" leaves out. With Href it is a link to the list that holds
+// them all ("Show all 6"); without, plain text ("2 more") for a reason the device list cannot filter by. Label is the
+// link's name for a screen reader, which tells the links apart ("Show all 6: Offline"); it starts with the visible
+// text. The zero value shows nothing.
+type AttMore struct {
+	Text, Href, Label string
+}
+
+// AttGroup is one reason of "Needs attention": a heading and the entries of that reason, each device once.
+type AttGroup struct {
+	Title string
+	Items []AttItem
+	More  AttMore
+}
+
+// AttentionData is what AttentionList draws: a note on what the list holds, the proposals (with More when there are
+// more than shown), then one group per reason. Everything is text.
+type AttentionData struct {
+	Note      string
+	Props     []AttProposal
+	PropsMore AttMore
+	Groups    []AttGroup
+	CSRF      string
+}
+
 // AttItem is a "Needs attention" entry: the name and the reason, a link to it. A device whose connection is the
 // reason carries Status, its status badge, and its colour is the badge's; an entry that is not a connection state (a
 // weak signal, a policy deviation, the broker's ACL) has no Status and keeps the dot in Tone.

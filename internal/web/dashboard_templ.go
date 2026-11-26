@@ -60,20 +60,26 @@ func dashboardPage(d dashView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			if d.AddHref != "" {
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref}).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, " ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "  ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if d.NewUpdate != "" {
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: d.NewUpdate}).Render(ctx, templ_7745c5c3_Buffer)
+			if !d.Empty {
+				if d.AddHref != "" {
+					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref}).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
+				}
+				if d.NewUpdate != "" {
+					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: d.NewUpdate}).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
 			}
 			return nil
@@ -83,49 +89,38 @@ func dashboardPage(d dashView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if d.Empty {
-			templ_7745c5c3_Var4 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-				if !templ_7745c5c3_IsBuffer {
-					defer func() {
-						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-						if templ_7745c5c3_Err == nil {
-							templ_7745c5c3_Err = templ_7745c5c3_BufErr
-						}
-					}()
-				}
-				ctx = templ.InitializeContext(ctx)
-				if d.ScanHref != "" {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: d.ScanHref}).Render(ctx, templ_7745c5c3_Buffer)
+			if d.AddHref != "" {
+				templ_7745c5c3_Var4 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+					templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+					templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+					if !templ_7745c5c3_IsBuffer {
+						defer func() {
+							templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+							if templ_7745c5c3_Err == nil {
+								templ_7745c5c3_Err = templ_7745c5c3_BufErr
+							}
+						}()
+					}
+					ctx = templ.InitializeContext(ctx)
+					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: d.AddHref}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " ")
+					return nil
+				})
+				templ_7745c5c3_Err = ui.Empty("No devices yet", "Add your Tasmota devices to see their health here.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if d.ManualHref != "" {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add manually", Href: d.ManualHref}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
+			} else {
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if d.ImpHref != "" {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Import from TasmoAdmin", Href: d.ImpHref}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
+				templ_7745c5c3_Err = ui.Empty("No devices yet", "An admin adds them.").Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
 				}
-				return nil
-			})
-			templ_7745c5c3_Err = ui.Empty("No devices yet", "Add your Tasmota devices to see their health here. Most home setups start with a network scan.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var4), templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
 			}
 		} else {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"stat-grid\">")
@@ -182,11 +177,11 @@ func dashboardPage(d dashView) templ.Component {
 							}()
 						}
 						ctx = templ.InitializeContext(ctx)
-						templ_7745c5c3_Err = ui.AttentionList(d.Props, d.Items, d.CSRF).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.AttentionList(d.Att).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						if len(d.Props) == 0 && len(d.Items) == 0 {
+						if len(d.Att.Props) == 0 && len(d.Att.Groups) == 0 {
 							templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<p class=\"dash-none\">Nothing needs attention: every device answers and follows the policy.</p>")
 							if templ_7745c5c3_Err != nil {
 								return templ_7745c5c3_Err
@@ -194,7 +189,7 @@ func dashboardPage(d dashView) templ.Component {
 						}
 						return nil
 					})
-					templ_7745c5c3_Err = ui.ListCard("Needs attention", "All devices", d.Base+"/devices").Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.ListCard(d.AttTitle, "All devices", d.Base+"/devices").Render(templ.WithChildren(ctx, templ_7745c5c3_Var7), templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

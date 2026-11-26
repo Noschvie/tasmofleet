@@ -332,7 +332,7 @@ for (const scheme of ["light", "dark"] as const) {
         const q = document.querySelector(".dv-list .dv-q")!.getBoundingClientRect();
         return { row: `[${Math.round(box.left)}..${Math.round(box.right)}]`, outside, scrolls: row.scrollWidth - row.clientWidth, q: q.width, line: tools.width, labels: [...row.children].map((c) => c.textContent ?? "").join("|") };
       });
-      for (const want of ["Not compliant", "No backup", "Chip", "Tag"]) if (!m.labels.includes(want)) bad.push(`${width}px: the chip row has no "${want}", the guard would measure a shorter row`);
+      for (const want of ["Differs from policy", "No backup", "Chip", "Tag"]) if (!m.labels.includes(want)) bad.push(`${width}px: the chip row has no "${want}", the guard would measure a shorter row`);
       if (m.outside.length) bad.push(`${width}px: outside the row ${m.row}: ${m.outside.join(", ")}`);
       if (m.scrolls > 0) bad.push(`${width}px: the chip row scrolls sideways by ${m.scrolls}px`);
       if (width < 720) {

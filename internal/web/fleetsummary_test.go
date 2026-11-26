@@ -40,7 +40,7 @@ func summaryRow(id model.DeviceID, st model.HealthState, version string) deviceR
 
 // Why (design v2, N7): the tiles and chips must count what their filters show.
 // Unknown (never answered) is its own tile, not part of Offline, but the
-// "Offline / unknown" chip covers both; "Firmware behind" uses the cached feed
+// "Offline / unknown" chip covers both; "Update available" uses the cached feed
 // and never fetches it; an unreadable policy value is no deviation; proposals
 // split into found-but-not-adopted and address changes, conflicts in neither.
 func TestFleetSummaryCountsWhatTheFiltersShow(t *testing.T) {
@@ -108,7 +108,7 @@ func TestFleetSummaryCountsWhatTheFiltersShow(t *testing.T) {
 	}
 }
 
-// Why: without a loaded feed, "Firmware behind" is unknown, not zero: no
+// Why: without a loaded feed, "Update available" is unknown, not zero: no
 // device may be marked outdated against an empty version.
 func TestFleetSummaryWithoutFeedOrPolicy(t *testing.T) {
 	h := &handler{log: slog.New(slog.NewTextHandler(io.Discard, nil)), d: Deps{Firmware: cachedFW{t: t}}}

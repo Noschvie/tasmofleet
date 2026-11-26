@@ -60,7 +60,7 @@ func TestStatusCellCarriesItsReasonAsText(t *testing.T) {
 }
 
 // Why: the badges "update" and "1 deviation" said what they meant only in a title. The list now says which version
-// the update is to ("Update 16.2.0": the one the cached feed names, the same fleetFacts.Latest the Firmware behind
+// the update is to ("Update 16.2.0": the one the cached feed names, the same fleetFacts.Latest the Update available
 // tile compares with) and what differs ("1 off policy"), in the table row and in the phone card alike.
 func TestDeviceListSaysWhichUpdateAndWhatDiffers(t *testing.T) {
 	fw := newFeed(feedReleases())

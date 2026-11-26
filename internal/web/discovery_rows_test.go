@@ -184,7 +184,7 @@ func TestDashboardAndAuditUseTheSameVerbs(t *testing.T) {
 	}
 	e, _ := dashFleet(t, nil)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	att := between(body, `<h2>Needs attention`, `</section>`)
 	if strings.Contains(att, ">Dismiss<") {
 		t.Error("Needs attention still says Dismiss")
 	}

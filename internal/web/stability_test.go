@@ -84,7 +84,7 @@ func TestDeviceListShowsStabilityBadgesOnlyOnProblemDevices(t *testing.T) {
 func TestDashboardNeedsAttentionListsBootLoopAndWeakWifi(t *testing.T) {
 	e := stabFleet(t)
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	att := between(body, `<h2>Needs attention`, `</section>`)
 	rest := att
 	for _, want := range []string{"gone", "Offline", "looper", "Boot loop: restarted 5 times in the last hour (crash)", "farlamp", "Weak Wi-Fi: -82 dBm, 14 reconnects since boot", "flappy", "Weak Wi-Fi: 11 reconnects since boot"} {
 		i := strings.Index(rest, want)
@@ -186,7 +186,7 @@ func TestNeedsAttentionNamesTheAverageThatMadeTheLinkWeak(t *testing.T) {
 	e.inv.devs[11] = model.Device{ID: 11, Name: "moved", Address: "10.0.3.1", Identity: model.Identity{DetectedAt: time.Now()}}
 	e.health[11] = model.Health{DeviceID: 11, State: model.HealthOnline, LastSeen: time.Now(), SignalDBm: -70, LinkCount: 1}
 	_, body := e.do(t, "GET", "/", "admin", nil)
-	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	att := between(body, `<h2>Needs attention`, `</section>`)
 	if !strings.Contains(att, "Weak Wi-Fi: -85 dBm") || strings.Contains(att, "-70") {
 		t.Errorf("attention: %s", att)
 	}

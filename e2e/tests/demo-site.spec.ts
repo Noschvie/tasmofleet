@@ -163,7 +163,7 @@ test("tour animation", async ({ browser }) => {
       await expect(page.getByRole("heading", { name: "Needs attention" })).toBeVisible();
       await page.waitForTimeout(pace.tourStart);
       // Needs attention lists what is wrong, not what is merely old: the outdated devices are one tile away
-      await page.getByRole("link", { name: /Firmware behind/ }).click();
+      await page.getByRole("link", { name: /Update available/ }).click();
       await expect(page.getByRole("link", { name: tourDevice, exact: true })).toBeVisible();
       await page.waitForTimeout(pace.list);
       await page.getByRole("link", { name: tourDevice, exact: true }).click();

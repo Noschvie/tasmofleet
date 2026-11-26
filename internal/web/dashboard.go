@@ -21,9 +21,9 @@ import (
 // "Needs attention" and the update transactions. The counts are N7's fleetSummary.
 
 const (
-	// dashAttentionMax is how many devices "Needs attention" lists (the prototype's slice(0, 8)):
-	// a glance, the device list has the rest.
-	dashAttentionMax = 8
+	// dashGroupMax is how many devices one reason of "Needs attention" lists (#1109): a glance, the group says how many
+	// it leaves out and the device list has them.
+	dashGroupMax = 5
 	// dashProposalsMax is how many discovery proposals it lists; the "New devices found" tile
 	// leads to all of them.
 	dashProposalsMax = 5
@@ -40,18 +40,18 @@ type dashView struct {
 	AddHref, NewUpdate string
 	Tiles              []ui.StatTileData
 	OK, Off, Unk       int // the health bar
-	Props              []ui.AttProposal
-	Items              []ui.AttItem
+	// AttTitle is the heading of "Needs attention" with the number of its entries; Att its content (#1109).
+	AttTitle string
+	Att      ui.AttentionData
 	// TxnCard is shown when updates are on or transactions exist; Cards are the transactions still at work,
 	// Rows the finished ones (#1199).
 	TxnCard bool
 	Cards   []ui.TxnData
 	Rows    []ui.TxnRowData
 	Plans   ui.PlanSummary // the plans waiting for their start (#707); N 0 shows nothing
-	// Empty: no devices. The page then shows only the empty state, with these ways to add
-	// devices for admins (empty hrefs are not offered).
-	Empty                         bool
-	ScanHref, ManualHref, ImpHref string
+	// Empty: no devices. The page then shows only the empty state: for an admin one button, Add devices (AddHref), for
+	// everyone else the words that say who adds them.
+	Empty bool
 }
 
 func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -130,23 +130,16 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	d := dashView{Base: v.Base, CSRF: v.CSRF, Total: len(rows), Empty: len(rows) == 0}
 	d.Sub = fmt.Sprintf("%d %s", len(rows), noun(len(rows), "device", "devices"))
 	if v.IsAdmin {
-		d.AddHref = v.Base + "/devices/new"
-		d.ManualHref = v.Base + "/devices/new"
-		if v.Features.Discovery {
-			d.ScanHref = v.Base + "/devices/new#card-scan"
-		}
-		if v.Features.Import {
-			d.ImpHref = v.Base + "/devices/new#card-import"
-		}
-		// Always offered, as in the prototype: with updates switched off the page explains
-		// what to configure (FIRMWARE_BASE_URL) instead of the button just missing.
+		d.AddHref = v.Base + "/devices/new" // the page that carries the ways to add (scan, by hand, import)
+		// Offered with devices only, as in the prototype: with updates switched off the page explains what to
+		// configure (FIRMWARE_BASE_URL) instead of the button just missing. A fleet without devices has nothing to
+		// update, and its one first action is Add devices (#1109).
 		d.NewUpdate = v.Base + "/updates/new"
 	}
 	d.Tiles = dashTiles(v.Base, s)
 	d.OK, d.Off, d.Unk = s.Online, s.Offline, s.Unknown
-	d.Props = dashProposals(v.Base, props, devs)
 	now := h.d.Clock.Now()
-	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow(), h.brokerACLOpen())
+	d.AttTitle, d.Att = dashNeedsAttention(v.Base, v.CSRF, now, rows, facts, h.channelWindow(), h.brokerACLOpen(), props, devs)
 	d.TxnCard = v.Features.Transactions || len(txs) > 0 || plans.N > 0
 	d.Plans = plans
 	d.Cards, d.Rows = dashTxnEntries(v.Base, now, txs)
@@ -181,18 +174,15 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 		{Tone: ui.ToneDanger, Label: "Offline", Value: itoa(s.Offline), Hint: "not reachable", Href: chip(chipDown)},
 		{Tone: ui.ToneNeutral, Label: "Unknown", Value: itoa(s.Unknown), Hint: "never answered", Href: chip(chipDown)},
 	}
-	fw := ui.StatTileData{Tone: ui.ToneAccent, Label: "Firmware behind", Value: itoa(s.Outdated), Hint: "older than " + s.Latest, Href: chip(chipOutdated)}
+	fw := ui.StatTileData{Tone: ui.ToneAccent, Label: wordUpdateAvailable, Value: itoa(s.Outdated), Hint: "to " + s.Latest, Href: chip(chipOutdated)}
 	if s.Latest == "" { // no release list yet: unknown, never "0 behind"
 		fw.Value, fw.Hint = "–", "no release list yet"
 	}
 	tiles = append(tiles, fw)
 	if s.HasPolicy {
-		pol := ui.StatTileData{Tone: ui.ToneWarn, Label: "Policy deviations", Value: itoa(s.Deviating),
-			Hint: noun(s.Deviating, "device", "devices") + ", " + itoa(s.DeviatingRules) + " " + noun(s.DeviatingRules, "rule", "rules"), Href: chip(chipNonCompliant)}
+		pol := ui.StatTileData{Tone: ui.ToneWarn, Label: wordDiffersFromPolicy, Value: itoa(s.Deviating), Hint: policyHint(s), Href: chip(chipNonCompliant)}
 		if s.PolicyUnread { // no value read yet (e.g. just restarted): unknown, never "0 deviations"
-			pol.Value, pol.Hint = "–", "not checked yet"
-		} else if s.PolicyUnchecked > 0 { // partly read: the known count is a lower bound
-			pol.Hint += ", " + itoa(s.PolicyUnchecked) + " not checked yet"
+			pol.Value, pol.Hint = "–", wordNotCheckedYet
 		}
 		tiles = append(tiles, pol)
 	}
@@ -237,8 +227,9 @@ func viaText(via string) string {
 }
 
 // dashProposals are the proposals an admin can act on from the dashboard: new devices (Ignore,
-// Add) first, then address changes (Ignore, Apply). Conflicts need the discovery page.
-func dashProposals(base string, props []discovery.Proposal, devs map[model.DeviceID]model.Device) []ui.AttProposal {
+// Add) first, then address changes (Ignore, Apply). Conflicts need the discovery page. At most dashProposalsMax are
+// returned; n is how many there are in all.
+func dashProposals(base string, props []discovery.Proposal, devs map[model.DeviceID]model.Device) (shown []ui.AttProposal, n int) {
 	var news, moves []ui.AttProposal
 	act := func(p discovery.Proposal, verb string) string {
 		return fmt.Sprintf("%s/discovery/proposals/%d/%s", base, p.ID, verb)
@@ -265,14 +256,72 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 		}
 	}
 	out := append(news, moves...)
-	return out[:min(len(out), dashProposalsMax)]
+	return out[:min(len(out), dashProposalsMax)], len(out)
 }
 
-// dashAttention lists the devices that need a look, worst first: offline, never answered,
-// refusing the login, silent, a boot loop, weak Wi-Fi, then policy deviations; at most dashAttentionMax.
-// With acl (brokerACLOpen) the broker ACL item follows the offline devices, once (#1078): it is not a device, so it
-// does not count against the cap, or a fleet with many offline devices would push it off the list.
-func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool) []ui.AttItem {
+// dashNeedsAttention is the card "Needs attention" (#1109, #1247): its heading with the number of entries, and its
+// content. The number counts every entry the card stands for, each once: the proposals (also those it does not show),
+// every device of every group (also those it does not show) and the broker item.
+func dashNeedsAttention(base, csrf string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool, props []discovery.Proposal, devs map[model.DeviceID]model.Device) (string, ui.AttentionData) {
+	a := ui.AttentionData{CSRF: csrf}
+	var nProps int
+	a.Props, nProps = dashProposals(base, props, devs)
+	if nProps > len(a.Props) {
+		a.PropsMore = ui.AttMore{Text: "Show all " + itoa(nProps), Href: base + "/devices/new#card-discovered", Label: "Show all " + itoa(nProps) + ": New devices"}
+	}
+	var nDevices int
+	a.Groups, nDevices = dashAttention(base, now, rows, f, window, acl)
+	n := nProps + nDevices
+	if acl {
+		n++
+	}
+	title := "Needs attention"
+	if n > 0 {
+		title += " (" + itoa(n) + ")"
+		a.Note = attentionNote
+	}
+	return title, a
+}
+
+// attentionNote is the one line under the heading: what the list holds, and what it leaves to the tiles.
+const attentionNote = "Each device once, for its worst reason. Firmware and backups are on the tiles."
+
+// attReasons are the reasons a device is listed for, worst first (the order of the card): its group's title and,
+// where the device list can filter by it, the filter. A group that has no filter says "N more" instead of leading to
+// a list that does not show what it counts.
+var attReasons = [...]struct {
+	title  func() string
+	filter deviceFilter
+}{
+	{func() string { return label(model.HealthOffline) }, deviceFilter{Health: string(model.HealthOffline)}},
+	{func() string { return label(model.HealthUnknown) }, deviceFilter{Health: string(model.HealthUnknown)}},
+	{func() string { return label(model.HealthAuthFailed) }, deviceFilter{Health: string(model.HealthAuthFailed)}},
+	{func() string { return label(model.HealthStale) }, deviceFilter{Health: string(model.HealthStale)}},
+	{stability.BootLoop.Label, deviceFilter{}},
+	{stability.WeakWiFi.Label, deviceFilter{}},
+	{func() string { return wordDiffersFromPolicy }, deviceFilter{Chip: chipNonCompliant}},
+}
+
+// Ranks of attReasons.
+const (
+	rankOffline = iota
+	rankUnknown
+	rankAuthFailed
+	rankStale
+	rankBootLoop
+	rankWeakWiFi
+	rankPolicy
+)
+
+// dashAttention groups the devices that need a look by their worst reason: offline, never answered, refusing the
+// login, silent, a boot loop, weak Wi-Fi, then policy deviations. A group shows at most dashGroupMax devices, in the
+// order they were added, and says how many more its list holds: "Show all N" where the device list can filter by the
+// reason (N counted by the list's own matcher, so the link says what the list will show), else "N more". The second
+// result is how many devices the groups hold in all.
+// With acl (brokerACLOpen) the broker ACL item is a group of its own right after the offline devices, once (#1078): it
+// is not a device, so it does not count against any cap, or a fleet with many offline devices would push it off the
+// list.
+func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool) ([]ui.AttGroup, int) {
 	type cand struct {
 		rank int
 		id   model.DeviceID
@@ -285,16 +334,16 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 		switch shownState(r) {
 		case model.HealthOffline:
 			// the badge says Offline, so the text only says since when
-			rank = 0
+			rank = rankOffline
 			if seen := lastContact(r.Device, r.Health); !seen.IsZero() {
 				it.Text = "Last seen " + agoWords(now, seen)
 			}
 		case model.HealthUnknown:
-			rank, it.Text = 1, "Has not answered since it was added"
+			rank, it.Text = rankUnknown, "Has not answered since it was added"
 		case model.HealthAuthFailed:
-			rank, it.Text = 2, "Refuses the stored web login"
+			rank, it.Text = rankAuthFailed, "Refuses the stored web login"
 		case model.HealthStale:
-			rank = 3
+			rank = rankStale
 			it.Text = "No message since " + agoWords(now, r.Health.LastSeen)
 			if ch := channelsOf(now, window, r.Health); len(ch) == 2 && ch[0].Tone == "bad" && ch[1].Tone == "ok" {
 				it.Text = "MQTT unreachable · HTTP works"
@@ -308,13 +357,13 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 			it.Status = &b
 		}
 		if sp := stabProblem(r.Stab); rank < 0 && sp != nil {
-			rank, it.Tone, it.Text = 4, ui.ToneDanger, stabAttention(*sp)
+			rank, it.Tone, it.Text = rankBootLoop, ui.ToneDanger, stabAttention(*sp)
 			if sp.Level == stability.WeakWiFi {
-				rank, it.Tone = 5, ui.ToneWarn
+				rank, it.Tone = rankWeakWiFi, ui.ToneWarn
 			}
 		}
 		if rank < 0 && r.Deviations > 0 {
-			rank, it.Tone, it.Text = 6, ui.ToneWarn, deviationText(f.Details[r.Device.ID], r.Deviations)
+			rank, it.Tone, it.Text = rankPolicy, ui.ToneWarn, deviationText(f.Details[r.Device.ID], r.Deviations)
 		}
 		if rank >= 0 {
 			cs = append(cs, cand{rank, r.Device.ID, it})
@@ -323,22 +372,42 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	// Within a reason, the order the devices were added in (the prototype's list order); the
 	// rows come sorted by name.
 	sort.SliceStable(cs, func(i, j int) bool { return cs[i].id < cs[j].id })
-	var out []ui.AttItem
-	offline := 0
-	for rank := 0; rank <= 6 && len(out) < dashAttentionMax; rank++ {
+	var out []ui.AttGroup
+	aclAt := 0 // the broker item follows the Offline group, or leads when there is none
+	for rank, reason := range attReasons {
+		var items []ui.AttItem
 		for _, c := range cs {
-			if c.rank == rank && len(out) < dashAttentionMax {
-				out = append(out, c.it)
-				if rank == 0 {
-					offline++
+			if c.rank == rank {
+				items = append(items, c.it)
+			}
+		}
+		if len(items) == 0 {
+			continue
+		}
+		g := ui.AttGroup{Title: reason.title(), Items: items[:min(len(items), dashGroupMax)]}
+		if reason.filter != (deviceFilter{}) {
+			// the list the link leads to, counted by its own matcher
+			held := 0
+			for _, r := range rows {
+				if reason.filter.match(r) {
+					held++
 				}
 			}
+			if held > len(g.Items) {
+				g.More = ui.AttMore{Text: "Show all " + itoa(held), Href: base + "/devices?" + reason.filter.values().Encode(), Label: "Show all " + itoa(held) + ": " + g.Title}
+			}
+		} else if len(items) > len(g.Items) {
+			g.More = ui.AttMore{Text: itoa(len(items)-len(g.Items)) + " more"}
+		}
+		out = append(out, g)
+		if rank == rankOffline {
+			aclAt = len(out)
 		}
 	}
 	if acl {
-		out = slices.Insert(out, offline, brokerACLItem)
+		out = slices.Insert(out, aclAt, ui.AttGroup{Title: "Broker", Items: []ui.AttItem{brokerACLItem}})
 	}
-	return out
+	return out, len(cs)
 }
 
 // brokerACLItem is the broker ACL notice as an entry of Needs attention (#1078): the same warning, in the list's words,
