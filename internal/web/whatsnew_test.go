@@ -2,8 +2,11 @@ package web
 
 import (
 	"context"
+	"fmt"
+	"html"
 	"log/slog"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -181,5 +184,125 @@ func TestHeaderVersionIsTheAboutVersion(t *testing.T) {
 		if !strings.Contains(body, `class="ver" href="/tf/whats-new"`) || !strings.Contains(body, ">9.9.9+edge (abcdef012345)</a>") {
 			t.Errorf("%s: header lacks the version link", path)
 		}
+	}
+}
+
+// outsideFolds is the page's main content without the content of every Details fold: what a person reads
+// without opening anything.
+func outsideFolds(t *testing.T, page string) string {
+	t.Helper()
+	i := strings.Index(page, `<main id="main">`)
+	if i < 0 {
+		t.Fatal("no <main> in the page")
+	}
+	main := page[i:]
+	if j := strings.Index(main, "</main>"); j >= 0 {
+		main = main[:j]
+	}
+	main = regexp.MustCompile(`(?s)<details class="fold">.*?</details>`).ReplaceAllString(main, "")
+	return html.UnescapeString(main) // &#39; is no issue number
+}
+
+// developerDetail is what a person who runs TasmoFleet cannot use: a migration, an issue number.
+var developerDetail = regexp.MustCompile(`Migration 00|#\d`)
+
+const developerRelease = "## 2.0.0 \"Pharos\" (2026-03-01)\n\n" +
+	"### Upgrade notes\n\n- Migration 0054 adds the columns `more_group_topics` and `more_group_topics_gen` to `devices` (#1005)\n\n" +
+	"### Changed\n\n- Group topics: the list shows the topic of every device (#998, thanks @Noschvie)\n" +
+	"  - sub bullet with `device_column` and #12\n" +
+	"\n" +
+	"### Fixed\n\n- **Backups no longer stall** (`backup_gen`) when a device is offline (#14)\n"
+
+// Why (#1108): What's new was the changelog file on a page: "Migration 0054 adds the columns ...", issue
+// numbers and credits on every line, 74 releases. A person who runs TasmoFleet reads headlines; the developer
+// text stays one click away. Nothing a user cannot use (a migration, an issue number) may stand outside the
+// closed Details folds, for the changelog this binary ships and for a release written the old way.
+func TestWhatsNewShowsNoDeveloperDetailOutsideTheFolds(t *testing.T) {
+	latest := changelog.Latest(changelog.Embedded())
+	e := setupWith(t, func(d *Deps) { d.Prefs = newFakePrefs(); d.Version = latest })
+	_, body := e.do(t, "GET", "/whats-new", "operator", nil)
+	if m := developerDetail.FindString(outsideFolds(t, body)); m != "" {
+		t.Errorf("the page shows %q outside the Details folds", m)
+	}
+
+	var b strings.Builder
+	p := whatsNewFrom(changelog.Parse(developerRelease), "2.0.0", nil)
+	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	out := outsideFolds(t, `<main id="main">`+b.String()+"</main>")
+	if m := developerDetail.FindString(out); m != "" {
+		t.Errorf("a release written the old way shows %q outside the folds: %s", m, out)
+	}
+	for _, want := range []string{"Group topics", "Backups no longer stall"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the headline %q is missing: %s", want, out)
+		}
+	}
+	for _, want := range []string{"Migration 0054 adds the columns", "<code>more_<wbr>group_<wbr>topics</code>", "thanks @Noschvie", "sub bullet"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("Details lost %q: the full text must stay on the page", want)
+		}
+	}
+}
+
+// Why (#1108): an admin who updates must see first what asks them to act; every other note is detail. A
+// Breaking section is a warn banner at the top of its release, with its headline once (the banner replaces the
+// list), and plain Upgrade notes are only in Details.
+func TestWhatsNewBreakingIsAWarnBannerFirst(t *testing.T) {
+	md := "## 3.0.0 (2026-04-01)\n\n### Upgrade notes\n\n- Nothing to set up; the schema stays at 0054\n\n" +
+		"### Changed\n\n- **Faster lists** The list renders in one pass\n\n" +
+		"### Breaking\n\n- **The old API key setting is gone** set a new key under Settings\n\n" +
+		"## 2.0.0 (2026-03-01)\n\n### Upgrade notes\n\n- Nothing to set up\n\n### Fixed\n\n- **Backups no longer stall**\n"
+	var b strings.Builder
+	if err := whatsNewPage(whatsNewFrom(changelog.Parse(md), "3.0.0", nil)).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	rels := strings.Split(b.String(), `<section class="wn-rel`)
+	if len(rels) != 3 {
+		t.Fatalf("%d releases rendered", len(rels)-1)
+	}
+	three, two := rels[1], rels[2]
+	banner := strings.Index(three, `class="banner t-warn`)
+	if banner < 0 || !strings.Contains(three[banner:], "Action may be required") || !strings.Contains(three[banner:], "The old API key setting is gone") {
+		t.Fatalf("the Breaking change is no warn banner: %s", three)
+	}
+	if first := strings.Index(three, `<div class="wn-sec">`); first < banner {
+		t.Errorf("the banner (%d) does not come before the headline lists (%d)", banner, first)
+	}
+	if n := strings.Count(outsideFolds(t, `<main id="main">`+three+"</main>"), "The old API key setting is gone"); n != 1 {
+		t.Errorf("the Breaking headline stands %d times outside Details, want once (in the banner)", n)
+	}
+	if strings.Contains(outsideFolds(t, `<main id="main">`+three+"</main>"), "Nothing to set up") {
+		t.Error("plain Upgrade notes stand outside Details")
+	}
+	if !strings.Contains(three, "Nothing to set up") {
+		t.Error("Details lost the Upgrade notes")
+	}
+	if strings.Contains(two, `class="banner`) {
+		t.Errorf("a release without action notes shows a banner: %s", two)
+	}
+}
+
+// Why (#1108): the page shows five releases, so a person who skipped more than five has to be told that
+// the older ones exist and where they are, instead of finding the news dot gone and the middle missing.
+func TestWhatsNewMoreThanFiveNewSaysSo(t *testing.T) {
+	var md strings.Builder
+	for i := 8; i >= 0; i-- {
+		fmt.Fprintf(&md, "## 1.%d.0 (2026-01-%02d)\n\n### Added\n\n- x\n\n", i, i+1)
+	}
+	rels := changelog.Parse(md.String())
+	p := whatsNewFrom(rels, "1.8.0", map[string]string{prefNewsSeen: `"1.1.0"`})
+	if len(p.Releases) != 5 {
+		t.Fatalf("%d releases on the page, want 5", len(p.Releases))
+	}
+	if p.NewCount != 7 {
+		t.Fatalf("NewCount = %d, want 7 (the count of the dot does not change)", p.NewCount)
+	}
+	if got, want := whatsNewSub(p), "7 releases are new; the 2 older ones are in the full changelog"; !strings.Contains(got, want) {
+		t.Errorf("sub line %q lacks %q", got, want)
+	}
+	if got := whatsNewSub(whatsNewFrom(rels, "1.8.0", map[string]string{prefNewsSeen: `"1.3.0"`})); strings.Contains(got, "older ones") {
+		t.Errorf("five new releases are all on the page, but the sub line says %q", got)
 	}
 }

@@ -26,13 +26,65 @@ type whatsNewView struct {
 	IsAdmin   bool   // About is an admin page: the others get no link
 }
 
-// jumpNewLimit is how many releases the jump list shows before "Older releases": the sticky narrow
-// stack must stay reachable as the changelog grows.
-const jumpNewLimit = 12
+// whatsNewShown is how many releases the page shows, newest first: the page is for what changed lately, the
+// jump card lists exactly these, and the full changelog on GitHub holds the rest (#1108).
+const whatsNewShown = 5
 
-func jumpNewest(r []whatsNewRelease) []whatsNewRelease { return r[:min(len(r), jumpNewLimit)] }
+// actionNotes is the section title a release uses for upgrade notes the admin must act on; "Breaking" is the
+// other section that asks for action. Plain "Upgrade notes" (a migration, nothing to do) stay in Details.
+const (
+	actionNotes   = "Upgrade notes: action may be required"
+	breakingTitle = "Breaking"
+	plainNotes    = "Upgrade notes"
+)
 
-func jumpOlder(r []whatsNewRelease) []whatsNewRelease { return r[min(len(r), jumpNewLimit):] }
+func isActionSection(title string) bool { return title == breakingTitle || title == actionNotes }
+
+// wnActionBanner is the warn banner at the top of a release that asks the admin to act, with the headline of
+// each such change; nil when the release has no Breaking or action-required section.
+func wnActionBanner(r whatsNewRelease) *ui.BannerData {
+	var lines []string
+	for _, s := range r.Sections {
+		if isActionSection(s.Title) {
+			lines = append(lines, headlines(s)...)
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return &ui.BannerData{Tone: ui.ToneWarn, Title: "Action may be required", Text: strings.Join(lines, "; ")}
+}
+
+// wnLines is one section of a release as What's new lists it: its title and one headline per change.
+type wnLines struct {
+	Title string
+	Lines []string
+}
+
+// wnHeadlines are the headline lists of a release: every section but the ones that are the banner (the same
+// change is not said twice) and the plain upgrade notes (developer detail, in Details).
+func wnHeadlines(r whatsNewRelease) []wnLines {
+	var out []wnLines
+	for _, s := range r.Sections {
+		if isActionSection(s.Title) || s.Title == plainNotes {
+			continue
+		}
+		if lines := headlines(s); len(lines) > 0 {
+			out = append(out, wnLines{Title: s.Title, Lines: lines})
+		}
+	}
+	return out
+}
+
+func headlines(s changelog.Section) []string {
+	var out []string
+	for _, it := range s.Items {
+		if h := changelog.Headline(it); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
+}
 
 // current is the installed release's entry (nil for a build that is no release, such as "dev").
 func (p whatsNewView) current() *whatsNewRelease {
@@ -67,7 +119,12 @@ func newsCount(prefs map[string]string) int {
 // whatsNewData builds the page data from the state before this visit (prefs as read for the
 // request), so the page can still mark what was new although opening it records the visit.
 func whatsNewData(installed string, prefs map[string]string) whatsNewView {
-	rels := changelog.Embedded()
+	return whatsNewFrom(changelog.Embedded(), installed, prefs)
+}
+
+// whatsNewFrom is whatsNewData for the given releases: the newest whatsNewShown released ones, with the news
+// counted over all of them.
+func whatsNewFrom(rels []changelog.Release, installed string, prefs map[string]string) whatsNewView {
 	seen := seenVersion(prefs)
 	p := whatsNewView{Installed: installed, Seen: seen, NewCount: changelog.NewSince(rels, seen)}
 	latest := changelog.Latest(rels)
@@ -81,7 +138,9 @@ func whatsNewData(installed string, prefs map[string]string) whatsNewView {
 		}
 		// a local build says "v0.10.1"; the image is stamped "0.10.1"
 		inst := r.Version == strings.TrimPrefix(installed, "v")
-		p.Releases = append(p.Releases, whatsNewRelease{Release: r, Installed: inst, New: isNew})
+		if len(p.Releases) < whatsNewShown {
+			p.Releases = append(p.Releases, whatsNewRelease{Release: r, Installed: inst, New: isNew})
+		}
 	}
 	return p
 }

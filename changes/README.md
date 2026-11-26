@@ -10,6 +10,8 @@ What changed, for users (#N, thanks @handle)
 ```
 
 - `section` is one of Upgrade notes, Added, Changed, Fixed, Removed, Breaking, Security.
+- An optional `user: <one sentence>` line (no asterisk) is what What's new shows for the change: the assembler writes
+  the line as `- **<user line>** <text>`. Without it What's new takes the first clause of the text.
 - The body is the line exactly as it should read in the changelog; credits stay in the text. Several fragments per
   issue are fine. The file name only orders the lines (leading number first).
 - A PR that changes code and has no fragment fails the `changelog fragment` check. Nothing user-visible (dependency

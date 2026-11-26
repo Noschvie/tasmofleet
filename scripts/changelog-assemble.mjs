@@ -6,7 +6,8 @@
 //   The line as it should read in CHANGELOG.md (#N, thanks @handle)
 //
 // The line text is the source of truth (credits, several issue refs); the file name only orders the lines
-// (leading number, then name). Sections: Upgrade notes, Added, Changed, Fixed, Removed, Breaking, Security.
+// (leading number, then name). An optional "user: <one sentence>" line is the sentence What's new shows for the
+// change (#1108): it is written in front of the text as a bold lead, "- **<user line>** <text>". Sections: Upgrade notes, Added, Changed, Fixed, Removed, Breaking, Security.
 //
 //   changelog-assemble.mjs assemble --version X.Y.Z [--name "Name"] [--date YYYY-MM-DD]
 //       writes the "## X.Y.Z "Name" (date)" section into CHANGELOG.md and deletes the fragments
@@ -30,12 +31,13 @@ export function parseFragment(file, text) {
   if (text.startsWith("\uFEFF")) throw new Error(`${file}: starts with a byte order mark (BOM); save it as plain UTF-8`);
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text);
   if (!m) throw new Error(`${file}: missing front matter: the file must start with "---", then "section: <name>", then "---", then the line`);
-  let section;
+  let section, user;
   for (const l of m[1].split(/\r?\n/)) {
     const kv = /^([A-Za-z_-]+):[ \t]*(.*?)[ \t]*$/.exec(l);
     if (!kv) throw new Error(`${file}: front matter line "${l}" is not "key: value"`);
-    if (kv[1] !== "section") throw new Error(`${file}: unknown front matter key "${kv[1]}" (only "section" is allowed)`);
-    section = kv[2];
+    if (kv[1] === "section") section = kv[2];
+    else if (kv[1] === "user") user = kv[2];
+    else throw new Error(`${file}: unknown front matter key "${kv[1]}" (only "section" and "user" are allowed)`);
   }
   if (section === undefined) throw new Error(`${file}: front matter has no "section:" line`);
   if (!SECTIONS.includes(section))
@@ -44,6 +46,12 @@ export function parseFragment(file, text) {
   if (!body) throw new Error(`${file}: empty body`);
   if (/^[-*+][ \t]/.test(body))
     throw new Error(`${file}: the body must not start with a bullet marker ("- "); the assembler adds it`);
+  if (user !== undefined) {
+    // the lead is a bold run of the line: an asterisk inside it would end it early
+    if (!user) throw new Error(`${file}: "user:" is empty; write the sentence a user reads, or leave the line out`);
+    if (user.includes("*")) throw new Error(`${file}: "user:" must not contain an asterisk (the assembler makes it bold)`);
+    return { file, section, body: `**${user}** ${body}` };
+  }
   return { file, section, body };
 }
 

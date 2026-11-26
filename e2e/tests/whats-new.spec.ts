@@ -73,13 +73,31 @@ for (const width of [768, 1024]) {
   });
 }
 
+// Why (#1108): the page shows the newest five releases and the jump list names exactly those, with no fold of older
+// ones; each release says what changed in headlines and keeps the developer text behind a closed Details fold.
+test("What's new shows five releases, each with its headlines and a closed Details fold", async ({ page }) => {
+  await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
+  await page.goto(app.url + "/whats-new");
+  await expect(page.locator(".wn-rel")).toHaveCount(5);
+  await expect(page.locator(".wn-jump a")).toHaveCount(5);
+  await expect(page.getByText("Older releases")).toHaveCount(0);
+  await expect(page.locator(".wn-rel details.fold")).toHaveCount(5);
+  await expect(page.locator(".wn-rel details.fold[open]")).toHaveCount(0);
+  const first = page.locator(".wn-rel").first();
+  await expect(first.locator("summary")).toHaveText("Details");
+  // the developer text is behind the fold: an issue number is not on screen until the fold opens
+  await expect(first.getByText(/\(#\d+/).first()).toBeHidden();
+  await first.locator("summary").click();
+  await expect(first.getByText(/\(#\d+/).first()).toBeVisible();
+});
+
 // Why: a jump to a release scrolls it under the sticky header, and the sticky narrow stack starts
 // under that header too: neither may be hidden by it.
 test("a jump to an older release and the sticky stack stay below the header", async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(app.url + "/whats-new");
-  const target = page.locator(".wn-jump a").nth(5);
+  const target = page.locator(".wn-jump a").nth(4); // the last of the five releases
   const id = (await target.getAttribute("href"))!;
   await target.click();
   await page.waitForTimeout(500);

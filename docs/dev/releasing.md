@@ -13,6 +13,17 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
   Format (see `changes/README.md`): front matter `section: Fixed` (one of the sections above), then the line
   exactly as it should read, credits inside it. Several fragments per issue are fine; the file name only orders
   the lines. A line must not start with `- `.
+- **What's new reads a headline from every line** (#1108): the page shows one headline per change and keeps the full
+  line behind a "Details" fold per release (the last 5 releases; the full changelog on GitHub has the rest). The
+  headline is the bold lead of the line, else its first clause (to the first `: `, `; ` or `. ` outside code, quotes
+  and parentheses), with issue numbers, credits and asides that hold code left out. Say it for users with an optional
+  front matter line `user: <one sentence, no asterisk>`: the assembler writes the line as `- **<user line>** <text>`,
+  so the sentence is the headline and the text stays the detail. Write a `user:` line, or start the line with a
+  sentence a user understands, whenever the first clause would be a migration, a column or a function name: a
+  migration belongs in "Upgrade notes" (Details only), and a test fails when the page shows
+  `Migration 00` outside the Details folds. A change the admin must act on goes in "Breaking": What's new shows it as a warn
+  banner at the top of its release ("Upgrade notes: action may be required" does the same for a release that has it;
+  the assembler's sections do not include it).
 - **The changelog fragment gate** (`pr.yml`, part of `required`): every PR validates its fragments; a PR that
   changes more than docs must add a fragment, or be the release commit, or carry `changelog: skip - <reason>`
   on a line of its PR body (nothing user-visible; the placeholder `<reason>` does not count). Renovate PRs

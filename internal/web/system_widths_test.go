@@ -118,15 +118,13 @@ func TestAboutPutsVersionAndLicenceNextToComponents(t *testing.T) {
 	}
 }
 
-// Why: sixty releases in a column 820 px wide left the rest of the page empty. The releases take the
-// wide stack and a narrow stack stays beside them: which release you are on and a jump list of every
-// release (the page is long; the list is how to get to 0.12 without scrolling).
+// Why: the releases fill the wide stack and a narrow stack stays beside them: which release you are on and a
+// jump list of the releases the page shows (the page is long; the list is how to get to an older one without
+// scrolling). Each release leads with one headline per change and keeps the developer text in a closed Details
+// fold, so the card does not read like the changelog file (#1108).
 func TestWhatsNewHasAWideStackAndANarrowStackWithEveryRelease(t *testing.T) {
-	rels := changelog.Parse("## 1.2.0 \"Pharos\" (2026-03-01)\n\n### Added\n\n- b\n\n## 1.1.0 (2026-02-01)\n\n### Fixed\n\n- a\n\n## 1.0.0 (2026-01-02)\n\n### Added\n\n- first\n")
-	p := whatsNewView{Installed: "1.1.0", Seen: "1.0.0"}
-	for _, r := range rels {
-		p.Releases = append(p.Releases, whatsNewRelease{Release: r, Installed: r.Version == "1.1.0"})
-	}
+	rels := changelog.Parse("## 1.2.0 \"Pharos\" (2026-03-01)\n\n### Added\n\n- **Faster lists** The list renders in one pass (#7)\n\n## 1.1.0 (2026-02-01)\n\n### Fixed\n\n- a\n\n## 1.0.0 (2026-01-02)\n\n### Added\n\n- first\n")
+	p := whatsNewFrom(rels, "1.1.0", map[string]string{prefNewsSeen: `"1.0.0"`})
 	var b strings.Builder
 	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)
@@ -137,6 +135,12 @@ func TestWhatsNewHasAWideStackAndANarrowStackWithEveryRelease(t *testing.T) {
 		if !strings.Contains(wide, `id="v`+v+`"`) {
 			t.Errorf("release %s is not in the wide stack", v)
 		}
+	}
+	if !strings.Contains(wide, "<li>Faster lists</li>") || strings.Count(wide, "<details class=\"fold\">") != 3 {
+		t.Errorf("a release lacks its headline or its Details fold: %s", wide)
+	}
+	if strings.Contains(wide, "<details class=\"fold\" open") {
+		t.Error("Details opens by itself")
 	}
 	narrow := stackOf(t, body, "cstack")
 	if !strings.Contains(narrow, ">You are on 1.1.0</h2>") {
@@ -184,29 +188,29 @@ func TestSettingsTabsFillTheThreeColumns(t *testing.T) {
 }
 
 // Why: from 1200 px the narrow stack stays in view while the page scrolls, so it must stay short as the
-// changelog grows: the newest 12 releases are links, every older one sits behind "Older releases (n)".
-func TestWhatsNewJumpListShowsTheNewestTwelve(t *testing.T) {
+// changelog grows: the page shows the newest 5 releases and the jump list names exactly those, with no fold of
+// older ones (the full changelog on GitHub holds the rest, #1108).
+func TestWhatsNewJumpListShowsOnlyTheNewestFive(t *testing.T) {
 	var md strings.Builder
 	for i := 13; i >= 1; i-- {
 		fmt.Fprintf(&md, "## 1.%d.0 (2026-01-%02d)\n\n### Added\n\n- x\n\n", i, i)
 	}
-	p := whatsNewView{Installed: "1.13.0"}
-	for _, r := range changelog.Parse(md.String()) {
-		p.Releases = append(p.Releases, whatsNewRelease{Release: r})
-	}
+	p := whatsNewFrom(changelog.Parse(md.String()), "1.13.0", nil)
 	var b strings.Builder
 	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
 		t.Fatal(err)
 	}
 	jump := stackOf(t, b.String(), "cstack")
-	i := strings.Index(jump, `<details class="wn-older">`)
-	if i < 0 {
-		t.Fatal("13 releases and no Older releases")
+	if strings.Contains(b.String(), "Older releases") || strings.Contains(b.String(), "wn-older") {
+		t.Error("an Older releases fold is left")
 	}
-	if n := strings.Count(jump[:i], `<a href="#v`); n != 12 {
-		t.Errorf("%d releases before Older releases, want the newest 12", n)
+	if n := strings.Count(jump, `<a href="#v`); n != 5 {
+		t.Errorf("%d releases in the jump list, want the newest 5", n)
 	}
-	if !strings.Contains(jump[i:], "Older releases (1)") || !strings.Contains(jump[i:], `<a href="#v1.1.0">`) {
-		t.Errorf("the oldest release is not behind Older releases (1): %s", jump[i:])
+	if !strings.Contains(jump, `<a href="#v1.13.0">`) || !strings.Contains(jump, `<a href="#v1.9.0">`) || strings.Contains(jump, `<a href="#v1.8.0">`) {
+		t.Errorf("the jump list is not 1.13.0 to 1.9.0: %s", jump)
+	}
+	if n := strings.Count(b.String(), `<section class="wn-rel`); n != 5 {
+		t.Errorf("%d releases on the page, want 5", n)
 	}
 }

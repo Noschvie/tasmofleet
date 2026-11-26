@@ -343,3 +343,35 @@ test("gate: the placeholder <reason> is not a reason", () => {
   assert.equal(r.status, 1);
   assert.match(r.stdout, /placeholder/);
 });
+
+// ---- the sentence for users (#1108) ----
+// What's new shows one headline per change, and the headline is the bold lead of the line. A fragment says it
+// with "user:"; the assembled line must be the same bold lead a hand-written one has, or the page falls back to
+// a clause of the developer text.
+test("a user: line becomes the bold lead of the assembled bullet, and a plain fragment stays as written", () => {
+  const d = repo({
+    fragments: {
+      "1-a.md": "---\nsection: Changed\nuser: What's new is written for users\n---\nThe page shows one headline per change (#1108)\n",
+      "2-b.md": frag("Changed", "plain line (#2)"),
+      "3-c.md": "---\nsection: Fixed\nuser: Backups no longer stall\n---\nfirst line\nsecond line (#3)\n",
+    },
+  });
+  assert.equal(assemble(d).status, 0);
+  const t = readFileSync(join(d, "CHANGELOG.md"), "utf8");
+  assert.match(t, /### Changed\n\n- \*\*What's new is written for users\*\* The page shows one headline per change \(#1108\)\n- plain line \(#2\)\n/);
+  assert.match(t, /### Fixed\n\n- \*\*Backups no longer stall\*\* first line\n {2}second line \(#3\)\n/);
+});
+
+test("an empty user:, a user: with an asterisk and an unknown key fail loud and change nothing", () => {
+  for (const [text, re] of [
+    ["---\nsection: Fixed\nuser:\n---\nx\n", /"user:" is empty/],
+    ["---\nsection: Fixed\nuser: **bold** already\n---\nx\n", /asterisk/],
+    ["---\nsection: Fixed\nuser: ok\nheadline: no\n---\nx\n", /unknown front matter key "headline"/],
+  ]) {
+    const d = repo({ fragments: { "1-a.md": text } });
+    const r = assemble(d);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, re);
+    unchanged(d);
+  }
+});

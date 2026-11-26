@@ -1,6 +1,7 @@
 package changelog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/firmware"
@@ -213,5 +214,44 @@ func TestParseNamedReleaseHeading(t *testing.T) {
 	}
 	if rels[2].Name != "" || rels[2].Version != "0.20.0" {
 		t.Fatalf("unnamed heading parsed as %+v", rels[2])
+	}
+}
+
+// itemOf parses one changelog bullet the way the file writes it.
+func itemOf(line string) Item {
+	return Parse("## 1.0.0\n\n### Changed\n\n- " + line + "\n")[0].Sections[0].Items[0]
+}
+
+// Why (#1108): What's new shows one headline per change, and a person who is not a developer reads it.
+// It is the bold lead the author wrote for users (a `user:` line, or an old bold lead), else the first
+// clause. Whatever a user cannot use (a column name, an issue number, a thank-you) is not in it, and a
+// headline never ends in the middle of a quoted label, a code span or an aside.
+func TestHeadline(t *testing.T) {
+	long := strings.Repeat("every dial and every switch ", 8)
+	for _, c := range []struct{ name, line, want string }{
+		{"bold lead", "**Bulk results filter by status** Tap Succeeded or Failed to filter (#1105)", "Bulk results filter by status"},
+		{"bold lead with an issue ref and a colon", "**Navigation moved (#410):** Devices -> List", "Navigation moved"},
+		{"old marker is no headline", "**breaking**: the UI listens on container port 8080 in every mode", "the UI listens on container port 8080 in every mode"},
+		{"old marker without a colon", "**breaking** The transaction page refreshes through one route. More text.", "The transaction page refreshes through one route"},
+		{"colon clause", "Every font size comes from the type scale: a test fails when a size is px (#1100)", "Every font size comes from the type scale"},
+		{"sentence", "The Copy button is one small button everywhere. The policy export's Copy is as small (#1092)", "The Copy button is one small button everywhere"},
+		{"semicolon clause", "The UI listens on port 8080; the self-signed TLS no longer moves it", "The UI listens on port 8080"},
+		{"one clause, issue and credit dropped", "The Source column says \"not in backup\" (#1240, thanks @Noschvie)", "The Source column says \"not in backup\""},
+		{"colon inside a quoted label is no cut", "The banner says \"Fix 2 fields: nothing saved\" on every form: one summary", "The banner says \"Fix 2 fields: nothing saved\" on every form"},
+		{"colon inside a code span is no cut", "Set `key: value` in the file: it is read", "Set key: value in the file"},
+		{"aside with code is dropped", "The drift view no longer reports the free PSRAM of ESP32 devices (`Status4.StatusMEM.PsrFree`) as a change: the list", "The drift view no longer reports the free PSRAM of ESP32 devices as a change"},
+		{"aside without code stays", "A phone shows the filters (the same ones) in one row. More", "A phone shows the filters (the same ones) in one row"},
+		{"colon inside an aside is no cut", "Backups (retention: 5) are pruned when the next one is taken. More", "Backups (retention: 5) are pruned when the next one is taken"},
+		{"code elsewhere keeps its words", "Moved from `deploy/homeassistant` to the add-on folder", "Moved from deploy/homeassistant to the add-on folder"},
+		{"abbreviation is no cut", "A device may be offline, e.g. while it restarts. More", "A device may be offline, e.g. while it restarts"},
+		{"stray issue number and credit", "Fixes the rule page (follow-up of #1087, thanks @bob) for good", "Fixes the rule page for good"},
+		{"long clause is cut at a word", long + "end", strings.TrimSpace(long[:strings.LastIndex(long[:headlineMax], " ")]) + "…"},
+		{"a line that is only an issue ref has no headline", "(#12)", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Headline(itemOf(c.line)); got != c.want {
+				t.Errorf("Headline(%q)\n got %q\nwant %q", c.line, got, c.want)
+			}
+		})
 	}
 }

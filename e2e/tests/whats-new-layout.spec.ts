@@ -21,6 +21,10 @@ for (const width of [1280, 375]) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(app.url + "/whats-new");
+      // the long text is behind the Details folds (#1108): open them, or the badge and code checks below judge nothing
+      for (const fold of await page.locator(".wn-rel details.fold").all()) await fold.locator("summary").click();
+      await expect(page.locator(".wn-rel details.fold[open]")).toHaveCount(5);
+      expect(await page.locator(".wn-sec code:visible").count(), "an open Details fold shows code").toBeGreaterThan(0);
       // every section badge's text stays between the section's edge and its list: the text, not the badge's
       // box, which kept its 72 px while a nowrap title ran out of it on both sides
       const overlaps = await page.evaluate(() =>
@@ -31,7 +35,7 @@ for (const width of [1280, 375]) {
           const b = r.getBoundingClientRect();
           const l = sec.querySelector("ul")!.getBoundingClientRect();
           const s = sec.getBoundingClientRect();
-          if (b.width === 0) return []; // a section without a title, or one folded away
+          if (b.width === 0) return []; // a section without a title
           return b.right > l.left + 0.5 || b.left < s.left - 0.5
             ? [`${badge.textContent}: text from ${Math.round(b.left)} to ${Math.round(b.right)}, section starts at ${Math.round(s.left)}, list at ${Math.round(l.left)}`]
             : [];
