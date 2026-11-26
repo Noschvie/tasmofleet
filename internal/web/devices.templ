@@ -297,16 +297,14 @@ templ bulkBar(v view, n int) {
 	</div>
 }
 
-// devicesEmpty is the empty fleet: the three ways to add devices (admins), or who can.
+// devicesEmpty is the empty fleet: the first three steps with the way to the first one (admins, #1050), or who can
+// add devices. The first step names the settings page only where there is one.
 templ devicesEmpty(v view, p devicesPage) {
 	if v.IsAdmin {
-		@ui.Empty("No devices yet", "Scan your network for Tasmota devices, add one by address, or bring over your existing TasmoAdmin setup.") {
-			if v.Features.Discovery {
-				@ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: v.Base + "/devices/new#card-scan"})
-			}
-			@ui.Button(ui.Btn{Label: "Add manually", Href: v.Base + "/devices/new"})
-			if v.Features.Import {
-				@ui.Button(ui.Btn{Label: "Import from TasmoAdmin", Href: v.Base + "/import/tasmoadmin"})
+		@ui.EmptySteps("No devices yet", quickStartSteps(v.Features.SysConfig)) {
+			@ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: v.Base + "/devices/new"})
+			if v.Features.SysConfig {
+				@ui.Button(ui.Btn{Label: "MQTT settings", Href: v.Base + sysTabPath("mqtt")})
 			}
 		}
 	} else {

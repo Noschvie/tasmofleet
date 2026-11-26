@@ -1364,17 +1364,17 @@ func styleguidePage(v sgView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add manually", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "MQTT settings", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = ui.Empty("No devices yet", "Scan your network for Tasmota devices, add one by address, or bring over your existing TasmoAdmin setup.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.EmptySteps("No devices yet", quickStartSteps(true)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

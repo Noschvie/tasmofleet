@@ -969,7 +969,8 @@ func bulkBar(v view, n int) templ.Component {
 	})
 }
 
-// devicesEmpty is the empty fleet: the three ways to add devices (admins), or who can.
+// devicesEmpty is the empty fleet: the first three steps with the way to the first one (admins, #1050), or who can
+// add devices. The first step names the settings page only where there is one.
 func devicesEmpty(v view, p devicesPage) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -1000,29 +1001,19 @@ func devicesEmpty(v view, p devicesPage) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				if v.Features.Discovery {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: v.Base + "/devices/new#card-scan"}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, " ")
+				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: v.Base + "/devices/new"}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Add manually", Href: v.Base + "/devices/new"}).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if v.Features.Import {
-					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "Import from TasmoAdmin", Href: v.Base + "/import/tasmoadmin"}).Render(ctx, templ_7745c5c3_Buffer)
+				if v.Features.SysConfig {
+					templ_7745c5c3_Err = ui.Button(ui.Btn{Label: "MQTT settings", Href: v.Base + sysTabPath("mqtt")}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = ui.Empty("No devices yet", "Scan your network for Tasmota devices, add one by address, or bring over your existing TasmoAdmin setup.").Render(templ.WithChildren(ctx, templ_7745c5c3_Var38), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.EmptySteps("No devices yet", quickStartSteps(v.Features.SysConfig)).Render(templ.WithChildren(ctx, templ_7745c5c3_Var38), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

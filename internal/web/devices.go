@@ -266,6 +266,17 @@ func addDevicesLabel(n int) string {
 	return "Add devices · " + strconv.Itoa(n) + " new"
 }
 
+// quickStartSteps are the three steps of the empty Devices page (#1050): the broker first, because with it devices
+// report at once and every write goes over MQTT; then the devices; then the first backup. Without the settings page
+// the broker comes from the environment, and the step says so instead of naming a page that is not there.
+func quickStartSteps(settingsPage bool) []string {
+	broker := "Connect your MQTT broker: set MQTT_URL for TasmoFleet."
+	if settingsPage {
+		broker = "Connect your MQTT broker in System → Settings → MQTT."
+	}
+	return []string{broker, "Add your devices on the Add devices page.", "Back them up with Back up all now on Device backups."}
+}
+
 // facets turns value counts into select options, sorted by value.
 func facets(n map[string]int, label func(string) string) []facet {
 	out := make([]facet, 0, len(n))

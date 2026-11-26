@@ -105,6 +105,10 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
   await expect(banner).toBeVisible();
   await expect(banner).toHaveClass(/\bt-warn\b/);
   await expect(banner).not.toHaveClass(/\bt-ok\b/);
+  // Why (#1050): the empty list names the three first steps, broker first, with the way to the first one
+  await expect(page.locator(".uempty-steps li")).toHaveCount(3);
+  await expect(page.locator(".uempty-steps li").first()).toContainText("MQTT broker");
+  await expect(page.locator(".uempty").getByRole("link", { name: "Add devices" })).toBeVisible();
   await page.goto(app.url + "/setup");
 
   // The suggestions are only a proposal; nothing is configured until the admin finishes.
@@ -132,5 +136,5 @@ test("zero configuration: setup link, first admin, setup, live networks, scan, d
 
   // The setup is finished: the dashboard opens instead of the setup.
   await page.goto(app.url + "/");
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 });

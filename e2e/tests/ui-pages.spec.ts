@@ -387,7 +387,7 @@ for (const m of modes) {
     await page.locator('input[name="username"]').fill("breakglass");
     await page.locator('input[name="password"]').fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
     await page.goto(local.url + "/account");
     await look("account");
     await page.goto(local.url + "/users");

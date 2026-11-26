@@ -6027,6 +6027,17 @@ dialog.stepup {
   color: var(--color-text-2);
   text-wrap: pretty;
 }
+.uempty-steps {
+  margin: 0;
+  padding-left: var(--sp-20);
+  max-width: 420px;
+  color: var(--color-text-2);
+  text-align: left;
+  text-wrap: pretty;
+}
+.uempty-steps li + li {
+  margin-top: var(--sp-6);
+}
 .uempty .btn-row {
   justify-content: center;
   margin-top: var(--sp-6);

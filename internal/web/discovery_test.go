@@ -484,7 +484,7 @@ func TestAddDevicesButtonCountsNewDevices(t *testing.T) {
 	}
 }
 
-// Why (#1106): with no device yet, the empty list's card carries the ways to add the first ones; buttons in the
+// Why (#1106, #1050): with no device yet, the empty list's card carries the way to add the first ones; buttons in the
 // header to the same page would be the same choice twice on one screen.
 func TestEmptyDeviceListHasNoHeaderButtons(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
@@ -501,7 +501,7 @@ func TestEmptyDeviceListHasNoHeaderButtons(t *testing.T) {
 	if strings.Contains(head, `class="btn`) {
 		t.Errorf("the empty list's header has buttons: %s", head)
 	}
-	if !strings.Contains(body, "No devices yet") || !strings.Contains(body, ">Scan network</a>") {
+	if !strings.Contains(body, "No devices yet") || !strings.Contains(body, ">Add devices</a>") {
 		t.Errorf("the empty card lost its ways to add devices")
 	}
 }

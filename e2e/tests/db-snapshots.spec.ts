@@ -20,7 +20,7 @@ async function signIn(page: import("@playwright/test").Page) {
   await page.getByLabel("Username").fill("snapper");
   await page.getByLabel("Password").fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 }
 
 // Why: the file holds every secret of the installation, so it is only handed out after the

@@ -77,7 +77,7 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
       await page.locator('input[name="username"]').fill("admin");
       await page.locator('input[name="password"]').fill(newPassword);
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
     });
 
     test("admin creates an operator; operators cannot manage accounts", { tag: "@core" }, async ({ page, browser }) => {

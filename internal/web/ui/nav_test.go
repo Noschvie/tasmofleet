@@ -30,7 +30,7 @@ func drawer(t *testing.T, d ShellData) string {
 // while a group with two or more pages keeps its row.
 func TestOneItemGroupHasNoSubNavRow(t *testing.T) {
 	d := admin()
-	d.Nav, d.Path, d.Title = "dashboard", "/", "Fleet overview"
+	d.Nav, d.Path, d.Title = "dashboard", "/", "Dashboard"
 	got := render(t, d)
 	if !strings.Contains(got, `<div class="sn sn-empty"></div>`) || strings.Contains(got, `class="sn-item"`) {
 		t.Errorf("the dashboard draws a sub-navigation row for its one page: %s", between(got, `<header class="top">`, "</header>"))
@@ -138,7 +138,7 @@ func TestTrailStartsAtThreeSteps(t *testing.T) {
 		steps            []Crumb
 		want             string
 	}{
-		{"dashboard", "/", "Fleet overview", nil, ""},
+		{"dashboard", "/", "Dashboard", nil, ""},
 		{"devices", "/devices", "Devices", nil, ""},
 		{"policy", "/policy", "Policy", nil, ""},
 		{"backups", "/devices/backups", "Device backups", nil, ""},

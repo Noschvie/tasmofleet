@@ -52,7 +52,7 @@ templ setupStepsBar(current int) {
 }
 
 // setupView is the first-run setup (design v2 screen "setup", step 3): the step indicator,
-// the device networks, the broker with its connection test, and Finish setup, which saves,
+// the broker with its connection test, the device networks, and Finish setup, which saves,
 // ends the setup and scans the networks when the box is ticked.
 templ setupView(p setupPage) {
 	@ui.AuthCard(p.Base, p.Version, p.Host) {
@@ -68,20 +68,6 @@ templ setupView(p setupPage) {
 		}
 		<form class="setup-form" method="post" action={ templ.SafeURL(p.Base + setupPath + "/finish") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
-			<label class="ufield">
-				<span class="ufield-label">Device networks</span>
-				<textarea name="v.DEVICE_NETWORKS" class="mono" rows="2" maxlength="2048" placeholder="192.168.1.0/24" { setupInvalid(p, "DEVICE_NETWORKS")... }>{ p.Networks }</textarea>
-				if e := p.Errors["DEVICE_NETWORKS"]; e != "" {
-					<span class="ufield-err" id="err-v.DEVICE_NETWORKS" role="alert">{ e }</span>
-				} else {
-					<span class="ufield-help">
-						TasmoFleet only talks to devices inside these networks.
-						if p.Suggested != "" {
-							Suggested from this machine’s network interfaces: nothing is configured until you finish.
-						}
-					</span>
-				}
-			</label>
 			<div class="setup-broker">
 				<label class="ufield">
 					<span class="ufield-label">MQTT broker host</span>
@@ -94,6 +80,8 @@ templ setupView(p setupPage) {
 			</div>
 			if e := p.Errors["MQTT_URL"]; e != "" {
 				<span class="ufield-err" id="err-v.MQTT_URL" role="alert">{ e }</span>
+			} else {
+				<span class="ufield-help">With a broker TasmoFleet works over MQTT; HTTP is only the fallback.</span>
 			}
 			<div class="setup-broker">
 				<label class="ufield">
@@ -121,10 +109,24 @@ templ setupView(p setupPage) {
 						<span class="sys-test-res t-ok" role="status">MQTT connection test: { p.MQTTResult }</span>
 					}
 				} else {
-					<span class="sys-test-help">Optional. With a broker devices report at once instead of being polled.</span>
+					<span class="sys-test-help">Saves nothing.</span>
 				}
 			</div>
 			@aclHelp("Without an ACL on the broker, any client on it can read device passwords and backups.")
+			<label class="ufield">
+				<span class="ufield-label">Device networks</span>
+				<textarea name="v.DEVICE_NETWORKS" class="mono" rows="2" maxlength="2048" placeholder="192.168.1.0/24" { setupInvalid(p, "DEVICE_NETWORKS")... }>{ p.Networks }</textarea>
+				if e := p.Errors["DEVICE_NETWORKS"]; e != "" {
+					<span class="ufield-err" id="err-v.DEVICE_NETWORKS" role="alert">{ e }</span>
+				} else {
+					<span class="ufield-help">
+						TasmoFleet only talks to devices inside these networks.
+						if p.Suggested != "" {
+							Suggested from this machine’s network interfaces: nothing is configured until you finish.
+						}
+					</span>
+				}
+			</label>
 			if p.CanScan {
 				<label class="ucheck"><input type="checkbox" name="scan" value="1" checked?={ p.Scan }/><span>Scan these networks for Tasmota devices when I finish<span class="ucheck-text">Ranges up to /22 (1024 addresses) each.</span></span></label>
 			}

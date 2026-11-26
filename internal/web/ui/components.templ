@@ -1093,6 +1093,23 @@ templ Empty(title, text string) {
 	</div>
 }
 
+// EmptySteps is Empty with the first steps as a numbered list in place of the line (the empty Devices page, #1050):
+// the steps are plain sentences, read as a list, and the buttons (children) lead to the first of them.
+templ EmptySteps(title string, steps []string) {
+	<div class="uempty">
+		<div class="uempty-icon" aria-hidden="true"><span></span></div>
+		<h2>{ title }</h2>
+		<ol class="uempty-steps">
+			for _, s := range steps {
+				<li>{ s }</li>
+			}
+		</ol>
+		<div class="btn-row">
+			{ children... }
+		</div>
+	</div>
+}
+
 // NoMatch is the row of a filtered list without results, with the way back.
 templ NoMatch(text, clearHref string) {
 	<div class="nomatch">

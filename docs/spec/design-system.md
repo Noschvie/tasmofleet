@@ -459,9 +459,9 @@ Also: [desktop, dark](../design/styleguide/dialogs-desktop-dark.png) · [phone, 
 
 ### Empty, no match and loading
 
-An empty list shows an icon tile, a heading, one line and up to three buttons in a dashed frame; one primary at most, and none where the viewer may not act (the dashboard of an empty fleet has one, Add devices, for an admin and "An admin adds them." for an operator, and no button in its header). A filter without results says so and offers Clear filters. The skeleton is only for lazily loaded fragments (D12); server-rendered pages never show it. Its shimmer stops under reduced motion.
+An empty list shows an icon tile, a heading, one line and up to three buttons in a dashed frame; one primary at most, and none where the viewer may not act (the dashboard of an empty fleet has one, Add devices, for an admin and "An admin adds them." for an operator, and no button in its header). Where the first run has an order, the line is a numbered list of plain sentences instead (the empty Devices page: connect the broker, add the devices, back them up, with Add devices as the primary button and MQTT settings beside it); an operator keeps the one line. A filter without results says so and offers Clear filters. The skeleton is only for lazily loaded fragments (D12); server-rendered pages never show it. Its shimmer stops under reduced motion.
 
-Component: `ui.Empty(title, text)`, `ui.NoMatch(text, clearHref)`, `ui.Skeleton(label, rows)`.
+Component: `ui.Empty(title, text)`, `ui.EmptySteps(title, steps)`, `ui.NoMatch(text, clearHref)`, `ui.Skeleton(label, rows)`.
 
 ![Empty, no match and loading, desktop, light](../design/styleguide/states-desktop-light.png)
 

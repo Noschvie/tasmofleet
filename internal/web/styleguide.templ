@@ -352,9 +352,9 @@ templ styleguidePage(v sgView) {
 			</div>
 		}
 		@sgSec("states") {
-			@ui.Empty("No devices yet", "Scan your network for Tasmota devices, add one by address, or bring over your existing TasmoAdmin setup.") {
-				@ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: v.Base + "/styleguide"})
-				@ui.Button(ui.Btn{Label: "Add manually", Href: v.Base + "/styleguide"})
+			@ui.EmptySteps("No devices yet", quickStartSteps(true)) {
+				@ui.Button(ui.Btn{Label: "Add devices", Kind: "primary", Href: v.Base + "/styleguide"})
+				@ui.Button(ui.Btn{Label: "MQTT settings", Href: v.Base + "/styleguide"})
 			}
 			@ui.NoMatch("No device matches “garage” with the filter Offline.", v.Base+"/styleguide")
 			@ui.Skeleton("Loading devices…", 4)

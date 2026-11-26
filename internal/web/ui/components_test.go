@@ -107,6 +107,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"StepUp":          StepUp(StepUpData{ID: "s", Name: h, Sub: h, What: h, IdP: h, IdPHref: "/x", Local: true, Action: "/x", CSRF: h, Error: h}),
 		"ConfirmPage":     ConfirmPage(ConfirmData{Title: h, Heading: h + "x", Text: h, Warning: h, Facts: []KVRow{{Key: h, Value: h}}, Action: "/x", CSRF: h, Fields: []KVRow{{Key: h, Value: h}}, Verb: h, CancelHref: "/x", CancelLabel: h}),
 		"Empty":           Empty(h, h),
+		"EmptySteps":      EmptySteps(h, []string{h, h}),
 		"NoMatch":         NoMatch(h, "/x"),
 		"Skeleton":        Skeleton(h, 2),
 		"ErrorPage":       ErrorPage(h, h, h, h, Btn{Label: h, Href: "/x"}, Btn{Label: h}),

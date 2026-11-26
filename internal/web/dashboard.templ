@@ -7,7 +7,7 @@ import "github.com/hellwand/tasmofleet/internal/web/ui"
 // takes the same #dash out of the whole page the GET answers with.
 templ dashboardPage(d dashView) {
 	<div id="dash" hx-get={ d.Base + "/" } hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">
-		@ui.PageHeaderLive("Fleet overview", d.Sub) {
+		@ui.PageHeaderLive("Dashboard", d.Sub) {
 			// No button while the fleet is empty (#1109): the empty card has the one first action, and New update has
 			// nothing to update.
 			if !d.Empty {

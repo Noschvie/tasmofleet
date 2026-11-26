@@ -55,7 +55,7 @@ test("local sign-in works and wrong passwords are refused", { tag: "@core" }, as
   await page.locator('input[name="username"]').fill("breakglass");
   await page.locator('input[name="password"]').fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   await openMenu(page, "System");
   await expect(page.locator("nav.sn-in").getByRole("link", { name: "Audit log" })).toBeVisible();
   await signOut(page);
@@ -147,7 +147,7 @@ test("a form left open past a sign-in change ends on a page that leads on", { ta
   await expect(page.getByText("missing or invalid CSRF token")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Reload" })).toHaveAttribute("href", "/devices");
   await page.getByRole("link", { name: "Dashboard" }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   await page.goto(app.url + "/devices");
   await page.context().clearCookies(); // the server-side effect of an ended session: no session cookie matches
@@ -206,7 +206,7 @@ async function signInBreakglass(page: Page) {
   await page.getByLabel("Username").fill("breakglass");
   await page.getByLabel("Password").fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 }
 
 // stepUp confirms the admin's password in the "Confirm it's you" dialog, which an action of a

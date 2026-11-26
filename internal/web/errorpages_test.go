@@ -71,7 +71,7 @@ func TestAddTabsHideImportWhenUnavailable(t *testing.T) {
 func TestDevicesEmptyStates(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Inventory = newInv() })
 	_, body := e.do(t, "GET", "/devices", "admin", nil)
-	if !strings.Contains(body, "No devices yet") || !strings.Contains(body, "Add manually") || strings.Contains(body, "<table") {
+	if !strings.Contains(body, "No devices yet") || !strings.Contains(body, ">Add devices</a>") || strings.Contains(body, "<table") {
 		t.Fatalf("empty inventory: %.600s", body)
 	}
 	e = setup(t)

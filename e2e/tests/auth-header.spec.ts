@@ -27,7 +27,7 @@ test.afterAll(async () => {
 test("operator sees the app but not admin pages", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-Test-User": "olivia", "X-Test-Groups": "Tasmofleet Users" });
   await page.goto(proxyURL + "/");
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   await expect(page.locator("summary.um-btn").getByText("olivia")).toBeVisible();
   await expect(page.getByRole("link", { name: "Audit" })).toHaveCount(0);
   const res = await page.goto(proxyURL + "/audit");

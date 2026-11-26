@@ -360,7 +360,7 @@ test.describe("with local accounts", () => {
     await page.getByLabel("Username").fill("settings-admin");
     await page.getByLabel("Password").fill("e2e-fake-password-1");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   }
 
   // Why: the identity provider does nothing in local mode, so its cards are dimmed until single

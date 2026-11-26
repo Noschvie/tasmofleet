@@ -76,7 +76,7 @@ test("the login page offers the IdP first and the local form in a fold", async (
   await expect(page.locator('input[name="password"]')).toBeVisible();
   await page.locator('input[name="password"]').fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 });
 
 // #283: an SSO user chooses how their name shows. The identity provider keeps sending its own name at

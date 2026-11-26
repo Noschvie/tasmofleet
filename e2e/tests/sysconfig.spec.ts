@@ -220,7 +220,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
   await page.getByLabel("Username").fill("resetter");
   await page.getByLabel("Password").fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   // a stored value to reset
   await page.goto(app.url + "/devices/backups");

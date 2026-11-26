@@ -82,7 +82,7 @@ async function signIn(page: Page, a: App = app) {
   await page.getByLabel("Password").fill("e2e-fake-password-1");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(
-    page.getByRole("heading", { name: "Fleet overview" }),
+    page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
 }
 
