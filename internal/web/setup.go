@@ -62,7 +62,7 @@ type setupPage struct {
 
 // setupFocusOrder are the settings the setup may change, in the order of their inputs on the page: the first refused
 // one takes the focus.
-var setupFocusOrder = []string{"DEVICE_NETWORKS", "MQTT_URL", "MQTT_USER", "MQTT_PASSWORD"}
+var setupFocusOrder = []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD", "DEVICE_NETWORKS"}
 
 // setupKeys are the settings the setup may change; each has an input on the page, where its refusal is shown.
 var setupKeys = func() map[string]bool {

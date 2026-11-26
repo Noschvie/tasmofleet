@@ -1,6 +1,7 @@
 package web
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -46,6 +47,10 @@ func TestEmptyDeviceListShowsAdminsTheQuickStart(t *testing.T) {
 		if n := strings.Count(card, `class="btn`); n < 1 || n > 3 {
 			t.Errorf("%s: %d buttons in the empty card, want one to three: %s", path, n, card)
 		}
+		// The setup already asks for the broker first, so the step must stay true after it: it says so.
+		if !strings.Contains(steps[0], "unless the setup already did") {
+			t.Errorf("%s: step 1 = %q reads as still to do for an admin whose setup set the broker", path, steps[0])
+		}
 		for _, href := range []string{"/devices/new", "?tab=mqtt"} {
 			if !strings.Contains(card, href+`"`) {
 				t.Errorf("%s: no link to %s in the empty card", path, href)
@@ -71,6 +76,9 @@ func TestQuickStartWithoutSettingsPageDoesNotLinkIt(t *testing.T) {
 	if !ok || len(steps) != 3 {
 		t.Fatalf("want three steps, got %v: %.600s", steps, body)
 	}
+	if !strings.Contains(steps[0], "unless it is set") {
+		t.Errorf("the first step reads as still to do when MQTT_URL is already set: %q", steps[0])
+	}
 	if strings.Contains(body, "tab=mqtt") || strings.Contains(steps[0], "Settings") {
 		t.Errorf("the first step points to a settings page this install does not have: %q", steps[0])
 	}
@@ -93,6 +101,11 @@ func TestSetupAsksForTheBrokerBeforeTheNetworks(t *testing.T) {
 	if !strings.Contains(body[host:nets], fallback) {
 		t.Errorf("the fallback sentence is not under the broker fields")
 	}
+	// a refused broker says what is wrong in the sentence's place, not under it
+	r, body := e.do(t, "POST", "/setup/finish", "admin", url.Values{"csrf": {"tok"}, "v.DEVICE_NETWORKS": {"192.168.7.0/24"}, "mqtt.host": {"broker.lan"}, "mqtt.port": {"99999"}})
+	if r.StatusCode != 422 || !strings.Contains(body, `id="err-v.MQTT_URL"`) || strings.Contains(body, fallback) {
+		t.Errorf("a refused broker: status %d, error shown %v, fallback still shown %v", r.StatusCode, strings.Contains(body, `id="err-v.MQTT_URL"`), strings.Contains(body, fallback))
+	}
 }
 
 // Why (#1050): the page is called Dashboard in the menu, the crumb and the tab title; a heading that reads
@@ -102,5 +115,18 @@ func TestDashboardHeadingIsItsName(t *testing.T) {
 	_, body := e.do(t, "GET", "/", "admin", nil)
 	if !strings.Contains(body, "<h1>Dashboard</h1>") || strings.Contains(body, "Fleet overview") {
 		t.Errorf("the dashboard heading is not Dashboard: %.800s", body)
+	}
+}
+
+// Why (#1098, #1050): the first refused input takes the focus, and "first" is the order of the inputs on the page.
+// The setup asks for the broker before the device networks, so a refused broker field must win over a refused
+// network list; otherwise the autofocus scrolls past the broker error to the networks at the bottom.
+func TestSetupFocusGoesToTheFirstRefusedInputOnThePage(t *testing.T) {
+	p := setupPage{Errors: map[string]string{"DEVICE_NETWORKS": "no", "MQTT_URL": "no"}}
+	if a := setupInvalid(p, "MQTT_URL"); a["autofocus"] != true {
+		t.Errorf("the refused broker (first on the page) does not take the focus: %v", a)
+	}
+	if a := setupInvalid(p, "DEVICE_NETWORKS"); a["autofocus"] != false {
+		t.Errorf("the refused networks (below the broker) take the focus: %v", a)
 	}
 }

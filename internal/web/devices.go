@@ -268,11 +268,12 @@ func addDevicesLabel(n int) string {
 
 // quickStartSteps are the three steps of the empty Devices page (#1050): the broker first, because with it devices
 // report at once and every write goes over MQTT; then the devices; then the first backup. Without the settings page
-// the broker comes from the environment, and the step says so instead of naming a page that is not there.
+// the broker comes from the environment, and the step says so instead of naming a page that is not there. The
+// step reads true whether or not the setup already set the broker, so the handler needs no broker state.
 func quickStartSteps(settingsPage bool) []string {
-	broker := "Connect your MQTT broker: set MQTT_URL for TasmoFleet."
+	broker := "Connect your MQTT broker: set MQTT_URL for TasmoFleet, unless it is set."
 	if settingsPage {
-		broker = "Connect your MQTT broker in System → Settings → MQTT."
+		broker = "Connect your MQTT broker in System → Settings → MQTT, unless the setup already did."
 	}
 	return []string{broker, "Add your devices on the Add devices page.", "Back them up with Back up all now on Device backups."}
 }

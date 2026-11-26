@@ -84,8 +84,8 @@ docker logs tasmofleet 2>&1 | grep -o '/setup/account?token=[^"]*'
 1. Open the setup link: `https://<host>:8443` followed by the `/setup/account?token=...` path printed once
    at start in the TasmoFleet log (`docker logs tasmofleet`; on Unraid, open the container's log). Accept
    the self-signed certificate and set the admin password.
-2. In the setup, enter your MQTT broker first (devices then report at once and every change goes over
-   MQTT; HTTP is only the fallback), then your device networks, and choose **Finish setup**.
+2. In the setup, enter your MQTT broker first (devices then report at once and changes go over MQTT
+   first; HTTP is the fallback), then your device networks, and choose **Finish setup**.
 3. On the empty Devices page, open **Add devices** and add your devices.
 4. Under **Device backups**, choose **Back up all now** to take the first backup.
 
