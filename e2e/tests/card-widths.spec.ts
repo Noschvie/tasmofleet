@@ -73,7 +73,11 @@ const exempt: Exempt[] = [
   use("device console", "console"), // the terminal: a console is wide, its text is not
   use("device settings", "devform-foot"), // the save bar under the settings columns: one line
   use("system settings advanced", "sys-danger"), // the "Reset all settings" strip: one line
-  use("policy rule", "History of this rule"), // a collapsed <details>: one line until opened
+  // a collapsed <details>: one line until opened. Its summary carries the version count since #1096
+  // (A5-018), and a card is named by its first heading or summary, so the name holds the count. The seeded
+  // rule (realisticPolicyRules) is never edited by this spec, so it has one version. If the seed gains a
+  // version, this entry goes stale and the finding is unlisted: change the number, do not loosen the match.
+  use("policy rule", "History of this rule · 1 version"),
   use("transactions", "History", true), // 61 % today (#419 decision): a hair under the line must not fail the guard
 
   // Single-form and confirmation pages stay narrow (decision of 2026-11-05).
