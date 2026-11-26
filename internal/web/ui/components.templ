@@ -803,19 +803,26 @@ templ StatTile(s StatTileData) {
 // come from the server (SVG attributes, no inline style).
 templ HealthBar(ok, off, unk int) {
 	<svg class="health-bar" viewBox="0 0 1000 8" preserveAspectRatio="none" role="img" aria-label={ itoa(ok) + " online, " + itoa(off) + " offline, " + itoa(unk) + " unknown" }>
-		for _, s := range healthSegments(ok, off, unk) {
-			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="8"></rect>
-		}
+		@barSegs(healthSegments(ok, off, unk))
 	</svg>
+}
+
+// barSegs draws the segments of the health and compliance bars and, over the boundary between two of them, the
+// divider (barGaps).
+templ barSegs(segs []barSeg) {
+	for _, s := range segs {
+		<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="8"></rect>
+	}
+	for _, x := range barGaps(segs) {
+		<line class="bar-gap" x1={ itoa(x) } x2={ itoa(x) } y1="0" y2="8"></line>
+	}
 }
 
 // ComplianceBar is a rule's compliance: devices that match, deviate and cannot be judged, drawn
 // like the fleet health bar (same segments and CSS); only the text for assistive technology differs.
 templ ComplianceBar(match, deviate, unknown int) {
 	<svg class="health-bar" viewBox="0 0 1000 8" preserveAspectRatio="none" role="img" aria-label={ itoa(match) + " match, " + itoa(deviate) + " deviate, " + itoa(unknown) + " not judged" }>
-		for _, s := range complianceSegments(match, deviate, unknown) {
-			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="8"></rect>
-		}
+		@barSegs(complianceSegments(match, deviate, unknown))
 	</svg>
 }
 

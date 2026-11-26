@@ -1,6 +1,8 @@
 package web
 
 import (
+	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -142,9 +144,10 @@ func TestTokensEqualThePrototype(t *testing.T) {
 	pd := cssDecls(t, proto, `[data-theme="dark"]{`)
 	light := lightTokens(t, css)
 	dark := cssDecls(t, css, darkHeader)
-	// tokens of ours that the prototype writes inline instead of as a token, and the one documented
-	// deviation (design-system.md "Deviations from the prototype" 13: --color-control-border, WCAG 1.4.11, #829)
-	extra := map[string]bool{"--color-grip-hover": true, "--color-control-border": true}
+	// tokens of ours that the prototype writes inline instead of as a token, and the documented deviations
+	// (design-system.md "Deviations from the prototype" 13: --color-control-border, WCAG 1.4.11, #829; 14:
+	// --color-knob and --color-danger-solid-hover, WCAG 1.4.3 and 1.4.11, #1266 and #1267)
+	extra := map[string]bool{"--color-grip-hover": true, "--color-control-border": true, "--color-knob": true, "--color-danger-solid-hover": true}
 
 	for name, want := range pl {
 		if name == "color-scheme" {
@@ -734,7 +737,7 @@ func TestMoreTokensRowsEqualStylesheet(t *testing.T) {
 			t.Errorf("design-system.md says %s is %q, app.css has %q", m[1], m[2], got)
 		}
 	}
-	for _, name := range []string{"--color-scrim", "--color-on-danger", "--color-knob", "--backdrop", "--focus-ring", "--focus-offset", "--dur-fast", "--dur-base", "--dur-slow", "--pulse", "--r-mark"} {
+	for _, name := range []string{"--color-scrim", "--color-on-danger", "--backdrop", "--focus-ring", "--focus-offset", "--dur-fast", "--dur-base", "--dur-slow", "--pulse", "--r-mark"} {
 		if _, ok := base[name]; !ok {
 			t.Errorf("app.css has no %s on :root", name)
 		}
@@ -943,6 +946,233 @@ func TestDatesAndReachabilityAreSans(t *testing.T) {
 	for _, want := range selectors {
 		if !sans[want] {
 			t.Errorf("%s has no rule that sets `font: 500 … var(--font-sans)`: it must be sans 500 (design-system.md, Cards and key/value rows)", want)
+		}
+	}
+}
+
+// ---- WCAG AA of the state pairs (#1266, #1267, #1268) ----------------------------------------------------
+//
+// #1170 measured the pairs a state draws (a hovered button, a checked switch, the segments of a bar) with a
+// script that converts every token to 8-bit sRGB and takes the WCAG ratio. Eight of them failed, all in a state
+// the base values do not show. These guards redo that arithmetic from the declarations app.css really writes, so
+// a token that moves, or a rule that points at another token, fails here instead of in an audit.
+
+// lum is the WCAG relative luminance of an 8-bit sRGB colour.
+func lum(c [3]int) float64 {
+	var l float64
+	for i, w := range []float64{0.2126, 0.7152, 0.0722} {
+		v := float64(c[i]) / 255
+		if v <= 0.04045 {
+			v /= 12.92
+		} else {
+			v = math.Pow((v+0.055)/1.055, 2.4)
+		}
+		l += w * v
+	}
+	return l
+}
+
+// contrast is the WCAG contrast ratio of two colours.
+func contrast(a, b [3]int) float64 {
+	la, lb := lum(a), lum(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// oklchToRGB converts oklch(l c h) to 8-bit sRGB the way #1170's script does: per channel clipped (the gamut is
+// not mapped), then rounded.
+func oklchToRGB(l, c, hDeg float64) [3]int {
+	h := hDeg * math.Pi / 180
+	a, b := c*math.Cos(h), c*math.Sin(h)
+	l_ := l + 0.3963377774*a + 0.2158037573*b
+	m_ := l - 0.1055613458*a - 0.0638541728*b
+	s_ := l - 0.0894841775*a - 1.2914855480*b
+	lc, mc, sc := l_*l_*l_, m_*m_*m_, s_*s_*s_
+	lin := [3]float64{
+		4.0767416621*lc - 3.3077115913*mc + 0.2309699292*sc,
+		-1.2684380046*lc + 2.6097574011*mc - 0.3413193965*sc,
+		-0.0041960863*lc - 0.7034186147*mc + 1.7076147010*sc,
+	}
+	var out [3]int
+	for i, v := range lin {
+		v = math.Min(1, math.Max(0, v))
+		if v <= 0.0031308 {
+			v *= 12.92
+		} else {
+			v = 1.055*math.Pow(v, 1/2.4) - 0.055
+		}
+		out[i] = int(math.Round(v * 255))
+	}
+	return out
+}
+
+// colourOf resolves a colour value (var() chains, #rgb, #rrggbb, oklch()) against the tokens of one theme.
+func colourOf(t *testing.T, v string, tokens map[string]string) [3]int {
+	t.Helper()
+	v = strings.TrimSpace(v)
+	for depth := 0; strings.HasPrefix(v, "var("); depth++ {
+		if depth > 8 {
+			t.Fatalf("var() chain too deep at %q", v)
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(v, "var("), ")")
+		got, ok := tokens[name]
+		if !ok {
+			t.Fatalf("%s is not a token of this theme", name)
+		}
+		v = strings.TrimSpace(got)
+	}
+	switch {
+	case strings.HasPrefix(v, "#"):
+		hex := v[1:]
+		if len(hex) == 3 {
+			hex = string([]byte{hex[0], hex[0], hex[1], hex[1], hex[2], hex[2]})
+		}
+		n, err := strconv.ParseUint(hex, 16, 32)
+		if err != nil || len(hex) != 6 {
+			t.Fatalf("cannot read the colour %q", v)
+		}
+		return [3]int{int(n >> 16), int(n >> 8 & 0xff), int(n & 0xff)}
+	case strings.HasPrefix(v, "oklch("):
+		f := strings.Fields(strings.TrimSuffix(strings.TrimPrefix(v, "oklch("), ")"))
+		if len(f) != 3 {
+			t.Fatalf("cannot read the colour %q", v)
+		}
+		var n [3]float64
+		for i := range n {
+			x, err := strconv.ParseFloat(f[i], 64)
+			if err != nil {
+				t.Fatalf("cannot read the colour %q: %v", v, err)
+			}
+			n[i] = x
+		}
+		return oklchToRGB(n[0], n[1], n[2])
+	}
+	t.Fatalf("cannot read the colour %q", v)
+	return [3]int{}
+}
+
+// declOf is the value the last rule with the selector sel (alone or in a list) writes for prop.
+func declOf(t *testing.T, rules []cssRule, sel, prop string) string {
+	t.Helper()
+	got, found := lookupDecl(rules, sel, prop)
+	if !found {
+		t.Fatalf("no rule %q writes %s", sel, prop)
+	}
+	return got
+}
+
+func lookupDecl(rules []cssRule, sel, prop string) (got string, found bool) {
+	for _, r := range rules {
+		for _, s := range strings.Split(r.header, ",") {
+			if strings.TrimSpace(s) != sel {
+				continue
+			}
+			for _, d := range r.decls {
+				if d.prop == prop {
+					got, found = d.val, true
+				}
+			}
+		}
+	}
+	return got, found
+}
+
+// Why: the pairs below are the ones #1170 found under 4.5:1 (text) or 3:1 (a graphic or the state of a control,
+// WCAG 1.4.11) in a state: the label of a hovered or pressed danger-solid button (row 36), the knob of a switch on
+// its checked, unchecked and warn tracks (rows 47 and 49), the warn track on the card (row 49), and the segments
+// of the health and compliance bars on their track (row 51). A segment of a bar next to another one is told apart
+// by the divider (.bar-gap, the track's colour), which each segment meets with 3:1 or more: online next to
+// offline does not rest on hue alone. The ratios come from the declarations app.css writes, resolved through the
+// light block and through the dark block over it, so moving a token or pointing a rule at another one fails here.
+func TestAAContrastOfStatePairs(t *testing.T) {
+	css := readRepoFile(t, "static/app.css")
+	rules := cssRules(css)
+	light := lightTokens(t, css)
+	dark := map[string]string{}
+	for k, v := range light {
+		dark[k] = v
+	}
+	for k, v := range cssDecls(t, css, darkHeader) {
+		dark[k] = v
+	}
+	themes := []struct {
+		name   string
+		tokens map[string]string
+	}{{"light", light}, {"dark", dark}}
+
+	const (
+		hover  = ".btn.btn-danger-solid:hover"
+		knob   = ".utoggle .sw::after"
+		off    = ".utoggle .sw"
+		on     = ".utoggle input:checked + .sw"
+		warnOn = ".sf-warn input:checked + .sw"
+	)
+	for _, th := range themes {
+		c := func(v string) [3]int { return colourOf(t, v, th.tokens) }
+		check := func(what string, fg, bg string, min float64) {
+			t.Helper()
+			if got := contrast(c(fg), c(bg)); got < min {
+				t.Errorf("%s, %s theme: %.2f:1 (%s on %s), want at least %.1f:1", what, th.name, got, fg, bg, min)
+			}
+		}
+		check("the label on a hovered or pressed danger-solid button (#1266)", declOf(t, rules, hover, "color"), declOf(t, rules, hover, "background"), 4.5)
+
+		knobFill := declOf(t, rules, knob, "background")
+		check("the knob on the checked switch track (#1267)", knobFill, declOf(t, rules, on, "background"), 3)
+		check("the knob on the unchecked switch track (#1267)", knobFill, declOf(t, rules, off, "background"), 3)
+		check("the knob on the checked warn switch track (#1267)", knobFill, declOf(t, rules, warnOn, "background"), 3)
+		check("the checked warn switch track on the card (#1267)", declOf(t, rules, warnOn, "background"), "var(--color-surface)", 3)
+
+		track := declOf(t, rules, ".health-bar", "background")
+		fill := declOf(t, rules, ".health-bar .bar-seg", "fill")
+		for _, tone := range []string{".t-ok", ".t-danger", ".t-warn", ".t-neutral"} {
+			tc := map[string]string{}
+			for k, v := range th.tokens {
+				tc[k] = v
+			}
+			for _, d := range []string{"--t", "--t-fg"} { // the tone class sets the variables the fill reads
+				tc[d] = declOf(t, rules, tone, d)
+			}
+			seg := colourOf(t, fill, tc)
+			if got := contrast(seg, c(track)); got < 3 {
+				t.Errorf("a %s segment of the health and compliance bars, %s theme: %.2f:1 on the track, want at least 3:1 (#1268)", tone, th.name, got)
+			}
+		}
+		// the divider is the track's colour, so a segment meets it with the same ratio it meets the track with
+		if stroke, ok := lookupDecl(rules, ".health-bar .bar-gap", "stroke"); !ok {
+			t.Errorf("no rule .health-bar .bar-gap writes stroke: the segments of a bar have no divider (#1268)")
+		} else if gap, tr := c(stroke), c(track); gap != tr {
+			t.Errorf("the bar divider is %v in the %s theme, the track %v: it must be the track's colour (#1268)", gap, th.name, tr)
+		}
+	}
+	if got, _ := lookupDecl(rules, ".health-bar .bar-gap", "vector-effect"); got != "non-scaling-stroke" {
+		t.Errorf(".bar-gap vector-effect is %q: the bar's 1000-unit width stretches a stroke, the divider must stay a fixed width on every bar", got)
+	}
+	if got, _ := lookupDecl(rules, ".health-bar .bar-gap", "stroke-width"); got != "2px" {
+		t.Errorf(".bar-gap stroke-width is %q, want 2px (the 2-unit gap of the bar drawn at a pixel width that no bar width shrinks)", got)
+	}
+}
+
+// Why: the guard above is only worth something if its arithmetic is #1170's. These are values the issues quote
+// (the ratios of #1266 and #1267 at the base, and the proposed values), so a converter that drifts fails here.
+func TestContrastArithmeticMatchesTheAudit(t *testing.T) {
+	light := map[string]string{"--a": "oklch(0.47 0.19 27)", "--w": "#fff"}
+	dark := map[string]string{"--a": "oklch(0.47 0.17 25)", "--w": "#fff", "--k": "#0b1015", "--acc": "oklch(0.7 0.12 250)"}
+	for _, c := range []struct {
+		name         string
+		fg, bg       string
+		tokens       map[string]string
+		want, within float64
+	}{
+		{"light hover", "var(--w)", "var(--a)", light, 7.57, 0.01},
+		{"dark hover", "var(--w)", "var(--a)", dark, 7.47, 0.01},
+		{"dark knob on accent", "var(--k)", "var(--acc)", dark, 7.18, 0.01},
+		{"white knob on dark accent", "var(--w)", "var(--acc)", dark, 2.66, 0.01},
+	} {
+		if got := contrast(colourOf(t, c.fg, c.tokens), colourOf(t, c.bg, c.tokens)); math.Abs(got-c.want) > c.within {
+			t.Errorf("%s: %.2f, the audit says %s", c.name, got, fmt.Sprint(c.want))
 		}
 	}
 }

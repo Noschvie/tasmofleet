@@ -36,7 +36,7 @@ sample data only (D17). If a component is not on the style guide, it is not part
 
 ## Tokens
 
-Where a value here is weaker than Apple's HIG or WCAG 2.2, [design-references.md](design-references.md) rates it: the text and fill pairs in rows 26 to 43 (the white label on a hovered danger-solid button, row 36, is an AA failure).
+Where a value here is weaker than Apple's HIG or WCAG 2.2, [design-references.md](design-references.md) rates it: the text and fill pairs in rows 26 to 43 (the white label on a hovered danger-solid button, row 36, was an AA failure until 0.48.1: `--color-danger-solid-hover`).
 
 Names are the prototype's with the app's `--color-` prefix (`--bg` is `--color-bg`). Values are copied
 verbatim, `oklch()` included. Light is `:root, [data-theme="light"]`; dark is
@@ -73,6 +73,7 @@ fails on any difference.
 | `--color-danger-fg` | `oklch(0.49 0.17 27)` | `oklch(0.8 0.13 25)` |
 | `--color-danger-bg` | `oklch(0.96 0.025 27)` | `oklch(0.29 0.07 25)` |
 | `--color-danger-solid` | `oklch(0.52 0.19 27)` | `oklch(0.55 0.17 25)` |
+| `--color-danger-solid-hover` | `oklch(0.47 0.19 27)` | `oklch(0.47 0.17 25)` |
 | `--color-neutral` | `#98a1ab` | `#6b7581` |
 | `--color-neutral-fg` | `#4f5964` | `#b0b8c1` |
 | `--color-neutral-bg` | `#eceff2` | `#242a31` |
@@ -87,7 +88,7 @@ fails on any difference.
 | `--color-console-line` | `rgba(255, 255, 255, 0.14)` | same |
 | `--color-scrim` | `rgb(10 14 18)` | same |
 | `--color-on-danger` | `#fff` | same |
-| `--color-knob` | `#fff` | same |
+| `--color-knob` | `#fff` | `#0b1015` |
 <!-- tokens:end -->
 
 `--color-info*` does not exist: informational banners and badges use the accent set
@@ -105,7 +106,7 @@ Theme-independent tokens (all on `:root`):
 | Card gap | `--card-gap: var(--sp-16)`: the space between sibling cards, down and across, on every page: card stacks, the device overview, including the tile row's distance to the card below it (the tiles inside the row keep `--sp-10`, see Stat tiles), the policy pages. It is the only card gap: every container that spaces cards (`.cstacks`, `.cstack`, `.devlive`, `.dev-pair`, `.pol-cards`) writes the token, and a card in one of them has no bottom margin of its own, so a gap is one value, not a gap plus a margin. `card-stacks.spec.ts` measures 16 px between sibling cards on the Dashboard, the device overview (tile row included), System settings and the policy pages; `device-layout.spec.ts` fails when two cards come closer |
 | Controls | `--ctl` 34px (44px on phones), `--ctl-sm` 32px (44px on phones), `--ctl-lg` 40px (44px on phones): the tall button and the full-width row targets (fold summaries, the drawer, row menus), `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
-| Inline values made tokens | `--backdrop`, `--color-scrim`, `--color-on-danger`, `--color-knob`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
+| Inline values made tokens | `--backdrop`, `--color-scrim`, `--color-on-danger`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent), `--color-knob` (per theme: `#fff` in light, `#0b1015` in dark, #1267) |
 | Layers | `--z-sticky` 10, `--z-menu` 20, `--z-header` 30, `--z-header-menu` 40, `--z-dialog` 1000, `--z-toast` 1001 |
 
 More tokens. `app.css` writes none of these values anywhere else: `TestStylesheetWritesTokens` fails on a colour,
@@ -116,13 +117,13 @@ shadow, layer above 4, transition duration, radius or focus ring written as a li
 | --- | --- |
 | Bars | `--sb-line` 32px (status bar row; 44px on phones), `--sb-h` (row + safe area), `--header-h` (sticky header with sub-navigation) |
 | Overlay | `--color-scrim: rgb(10 14 18)`, `--backdrop: color-mix(in srgb, var(--color-scrim) 50%, transparent)` for every `::backdrop` (drawer and dialogs alike); the scrollbar gutter behind a modal paints `color-mix(in srgb, var(--color-bg) 50%, var(--color-scrim))`, which is what the backdrop would make of the page colour |
-| On colours | `--color-on-danger: #fff` (text on `--color-danger-solid`), `--color-knob: #fff` (switch knobs), both themes |
+| On colours | `--color-on-danger: #fff` (text on `--color-danger-solid` and `--color-danger-solid-hover`), both themes. `--color-knob` (switch knobs) is not here: it is `#fff` in light and `#0b1015` in dark, so it is a row of the Tokens table (Deviation 14) |
 | Focus | `--focus-ring: 2px solid var(--color-accent)`, `--focus-offset: 2px`: every `:focus-visible`, `:focus-within` and `.is-focus` rule writes `outline: var(--focus-ring)`. Inside a clipping container and on text fields the ring sits inside, `outline-offset: calc(-1 * var(--focus-offset))`. The outlines that mark a state, not focus (an invalid label or checkbox in `--color-danger`, a locked checkbox in `--color-text-3`), are not the ring |
 | Motion | `--dur-fast: 0.12s` (hover, press, chevrons), `--dur-base: 0.15s` (switch knob, status bar chevron), `--dur-slow: 0.6s` (progress width), `--pulse: 1.6s` (live dot). The three durations are `0s` under `prefers-reduced-motion`, so every transition that reads them stops; `--pulse` is not, the live dot's animation is turned off by its own rule. Component-local keyframe durations stay literal: `0.8s` spinners, `0.9s` and `2.4s` busy pulses, `1.4s` shimmer, `1s` indeterminate bar, `0.01s` the busy indicator's delayed show |
 | Marks | `--r-mark: 2px` |
 | Other | `--lh-tight` 1.15, `--grid-cols` 12, `--busy-ring` (the busy indicator's ring) |
 
-The focus ring is held to HIG and WCAG in [design-references.md](design-references.md), rows 55 to 58: inputs, a ring inside a clipping container, and focus hidden by the fixed bars or by pinned table columns are weaker than the reference.
+The focus ring is held to HIG and WCAG in [design-references.md](design-references.md), rows 55 to 58: inputs, a ring inside a clipping container, and focus hidden by pinned table columns (open, #1275) are weaker than the reference. Focus is kept clear of the sticky header and the fixed status bar by the root's `scroll-padding-block: var(--header-h) calc(var(--sb-h) + var(--sp-8))` (row 57, #1274); a target's own `scroll-margin` adds to it, so none writes a bar's height again.
 
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
 width including the scrollbar, which is what the prototype's root measures, and fixed elements
@@ -229,7 +230,7 @@ Also: [desktop, dark](../design/styleguide/live-desktop-dark.png) · [phone, lig
 
 ### Buttons
 
-The white label on a hovered or pressed danger-solid button fails WCAG AA in the dark theme: [design-references.md](design-references.md), row 36.
+The hovered and pressed fill of danger-solid is `--color-danger-solid-hover` (7.57:1 in light, 7.47:1 in dark under the white label); `--color-danger` would give 3.13:1 in dark (WCAG 1.4.3, [design-references.md](design-references.md), row 36, #1266).
 
 Default (surface, strong border, `500 13px`), primary (accent, `600 13px`, padding 14), danger (outlined text in danger-fg), danger-solid (the confirming button of a destructive dialog), ghost, link (text only, 32 px target) and the icon button (⋯). Height `--ctl` (34 px, 44 px on phones), small 32 px (44 px on phones). A Btn with `Href` is a link (it only navigates or opens the dialog named by `Dialog`); without it a `type=button` that never submits by accident. One action, one component; the confirming button repeats the trigger's verb and tone.
 
@@ -356,9 +357,9 @@ Also: [desktop, dark](../design/styleguide/forms-desktop-dark.png) · [phone, li
 
 ### Choices and switches
 
-The white knob on a checked accent track and the checked warn switch fail WCAG AA, and the setting switch target is below HIG: [design-references.md](design-references.md), rows 47, 49 and 60.
+The knob is `--color-knob` (`#fff` in light, `#0b1015` in dark): 3:1 or more on the accent, the off and the warn track in both themes (WCAG 1.4.11, #1267, [design-references.md](design-references.md), rows 47 and 49); the setting switch target is below HIG, row 60.
 
-Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. There are two switches and no third (#1096). A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`; on a phone its target reaches 44 x 44): `ui.Toggle(ToggleData{Name, Value, ID, Label, Text, On, Disabled, Attrs})` draws the setting's card with a `Label`, and the switch alone without one, for a setting whose label is drawn elsewhere (System settings and the broker's TLS, named by their `<label for>`; the rule editor's Enabled). It posts `Value` ("true" unless a page names another) when on and nothing when off. The power switch of a row, a card, the header and a relay is `ui.PowerSwitch(PowerSwitchData{Label or LabelledBy, On, Disabled, Submit, Class, Attrs})`, 34 x 20 inside a 48 x 44 px target (44 px wide where a row has several relays), disabled while the device is offline. Every switch has one off state, the `--color-control-border` fill, and the accent when on (a setting that warns takes `--color-warn`). `Attrs` of both are `hx-*`, `data-*`, `aria-describedby` and the like; `role`, `aria-checked`, `checked` and the keys the component writes are its own. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
+Radio cards (auth method, backup keep or drop) are `label > input[type=radio]` with a title and a line; the checked card takes the accent tint. Segmented controls (Advisory / Required, Operator / Admin, Side by side / Unified) are radio inputs in one frame, so they work without JavaScript; the theme switch in the shell is the same look. Checkboxes are 16 px in the accent colour. There are two switches and no third (#1096). A setting switch is a checkbox with `role=switch` (38 x 22, knob `--shadow-knob`; on a phone its target reaches 44 x 44): `ui.Toggle(ToggleData{Name, Value, ID, Label, Text, On, Disabled, Attrs})` draws the setting's card with a `Label`, and the switch alone without one, for a setting whose label is drawn elsewhere (System settings and the broker's TLS, named by their `<label for>`; the rule editor's Enabled). It posts `Value` ("true" unless a page names another) when on and nothing when off. The power switch of a row, a card, the header and a relay is `ui.PowerSwitch(PowerSwitchData{Label or LabelledBy, On, Disabled, Submit, Class, Attrs})`, 34 x 20 inside a 48 x 44 px target (44 px wide where a row has several relays), disabled while the device is offline. Every switch has one off state, the `--color-control-border` fill, and the accent when on (a setting that warns takes `--color-warn-fg`: `--color-warn` is 2.19:1 on a light card). `Attrs` of both are `hx-*`, `data-*`, `aria-describedby` and the like; `role`, `aria-checked`, `checked` and the keys the component writes are its own. A row's power switch is `role="switch"` with `aria-checked` (the state is never in its name) and is named by its row through `aria-labelledby`: the device name in the Name cell (`dvn-<id>`) and the page's hidden `relay N` text (`rly-N`), so the live fragment the stream sends needs no device name and carries no id of its own (#1074).
 
 Component: `ui.RadioCards`, `ui.Segmented`, `ui.Check`, `ui.Toggle`, `ui.PowerSwitch`.
 
@@ -368,7 +369,7 @@ Also: [desktop, dark](../design/styleguide/controls-desktop-dark.png) · [phone,
 
 ### Stat tiles and fleet health
 
-A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments; their widths come from the server as SVG attributes (no inline style under the CSP). Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The info tile values (`.itile-v`, numbers and words) follow this; `shell-css.spec.ts` guards it.
+A tile is a link to the filtered list: dot and label (`500 12.5px`), the value (`--fs-stat`, tabular figures) and a hint. Tiles sit in a grid of 150 px columns. The health bar shows online, offline and unknown as three segments, filled with the tone's text colour (`--t-fg`, 6.1 to 10.5:1 on the track in both themes) and divided by a 2 px line in the track's colour on each boundary (`.bar-gap`, kept at 2 px by `vector-effect: non-scaling-stroke`; `ui.barGaps`); their widths come from the server as SVG attributes (no inline style under the CSP). `TestAAContrastOfStatePairs` holds the ratios. Text meets WCAG AA in both themes (4.5:1; 3:1 only for text of 24 px or more, or 18.66 px bold and more): a number in a tone is coloured with the tone's `-fg` token, never with its fill (`--t`, `--color-*`), which is for dots, bars and backgrounds. The info tile values (`.itile-v`, numbers and words) follow this; `shell-css.spec.ts` guards it.
 
 An info tile (device overview, rule page) is `ui.InfoTile(InfoTileData{Key, Label, Value, Tone, Word, Mask, Bar,
 BarTone, Hint, ...})`. It is not a link: label, value, hint and optionally a bar, a note beside the label ("Last
@@ -509,7 +510,7 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
 
 ### Data tables
 
-Sort links in a header are smaller than WCAG 2.5.8 asks and pinned columns can hide a focused cell: [design-references.md](design-references.md), rows 10 and 58.
+A sort link in a header is at least 24 x 24 px (`min-width`, `min-height`; WCAG 2.5.8, #1272, [design-references.md](design-references.md), row 10), and the device list's name link wraps in full, with no line clamp, so the text-spacing override of WCAG 1.4.12 loses none of it (row 25, #1273). Pinned columns can still hide a focused cell: row 58, open (#1275).
 
 A table sits in a card frame edge to edge (no inner padding), with a hairline under the header and between
 rows. Header cells are `500 12px` text-2, sentence case, on a `--color-surface-2` band 38 px tall: the prototype's
@@ -625,8 +626,9 @@ accent, done steps carry ✓. Progress is `ui.SegBar` (done, failed, running; th
 hue and reach 3:1 against the track) or a native `<progress>` (flat, full width, accent fill, radius 2). In a
 `ui.SegBar` done is one solid bar, running is vertical stripes with gaps and failed is a checker over two rows
 (`segRects` in `ui/components.go`; each cell is 10 of the bar's 1000 units, 3 px at the narrowest), filled with the
-tone's text colour (`--t-fg`), never dimmed. The fleet health bar and a rule's compliance bar still fill with `--t`
-(2.2 to 2.7:1 on their track) and differ by hue only: open follow-up. The
+tone's text colour (`--t-fg`), never dimmed. The fleet health bar and a rule's compliance bar fill with `--t-fg` too
+(6.1 to 10.5:1 on their track, #1268) and divide their segments by a line in the track's colour, so neighbours do not
+differ by hue only. The
 stability sparkline is an SVG with sizes as attributes.
 
 ### Busy
@@ -795,7 +797,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
     reserves the status bar plus one `--sp-16` gap, so a page ends one gap above the bar (#773).
 13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button, the default
     (outlined) buttons, the chips (`.chip`, #1095), the filled switch tracks in their off state (`.pwr .sw`, `.utoggle .sw`, `.uswitch .sw`: the fill marks the
-    control, the white knob keeps 3.5:1 or more on it) and the segment controls (`.seg`, `.useg`, frame and
+    control, the knob keeps 3.5:1 or more on it) and the segment controls (`.seg`, `.useg`, frame and
     inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
     (light) and 1.75:1 (dark) against the card surface, below the 3:1 that WCAG 2.2 SC 1.4.11 (Non-text
     Contrast) asks for the boundary of a UI component. The new values give 3.51:1 / 3.69:1 on the card surface
@@ -804,3 +806,4 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
     unchanged and still draws dividers, card edges, dialog and menu panels, dashed drop zones and other
     decoration. `design/v2` is not edited, so `make visual` reports these controls as a known difference
     (#829, #860).
+14. `--color-knob` and `--color-danger-solid-hover` are not in the prototype, and `--color-knob` is a theme token. The prototype's white knob is 2.66:1 on the dark accent track and 1.89:1 on the dark warn track, below the 3:1 of WCAG 1.4.11 (#1267): the dark knob is `#0b1015` (7.18:1 on the accent, 3.96:1 on the off track, 12.06:1 on the warn track), the light knob stays `#fff`. The prototype fills a hovered or pressed danger-solid button with `--color-danger`, which gives its white label 3.13:1 in dark, below the 4.5:1 of WCAG 1.4.3 (#1266): the fill is the darker `--color-danger-solid-hover` (7.57:1 light, 7.47:1 dark). `TestTokensEqualThePrototype` lists both in its `extra` map; `TestDesignSystemTokenTableEqualsStylesheet` checks both theme values against the Tokens table, which is what covers `--color-knob` now that it is not on the base `:root` block.

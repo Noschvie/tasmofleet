@@ -778,6 +778,18 @@ func segments(gap int, parts ...struct {
 	return out
 }
 
+// barGaps are the x positions, in the bar's 1000-unit space, of the dividers between neighbouring segments: the
+// centre of each gap segments() leaves. The gap itself is 2 units, under a pixel on a narrow bar, so the divider is a
+// line in the track's colour with a fixed stroke width (.bar-gap in app.css), not the gap's own width: it keeps the
+// two tones apart by more than hue wherever the bar is drawn (#1268). One segment, or none, has no boundary.
+func barGaps(segs []barSeg) []int {
+	var out []int
+	for i := 1; i < len(segs); i++ {
+		out = append(out, (segs[i-1].X+segs[i-1].W+segs[i].X)/2)
+	}
+	return out
+}
+
 type part = struct {
 	N    int
 	Tone Tone

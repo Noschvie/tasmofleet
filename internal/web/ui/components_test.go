@@ -472,6 +472,40 @@ func TestComplianceBarSegmentsAndText(t *testing.T) {
 	}
 }
 
+// Why (#1268): the health and compliance bars fill their segments with the tone's text colour, which meets the
+// track with 3:1 or more, and a divider in the track's colour sits on every boundary between two drawn segments, so
+// online next to offline is told apart by that divider and not by hue alone. The 2-unit gap alone is under a pixel
+// on a narrow bar. One line per boundary, centred in the gap, none for one segment and none for an empty part; the
+// count comes from segments(), never from a fixed number.
+func TestBarsDrawADividerOnEveryBoundary(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		html string
+		segs []barSeg
+	}{
+		{"health", comp(t, HealthBar(54, 4, 2)), healthSegments(54, 4, 2)},
+		{"health, two parts", comp(t, HealthBar(54, 0, 6)), healthSegments(54, 0, 6)},
+		{"health, one part", comp(t, HealthBar(10, 0, 0)), healthSegments(10, 0, 0)},
+		{"health, empty", comp(t, HealthBar(0, 0, 0)), healthSegments(0, 0, 0)},
+		{"compliance", comp(t, ComplianceBar(17, 1, 2)), complianceSegments(17, 1, 2)},
+		{"compliance, one part", comp(t, ComplianceBar(18, 0, 0)), complianceSegments(18, 0, 0)},
+	} {
+		lines := regexp.MustCompile(`<line class="bar-gap" x1="(\d+)" x2="(\d+)" y1="0" y2="8"></line>`).FindAllStringSubmatch(c.html, -1)
+		want := max(len(c.segs)-1, 0)
+		if len(lines) != want {
+			t.Errorf("%s: %d dividers, want %d (one per boundary between drawn segments): %s", c.name, len(lines), want, c.html)
+			continue
+		}
+		for i, m := range lines {
+			x, _ := strconv.Atoi(m[1])
+			end, next := c.segs[i].X+c.segs[i].W, c.segs[i+1].X
+			if m[1] != m[2] || x != (end+next)/2 {
+				t.Errorf("%s: divider %d at x1=%s x2=%s, want the centre %d of the gap between %d and %d", c.name, i, m[1], m[2], (end+next)/2, end, next)
+			}
+		}
+	}
+}
+
 // Why (#1078, #840): a banner whose action leads off TasmoFleet (the broker ACL guide) opens it in a new tab, so the
 // person keeps the page they were on (a confirmation, a form), without handing the guide the opener; a screen reader
 // hears that a tab opens. The banner passes the action's Target and Rel through like ui.Button does, for every banner:
