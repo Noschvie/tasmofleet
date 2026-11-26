@@ -1623,7 +1623,7 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		}
 		p.History = append(p.History, row)
 	}
-	v := h.view(r, "Updates", "transactions", nil) // the phone header names the group, as the prototype does
+	v := h.view(r, txListTitle(p), "transactions", nil) // the tab is the heading; the phone header names the group by itself (AreaLabel)
 	v.Live = true
 	p.CSRF = v.CSRF
 	h.show(w, r, http.StatusOK, "transactions", v, transactionsPage(p))

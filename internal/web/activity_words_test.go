@@ -85,10 +85,23 @@ func TestNoPageNamesAJobATransaction(t *testing.T) {
 }
 
 // Why: the page names the area in its tab, its heading and the dashboard card, and says what is on it in words a person
-// who never ran a "transaction" understands (A1-002, A4-016).
+// who never ran a "transaction" understands (A1-002, A4-016). A person with several tabs open finds the page by its
+// tab: a tab "Updates" above the heading "Activity" sends them to the wrong place. The tab and the heading had two
+// sources (a literal in the handler and txListTitle) and drifted apart when the heading was renamed (#1302); the
+// phone header keeps naming the group ("Updates"), which is the area, not the page.
 func TestActivityIsTheNameOfTheJobList(t *testing.T) {
 	e, _, _, _ := setupOTA(t)
 	_, body := e.do(t, "GET", "/transactions", "admin", nil)
+	if got := titleOf(body); got != "Activity" {
+		t.Errorf("the tab of the Activity page is %q, want Activity", got)
+	}
+	if m := phoneTitle.FindStringSubmatch(body); m == nil || html.UnescapeString(m[1]) != "Updates" {
+		t.Errorf("the phone header does not name the group Updates: %v", m)
+	}
+	_, filtered := e.do(t, "GET", "/transactions?device=1", "admin", nil)
+	if tab, h1 := titleOf(filtered), h1Of(filtered); tab == "" || tab != h1 || !strings.HasPrefix(tab, "Activity of ") {
+		t.Errorf("the tab of the device-filtered list is %q, want its heading %q", tab, h1)
+	}
 	text := shownText(body)
 	for _, want := range []string{"Activity", "Updates and other changes sent to devices, with a log for each device."} {
 		if !strings.Contains(text, want) {
