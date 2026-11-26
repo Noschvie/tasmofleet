@@ -217,9 +217,11 @@ test.describe("status badges of the history and the activity lists stand in one 
   }
 
   // Why: the time has a fixed track so the text column keeps one x. The seed only has rows from today ("Today
-  // 10:17 PM"), but the list holds every audited action: "Yesterday 10:17 PM" and "19 Aug 2025, 08:02 PM" are longer
+  // 10:17 PM"), but the list holds every audited action: "Yesterday 10:17 PM" and "19 Aug 2025, 8:02 PM" are longer
   // and must wrap inside the track, not run over the action text next to it.
   // The stamps come from the page's own formatter in a 12-hour locale; the meridiem must stay with its clock time.
+  // The key is read from the row's own time element (data-ts), not written here a second time: time.js returns ""
+  // for a key it does not know (#1104 renamed "day" to "relative"), and a hard-coded key would drift again.
   test.describe("12-hour locale", () => {
     test.use({ locale: "en-US" });
     for (const width of [375, 1280]) {
@@ -247,9 +249,12 @@ test.describe("status badges of the history and the activity lists stand in one 
             const w = row.querySelector(".ud-act-when") as HTMLElement;
             const t = row.querySelector(".ud-act-text") as HTMLElement;
             const k = kinds[i % kinds.length];
-            w.textContent = fmt(k.iso, "day");
-            const node = w.firstChild as Text;
+            const key = w.getAttribute("data-ts") ?? "";
+            w.textContent = fmt(k.iso, key);
+            const node = w.firstChild as Text | null;
+            // An empty text means time.js does not know the page's key: report it, do not die on a null node.
             const top = (needle: string) => {
+              if (!node) return null;
               const at = node.data.indexOf(needle);
               const r = document.createRange();
               r.setStart(node, at);
@@ -258,7 +263,8 @@ test.describe("status badges of the history and the activity lists stand in one 
             };
             return {
               kind: k.kind,
-              text: w.textContent,
+              key,
+              text: w.textContent ?? "",
               over: w.scrollWidth - w.clientWidth,
               lines: w.clientHeight / parseFloat(getComputedStyle(w).fontSize),
               gap: t.getBoundingClientRect().left - w.getBoundingClientRect().right,
@@ -269,6 +275,7 @@ test.describe("status badges of the history and the activity lists stand in one 
         });
         expect(new Set(gaps.map((g) => g.kind)).size, "all three kinds of stamp were checked").toBe(3);
         for (const g of gaps) {
+          expect(g.text, `time.js must format the key "${g.key}" the page puts on its time element`).not.toBe("");
           expect(g.over, `${g.text} must not run past its column`).toBeLessThanOrEqual(0);
           expect(g.gap, `${g.text} must end before the action text`).toBeGreaterThan(0);
           // The meridiem must not be cut off from its clock time by a line break.
