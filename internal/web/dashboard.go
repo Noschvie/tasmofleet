@@ -229,9 +229,11 @@ func viaText(via string) string {
 
 // dashProposals are the proposals an admin can act on from the dashboard: new devices (Ignore,
 // Add) first, then address changes (Ignore, Apply). Conflicts need the discovery page. At most dashProposalsMax are
-// returned; n is how many there are in all.
-func dashProposals(base string, props []discovery.Proposal, devs map[model.DeviceID]model.Device) (shown []ui.AttProposal, n int) {
+// returned; n is how many there are in all. moved is the devices that have an address change among those n, also the
+// ones cut: the proposal stands for them (#1303).
+func dashProposals(base string, props []discovery.Proposal, devs map[model.DeviceID]model.Device) (shown []ui.AttProposal, n int, moved map[model.DeviceID]bool) {
 	var news, moves []ui.AttProposal
+	moved = map[model.DeviceID]bool{}
 	act := func(p discovery.Proposal, verb string) string {
 		return fmt.Sprintf("%s/discovery/proposals/%d/%s", base, p.ID, verb)
 	}
@@ -252,26 +254,30 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 			if !ok {
 				continue
 			}
+			moved[p.ExistingID] = true
 			moves = append(moves, ui.AttProposal{Name: cur.Name, Text: "Address changed · " + cur.Address + " → " + p.Device.Address,
 				Primary: "Apply", Secondary: "Ignore", PrimaryAction: act(p, "accept"), SecondaryAction: act(p, "dismiss"), Version: p.Version})
 		}
 	}
 	out := append(news, moves...)
-	return out[:min(len(out), dashProposalsMax)], len(out)
+	return out[:min(len(out), dashProposalsMax)], len(out), moved
 }
 
 // dashNeedsAttention is the card "Needs attention" (#1109, #1247): its heading with the number of entries, and its
 // content. The number counts every entry the card stands for, each once: the proposals (also those it does not show),
-// every device of every group (also those it does not show) and the broker item.
+// every device of every group (also those it does not show) and the broker item. A device with an address change is
+// listed as that proposal only (#1303).
 func dashNeedsAttention(base, csrf string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool, props []discovery.Proposal, devs map[model.DeviceID]model.Device) (string, ui.AttentionData) {
 	a := ui.AttentionData{CSRF: csrf}
 	var nProps int
-	a.Props, nProps = dashProposals(base, props, devs)
+	var moved map[model.DeviceID]bool
+	a.Props, nProps, moved = dashProposals(base, props, devs)
+	a.PropsTitle = propsTitle
 	if nProps > len(a.Props) {
-		a.PropsMore = ui.AttMore{Text: "Show all " + itoa(nProps), Href: base + "/devices/new#card-discovered", Label: "Show all " + itoa(nProps) + ": New devices"}
+		a.PropsMore = ui.AttMore{Text: "Show all " + itoa(nProps), Href: base + "/devices/new#card-discovered", Label: "Show all " + itoa(nProps) + ": " + propsTitle}
 	}
 	var nDevices int
-	a.Groups, nDevices = dashAttention(base, now, rows, f, window, acl)
+	a.Groups, nDevices = dashAttention(base, now, rows, f, window, acl, moved)
 	n := nProps + nDevices
 	if acl {
 		n++
@@ -283,6 +289,9 @@ func dashNeedsAttention(base, csrf string, now time.Time, rows []deviceRow, f fl
 	}
 	return title, a
 }
+
+// propsTitle is the title of the proposal block: the Discovered card's name for the same set, which "Show all N" leads to.
+const propsTitle = "Waiting for a decision"
 
 // attentionNote is the one line under the heading: what the list holds, and what it leaves to the tiles.
 const attentionNote = "Each device once, for its worst reason. Firmware and backups are on the tiles."
@@ -322,7 +331,10 @@ const (
 // With acl (brokerACLOpen) the broker ACL item is a group of its own right after the offline devices, once (#1078): it
 // is not a device, so it does not count against any cap, or a fleet with many offline devices would push it off the
 // list.
-func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool) ([]ui.AttGroup, int) {
+// A device in moved has an address change among the proposals above the groups: that is its worst reason (it is the
+// likely cause of the others, and Apply fixes it), so it is not listed again here. The set holds the devices of the
+// proposals the card cuts as well, or one behind "Show all" would be counted twice.
+func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration, acl bool, moved map[model.DeviceID]bool) ([]ui.AttGroup, int) {
 	type cand struct {
 		rank int
 		id   model.DeviceID
@@ -330,6 +342,9 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	}
 	var cs []cand
 	for _, r := range rows {
+		if moved[r.Device.ID] {
+			continue
+		}
 		it := ui.AttItem{Name: r.Device.Name, Href: fmt.Sprintf("%s/devices/%d", base, r.Device.ID)}
 		rank := -1
 		switch r.Health.State {

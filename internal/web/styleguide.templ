@@ -238,6 +238,7 @@ templ styleguidePage(v sgView) {
 					@ui.AttentionList(ui.AttentionData{
 						CSRF: v.CSRF,
 						Note: "Each device once, for its worst reason. Firmware and backups are on the tiles.",
+						PropsTitle: "Waiting for a decision",
 						Props: []ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}},
 						Groups: []ui.AttGroup{
 							{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, More: ui.AttMore{Text: "Show all 4", Href: v.Base + "/styleguide", Label: "Show all 4: Offline"}},

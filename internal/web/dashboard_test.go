@@ -133,7 +133,6 @@ func TestDashboardNeedsAttention(t *testing.T) {
 		"hallway", "Last seen 5h ago", ">Offline</span>",
 		"annex", "Has not answered since it was added",
 		"porch", "Refuses the stored web login",
-		"kitchen", "TelePeriod 60 → 300",
 	}
 	rest := att
 	for _, want := range order {
@@ -152,6 +151,11 @@ func TestDashboardNeedsAttention(t *testing.T) {
 	}
 	if strings.Contains(att, "clash") || strings.Contains(att, `href="/tf/devices/6"`) {
 		t.Error("a conflict or an online, compliant device is listed")
+	}
+	// kitchen has an address change and a policy deviation: the address change is its worst reason, so it is listed
+	// there and not again under Differs from policy (#1303)
+	if strings.Contains(att, "TelePeriod 60 → 300") || strings.Contains(att, `href="/tf/devices/1"`) {
+		t.Errorf("kitchen is listed a second time, for its policy deviation: %s", att)
 	}
 	// The form really accepts: the version reaches the discovery service.
 	resp, _ := e.do(t, "POST", "/discovery/proposals/30/accept", "admin", map[string][]string{"csrf": {"tok"}, "version": {"v30"}})
@@ -290,8 +294,89 @@ func TestNeedsAttentionProposalsAreCountedAndCapped(t *testing.T) {
 	if n := strings.Count(att, `class="att-row att-prop"`); n != dashProposalsMax {
 		t.Errorf("%d proposals listed, want %d", n, dashProposalsMax)
 	}
-	if !strings.Contains(att, `<a class="att-more" href="/tf/devices/new#card-discovered" aria-label="Show all 7: New devices">Show all 7</a>`) {
+	if !strings.Contains(att, `<a class="att-more" href="/tf/devices/new#card-discovered" aria-label="Show all 7: Waiting for a decision">Show all 7</a>`) {
 		t.Errorf("the 7 proposals have no link to the page that lists them: %s", att)
+	}
+}
+
+// Why (#1303): the note under the heading promises "Each device once, for its worst reason", and the heading counts
+// entries. A device with a pending address change used to be listed twice, as the proposal and again in its health or
+// policy group, and the heading counted it twice. The address change is its worst reason (it is the likely cause of
+// Offline and the Apply button fixes it), so the device is listed there only, wherever it would otherwise be.
+func TestNeedsAttentionListsADeviceWithAnAddressChangeOnce(t *testing.T) {
+	e, disc := dashFleet(t, nil)
+	// hallway (3) is offline and has moved too: it must not be in Offline, or in the count, a second time
+	disc.props = append(disc.props, discovery.Proposal{ID: 33, Kind: discovery.KindAddressChange, Via: discovery.ViaMQTT, Version: "v33", ExistingID: 3, Device: model.Device{Name: "hallway", Address: "10.0.0.33"}})
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	// 2 address changes + 1 new device + annex, attic (never answered) and porch (login refused)
+	if !strings.Contains(body, "<h2>Needs attention (6)</h2>") {
+		t.Fatalf("the heading does not count each device once: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	att := attRegion(body)
+	for _, name := range []string{">kitchen<", ">hallway<"} {
+		if n := strings.Count(att, name); n != 1 {
+			t.Errorf("%s is listed %d times, want once (as its address change): %s", name, n, att)
+		}
+	}
+	if strings.Contains(att, "TelePeriod 60 → 300") || strings.Contains(att, "Last seen 5h ago") {
+		t.Errorf("a device with an address change is also listed for another reason: %s", att)
+	}
+	if strings.Contains(att, `>Offline</h3>`) {
+		t.Errorf("the only offline device moved, the Offline group is empty: %s", att)
+	}
+	// An operator gets no proposals (discovery is admin-only), so nobody may drop out of the list because of one.
+	_, body = e.do(t, "GET", "/", "operator", nil)
+	att = attRegion(body)
+	if !strings.Contains(att, "TelePeriod 60 → 300") || !strings.Contains(att, "Last seen 5h ago") {
+		t.Errorf("an operator lost devices that only an admin's proposal explains: %s", att)
+	}
+	if !strings.Contains(body, "<h2>Needs attention (5)</h2>") {
+		t.Errorf("operator heading: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+}
+
+// Why (#1303): a proposal that the card cuts at five still stands for its device. If only the shown proposals took
+// their devices out of the groups, a device whose move is behind "Show all" would be counted twice in the heading.
+func TestNeedsAttentionCutAddressChangeStillTakesItsDeviceOut(t *testing.T) {
+	disc := &fakeDiscovery{}
+	for i := 1; i <= dashProposalsMax; i++ {
+		disc.props = append(disc.props, discovery.Proposal{ID: int64(40 + i), Kind: discovery.KindNew, Via: discovery.ViaScan, Version: "v", Device: model.Device{Name: "new-" + itoa(i), Address: "10.0.5." + itoa(i)}})
+	}
+	// new devices come first, so this move is behind the cap
+	disc.props = append(disc.props, discovery.Proposal{ID: 60, Kind: discovery.KindAddressChange, Via: discovery.ViaMQTT, Version: "v60", ExistingID: 1, Device: model.Device{Name: "kitchen", Address: "10.0.0.11"}})
+	e := setupWith(t, func(d *Deps) { d.Discovery = disc })
+	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now()}
+	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	if !strings.Contains(body, "<h2>Needs attention (6)</h2>") {
+		t.Errorf("the heading counts the cut move and its device apart: %s", between(body, `<div class="ulist-head">`, `</div>`))
+	}
+	if att := attRegion(body); strings.Contains(att, `>Offline</h3>`) {
+		t.Errorf("kitchen, whose move is behind Show all, is listed for being offline: %s", att)
+	}
+}
+
+// Why (#1303): every block of the card has a title, the proposals too. A reader met five rows with buttons and no word
+// on what they have in common; the groups below had one. Each row belongs to a titled group.
+func TestNeedsAttentionProposalBlockHasItsTitle(t *testing.T) {
+	e, _ := dashFleet(t, nil)
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	att := attRegion(body)
+	groups := strings.Split(att, `<div class="att-group">`)
+	if len(groups) < 3 || !strings.Contains(groups[0], `class="att-note"`) {
+		t.Fatalf("the card is not a note and titled groups: %s", att)
+	}
+	if first := strings.TrimSpace(groups[1]); !strings.HasPrefix(first, `<h3 class="att-gh">Waiting for a decision</h3>`) || !strings.Contains(first, `class="att-row att-prop"`) {
+		t.Fatalf("the proposals are not the first group, under their title: %s", att)
+	}
+	// every row sits in a group that starts with a heading, none before the first group
+	if strings.Contains(groups[0], `class="att-row`) {
+		t.Errorf("a row outside every group: %s", groups[0])
+	}
+	for _, g := range groups[1:] {
+		if !strings.HasPrefix(strings.TrimSpace(g), `<h3 class="att-gh">`) {
+			t.Errorf("a group without a title: %s", g)
+		}
 	}
 }
 
@@ -723,7 +808,7 @@ func TestOfflineProposalLeavesNeedsAttention(t *testing.T) {
 		{ID: 40, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v40", LWT: "Offline", Device: model.Device{Name: "Gone Lamp", Address: "10.0.0.40"}},
 		{ID: 41, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v41", LWT: "Online", Device: model.Device{Name: "Live Lamp", Address: "10.0.0.41"}},
 	}
-	got, n := dashProposals("", props, nil)
+	got, n, _ := dashProposals("", props, nil)
 	if len(got) != 1 || n != 1 || got[0].Name != "Live Lamp" {
 		t.Fatalf("dashboard proposals = %+v (of %d), want only the online one", got, n)
 	}

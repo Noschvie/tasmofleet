@@ -73,7 +73,9 @@ func TestConnectionStatusIsOneBadge(t *testing.T) {
 // pretend to be one: they keep the dot of their tone and carry no status badge.
 func TestAttentionItemsThatAreNoStatusKeepTheDot(t *testing.T) {
 	e, _ := dashFleet(t, nil)
-	_, dash := e.do(t, "GET", "/", "admin", nil)
+	// an operator: kitchen has an address change, and for an admin that is its one entry (#1303); an operator gets no
+	// proposals, so its deviation is listed
+	_, dash := e.do(t, "GET", "/", "operator", nil)
 	attention := between(dash, `<h2>Needs attention`, `</section>`)
 	i := strings.Index(attention, "TelePeriod 60")
 	if i < 0 {

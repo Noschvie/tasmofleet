@@ -826,30 +826,22 @@ templ ComplianceBar(match, deviate, unknown int) {
 	</svg>
 }
 
-// AttentionList is the "Needs attention" list: the note on what it holds, the proposals with two inline actions, then
-// one group per reason with its devices, worst first. A group is capped by the caller; its More says how many it leaves
-// out and where to see them.
+// AttentionList is the "Needs attention" list: the note on what it holds, the proposals with two inline actions in a
+// group of their own under PropsTitle, then one group per reason with its devices, worst first. A group is capped by
+// the caller; its More says how many it leaves out and where to see them.
 templ AttentionList(a AttentionData) {
 	if a.Note != "" {
 		<p class="att-note">{ a.Note }</p>
 	}
-	for _, p := range a.Props {
-		<div class="att-row att-prop">
-			<span class="sdot-dot t-accent" aria-hidden="true"></span>
-			<span class="att-text"><span class="att-name">{ p.Name }</span><span class="att-why">{ p.Text }</span></span>
-			<span class="att-acts">
-				<form method="post" action={ templ.SafeURL(p.SecondaryAction) }>
-					@attHidden(a.CSRF, p.Version)
-					<button type="submit" class="btn btn-sm" aria-label={ p.Secondary + " " + p.Name }>{ p.Secondary }</button>
-				</form>
-				<form method="post" action={ templ.SafeURL(p.PrimaryAction) }>
-					@attHidden(a.CSRF, p.Version)
-					<button type="submit" class="btn btn-sm btn-primary" aria-label={ p.Primary + " " + p.Name }>{ p.Primary }</button>
-				</form>
-			</span>
+	if len(a.Props) > 0 {
+		<div class="att-group">
+			<h3 class="att-gh">{ a.PropsTitle }</h3>
+			for _, p := range a.Props {
+				@attProposal(a.CSRF, p)
+			}
+			@attMore(a.PropsMore)
 		</div>
 	}
-	@attMore(a.PropsMore)
 	for _, g := range a.Groups {
 		<div class="att-group">
 			<h3 class="att-gh">{ g.Title }</h3>
@@ -859,6 +851,24 @@ templ AttentionList(a AttentionData) {
 			@attMore(g.More)
 		</div>
 	}
+}
+
+// attProposal is one proposal of the first group: what was found and the two actions on it.
+templ attProposal(csrf string, p AttProposal) {
+	<div class="att-row att-prop">
+		<span class="sdot-dot t-accent" aria-hidden="true"></span>
+		<span class="att-text"><span class="att-name">{ p.Name }</span><span class="att-why">{ p.Text }</span></span>
+		<span class="att-acts">
+			<form method="post" action={ templ.SafeURL(p.SecondaryAction) }>
+				@attHidden(csrf, p.Version)
+				<button type="submit" class="btn btn-sm" aria-label={ p.Secondary + " " + p.Name }>{ p.Secondary }</button>
+			</form>
+			<form method="post" action={ templ.SafeURL(p.PrimaryAction) }>
+				@attHidden(csrf, p.Version)
+				<button type="submit" class="btn btn-sm btn-primary" aria-label={ p.Primary + " " + p.Name }>{ p.Primary }</button>
+			</form>
+		</span>
+	</div>
 }
 
 // attItem is one entry of a group: a link to the device (or the guide) with the reason.

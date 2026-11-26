@@ -633,14 +633,15 @@ type AttGroup struct {
 	More  AttMore
 }
 
-// AttentionData is what AttentionList draws: a note on what the list holds, the proposals (with More when there are
-// more than shown), then one group per reason. Everything is text.
+// AttentionData is what AttentionList draws: a note on what the list holds, the proposals under their title (with More
+// when there are more than shown), then one group per reason. Everything is text.
 type AttentionData struct {
-	Note      string
-	Props     []AttProposal
-	PropsMore AttMore
-	Groups    []AttGroup
-	CSRF      string
+	Note       string
+	PropsTitle string
+	Props      []AttProposal
+	PropsMore  AttMore
+	Groups     []AttGroup
+	CSRF       string
 }
 
 // AttItem is a "Needs attention" entry: the name and the reason, a link to it. A device whose connection is the

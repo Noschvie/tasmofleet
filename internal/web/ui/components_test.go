@@ -95,7 +95,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"Power":            PowerSwitch(PowerSwitchData{Label: h, On: true}),
 		"PowerLabelledBy":  PowerSwitch(PowerSwitchData{LabelledBy: h, Class: h, Submit: true, Attrs: templ.Attributes{"title": h, "hx-post": h}}),
 		"StatTile":         StatTile(StatTileData{Label: h, Value: h, Hint: h, Href: "/x"}),
-		"Attention": AttentionList(AttentionData{Note: h, CSRF: h, Props: []AttProposal{{Name: h, Text: h, Primary: h, Secondary: h, PrimaryAction: "/a", SecondaryAction: "/b"}}, PropsMore: AttMore{Text: h, Href: "/m", Label: h},
+		"Attention": AttentionList(AttentionData{Note: h, CSRF: h, PropsTitle: h, Props: []AttProposal{{Name: h, Text: h, Primary: h, Secondary: h, PrimaryAction: "/a", SecondaryAction: "/b"}}, PropsMore: AttMore{Text: h, Href: "/m", Label: h},
 			Groups: []AttGroup{{Title: h, Items: []AttItem{{Name: h, Text: h, Href: "/x"}}, More: AttMore{Text: h, Href: "/y", Label: h}}, {Title: h, More: AttMore{Text: h}}}}),
 		"AttentionStatus": AttentionList(AttentionData{Groups: []AttGroup{{Title: h, Items: []AttItem{{Name: h, Text: h, Href: "/x", Status: &StatusBadgeData{State: h, Tone: Tone(h), Label: h, Title: h}}}}}}),
 		"StatusBadge":     StatusBadge(StatusBadgeData{State: h, Tone: Tone(h), Label: h, Title: h}),

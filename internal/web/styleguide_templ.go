@@ -896,9 +896,10 @@ func styleguidePage(v sgView) templ.Component {
 				}
 				ctx = templ.InitializeContext(ctx)
 				templ_7745c5c3_Err = ui.AttentionList(ui.AttentionData{
-					CSRF:  v.CSRF,
-					Note:  "Each device once, for its worst reason. Firmware and backups are on the tiles.",
-					Props: []ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}},
+					CSRF:       v.CSRF,
+					Note:       "Each device once, for its worst reason. Firmware and backups are on the tiles.",
+					PropsTitle: "Waiting for a decision",
+					Props:      []ui.AttProposal{{Name: "Kitchen Plug", Text: "New address 192.168.20.41 announced", Primary: "Update address", Secondary: "Ignore", PrimaryAction: v.Base + "/styleguide", SecondaryAction: v.Base + "/styleguide"}},
 					Groups: []ui.AttGroup{
 						{Title: "Offline", Items: []ui.AttItem{{Name: "Garage Door Sensor", Text: "Last seen 3 h ago", Href: v.Base + "/styleguide", Status: sgOffline()}}, More: ui.AttMore{Text: "Show all 4", Href: v.Base + "/styleguide", Label: "Show all 4: Offline"}},
 						{Title: "Boot loop", Items: []ui.AttItem{{Tone: ui.ToneDanger, Name: "Pump Controller", Text: "Boot loop: restarted 5 times in the last hour", Href: v.Base + "/styleguide"}}, More: ui.AttMore{Text: "2 more"}},
