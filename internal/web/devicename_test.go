@@ -74,7 +74,7 @@ func TestNameOfferBannerHasOneActionAndKeepSitsInTheNameRow(t *testing.T) {
 	if n := strings.Count(banner, "<button"); n != 1 || !strings.Contains(banner, `>Use device name</button>`) || strings.Contains(banner, ">Keep<") {
 		t.Errorf("the banner has %d buttons, want the one Use device name:\n%s", n, banner)
 	}
-	row := regexp.MustCompile(`<dt>Device name</dt><dd class="mono">[^<]*<button [^>]*hx-post="/tf/devices/1/name/keep"[^>]*>Keep</button></dd>`)
+	row := regexp.MustCompile(`<dt>Device name</dt><dd class="ukv-name">[^<]*<button [^>]*hx-post="/tf/devices/1/name/keep"[^>]*>Keep</button></dd>`)
 	if !row.MatchString(body) {
 		t.Errorf("Keep is not in the Device name row of the Identity card:\n%s", body)
 	}

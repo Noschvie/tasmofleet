@@ -455,7 +455,7 @@ templ KV(rows []KVRow) {
 		for _, r := range rows {
 			<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
 				<dt>{ r.Key }</dt>
-				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
+				<dd class={ templ.KV("mono", r.Mono), templ.KV("ukv-name", r.IsName) } data-visual-mask?={ r.Mask }>
 					@kvValue(r)
 					if r.Action != nil {
 						{ " " }

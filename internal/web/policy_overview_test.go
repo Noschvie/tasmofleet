@@ -131,10 +131,10 @@ func TestPolicyOverviewSummaryFollowsTheDefinitions(t *testing.T) {
 func TestPolicyOverviewBannerNamesRequiredDeviationsOnly(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: fleetReport()} })
 	_, body := e.do(t, "GET", "/policy", "operator", nil)
-	if !strings.Contains(body, `1 device deviates from a required rule: <span class="mono">bravo</span> (OtaUrl for ESP8266)`) {
+	if !strings.Contains(body, `1 device deviates from a required rule: bravo (OtaUrl for ESP8266)`) {
 		t.Errorf("banner:\n%s", body)
 	}
-	if strings.Contains(body, `<span class="mono">charlie`) || strings.Contains(body, "echo</span>") {
+	if strings.Contains(body, "rule: charlie") || strings.Contains(body, "echo (") {
 		t.Error("advisory deviations do not make the banner")
 	}
 	rep := fleetReport()

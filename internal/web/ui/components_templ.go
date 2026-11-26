@@ -3585,7 +3585,7 @@ func KV(rows []KVRow) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var169 = []any{templ.KV("mono", r.Mono)}
+				var templ_7745c5c3_Var169 = []any{templ.KV("mono", r.Mono), templ.KV("ukv-name", r.IsName)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_ElementWriter, templ_7745c5c3_Var169...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

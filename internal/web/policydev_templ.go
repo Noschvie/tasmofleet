@@ -350,14 +350,14 @@ func policyDevTable(p devView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			for _, g := range p.Groups {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<tbody data-dev-group><tr class=\"pol-grp\"><td colspan=\"6\"><a class=\"mono\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<tbody data-dev-group><tr class=\"pol-grp\"><td colspan=\"6\"><a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(p.Base + "/devices/" + devStr(g.ID))).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policydev.templ`, Line: 86, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policydev.templ`, Line: 86, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 				if templ_7745c5c3_Err != nil {
@@ -370,7 +370,7 @@ func policyDevTable(p devView) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(g.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policydev.templ`, Line: 86, Col: 93}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/policydev.templ`, Line: 86, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -677,7 +677,7 @@ func policyDevUnjudged(p devView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				for _, c := range p.Firmware {
-					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Title: c.Why, Mono: true}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Title: c.Why}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -693,7 +693,7 @@ func policyDevUnjudged(p devView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				for _, c := range p.Backup {
-					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Mono: true}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID)}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -772,7 +772,7 @@ func policyDevUnjudged(p devView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				for _, c := range p.Live {
-					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Mono: true}).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID)}).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

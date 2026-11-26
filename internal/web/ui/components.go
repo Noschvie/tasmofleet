@@ -298,8 +298,8 @@ func (c ChipData) inputType() string {
 	return "checkbox"
 }
 
-// TagData is a tag that needs more than its words (#1095): a hint, a link (a device in a list), the mono font (a
-// name an address or an id) or an attribute a script finds it by. Tag(label) is the short form. A tag is never a state.
+// TagData is a tag that needs more than its words (#1095): a hint, a link (a device in a list), the mono font (an
+// address or an id, never a name) or an attribute a script finds it by. Tag(label) is the short form. A tag is never a state.
 type TagData struct {
 	Label, Title string
 	Href         string
@@ -489,13 +489,15 @@ type StatTileData struct {
 }
 
 // KVRow is one label/value line of a card; Mono sets the value in the monospace font
-// (addresses, versions, ids).
+// (addresses, MACs, versions, ids and commands). A name a person typed (a device name) is not one of them: IsName draws it
+// in the page font at weight 500, like a device name in a table.
 type KVRow struct {
 	Key, Value string
 	// Action is the one button that belongs to this row's value (Keep beside a device name that is on offer): it
 	// follows the value inside the same cell.
 	Action *Btn
 	Mono   bool
+	IsName bool
 	Mask   bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
 	Wide   bool      // a long value: on a phone it takes the whole row of a compact card (Identity)
 	Soft   bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)

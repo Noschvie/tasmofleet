@@ -154,7 +154,7 @@ set the heading sizes, so a heading needs no size of its own unless the table gi
 | Field labels, secondary lines | `500 12.5px` / `400 12.5px` (`--fs-meta`) |
 | Help, error lines, hints | `400 12px` (`--fs-small`) |
 | Badges, counters | `500 11.5px` (`--fs-badge`), also the smallest text: carets, avatar initials, key caps |
-| Mono values (addresses, versions, ids) | `400 12.5px var(--font-mono)`; transaction ids `500 12px`; a version in a tile `600 14px` |
+| Mono values (addresses, MACs, versions, ids, commands) | `400 12.5px var(--font-mono)`; transaction ids `500 12px`; a version in a tile `600 14px`; an address that is a link in a table cell is `500` like every cell link. A device name, a date and a count are never mono: they are `500` in the page font (`--font-sans`) |
 
 ## Spacing, shape and layout
 
@@ -256,6 +256,20 @@ settings strip keeps its frame, neutral, and its trigger is a default button. A 
 interrupts the device (Restart 1) is a link to the confirmation of the header's button, offered to whoever gets
 that button (the restart routes are admin-only), never a submit that sends at once; the typed line is unchanged.
 
+**Inline links** (#1103): a link looks one way wherever it is, so a person sees at a glance what can be clicked.
+It is accent text (`--color-accent-fg`), underlined in running text (the base `a` rule) and underlined on hover
+everywhere. In a table cell it is weight 500 and has no underline at rest; the rule `td a` is the one cell link
+style, and a cell's address link (`.dv-mono`) and an external link (`a.ext`) have no rule of their own. The link
+button (`Btn{Kind: "link"}`: a card header's "All devices", "History", "Refresh identity") and the "Show N older
+releases" link are the same accent text, no underline at rest and an underline on hover; the hover keeps the colour
+(there is no darker hover colour). Crumbs keep `--color-text-2` with their underline: they are navigation, not
+content. A button (`.btn`), a tag and a row-menu item are not inline links and keep their own look; so does the
+one link of a row that `ui.RowHead` makes the whole row's target; so do the title links of a list row or card
+(`.dcard-title`, `.dev > a`, `.upd-dev-head a`, `.add-move-name a`, `.bk-namelink`): text colour, underline on hover.
+A device name in the GPIO templates lists (`.gt-name`, `.gt-list`) is the accent link at weight 500. A new link rule for a place is a reason to
+change the base rule, not a new look. `e2e/tests/links-one-style.spec.ts` reads the computed style of every
+table-cell link of the Devices, Policy and Audit pages and expects exactly that one.
+
 ![Buttons, desktop, light](../design/styleguide/buttons-desktop-light.png)
 
 Also: [desktop, dark](../design/styleguide/buttons-desktop-dark.png) · [phone, light](../design/styleguide/buttons-phone-light.png) · [phone, dark](../design/styleguide/buttons-phone-dark.png)
@@ -302,7 +316,7 @@ Also: [desktop, dark](../design/styleguide/badges-desktop-dark.png) · [phone, l
 
 ### Cards and key/value rows
 
-A card is a surface with a hairline border and radius 10: padded (16 px, h2 `600 14px`, an optional line under it) or a list card (a header row with the title and a link, then rows separated by hairlines). Key/value rows are a 118 px label column and the value; addresses, MACs, versions and ids are monospace.
+A card is a surface with a hairline border and radius 10: padded (16 px, h2 `600 14px`, an optional line under it) or a list card (a header row with the title and a link, then rows separated by hairlines). Key/value rows are a 118 px label column and the value; addresses, MACs, versions, ids and commands are monospace. A device name, a date and a count are not values to compare character by character: they are the page font at weight 500, so the Identity card's Device name is `KVRow{IsName: true}` (class `ukv-name`), never `Mono`, and the dates of the activity lists (`.dev-act-at`, `.ud-act-when`, `.stab-boots .when`) and the Devices list's reachability (`.dv-reach`) are sans 500 (`TestDatesAndReachabilityAreSans`). The "TasmoFleet ID" row is an id and stays mono; so do the policy tables' "Have", "Expected" and "Actual" values and a command's name. `TagData.Mono` is for an address or an id, never a name.
 
 Component: `ui.Card(title, sub)`, `ui.CardOf(CardData{Title, Sub, ID, Class, Rank, Tag, LabelledBy, Aria, Attrs})`, `ui.ListCard(title, linkLabel, linkHref)`, `ui.KV(rows)`. `CardOf` is `Card` for a page that needs more, and with none of those fields it is `Card` byte for byte. `Rank` is the phone stack place (`ui.StackRank`) and `Class` the page's own class; the classes come out as rank, `ucard`, class (`r2 ucard fw-sel`), so the page CSS and the class-string tests keep working. `Tag` is `section` (the default), `article`, `aside`, `form` or `div` (an element a live swap replaces keeps its element); any other value is `section`, never free text. `LabelledBy` is the id of the card's heading: with a `Title` the h2 carries it, without one the heading is in the children (an h2 with a link, a heading that changes with the state). `Aria` is an `aria-label` for a card with no visible heading. `Attrs` follows the button's rules (a form card's `method` and `action`, the stream attributes of a live card).
 
@@ -501,7 +515,7 @@ A table sits in a card frame edge to edge (no inner padding), with a hairline un
 rows. Header cells are `500 12px` text-2, sentence case, on a `--color-surface-2` band 38 px tall: the prototype's
 header and the one style of every table (the base `thead th` rule; no page paints another). A sortable header
 carries the sort icon (3:1 against the header) and `aria-sort`. Rows are at least 44 px tall, cells `400 13.5px`,
-values that are addresses, MACs, versions and ids in mono; an empty cell reads "-". At most two row actions, more go
+values that are addresses, MACs, versions, ids and commands in mono (a device name is not: it is a link in the page font); an empty cell reads "-". At most two row actions, more go
 into the row menu (⋯). Pinned columns, column widths and the Columns chooser come from `tableprefs.go`. Below
 45rem a table either scrolls sideways (`.dense` tables with few columns) or turns into phone cards, one block
 per row with label before value. A table without rows shows `ui.Empty` instead of a header.

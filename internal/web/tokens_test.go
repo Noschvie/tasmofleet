@@ -882,3 +882,67 @@ func TestMediaQueryGuardJudges(t *testing.T) {
 		t.Errorf("a media query inside a comment is judged: %v", got)
 	}
 }
+
+// A device name is the accent link at weight 500 on every list of the GPIO templates page (A5-policy-templates-019:
+// "the same device name has three looks on one page"). The group rows (.gt-name) and the plain lists (.gt-list li > a)
+// must not differ, and .gt-name must not set its own colour, which would turn it back into a text-coloured link.
+func TestGPIOTemplateDeviceNamesLookAlike(t *testing.T) {
+	weight := map[string]string{}
+	for _, r := range cssRules(readRepoFile(t, "static/app.css")) {
+		for _, sel := range strings.Split(r.header, ",") {
+			sel = strings.TrimSpace(sel)
+			if sel != ".gt-name" && sel != ".gt-list li > a" {
+				continue
+			}
+			for _, d := range r.decls {
+				if sel == ".gt-name" && d.prop == "color" {
+					t.Errorf("app.css:%d .gt-name { color: %s }: a device name is the accent link, not text colour", d.line, d.val)
+				}
+				if d.prop == "font-weight" {
+					weight[sel] = d.val
+				}
+			}
+		}
+	}
+	for _, sel := range []string{".gt-name", ".gt-list li > a"} {
+		if weight[sel] != "500" {
+			t.Errorf("%s has font-weight %q, want 500: device names are sans 500 (design-system.md, Inline links)", sel, weight[sel])
+		}
+	}
+}
+
+// Why (#1103, DS-034): the design system reserves the mono font for addresses, MACs, versions, ids and commands. A
+// date, and the "MQTT ✓ · HTTP ✓" reachability of the Devices list, are words and numbers a person reads, not values
+// to compare character by character, so they are sans 500 like the rest of the page. Each of these classes sat in
+// the mono font. cssDecls reads only the first rule of a selector and .dev-act-at appears first in a media query
+// that sets no font, so the guard walks every rule of the parser and reads the whole font declaration.
+func TestDatesAndReachabilityAreSans(t *testing.T) {
+	selectors := []string{".dev-act-at", ".ud-act-when", ".stab-boots .when", ".dv-reach"}
+	sans := map[string]bool{}
+	for _, r := range cssRules(readRepoFile(t, "static/app.css")) {
+		for _, sel := range strings.Split(r.header, ",") {
+			sel = strings.TrimSpace(sel)
+			for _, want := range selectors {
+				if sel != want {
+					continue
+				}
+				for _, d := range r.decls {
+					if d.prop != "font" && d.prop != "font-family" {
+						continue
+					}
+					if strings.Contains(d.val, "--font-mono") {
+						t.Errorf("app.css:%d %s { %s: %s }: a date or a reachability is not an address, id or version; use --font-sans", d.line, want, d.prop, d.val)
+					}
+					if d.prop == "font" && strings.HasPrefix(d.val, "500 ") && strings.Contains(d.val, "--font-sans") {
+						sans[want] = true
+					}
+				}
+			}
+		}
+	}
+	for _, want := range selectors {
+		if !sans[want] {
+			t.Errorf("%s has no rule that sets `font: 500 … var(--font-sans)`: it must be sans 500 (design-system.md, Cards and key/value rows)", want)
+		}
+	}
+}

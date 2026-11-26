@@ -420,7 +420,7 @@ func gtSetDiffers(g *templates.GroupView, i int, differs bool) {
 var (
 	gtCardRe  = regexp.MustCompile(`<section class="scard (r\d+) gt-card" aria-label="([^"]+)"`)
 	gtStackRe = regexp.MustCompile(`<div class="cstack[ "]`) // not "cstacks", the wrapper
-	gtRowRe   = regexp.MustCompile(`(?s)<li class="(gt-row[^"]*)">.*?class="mono gt-name"[^>]*>([^<]+)</a>`)
+	gtRowRe   = regexp.MustCompile(`(?s)<li class="(gt-row[^"]*)">.*?class="gt-name"[^>]*>([^<]+)</a>`)
 )
 
 // gtLayout reads the page back as the person sees it: the cards in reading order (the phone's order,

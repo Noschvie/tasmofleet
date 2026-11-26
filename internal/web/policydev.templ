@@ -83,7 +83,7 @@ templ policyDevTable(p devView) {
 						<tbody data-dev-group>
 							<tr class="pol-grp">
 								<td colspan="6">
-									<a class="mono" href={ templ.SafeURL(p.Base + "/devices/" + devStr(g.ID)) }>{ g.Name }</a>
+									<a href={ templ.SafeURL(p.Base + "/devices/" + devStr(g.ID)) }>{ g.Name }</a>
 									<span class="pol-none">{ g.meta() } · { g.Count }</span>
 								</td>
 							</tr>
@@ -134,7 +134,7 @@ templ policyDevUnjudged(p devView) {
 					<p class="pol-none">These run safeboot or minimal firmware, which does not know the rule settings, so they are not asked for them. They are checked again about once an hour and read as soon as they run regular firmware.</p>
 					<div class="chips">
 						for _, c := range p.Firmware {
-							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Title: c.Why, Mono: true})
+							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Title: c.Why})
 						}
 					</div>
 				</div>
@@ -144,7 +144,7 @@ templ policyDevUnjudged(p devView) {
 					<p class="pol-none">A backup of these would tell their settings.</p>
 					<div class="chips">
 						for _, c := range p.Backup {
-							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Mono: true})
+							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID)})
 						}
 					</div>
 					if p.CanBackup {
@@ -163,7 +163,7 @@ templ policyDevUnjudged(p devView) {
 					<p class="pol-none">Only a live read tells these: no backup holds the setting.</p>
 					<div class="chips">
 						for _, c := range p.Live {
-							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID), Mono: true})
+							@ui.TagOf(ui.TagData{Label: c.Name, Href: p.Base + "/devices/" + devStr(c.ID)})
 						}
 					</div>
 					<form method="post" action={ templ.SafeURL(p.Base + "/policy/live") } class="pol-inline">

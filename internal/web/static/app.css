@@ -941,19 +941,20 @@ th.sel {
   padding-left: var(--sp-6);
   padding-right: 0;
 }
-/* :not(:disabled) is true for every link: it only keeps these rules at the specificity the removed
-   :not(.button) gave them, which the colours of .dv-mono a and other cell links are measured against (#1069) */
-td.p1 a,
-td a:not(:disabled) {
-  color: var(--color-text);
-  font-weight: 600;
+/* The one link style of a table cell (#1103): accent, weight 500, no underline at rest, an underline on hover. It
+   holds for every cell link, an address (.dv-mono) and an external link (a.ext) included: none has a rule of its own.
+   A button (.btn) and a menu item keep their own look. :not(:disabled) is true for every link: it only keeps these
+   rules at the specificity the removed :not(.button) gave them (#1069) */
+td.p1 a:not(.btn),
+td a:not(:disabled):not(.btn) {
+  color: var(--color-accent-fg);
+  font-weight: 500;
   text-decoration: none;
 }
-td.p1 a:hover,
-td.p1 a.is-hover,
-td a:not(:disabled):hover,
-td a:not(:disabled).is-hover {
-  color: var(--color-accent-fg);
+td.p1 a:not(.btn):hover,
+td.p1 a:not(.btn).is-hover,
+td a:not(:disabled):not(.btn):hover,
+td a:not(:disabled):not(.btn).is-hover {
   text-decoration: underline;
 }
 td.empty {
@@ -1440,9 +1441,6 @@ a.ext .ico {
 a.ext:hover .ico,
 a.ext.is-hover .ico {
   opacity: 1;
-}
-td a.ext {
-  font-weight: 400;
 }
 
 /* ==== nav-patterns: row actions, menus, the Columns chooser, log box, chip lists and the phone refinements ====
@@ -4779,7 +4777,8 @@ html[data-live="offline"] .pghead-stale {
 }
 .btn.btn-link:hover {
   background: none;
-  color: var(--color-accent-hover);
+  color: var(--color-accent-fg);
+  text-decoration: underline;
 }
 /* a row's Delete when the row has no other button: the link's metrics in the danger colour */
 .btn.btn-danger-link,
@@ -4966,6 +4965,10 @@ button.btn[aria-disabled="true"]:focus-visible {
 .ukv dd.mono {
   font: 400 var(--fs-meta) var(--font-mono);
   overflow-wrap: anywhere;
+}
+/* a name a person typed (the Identity card's Device name): the page font at weight 500, as in a table (#1103) */
+.ukv dd.ukv-name {
+  font-weight: 500;
 }
 
 /* inline banners: an action that is a link */
@@ -7866,14 +7869,8 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    color: var(--color-text);
     font: 500 var(--fs-ui)/1.3 var(--font-sans);
-    text-decoration: none;
     overflow-wrap: anywhere;
-  }
-  table.devtable td.dv-name > a:hover {
-    color: var(--color-accent-fg);
-    text-decoration: underline;
   }
   /* #828: the room a frame has beyond the table's columns, empty, before the columns pinned right
      (tableprefs.go: spareID). Its <col> has no width, so the fixed layout gives it all of that room. */
@@ -7961,8 +7958,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 .dv-gtmore {
   flex: none;
 }
-.dv-mono,
-.dv-mono a {
+.dv-mono {
   font: 400 var(--fs-meta) var(--font-mono);
   color: var(--color-text-2);
 }
@@ -7978,7 +7974,7 @@ table.devtable > tbody > tr > td[data-label="Firmware"] {
   font-size: var(--fs-badge);
 }
 .dv-reach {
-  font: 500 var(--fs-small) var(--font-mono);
+  font: 500 var(--fs-small) var(--font-sans);
 }
 .dv-reach .chan {
   display: inline;
@@ -8508,7 +8504,7 @@ tr.is-saved > td {
 .dev-act-at {
   flex: none;
   min-width: 9.5em;
-  font: 400 var(--fs-small) var(--font-mono);
+  font: 500 var(--fs-small) var(--font-sans);
   color: var(--color-text-3);
 }
 .dev-act-what {
@@ -10123,6 +10119,9 @@ html:has(dialog#dlg-txn:modal) body {
   font: 500 var(--fs-ui) var(--font-sans);
   text-decoration: none;
 }
+.fw-older-tg:hover {
+  text-decoration: underline;
+}
 .fw-older {
   display: flex;
   flex-wrap: wrap;
@@ -10857,13 +10856,6 @@ dialog.fw-notes-dlg .fw-dlg-body {
   overflow: visible;
   white-space: normal;
   overflow-wrap: anywhere;
-}
-.add-disc-table .add-label a.add-label-t {
-  color: var(--color-text);
-  text-decoration: none;
-}
-.add-disc-table .add-label a.add-label-t:hover {
-  text-decoration: underline;
 }
 /* a second line under a cell's value: the MQTT topic, the old address, a row's own reason */
 .add-sub {
@@ -14149,7 +14141,7 @@ a.pol-tpl {
   justify-self: end;
 }
 .ud-act-when {
-  font: 400 var(--fs-meta) var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-sans);
   color: var(--color-text-2);
   white-space: normal; /* wraps inside the fixed track (long dates: "19 Aug 2025," / "08:02 PM"; "Today 10:17 PM" fits) instead of running over the text */
 }
@@ -15076,7 +15068,7 @@ details.devcard > summary {
 }
 .stab-boots .when {
   color: var(--color-text-2);
-  font: 400 var(--fs-meta) var(--font-mono);
+  font: 500 var(--fs-meta) var(--font-sans);
 }
 .stab-boots .ran {
   color: var(--color-text-2);
@@ -15207,8 +15199,7 @@ details.devcard > summary {
   font-size: var(--fs-ui);
 }
 .gt-name {
-  font-weight: 600;
-  color: var(--color-text);
+  font-weight: 500;
 }
 .gt-meta {
   font-size: var(--fs-small);
@@ -15300,6 +15291,9 @@ details.devcard > summary {
 .gt-list li:first-child {
   border-top: 0;
   padding-top: 0;
+}
+.gt-list li > a {
+  font-weight: 500;
 }
 .gt-list .gt-why {
   margin: 0;

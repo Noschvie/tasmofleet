@@ -1169,7 +1169,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: "kitchen-plug", Href: v.Base + "/styleguide", Mono: true}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.TagOf(ui.TagData{Label: "tasmota_3F2A1B", Href: v.Base + "/styleguide", Mono: true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -106,7 +106,7 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 		}
 		<div class="gt-main">
 			<div class="gt-line">
-				<a class="mono gt-name" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a>
+				<a class="gt-name" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a>
 				if d.Chip != "" {
 					{ " " }
 					@ui.Badge(d.Tone, d.Chip)
@@ -170,7 +170,7 @@ templ gtNotJudged(p gtView, rank string) {
 		<div class="sbody sbody-plain">
 			<ul class="gt-list">
 				for _, d := range p.NotJudged {
-					<li><a class="mono" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a><span class="gt-why">{ d.Why }</span></li>
+					<li><a href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a><span class="gt-why">{ d.Why }</span></li>
 				}
 			</ul>
 			if p.CanBackup && len(p.BackupIDs) > 0 {
@@ -193,7 +193,7 @@ templ gtBuiltIn(p gtView, rank string) {
 			<div class="gt-fold-in">
 				<ul class="gt-list">
 					for _, d := range p.BuiltIn {
-						<li><a class="mono" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a><span class="gt-why">{ d.Why }</span></li>
+						<li><a href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a><span class="gt-why">{ d.Why }</span></li>
 					}
 				</ul>
 				<p class="gt-fine">These use a built-in module, not a template; they are listed only. Switching them to a template would also clear their per-pin settings.</p>
@@ -209,7 +209,7 @@ templ gtOneDevice(p gtView, rank string) {
 			<div class="gt-fold-in">
 				<ul class="gt-list">
 					for _, d := range p.OneDevice {
-						<li><span>{ d.Title }</span> @ui.Badge(ui.ToneNeutral, d.Chip)<a class="mono" href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a></li>
+						<li><span>{ d.Title }</span> @ui.Badge(ui.ToneNeutral, d.Chip)<a href={ templ.SafeURL(p.Base + d.Href) }>{ d.Name }</a></li>
 					}
 				</ul>
 			</div>
@@ -316,7 +316,7 @@ templ gtReferenceCard(p gtPreview) {
 		<div class="sch">
 			<div>
 				<h2>Reference</h2>
-				<p class="cnote">{ p.RefHow }: <a class="mono" href={ templ.SafeURL(p.Base + p.RefHref) }>{ p.Ref }</a>, read live <time { ui.StampAttrs(p.RefAt, ui.StampDateTime)... }>{ ui.StampText(p.RefAt, ui.StampDateTime) }</time></p>
+				<p class="cnote">{ p.RefHow }: <a href={ templ.SafeURL(p.Base + p.RefHref) }>{ p.Ref }</a>, read live <time { ui.StampAttrs(p.RefAt, ui.StampDateTime)... }>{ ui.StampText(p.RefAt, ui.StampDateTime) }</time></p>
 			</div>
 		</div>
 		<div class="sbody sbody-plain">
@@ -346,7 +346,7 @@ templ gtExcluded(p gtPreview) {
 			<div class="sbody sbody-plain">
 				<ul class="gt-list">
 					for _, e := range p.Excluded {
-						<li><a class="mono" href={ templ.SafeURL(p.Base + e.Href) }>{ e.Name }</a><span class="gt-why">{ e.Why }</span></li>
+						<li><a href={ templ.SafeURL(p.Base + e.Href) }>{ e.Name }</a><span class="gt-why">{ e.Why }</span></li>
 					}
 				</ul>
 			</div>

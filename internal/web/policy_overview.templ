@@ -185,7 +185,7 @@ templ policyRowOp(p policyView, r ruleRow, path, move, back, label string) {
 // Make compliant is (the banner has one action, the design system's rule, #1091).
 templ policyAlert(p policyView) {
 	@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Alert.Text, Action: &ui.Btn{Label: "Show", Href: p.Base + policyPath + "/deviations"}}) {
-		<span class="mono">{ p.Alert.Devices }</span>{ " (" + p.Alert.Rules + ")" }
+		{ p.Alert.Devices + " (" + p.Alert.Rules + ")" }
 	}
 }
 

@@ -462,7 +462,7 @@ templ ruleDevicesCard(v ruleDevicesView) {
 						<tbody>
 							for _, r := range v.Rows {
 								<tr>
-									<td class="p1" data-label="Device"><a class="mono" href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
+									<td class="p1" data-label="Device"><a href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
 									<td data-label="Actual">
 										if r.Have != "" {
 											<span class="mono">@ui.Soft(r.Have)</span>
