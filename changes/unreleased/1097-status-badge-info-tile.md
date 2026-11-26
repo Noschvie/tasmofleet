@@ -1,4 +1,0 @@
----
-section: Changed
----
-A device's connection status looks the same everywhere: the device list, its phone cards, the device header and the dashboard's "Needs attention" list all show one tinted badge with a dot and the word (Online, Offline, Stale, Unknown, Auth failed). The header badge is 20 px like the list's and says "Updating" in the accent tone while an update holds the device; an attention entry that is not a connection state (weak signal, policy deviation, the broker's ACL) keeps its dot, and an offline entry now reads "Last seen 5h ago" beside its badge instead of repeating the word. The tiles of the device overview and the rule page are one component: a word as a value ("MQTT · HTTP", "Login refused", "Ethernet") is set at 18 px instead of the 28 px of a number. On the policy page a paused live check is amber instead of grey, and the deviating count says "(values from 02:28 PM)" so a number that is no longer refreshed is marked where it stands (#1097)
