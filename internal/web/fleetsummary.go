@@ -18,7 +18,6 @@ import (
 
 // Device list chips, also the values of the ?chip= filter.
 const (
-	chipDown         = "down"         // offline or never answered
 	chipOutdated     = "outdated"     // a newer stable release exists
 	chipNonCompliant = "noncompliant" // at least one policy deviation
 	chipNoBackup     = "nobackup"     // no backup run yet (#381; the Devices, Backups tile)
@@ -184,22 +183,9 @@ func (f fleetFacts) annotate(rows []deviceRow) {
 	}
 }
 
-// shownState is the state the counts and the dashboard use. The health tracker calls a device
-// Offline once its polls fail, also when it never answered at all; the design calls that one
-// Unknown ("never answered", "Has not answered since it was added"). A device answered once if
-// this run saw it (LastSeen) or an earlier one detected its identity (DetectedAt is stored).
-func shownState(r deviceRow) model.HealthState {
-	if r.Health.State == model.HealthOffline && neverAnswered(r.Device, r.Health) {
-		return model.HealthUnknown
-	}
-	return r.Health.State
-}
-
 // chipMatch reports whether an annotated row belongs to a chip.
 func chipMatch(chip string, r deviceRow) bool {
 	switch chip {
-	case chipDown:
-		return r.Health.State == model.HealthOffline || r.Health.State == model.HealthUnknown
 	case chipOutdated:
 		return r.Outdated
 	case chipNonCompliant:
@@ -212,7 +198,6 @@ func chipMatch(chip string, r deviceRow) bool {
 
 var deviceChips = []chipCount{
 	{Key: "", Label: "All"},
-	{Key: chipDown, Label: "Offline / unknown"},
 	{Key: chipOutdated, Label: wordUpdateAvailable},
 	{Key: chipNonCompliant, Label: wordDiffersFromPolicy},
 	{Key: chipNoBackup, Label: "No backup"},
@@ -225,7 +210,7 @@ func summarize(rows []deviceRow, f fleetFacts, props []discovery.Proposal, withD
 	s.Chips = append([]chipCount(nil), deviceChips...)
 	rules := map[string]bool{}
 	for _, r := range rows {
-		s.States[shownState(r)]++
+		s.States[r.Health.State]++ // rows carry shownHealth: the one never-answered rule (devices.go)
 		if r.Outdated {
 			s.Outdated++
 		}

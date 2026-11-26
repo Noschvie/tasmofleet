@@ -71,6 +71,9 @@ func TestFleetSummaryNeverAnsweredIsUnknown(t *testing.T) {
 		{Device: model.Device{ID: 4}, Health: model.Health{DeviceID: 4, State: model.HealthUnknown}},                                                            // not polled yet
 		{Device: model.Device{ID: 5, Identity: model.Identity{DetectedAt: seen}}, Health: model.Health{DeviceID: 5, State: model.HealthOnline, LastSeen: seen}}, // online
 	}
+	for i := range rows { // the rows the pages build carry the shown health (h.rows)
+		rows[i].Health = shownHealth(rows[i].Device, rows[i].Health)
+	}
 	s := summarize(rows, fleetFacts{}, nil, false)
 	if s.Online != 1 || s.Offline != 2 || s.Unknown != 2 {
 		t.Errorf("online/offline/unknown = %d/%d/%d, want 1/2/2", s.Online, s.Offline, s.Unknown)
@@ -89,8 +92,8 @@ func TestDashboardTilesLinkToTheirFilters(t *testing.T) {
 	tiles := strings.ReplaceAll(between(body, `<div class="stat-grid">`, `<svg class="health-bar"`), "</span> <span", "</span><span")
 	for _, want := range []string{
 		`href="/tf/devices?health=online"`, `>Online</span><span class="stat-value">2</span><span class="stat-hint">of 6 devices</span>`,
-		`href="/tf/devices?chip=down"`, `>Offline</span><span class="stat-value">1</span><span class="stat-hint">not reachable</span>`,
-		`>Unknown</span><span class="stat-value">2</span><span class="stat-hint">never answered</span>`,
+		`href="/tf/devices?health=offline"`, `>Offline</span><span class="stat-value">1</span><span class="stat-hint">not reachable</span>`,
+		`href="/tf/devices?health=unknown"`, `>Unknown</span><span class="stat-value">2</span><span class="stat-hint">never answered</span>`,
 		`>Differs from policy</span><span class="stat-value">1</span><span class="stat-hint">1 device differs from 1 rule</span>`,
 		`href="/tf/devices?chip=noncompliant"`,
 		`href="/tf/devices/new#card-discovered"`, `>New devices found</span><span class="stat-value">1</span><span class="stat-hint">+ 1 address changed</span>`,

@@ -29,7 +29,7 @@ func (f cachedFW) Releases(context.Context) ([]firmware.Release, error) {
 }
 
 // summaryRow is a device in a state; one with a known version has answered once (its identity
-// was detected), so Offline stays Offline and is not "never answered" (shownState).
+// was detected), so Offline stays Offline and is not "never answered" (shownHealth).
 func summaryRow(id model.DeviceID, st model.HealthState, version string) deviceRow {
 	idn := model.Identity{Version: version}
 	if version != "" {
@@ -39,8 +39,7 @@ func summaryRow(id model.DeviceID, st model.HealthState, version string) deviceR
 }
 
 // Why (design v2, N7): the tiles and chips must count what their filters show.
-// Unknown (never answered) is its own tile, not part of Offline, but the
-// "Offline / unknown" chip covers both; "Update available" uses the cached feed
+// Unknown (never answered) is its own tile and its own chip, not part of Offline; "Update available" uses the cached feed
 // and never fetches it; an unreadable policy value is no deviation; proposals
 // split into found-but-not-adopted and address changes, conflicts in neither.
 func TestFleetSummaryCountsWhatTheFiltersShow(t *testing.T) {
@@ -83,7 +82,7 @@ func TestFleetSummaryCountsWhatTheFiltersShow(t *testing.T) {
 	if !s.HasDiscovery || s.NewFound != 3 || s.AddressChanged != 2 {
 		t.Errorf("discovery: %d new, %d moved", s.NewFound, s.AddressChanged)
 	}
-	want := map[string]int{"": 6, chipDown: 2, chipOutdated: 3, chipNonCompliant: 2}
+	want := map[string]int{"": 6, chipOutdated: 3, chipNonCompliant: 2}
 	for _, c := range s.Chips {
 		if c.N != want[c.Key] {
 			t.Errorf("chip %q (%s) = %d, want %d", c.Key, c.Label, c.N, want[c.Key])
@@ -121,19 +120,19 @@ func TestFleetSummaryWithoutFeedOrPolicy(t *testing.T) {
 	}
 }
 
-// Why: the chip is a URL filter (?chip=down) so the dashboard tiles can link
+// Why: a state chip is a URL filter (?health=unknown) so the dashboard tiles can link
 // to the filtered list, and it survives in the sort links.
 func TestDevicesChipFilter(t *testing.T) {
 	e := setup(t) // kitchen is online, attic has no health: unknown
-	_, body := e.do(t, "GET", "/devices?chip=down", "operator", nil)
+	_, body := e.do(t, "GET", "/devices?health=unknown", "operator", nil)
 	if !strings.Contains(body, `/devices/2"`) || strings.Contains(body, `/devices/1"`) {
-		t.Fatalf("chip=down must show the unknown attic only")
+		t.Fatalf("health=unknown must show the unknown attic only")
 	}
-	if !strings.Contains(body, "chip=down") {
-		t.Fatal("the chip is lost from the sort links")
+	if !strings.Contains(body, "health=unknown") {
+		t.Fatal("the filter is lost from the sort links")
 	}
 	_, body = e.do(t, "GET", "/devices", "operator", nil)
 	if !strings.Contains(body, `/devices/2"`) || !strings.Contains(body, `/devices/1"`) {
-		t.Fatal("without a chip both devices show")
+		t.Fatal("without a filter both devices show")
 	}
 }

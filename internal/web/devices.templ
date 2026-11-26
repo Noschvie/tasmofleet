@@ -53,32 +53,49 @@ func (p devicesPage) chipHref(base, key string) string {
 	return base + "/devices?" + p.Sort.values(f.values()).Encode()
 }
 
-// onlineChip is the fixed "Online" chip (health=online, also the dashboard's Online tile). It is
-// always rendered; its link switches to the online filter, or drops it again while it is active.
-func (p devicesPage) onlineChip(base string) (href string, active bool) {
+// stateChips are the fixed state chips after All, the states the dashboard tiles count: each is a health filter
+// (?health=online, offline, unknown), so a tile and its chip are the same filter and count the same devices (#1132).
+var stateChips = []struct {
+	State model.HealthState
+	Label string
+}{
+	{model.HealthOnline, "Online"}, {model.HealthOffline, "Offline"}, {model.HealthUnknown, "Unknown"},
+}
+
+// stateCount is the number a state chip shows: the tile's number.
+func (p devicesPage) stateCount(st model.HealthState) int { return p.Summary.States[st] }
+
+// stateChip is one fixed state chip (health=<state>, also the dashboard's tile). It is always rendered; its link
+// switches to that filter and drops a chip filter, or drops the filter again while it is active.
+func (p devicesPage) stateChip(base string, st model.HealthState) (href string, active bool) {
 	f := p.Filter
-	active = f.Health == string(model.HealthOnline)
+	active = f.Health == string(st)
 	if active {
 		f.Health = ""
 	} else {
-		f.Chip, f.Health = "", string(model.HealthOnline)
+		f.Chip, f.Health = "", string(st)
 	}
 	return base + "/devices?" + p.Sort.values(f.values()).Encode(), active
 }
 
-// onlineTitle is the hint of the Online chip: only the active one says what a click does.
-func onlineTitle(active bool) string {
+// stateTitle is the hint of a state chip: only the active one says what a click does.
+func stateTitle(active bool) string {
 	if active {
 		return "Show all states again"
 	}
 	return ""
 }
 
-// healthChip is the extra chip for an active health filter other than online (?health=offline
-// from a dashboard tile): no fixed chip stands for it, so without it "All" would look active
-// while the list is narrowed. Its link drops the filter again. Online has its own fixed chip.
+// healthChip is the extra chip for an active health filter that has no fixed chip (?health=stale or auth-failed
+// typed into the address bar): without it "All" would look active while the list is narrowed. Its link drops
+// the filter again. Online, Offline and Unknown have their own fixed chips.
 func (p devicesPage) healthChip(base string) (label, href string, n int, ok bool) {
-	if p.Filter.Health == "" || p.Filter.Health == string(model.HealthOnline) {
+	for _, c := range stateChips {
+		if p.Filter.Health == string(c.State) {
+			return "", "", 0, false
+		}
+	}
+	if p.Filter.Health == "" {
 		return "", "", 0, false
 	}
 	f := p.Filter
@@ -107,8 +124,8 @@ templ devicesContent(v view, p devicesPage) {
 	} else {
 		<div class="dv-list">
 			<form class="dv-tools" method="get" action={ templ.SafeURL(v.Base + "/devices") } role="search" aria-label="Filter devices">
-				<input type="search" class="dv-q" name="q" value={ p.Filter.Q } placeholder="Filter devices" title="Filter by name, IP, chip or firmware" aria-label="Filter devices" aria-describedby="dv-q-help"/>
-				<span id="dv-q-help" class="sr-only">Filter by name, IP, chip or firmware</span>
+				<input type="search" class="dv-q" name="q" value={ p.Filter.Q } placeholder="Name, address or MAC" aria-label="Filter devices" aria-describedby="dv-q-help"/>
+				<span id="dv-q-help" class="sr-only">Searches the name, address, MAC and topic</span>
 				if p.Filter.Chip != "" {
 					<input type="hidden" name="chip" value={ p.Filter.Chip }/>
 				}
@@ -120,8 +137,10 @@ templ devicesContent(v view, p devicesPage) {
 					for _, c := range p.Summary.Chips {
 						@ui.Chip(ui.ChipData{Label: c.Label, Count: c.Text(), Title: c.Title(), Href: p.chipHref(v.Base, c.Key), Current: c.Key == p.Filter.Chip && (c.Key != "" || p.Filter.Health == "")})
 						if c.Key == "" {
-							{{ onlineHref, onlineOn := p.onlineChip(v.Base) }}
-							@ui.Chip(ui.ChipData{Label: "Online", Count: strconv.Itoa(p.Summary.Online), Title: onlineTitle(onlineOn), Href: onlineHref, Current: onlineOn})
+							for _, sc := range stateChips {
+								{{ href, on := p.stateChip(v.Base, sc.State) }}
+								@ui.Chip(ui.ChipData{Label: sc.Label, Count: strconv.Itoa(p.stateCount(sc.State)), Title: stateTitle(on), Href: href, Current: on})
+							}
 						}
 					}
 					if label, href, n, ok := p.healthChip(v.Base); ok {

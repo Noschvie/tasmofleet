@@ -1094,7 +1094,11 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Offline / unknown", Count: "6", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Offline", Count: "4", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Unknown", Count: "2", Href: v.Base + "/styleguide"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1374,7 +1378,7 @@ func styleguidePage(v sgView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.NoMatch("No device matches “garage” with the filter Offline / unknown.", v.Base+"/styleguide").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.NoMatch("No device matches “garage” with the filter Offline.", v.Base+"/styleguide").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

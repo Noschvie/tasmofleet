@@ -7,7 +7,7 @@ package web
 var colTips = map[string]string{ //nolint:gosec // G101: header texts, no credentials
 	"devices.name":       "The device name.",
 	"devices.status":     "Health of the device and its policy deviations.",
-	"devices.reach":      "Whether the device was heard from over MQTT and over HTTP.",
+	"devices.reach":      "How TasmoFleet reaches the device now: over MQTT, over its web page, or both.",
 	"devices.firmware":   "Installed Tasmota version and build.",
 	"devices.family":     "Chip of the device.",
 	"devices.address":    "Network address the device is reached at.",

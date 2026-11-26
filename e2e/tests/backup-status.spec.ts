@@ -89,7 +89,7 @@ async function takeAndPad(page: Page, device: string, copies: number): Promise<s
 /** answerIsVisible: the answer lies inside the window and nothing, the fixed status bar included, covers it. */
 async function expectAnswerVisible(page: Page) {
   const status = page.locator("#backup-status");
-  await expect(status).toContainText("a new one is possible in");
+  await expect(status).toContainText("Too many requests. Try again in a few seconds.");
   await expect(status).toBeInViewport({ ratio: 1 });
   const geo = await page.evaluate(() => {
     const s = document.querySelector("#backup-status")!.getBoundingClientRect();

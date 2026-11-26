@@ -9,7 +9,7 @@ import {
 } from "../support/stack";
 
 // Every dashboard tile opens the device list narrowed to what it counts (?health=online,
-// ?chip=down, ...). "All" must then be the way back to the whole fleet, with the filter gone from
+// ?chip=outdated, ...). "All" must then be the way back to the whole fleet, with the filter gone from
 // the URL too (v0.11.1 feedback 5: from the Online tile, All kept ?health=online and the list
 // stayed narrowed, so a reload or a shared link showed a part of the fleet as "All").
 let app: App;
@@ -67,6 +67,12 @@ for (const tile of tiles) {
     await expect(page).toHaveURL(/[?&](health|chip)=/);
     const all = page.locator(".dv-chips a.chip").filter({ hasText: /^All/ });
     await expect(all).not.toHaveAttribute("aria-current", "page");
+    // a tile and the chip of the same name are one filter: the chip is the one marked, with the tile's number (#1132)
+    if (["Online", "Offline", "Unknown"].includes(tile)) {
+      const marked = page.locator(".dv-chips a.chip[aria-current=page]");
+      await expect(marked).toHaveCount(1);
+      await expect(marked.locator(".chip-l")).toHaveText(tile);
+    }
 
     await all.click();
     await expect(page).not.toHaveURL(/[?&](health|chip)=/);

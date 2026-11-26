@@ -1032,17 +1032,6 @@ th .sortlink.is-hover {
 }
 
 /* cell content helpers */
-.chan {
-  font-size: var(--fs-badge);
-  font-weight: 600;
-  padding: 0 var(--sp-4);
-  border: var(--hair-w) solid var(--color-border);
-  border-radius: var(--r-xs);
-}
-.chan-bad {
-  color: var(--color-danger-fg);
-  border-color: var(--color-danger);
-}
 .pager {
   display: flex;
   flex-wrap: wrap;
@@ -2969,9 +2958,6 @@ form[data-track-changes] .savebar .actions {
     position: relative;
     z-index: 1;
   }
-}
-.chan-ok {
-  color: var(--color-ok-fg);
 }
 .colslot {
   display: none;
@@ -7484,10 +7470,8 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
     align-items: center;
     gap: var(--sp-5);
   }
-  /* the card shows the status badge and a failing channel only (the prototype's "MQTT down");
-     the last-report age and the working channels are the table's detail */
-  .dcard-badges > small.muted,
-  .dcard-badges .chan:not(.chan-bad) {
+  /* the card shows the status badge and the "MQTT down" badge only; the last-report age is the table's detail */
+  .dcard-badges > small.muted {
     display: none;
   }
   .dcard-last {
@@ -8032,23 +8016,6 @@ table.devtable > tbody > tr > td[data-label="Firmware"] {
 }
 .dv-reach {
   font: 500 var(--fs-small) var(--font-sans);
-}
-.dv-reach .chan {
-  display: inline;
-  height: auto;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  font: inherit;
-  color: var(--color-text-3);
-}
-.dv-reach .chan-ok {
-  color: var(--color-ok-fg);
-}
-.dv-reach .chan-bad {
-  color: var(--color-danger-fg);
 }
 .dv-reach-sep {
   color: var(--color-text-3);

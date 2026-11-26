@@ -24,9 +24,15 @@ func TestShownHealthKeepsNeverAnsweredDevicesUnknown(t *testing.T) {
 	if got := shownHealth(model.Device{}, off).State; got != model.HealthUnknown {
 		t.Errorf("never answered, polls failed: %s, want unknown", got)
 	}
-	known := model.Device{Identity: model.Identity{Family: model.ChipESP32, Version: "14.3.0"}}
+	known := model.Device{Identity: model.Identity{Family: model.ChipESP32, Version: "14.3.0", DetectedAt: time.Now()}}
 	if got := shownHealth(known, off).State; got != model.HealthOffline {
 		t.Errorf("answered once, then stopped: %s, want offline", got)
+	}
+	// #1132: a version read over MQTT is no answer (it sets Version, never DetectedAt), so the list says what the
+	// tiles and the device page say
+	overMQTT := model.Device{Identity: model.Identity{Version: "14.3.0"}}
+	if got := shownHealth(overMQTT, off).State; got != model.HealthUnknown {
+		t.Errorf("version over MQTT, never answered: %s, want unknown", got)
 	}
 	seen := model.Health{State: model.HealthOffline, LastSeen: time.Now()}
 	if got := shownHealth(model.Device{}, seen).State; got != model.HealthOffline {
@@ -83,7 +89,7 @@ func TestDeviceListCountsNeverAnsweredAsUnknown(t *testing.T) {
 		t.Errorf("the live update must say Unknown too:\n%s", ev)
 	}
 	if !strings.Contains(ev, "event: reach-3") {
-		t.Errorf("the MQTT · HTTP column must be live as well:\n%s", ev)
+		t.Errorf("the Reachable via column must be live as well:\n%s", ev)
 	}
 }
 
@@ -126,19 +132,18 @@ func TestDeviceListToolbarOffersCountedFilters(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices?q=a&tag=kitchen", "operator", nil)
 	body = squash(body)
 	for _, want := range []string{
-		`>All</span><span class="chip-n">`, `>Offline / unknown</span><span class="chip-n">`, `>Update available</span><span class="chip-n">`, `>Differs from policy</span><span class="chip-n">`,
+		`>All</span><span class="chip-n">`, `>Online</span><span class="chip-n">`, `>Offline</span><span class="chip-n">`, `>Unknown</span><span class="chip-n">`, `>Update available</span><span class="chip-n">`, `>Differs from policy</span><span class="chip-n">`,
 		`<option value="esp32">ESP32 · 1</option>`, `<option value="esp8266">ESP8266 · 1</option>`,
 		`<option value="kitchen" selected>kitchen · 1</option>`,
-		// the search field is short (#428), so the placeholder is brief and the full hint stays in the title
-		// and the description
-		`placeholder="Filter devices"`, `title="Filter by name, IP, chip or firmware"`, `aria-describedby="dv-q-help"`,
-		`<span id="dv-q-help" class="sr-only">Filter by name, IP, chip or firmware</span>`,
+		// the search field is short (#428), so the placeholder is an example; the description says what is searched
+		`placeholder="Name, address or MAC"`, `aria-describedby="dv-q-help"`,
+		`<span id="dv-q-help" class="sr-only">Searches the name, address, MAC and topic</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("toolbar: missing %q", want)
 		}
 	}
-	if !strings.Contains(body, `href="/tf/devices?chip=down&amp;dir=asc&amp;q=a&amp;sort=name&amp;tag=kitchen"`) {
+	if !strings.Contains(body, `href="/tf/devices?dir=asc&amp;health=offline&amp;q=a&amp;sort=name&amp;tag=kitchen"`) {
 		t.Errorf("the Offline chip must keep the search, the tag and the sort: %s", dvChips(body))
 	}
 	if !strings.Contains(body, `<a class="chip" href="/tf/devices?dir=asc&amp;q=a&amp;sort=name&amp;tag=kitchen" aria-current="page"><span class="chip-l">All`) {
@@ -242,7 +247,7 @@ func TestDeviceListHealthFilterHasItsOwnActiveChip(t *testing.T) {
 	}
 }
 
-// Why: a dashboard tile opens the list narrowed (?health=online, ?chip=down, ...). "All" is the
+// Why: a dashboard tile opens the list narrowed (?health=online, ?chip=outdated, ...). "All" is the
 // way back to the whole fleet from any entry path (v0.11.1 feedback 5: from the Online tile, All
 // kept ?health=online and the list stayed narrowed). So the All link carries neither a health nor
 // a chip filter, and no chip link keeps a health filter: the chips and the health filter are one
@@ -250,7 +255,7 @@ func TestDeviceListHealthFilterHasItsOwnActiveChip(t *testing.T) {
 // The search, the selects and the sort are not status filters and stay.
 func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 	e := setup(t)
-	for _, q := range []string{"health=online", "health=offline", "health=unknown", "chip=down", "chip=outdated", "chip=noncompliant", "health=online&chip=down"} {
+	for _, q := range []string{"health=online", "health=offline", "health=unknown", "chip=outdated", "chip=noncompliant", "health=online&chip=outdated"} {
 		_, body := e.do(t, "GET", "/devices?"+q+"&tag=kitchen", "operator", nil)
 		chips := dvChips(body)
 		hrefs := regexp.MustCompile(`<a class="chip" href="([^"]*)"[^>]*><span class="chip-l">([^<]*)<`).FindAllStringSubmatch(chips, -1)
@@ -269,9 +274,9 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 					t.Errorf("%s: All links to %q and drops the tag select", q, href)
 				}
 			}
-			// The Online chip is itself the health filter (health=online), so it is the one chip
-			// that may carry it; every other chip must drop it.
-			if strings.Contains(href, "health=") && h[2] != "Online" {
+			// The Online, Offline and Unknown chips are themselves health filters, so they are the
+			// chips that may carry one; every other chip must drop it.
+			if strings.Contains(href, "health=") && h[2] != "Online" && h[2] != "Offline" && h[2] != "Unknown" {
 				t.Errorf("%s: chip %q links to %q, which keeps the health filter", q, h[2], href)
 			}
 		}
@@ -282,13 +287,13 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 }
 
 // Why: Online used to exist only while ?health=online was active (#102), so after switching to
-// All the filter could not be picked again, unlike Offline / unknown, Update available and Differs from policy.
+// All the filter could not be picked again, unlike Update available and Differs from policy.
 // It is a fixed chip: always there with its count, marked only while it filters, and clicking it
 // while active drops the filter again.
 func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 	e := setup(t)
 	online := regexp.MustCompile(`<a class="chip" href="([^"]*)"([^>]*)><span class="chip-l">Online</span><span class="chip-n">(\d+)</span></a>`)
-	for _, q := range []string{"", "?chip=down", "?chip=outdated", "?health=offline"} {
+	for _, q := range []string{"", "?chip=outdated", "?health=offline"} {
 		_, body := e.do(t, "GET", "/devices"+q, "operator", nil)
 		m := online.FindStringSubmatch(dvChips(body))
 		if m == nil {
@@ -309,18 +314,18 @@ func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 	}
 }
 
-// Why: Online is the healthy state and reads together with All; the problem chips (Offline /
-// unknown, Update available, Differs from policy) follow it (maintainer's request with #116).
+// Why: Online is the healthy state and reads together with All; the problem chips (Offline,
+// Unknown, Update available, Differs from policy) follow it (maintainer's request with #116).
 func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
 	chips := dvChips(body)
 	pos := func(label string) int { return strings.Index(chips, ">"+label+"</span><span class=\"chip-n\"") }
-	all, online, down := pos("All"), pos("Online"), pos("Offline / unknown")
-	if all < 0 || online < 0 || down < 0 || all >= online || online >= down {
-		t.Errorf("want the order All, Online, Offline / unknown (positions %d, %d, %d): %s", all, online, down, chips)
+	all, online, off, unk := pos("All"), pos("Online"), pos("Offline"), pos("Unknown")
+	if all < 0 || online < 0 || off < 0 || unk < 0 || all >= online || online >= off || off >= unk {
+		t.Errorf("want the order All, Online, Offline, Unknown (positions %d, %d, %d, %d): %s", all, online, off, unk, chips)
 	}
-	if o, out, nc := online, pos("Update available"), pos("Differs from policy"); o >= out || out >= nc {
+	if o, out, nc := unk, pos("Update available"), pos("Differs from policy"); o >= out || out >= nc {
 		t.Errorf("want Online before Update available before Differs from policy: %s", chips)
 	}
 }

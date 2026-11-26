@@ -283,7 +283,8 @@ templ styleguidePage(v sgView) {
 			<div class="sg-row">
 				@ui.Chip(ui.ChipData{Label: "All", Count: "60", Href: v.Base + "/styleguide", Current: true})
 				@ui.Chip(ui.ChipData{Label: "Online", Count: "54", Href: v.Base + "/styleguide"})
-				@ui.Chip(ui.ChipData{Label: "Offline / unknown", Count: "6", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Offline", Count: "4", Href: v.Base + "/styleguide"})
+				@ui.Chip(ui.ChipData{Label: "Unknown", Count: "2", Href: v.Base + "/styleguide"})
 				@ui.Chip(ui.ChipData{Label: "Update available", Count: "19", Href: v.Base + "/styleguide"})
 				@ui.Chip(ui.ChipData{Label: "Differs from policy", Count: "–", Title: "2 not checked yet", Href: v.Base + "/styleguide"})
 			</div>
@@ -355,7 +356,7 @@ templ styleguidePage(v sgView) {
 				@ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: v.Base + "/styleguide"})
 				@ui.Button(ui.Btn{Label: "Add manually", Href: v.Base + "/styleguide"})
 			}
-			@ui.NoMatch("No device matches “garage” with the filter Offline / unknown.", v.Base+"/styleguide")
+			@ui.NoMatch("No device matches “garage” with the filter Offline.", v.Base+"/styleguide")
 			@ui.Skeleton("Loading devices…", 4)
 		}
 		@sgSec("errors") {

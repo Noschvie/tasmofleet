@@ -51,8 +51,11 @@ type deviceRow struct {
 	Device  model.Device
 	Health  model.Health
 	Minimal bool
-	Vitals  vitals
-	Power   powerCell
+	// PollsFailed: the tracker says Offline, although the list shows the device Unknown because it never answered
+	// (shownHealth). The update picker keeps it unselectable: its polls fail, a version read over MQTT does not change that.
+	PollsFailed bool
+	Vitals      vitals
+	Power       powerCell
 	// Outdated and Deviations are set by fleetFacts.annotate on the device
 	// list and the dashboard only (N7); elsewhere they stay zero.
 	// ViaMQTT: commands to the device go over MQTT now (Paths.Commands is MQTT), the "MQTT" marker.
@@ -107,8 +110,9 @@ func (h *handler) rows(ctx context.Context) ([]deviceRow, error) {
 		if !ok {
 			hl = model.Health{DeviceID: d.ID, State: model.HealthUnknown}
 		}
+		polls := hl.State == model.HealthOffline
 		hl = shownHealth(d, hl)
-		r := deviceRow{Device: d, Health: hl, Vitals: vitalsOf(hl), Power: h.powerCellOf(httpx.BasePath(ctx), d.ID, hl)}
+		r := deviceRow{Device: d, Health: hl, PollsFailed: polls, Vitals: vitalsOf(hl), Power: h.powerCellOf(httpx.BasePath(ctx), d.ID, hl)}
 		if minimal != nil {
 			r.Minimal = minimal.Minimal(d.ID)
 		}
@@ -123,12 +127,14 @@ func (h *handler) rows(ctx context.Context) ([]deviceRow, error) {
 	return out, nil
 }
 
-// shownHealth is the health the device list, its counts and the dashboard show (design v2,
-// P2): a device that never answered stays "Unknown" after its polls fail. Its identity is read
-// on the first contact and kept, so a device without one has never answered; "Offline" means
-// it answered once and stopped. The health tracker itself is unchanged (alerts, bulk skips).
+// shownHealth is the health the device list, its chips, its counts and the dashboard show (design v2,
+// P2): a device that never answered stays "Unknown" after its polls fail; "Offline" means it
+// answered once and stopped. "Answered" is neverAnswered, the one definition: this run saw it, or
+// an earlier run stored its identity. A version read over MQTT is not an answer (it sets Version,
+// never DetectedAt), so it counts as never answered, on the badge, in ?health= and on the tiles
+// alike (#1132). The health tracker itself is unchanged (alerts, bulk skips).
 func shownHealth(d model.Device, hl model.Health) model.Health {
-	if hl.State == model.HealthOffline && hl.LastSeen.IsZero() && d.Identity.Version == "" {
+	if hl.State == model.HealthOffline && neverAnswered(d, hl) {
 		hl.State = model.HealthUnknown
 	}
 	if hl.State == model.HealthOffline {
@@ -154,8 +160,14 @@ func vitalsOf(h model.Health) vitals {
 }
 
 func filterOf(q url.Values) deviceFilter {
+	chip := q.Get("chip")
+	// a chip that does not exist (an old ?chip=down link) reads as All, so All is marked and the stale key does not
+	// travel with every later search
+	if !slices.ContainsFunc(deviceChips, func(c chipCount) bool { return c.Key == chip }) {
+		chip = ""
+	}
 	return deviceFilter{
-		Q: strings.TrimSpace(q.Get("q")), Health: q.Get("health"), Family: q.Get("family"), Tag: q.Get("tag"), Chip: q.Get("chip"),
+		Q: strings.TrimSpace(q.Get("q")), Health: q.Get("health"), Family: q.Get("family"), Tag: q.Get("tag"), Chip: chip,
 	}
 }
 
@@ -394,7 +406,7 @@ func neverAnswered(d model.Device, hl model.Health) bool {
 }
 
 // pageHealth is the health the device page shows. The tracker calls a device Offline once its polls fail, also when it
-// never answered at all; the list and the dashboard call that Unknown (shownState), and so does the page: "Offline since"
+// never answered at all; the list and the dashboard call that Unknown (shownHealth), and so does the page: "Offline since"
 // is about a device that went away, and a device that was never there did not. An operation that holds the device keeps
 // the tracker's state: its own banner and "Updating" badge say more, and the buttons' reasons key on it.
 func pageHealth(d model.Device, hl model.Health, running *model.Job) model.Health {
@@ -546,7 +558,7 @@ func (h *handler) deviceBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if wait := h.backupWait(d.ID); wait != "" {
-		refuse(http.StatusTooManyRequests, wait+".")
+		refuse(http.StatusTooManyRequests, wait)
 		return
 	}
 	bs, rep, err := h.backupTraced(r, d.ID)
@@ -568,17 +580,22 @@ func headBack(tab string) string {
 	return ""
 }
 
+// tooManyRequests is the one sentence of a refused manual backup, on the device list, the Backups tab and the
+// header's message page (#1132). A refusal is not a failure and the exact wait is no use to the reader, who only
+// has to try again a little later, so it carries no timing words.
+const tooManyRequests = "Too many requests. Try again in a few seconds."
+
 // backupWait reserves a manual backup slot for the device and returns the refusal sentence
 // ("" when the slot is granted) when the last one is too recent. The cooldown keeps repeated
 // clicks from evicting restore points, so it counts from the last backup run even when that
-// backup was deleted since; the sentence names that time so the refusal explains itself (#208).
-// Only deleting the device's last backup ends it (backupDeleted): nothing is left to evict.
+// backup was deleted since. Only deleting the device's last backup ends it (backupDeleted):
+// nothing is left to evict.
 func (h *handler) backupWait(id model.DeviceID) string {
 	h.backupMu.Lock()
 	defer h.backupMu.Unlock()
 	now := h.d.Clock.Now()
 	if last, ok := h.lastBackup[id]; ok && now.Sub(last) < h.d.BackupCooldown {
-		return cooldownText(now.Sub(last), h.d.BackupCooldown-now.Sub(last))
+		return tooManyRequests
 	}
 	h.lastBackup[id] = now
 	return ""
@@ -612,29 +629,6 @@ func (h *handler) backupDeleted(d backup.Deletion) {
 	h.backupMu.Unlock()
 }
 
-// cooldownText is "Last backup 4 min 40 s ago; a new one is possible in 20 s". The wait rounds up to the next full
-// second: a refused request never says "possible in 0 s" (#994).
-func cooldownText(ago, wait time.Duration) string {
-	whole := wait.Truncate(time.Second)
-	if whole < wait {
-		whole += time.Second
-	}
-	return fmt.Sprintf("Last backup %s ago; a new one is possible in %s", minSec(ago), minSec(whole))
-}
-
-// minSec renders a short span as "4 min 40 s", "5 min", "20 s".
-func minSec(d time.Duration) string {
-	sec := int(d.Round(time.Second) / time.Second)
-	switch m, s := sec/60, sec%60; {
-	case m == 0:
-		return fmt.Sprintf("%d s", s)
-	case s == 0:
-		return fmt.Sprintf("%d min", m)
-	default:
-		return fmt.Sprintf("%d min %d s", m, s)
-	}
-}
-
 // deviceBackupFromTab answers the "Back up now" of the empty Backups tab: on
 // success the page reloads (the tab lists the new backup), otherwise the sentence
 // goes into the status line under the button.
@@ -644,7 +638,7 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActBackup); why != "" {
 		data.Error = why
 	} else if wait := h.backupWait(d.ID); wait != "" {
-		data.Error = wait + "."
+		data.Error = wait
 		status = http.StatusTooManyRequests
 	} else if bs, rep, err := h.backupTraced(r, d.ID); err != nil {
 		h.backupNotSent(d.ID, err)
@@ -663,15 +657,20 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 
 // deviceBackupFromList answers the "Back up now" of the device list with a toast (design v2:
 // "Backup of Attic Dimmer saved"; a failure stays until dismissed). The toast region is a live
-// region, so screen readers hear it; the swap target above the table is emptied.
+// region, so screen readers hear it; the swap target above the table is emptied. A refused click
+// (the cooldown) is neither: it answers 429 with a warn banner in that target, which the next answer
+// from any row replaces, and no toast (#1132).
 func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d model.Device) {
 	data := struct{ Notice, Error string }{}
-	status := http.StatusOK
 	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActBackup); why != "" {
 		data.Error = d.Name + ": " + why
 	} else if wait := h.backupWait(d.ID); wait != "" {
-		data.Error = d.Name + ": " + strings.ToLower(wait[:1]) + wait[1:] + "."
-		status = http.StatusTooManyRequests
+		w.Header().Set("Cache-Control", "no-store")
+		// #list-notice sits above the toolbar and does not stick: bring the answer into view, as the Backups tab
+		// does for its status line. Only here: the success and failure answers have no body and must not jump the page.
+		w.Header().Set("HX-Reswap", "innerHTML show:#list-notice:top")
+		h.component(w, r, http.StatusTooManyRequests, ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: wait}))
+		return
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
 		h.backupNotSent(d.ID, err)
 		msg := h.backupProblem(err)
@@ -685,5 +684,5 @@ func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d
 	}
 	setHXTrigger(w, map[string]any{"toast": map[string]string{"text": text, "tone": tone}})
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
+	w.WriteHeader(http.StatusOK)
 }

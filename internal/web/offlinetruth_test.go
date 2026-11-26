@@ -376,7 +376,7 @@ func TestNeverAnsweredIsOneDefinition(t *testing.T) {
 		t.Error("either one is an answer")
 	}
 	row := deviceRow{Device: d, Health: model.Health{State: model.HealthOffline}}
-	if shownState(row) != model.HealthUnknown {
+	if shownHealth(d, row.Health).State != model.HealthUnknown {
 		t.Error("the dashboard maps the same device to Unknown")
 	}
 	if got := pageHealth(d, row.Health, nil).State; got != model.HealthUnknown {

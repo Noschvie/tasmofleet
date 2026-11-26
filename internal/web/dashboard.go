@@ -169,10 +169,11 @@ func noun(n int, one, many string) string {
 // discovery tile is for admins with discovery on. Each links to the list that shows what it counts.
 func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 	chip := func(c string) string { return base + "/devices?chip=" + c }
+	health := func(st model.HealthState) string { return base + "/devices?health=" + string(st) }
 	tiles := []ui.StatTileData{
-		{Tone: ui.ToneOK, Label: "Online", Value: itoa(s.Online), Hint: "of " + itoa(s.Total) + " " + noun(s.Total, "device", "devices"), Href: base + "/devices?health=" + string(model.HealthOnline)},
-		{Tone: ui.ToneDanger, Label: "Offline", Value: itoa(s.Offline), Hint: "not reachable", Href: chip(chipDown)},
-		{Tone: ui.ToneNeutral, Label: "Unknown", Value: itoa(s.Unknown), Hint: "never answered", Href: chip(chipDown)},
+		{Tone: ui.ToneOK, Label: "Online", Value: itoa(s.Online), Hint: "of " + itoa(s.Total) + " " + noun(s.Total, "device", "devices"), Href: health(model.HealthOnline)},
+		{Tone: ui.ToneDanger, Label: "Offline", Value: itoa(s.Offline), Hint: "not reachable", Href: health(model.HealthOffline)},
+		{Tone: ui.ToneNeutral, Label: "Unknown", Value: itoa(s.Unknown), Hint: "never answered", Href: health(model.HealthUnknown)},
 	}
 	fw := ui.StatTileData{Tone: ui.ToneAccent, Label: wordUpdateAvailable, Value: itoa(s.Outdated), Hint: "to " + s.Latest, Href: chip(chipOutdated)}
 	if s.Latest == "" { // no release list yet: unknown, never "0 behind"
@@ -331,7 +332,7 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	for _, r := range rows {
 		it := ui.AttItem{Name: r.Device.Name, Href: fmt.Sprintf("%s/devices/%d", base, r.Device.ID)}
 		rank := -1
-		switch shownState(r) {
+		switch r.Health.State {
 		case model.HealthOffline:
 			// the badge says Offline, so the text only says since when
 			rank = rankOffline
@@ -353,7 +354,7 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 		}
 		if rank >= 0 {
 			// the colour of a connection problem is the badge's, from the one state table (#1097)
-			b := statusBadgeOf(shownState(r), "")
+			b := statusBadgeOf(r.Health.State, "")
 			it.Status = &b
 		}
 		if sp := stabProblem(r.Stab); rank < 0 && sp != nil {

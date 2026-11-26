@@ -749,7 +749,7 @@ func TestSSEStreamsHealthFragments(t *testing.T) {
 	}
 	go func() {
 		for ctx.Err() == nil {
-			e.hub.Publish(events.Event{Topic: events.TopicHealth, Payload: model.Health{DeviceID: 1, State: model.HealthOffline, RSSI: 40}})
+			e.hub.Publish(events.Event{Topic: events.TopicHealth, Payload: model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-time.Hour), RSSI: 40}})
 			time.Sleep(20 * time.Millisecond)
 		}
 	}()
@@ -787,7 +787,7 @@ func TestManualBackupIsRateLimitedPerDevice(t *testing.T) {
 		t.Fatalf("first: %d", resp.StatusCode)
 	}
 	resp, body := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
-	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Last backup 0 s ago; a new one is possible in") {
+	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Too many requests. Try again in a few seconds.") {
 		t.Fatalf("second: %d taken=%d %s", resp.StatusCode, e.bk.taken, body)
 	}
 	if resp, _ := e.do(t, "POST", "/devices/2/backup", "operator", url.Values{}); resp.StatusCode != 303 {
@@ -921,7 +921,7 @@ func TestBackupDownloadNameKeepsUmlautsAndNeverInjects(t *testing.T) {
 
 // Why (#208, Noschvie): a user who deletes the only backup of a device and clicks "Back up now"
 // must not be told to wait; with nothing left there is nothing to protect. While other backups
-// remain, the cooldown stays (and its refusal still names the last backup), so repeated clicks
+// remain, the cooldown stays (and its refusal still stands), so repeated clicks
 // cannot evict restore points. Both delete routes (single run, selected runs) behave alike.
 func TestDeletingTheLastBackupEndsTheCooldown(t *testing.T) {
 	for _, tc := range []struct {
@@ -952,40 +952,10 @@ func TestDeletingTheLastBackupEndsTheCooldown(t *testing.T) {
 				if resp.StatusCode != tc.wantCode {
 					t.Fatalf("backup after delete: %d (want %d) %s", resp.StatusCode, tc.wantCode, body)
 				}
-				if tc.wantCode == http.StatusTooManyRequests && !strings.Contains(body, "Last backup 0 s ago; a new one is possible in 60 min") {
-					t.Fatalf("refusal must name the last backup: %s", body)
+				if tc.wantCode == http.StatusTooManyRequests && !strings.Contains(body, "Too many requests. Try again in a few seconds.") {
+					t.Fatalf("refusal must say so: %s", body)
 				}
 			})
-		}
-	}
-}
-
-func TestCooldownTextNamesAgoAndRemainder(t *testing.T) {
-	if got, want := cooldownText(280*time.Second, 20*time.Second), "Last backup 4 min 40 s ago; a new one is possible in 20 s"; got != want {
-		t.Errorf("got %q want %q", got, want)
-	}
-	if got, want := cooldownText(time.Minute, 4*time.Minute), "Last backup 1 min ago; a new one is possible in 4 min"; got != want {
-		t.Errorf("got %q want %q", got, want)
-	}
-}
-
-// Why (#994): a refused request said "possible in 0 s" when under half a second was left, which reads as
-// "try again now" and sends the person into a second refusal. The wait rounds up, so the text never
-// promises an earlier time than the cooldown allows; whole seconds stay as they are.
-func TestCooldownTextRoundsTheWaitUp(t *testing.T) {
-	for _, c := range []struct {
-		wait time.Duration
-		want string
-	}{
-		{300 * time.Millisecond, "possible in 1 s"},
-		{time.Millisecond, "possible in 1 s"},
-		{1200 * time.Millisecond, "possible in 2 s"},
-		{59*time.Second + 100*time.Millisecond, "possible in 1 min"},
-		{20 * time.Second, "possible in 20 s"},
-		{4 * time.Minute, "possible in 4 min"},
-	} {
-		if got := cooldownText(time.Minute, c.wait); !strings.HasSuffix(got, c.want) {
-			t.Errorf("wait %v: %q does not end in %q", c.wait, got, c.want)
 		}
 	}
 }

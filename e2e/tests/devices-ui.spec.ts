@@ -644,3 +644,34 @@ test("a list update held back by an open row menu is applied when it closes", as
     page.locator(`table[data-table=devices] a:text-is("${newName}")`),
   ).toBeVisible({ timeout: 5_000 });
 });
+
+// Why (#1132): "Back up now" twice in a row is not a failure. The second click gets one warn banner in the list's
+// notice slot, one plain sentence, and no red toast that counts seconds. On a phone the banner must fit its width.
+// The slot sits above the toolbar and does not stick, so the click is on a row far down a short window: the banner
+// must be brought into view, or the click looks dead.
+for (const width of [375, 1280]) {
+  test(`a refused Back up now is a warn banner, not a red toast, at ${width}px`, async ({ page }) => {
+    await open(page, width);
+    await page.setViewportSize({ width, height: 480 });
+    const rows = page
+      .locator(width < 720 ? "li.dcard" : "table[data-table=devices] tbody tr")
+      .filter({ has: page.locator('button[hx-post$="/backup"]:not([aria-disabled="true"])') });
+    // the cooldown is per device and the app is shared by the tests of this file: a device of its own per width,
+    // both near the end of the list, below the fold
+    const n = await rows.count();
+    const row = rows.nth(width === 375 ? n - 1 : n - 2);
+    const backUp = async () => {
+      await row.locator("details.rowmenu > summary").click();
+      await row.getByRole("button", { name: "Back up now" }).click();
+    };
+    await backUp();
+    await expect(page.locator("#list-notice .banner")).toHaveCount(0);
+    await backUp();
+    const banner = page.locator("#list-notice .banner.t-warn");
+    await expect(banner).toHaveText("Too many requests. Try again in a few seconds.");
+    await expect(banner).toBeInViewport({ ratio: 1 });
+    await expect(page.locator(".toast.t-danger")).toHaveCount(0);
+    await expectNoOverflow(page, "list notice banner");
+    await shot(page, `list-backup-banner-${width}`);
+  });
+}

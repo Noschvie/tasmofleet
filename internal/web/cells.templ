@@ -30,16 +30,23 @@ templ (h *handler) statusCell(hl model.Health) {
 	}
 }
 
-// reachCell is the MQTT · HTTP column: per channel whether the device was heard from lately.
+// reachCell is the Reachable via column (#1132): the channels that carry the device now, in words ("MQTT", "Web",
+// "MQTT, Web"), each with its last contact as the tip. A device that none carries shows the empty mark; the problem
+// of one channel is the "MQTT down" badge of the Status column, not a mark here.
 templ (h *handler) reachCell(hl model.Health) {
-	<span class="dv-reach">
-		for i, c := range h.channels(hl) {
-			if i > 0 {
-				<span class="dv-reach-sep" aria-hidden="true">{ " · " }</span>
+	{{ via := reachVia(h.channels(hl)) }}
+	if len(via) == 0 {
+		<span class="muted">-</span>
+	} else {
+		<span class="dv-reach">
+			for i, c := range via {
+				if i > 0 {
+					<span class="dv-reach-sep">{ ", " }</span>
+				}
+				<span title={ c.Tip }>{ c.Name }</span>
 			}
-			<span class={ "chan", "chan-" + c.Tone } title={ c.Tip }>{ c.Name }<span aria-hidden="true">{ " " + c.Mark }</span><span class="sr-only">{ " " + c.Word }</span></span>
-		}
-	</span>
+		</span>
+	}
 }
 
 // uptimeCell is the uptime, or when the device last answered while it is down.
@@ -168,7 +175,7 @@ templ (h *handler) deviceRows(d rowsData) {
 					@ui.BadgeOf(ui.BadgeData{Tone: ui.ToneWarn, Label: ui.OffPolicy(row.Deviations), Class: "dv-devs", Title: "Settings of this device that differ from the policy"})
 				}
 			</td>
-			<td data-label="MQTT · HTTP" class="nowrap s m-hide" sse-swap={ "reach-" + devID(row.Device.ID) }>
+			<td data-label="Reachable via" class="nowrap s m-hide" sse-swap={ "reach-" + devID(row.Device.ID) }>
 				@h.reachCell(row.Health)
 			</td>
 			<td data-label="Firmware" class="s m-hide">
@@ -227,6 +234,9 @@ templ deviceMenu(m rowMenu) {
 		@ui.MenuButton("Actions for "+m.Device.Name, "Actions for "+m.Device.Name)
 		<div class="rowmenu-body menu-panel">
 			<a class="menu-item" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID)) }>Open</a>
+			if l := deviceWebLink(m.Device.Address, m.Device.Port); l != nil {
+				<a class="menu-item" href={ templ.SafeURL(l.Href) } target="_blank" rel="noopener noreferrer">Open web UI<span class="sr-only">{ " (opens in a new tab)" }</span></a>
+			}
 			if m.Console {
 				<a class="menu-item" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/console") }>Open console</a>
 			}

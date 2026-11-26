@@ -62,32 +62,49 @@ func (p devicesPage) chipHref(base, key string) string {
 	return base + "/devices?" + p.Sort.values(f.values()).Encode()
 }
 
-// onlineChip is the fixed "Online" chip (health=online, also the dashboard's Online tile). It is
-// always rendered; its link switches to the online filter, or drops it again while it is active.
-func (p devicesPage) onlineChip(base string) (href string, active bool) {
+// stateChips are the fixed state chips after All, the states the dashboard tiles count: each is a health filter
+// (?health=online, offline, unknown), so a tile and its chip are the same filter and count the same devices (#1132).
+var stateChips = []struct {
+	State model.HealthState
+	Label string
+}{
+	{model.HealthOnline, "Online"}, {model.HealthOffline, "Offline"}, {model.HealthUnknown, "Unknown"},
+}
+
+// stateCount is the number a state chip shows: the tile's number.
+func (p devicesPage) stateCount(st model.HealthState) int { return p.Summary.States[st] }
+
+// stateChip is one fixed state chip (health=<state>, also the dashboard's tile). It is always rendered; its link
+// switches to that filter and drops a chip filter, or drops the filter again while it is active.
+func (p devicesPage) stateChip(base string, st model.HealthState) (href string, active bool) {
 	f := p.Filter
-	active = f.Health == string(model.HealthOnline)
+	active = f.Health == string(st)
 	if active {
 		f.Health = ""
 	} else {
-		f.Chip, f.Health = "", string(model.HealthOnline)
+		f.Chip, f.Health = "", string(st)
 	}
 	return base + "/devices?" + p.Sort.values(f.values()).Encode(), active
 }
 
-// onlineTitle is the hint of the Online chip: only the active one says what a click does.
-func onlineTitle(active bool) string {
+// stateTitle is the hint of a state chip: only the active one says what a click does.
+func stateTitle(active bool) string {
 	if active {
 		return "Show all states again"
 	}
 	return ""
 }
 
-// healthChip is the extra chip for an active health filter other than online (?health=offline
-// from a dashboard tile): no fixed chip stands for it, so without it "All" would look active
-// while the list is narrowed. Its link drops the filter again. Online has its own fixed chip.
+// healthChip is the extra chip for an active health filter that has no fixed chip (?health=stale or auth-failed
+// typed into the address bar): without it "All" would look active while the list is narrowed. Its link drops
+// the filter again. Online, Offline and Unknown have their own fixed chips.
 func (p devicesPage) healthChip(base string) (label, href string, n int, ok bool) {
-	if p.Filter.Health == "" || p.Filter.Health == string(model.HealthOnline) {
+	for _, c := range stateChips {
+		if p.Filter.Health == string(c.State) {
+			return "", "", 0, false
+		}
+	}
+	if p.Filter.Health == "" {
 		return "", "", 0, false
 	}
 	f := p.Filter
@@ -164,7 +181,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.Base + "/devices")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 109, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 126, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 			if templ_7745c5c3_Err != nil {
@@ -177,13 +194,13 @@ func devicesContent(v view, p devicesPage) templ.Component {
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Filter.Q).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 110, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 127, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" placeholder=\"Filter devices\" title=\"Filter by name, IP, chip or firmware\" aria-label=\"Filter devices\" aria-describedby=\"dv-q-help\"> <span id=\"dv-q-help\" class=\"sr-only\">Filter by name, IP, chip or firmware</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" placeholder=\"Name, address or MAC\" aria-label=\"Filter devices\" aria-describedby=\"dv-q-help\"> <span id=\"dv-q-help\" class=\"sr-only\">Searches the name, address, MAC and topic</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -195,7 +212,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Filter.Chip).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 113, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 130, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 				if templ_7745c5c3_Err != nil {
@@ -214,7 +231,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Filter.Health).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 116, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 133, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 				if templ_7745c5c3_Err != nil {
@@ -232,7 +249,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Sort.Dir).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 118, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 135, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
@@ -248,10 +265,12 @@ func devicesContent(v view, p devicesPage) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if c.Key == "" {
-					onlineHref, onlineOn := p.onlineChip(v.Base)
-					templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: "Online", Count: strconv.Itoa(p.Summary.Online), Title: onlineTitle(onlineOn), Href: onlineHref, Current: onlineOn}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
+					for _, sc := range stateChips {
+						href, on := p.stateChip(v.Base, sc.State)
+						templ_7745c5c3_Err = ui.Chip(ui.ChipData{Label: sc.Label, Count: strconv.Itoa(p.stateCount(sc.State)), Title: stateTitle(on), Href: href, Current: on}).Render(ctx, templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
 					}
 				}
 			}
@@ -313,7 +332,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templruntime.NewAttributeExpression(f.Value).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 136, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 155, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 				if templ_7745c5c3_Err != nil {
@@ -336,7 +355,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var11 string
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(f.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 136, Col: 84}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 155, Col: 84}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -349,7 +368,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(f.N))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 136, Col: 109}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 155, Col: 109}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -412,7 +431,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templruntime.NewAttributeExpression(f.Value).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 145, Col: 31}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 164, Col: 31}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 				if templ_7745c5c3_Err != nil {
@@ -435,7 +454,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(f.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 145, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 164, Col: 81}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -448,7 +467,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(f.N))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 145, Col: 106}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 164, Col: 106}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -471,7 +490,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templruntime.NewAttributeExpression(o.Key).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 155, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 174, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 				if templ_7745c5c3_Err != nil {
@@ -494,7 +513,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(o.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 155, Col: 74}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 174, Col: 74}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -525,7 +544,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.Base + "/devices/bulk/power")).ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 162, Col: 90}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 181, Col: 90}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 				if templ_7745c5c3_Err != nil {
@@ -538,7 +557,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.CSRF).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 163, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 182, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 				if templ_7745c5c3_Err != nil {
@@ -579,7 +598,7 @@ func devicesContent(v view, p devicesPage) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.CSRF).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 175, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 194, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 			if templ_7745c5c3_Err != nil {
@@ -635,7 +654,7 @@ func devicesTable(v view, p devicesPage) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templruntime.NewAttributeExpression(v.Base + "/devices/table?" + p.Query).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 194, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 213, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
@@ -709,7 +728,7 @@ func devicesTableBody(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var26 string
 				templ_7745c5c3_Var26, templ_7745c5c3_Err = templruntime.NewAttributeExpression("rly-" + strconv.Itoa(n)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 214, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 233, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 				if templ_7745c5c3_Err != nil {
@@ -722,7 +741,7 @@ func devicesTableBody(v view, p devicesPage) templ.Component {
 				var templ_7745c5c3_Var27 string
 				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs("relay " + strconv.Itoa(n))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 214, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 233, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 				if templ_7745c5c3_Err != nil {
@@ -804,7 +823,7 @@ func bulkBar(v view) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.Base + "/devices/bulk/command")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 232, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 251, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
@@ -823,7 +842,7 @@ func bulkBar(v view) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.Base + "/devices/bulk/backup")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 235, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 254, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -842,7 +861,7 @@ func bulkBar(v view) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templruntime.NewAttributeExpression(templ.SafeURL(v.Base + "/devices/bulk/restart")).ResolveURL(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 238, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 257, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {

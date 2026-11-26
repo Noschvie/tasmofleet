@@ -247,6 +247,9 @@ func (h *handler) updateFormData(r *http.Request, selected []model.DeviceID, mod
 	for _, row := range rows {
 		d := row.Device
 		blocked := blockedReason(d, row.Health.State)
+		if blocked == "" && row.PollsFailed { // shown Unknown, tracker Offline: a version read over MQTT is no answer (#1132)
+			blocked = "Never answered"
+		}
 		if blocked == "" && row.Health.APIOff() {
 			blocked = h.apiOffBlock(r.Context(), d.ID, transport.ActUpdate) // online, but its HTTP API is off and MQTT cannot update it (#447)
 		}
