@@ -257,8 +257,11 @@ test("after a scheduled run the status bar links to the page and the last run is
 function liveRow(page: Page, name: string) {
   return page.locator(`.bk-table tbody tr:has(td.dv-name[title="${name}"])`);
 }
+// The helper picks a device the scheduled run backed up: its Last result reads the user-facing word for a
+// finished success, which the design system fixes as "Succeeded" (docs/spec/design-system.md, Wording; #1105
+// replaced "OK"). Match that word, not the badge's tone class: the word is what a reader sees.
 async function backedUp(page: Page, n: number): Promise<{ name: string; id: string }> {
-  const row = page.locator(".bk-table tbody tr").filter({ has: page.locator("td[data-label='Last result']", { hasText: /^\s*OK\s*$/ }) }).nth(n);
+  const row = page.locator(".bk-table tbody tr").filter({ has: page.locator("td[data-label='Last result']", { hasText: /^\s*Succeeded\s*$/ }) }).nth(n);
   const name = (await row.locator("td.dv-name").getAttribute("title"))!;
   const id = (await row.locator("input[name=id]").inputValue())!;
   return { name, id };
