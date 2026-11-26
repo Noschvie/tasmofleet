@@ -1,4 +1,0 @@
----
-section: Changed
----
-Every date and time is written one way, from one set of named formats: a date ("20 Nov 2026"), a date with its time ("20 Nov 2026, 14:17"), a month and day, and a relative day ("Today 14:17", "Yesterday 21:10", else the date with its time, without the year in this year). The same instant used to read "11/20/2026, 02:17:25 PM" in one table and "20 Nov, 14:17" in the next, because twelve formats were picked per place. The seconds are gone from the text (the tooltip keeps the full instant with its zone), hours have no leading zero in a 12-hour locale ("3:00 AM"), the browser's locale still decides the order and 12 or 24 hours, and a bare clock time stays only on a line that already names the day. The restarts list on a device and the "Next try" line now say "Today" before today's clock time, and the storage and subscription lines show the time with the date (#1104, part 1)
