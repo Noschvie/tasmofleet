@@ -4,6 +4,22 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.49.2 "South Stack" (2026-11-27)
+
+### Changed
+
+- A first run has an order: the empty Devices page shows administrators three steps (connect the MQTT broker in System, Settings, MQTT; add devices on the Add devices page; back them up with Back up all now) with Add devices and MQTT settings as the buttons, and operators keep "No devices yet". The setup asks for the MQTT broker before the device networks and says that HTTP is only the fallback, its connection test says "Saves nothing." where it said "Optional.", and the README Quick start and the Unraid template Overview walk the same steps and say where the setup link is (the container log). The dashboard heading is "Dashboard", the name the menu and the tab already used, where it said "Fleet overview" (#1050)
+
+### Fixed
+
+- The shell on a keyboard and a phone: the first Tab stop is "Skip to content", which jumps over the header and the navigation into the page. The phone drawer has a close button and keeps Account, the theme switch and Sign out in view while the list scrolls. The avatar no longer opens the same drawer as the menu button: it opens an account sheet with what the desktop user menu holds, and the account entry is called Account everywhere ("Account & password" and "Account · name" are gone). The line under the name says the role only (Admin, Operator), not how you signed in. The phone status bar says "Status" next to its caret and reads "No devices yet" instead of "All good" before the first device is added (#1077)
+- Keyboard focus no longer ends under a pinned column of a table that scrolls sideways: Tab onto a sort link, a resize handle or a link in a column that has scrolled under the pinned ones now scrolls the table just far enough to show it with its focus ring, while Tab onto a pinned cell leaves the table where it is (#1275). The filter chips and tabs on a phone do the same inside their own strip: a focused chip is centred, so neither a sliver at the edge nor the fade cuts it (#1133, #1275)
+- What's new now shows the 0.49.0 note about the new titles of the update messages as a warning at the top of that release instead of behind Details, and a changelog fragment can ask for action with the section "Upgrade notes: action may be required" (#1301)
+- The browser tab of the Activity page reads "Activity" like its heading instead of "Updates", and the tab of the list filtered to one device reads "Activity of" and the device name (#1302)
+- Needs attention lists a device once: a device with a pending address change, which was shown as that proposal and again under Offline, Differs from policy or another reason (and counted twice in the heading), is now listed as the address change only. The proposals (new devices and address changes) have a title now, "Waiting for a decision", like every other group of the card (#1303)
+- A device that was restarted on purpose outside TasmoFleet (plugged in, MQTT settings sent over HTTP, a template change) is no longer shown as "Boot loop" when it ran for 2 minutes or more before each restart. A crash, watchdog or brown-out restart, short runs and the Wi-Fi config reboot cycle still count (#1308)
+- Rules stored by `tasmofleet settings import` while the server runs now apply at once: Run now and the background reads judge the stored rules, so a new rule no longer stays "?" with its devices held back as "read recently". The server used to learn of a rule change only from the Policy page's own editor (#1309)
+
 ## 0.49.1 "South Stack" (2026-11-26)
 
 ### Added
